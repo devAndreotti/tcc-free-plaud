@@ -76,6 +76,83 @@ def test_structure_document_uses_first_real_paragraph_as_summary(tmp_path: Path)
     assert note.summary == 'Este paragrafo deve virar o resumo inicial da nota.'
 
 
+def test_structure_document_prefers_markdown_h1_after_leading_table(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'anotacoes.md'
+    sample_file.write_text(
+        '| topico | status |\n'
+        '| --- | --- |\n'
+        '| estudar | pendente |\n\n'
+        '# Anotacoes da semana\n\n'
+        'Resumo mais util da semana com contexto real do que aconteceu.\n',
+        encoding='utf-8',
+    )
+
+    document = load_document(sample_file)
+
+    note = structure_document(document)
+
+    assert note.title == 'Anotacoes da semana'
+    assert note.summary == 'Resumo mais util da semana com contexto real do que aconteceu.'
+
+
+def test_structure_document_prefers_summary_under_preferred_markdown_section(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'relatorio.md'
+    sample_file.write_text(
+        '# Relatorio de Benchmark\n\n'
+        '**Tipo:** Relatorio tecnico interno\n'
+        '**Autor:** Equipe X\n\n'
+        '## Sumario Executivo\n\n'
+        'Este relatorio apresenta os principais resultados do benchmark e justifica a escolha do modelo.\n\n'
+        '## Metodologia\n\n'
+        'Texto secundario.\n',
+        encoding='utf-8',
+    )
+
+    document = load_document(sample_file)
+
+    note = structure_document(document)
+
+    assert note.summary == (
+        'Este relatorio apresenta os principais resultados do benchmark e justifica a escolha do modelo.'
+    )
+
+
+def test_structure_document_skips_metadata_lines_in_plain_text_summary(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'ata.txt'
+    sample_file.write_text(
+        'ATA DE REUNIAO - SPRINT 14\n'
+        'Data: 18 de marco de 2025\n'
+        'Horario: 09h00 as 10h30\n'
+        'OBJETIVO DA REUNIAO\n'
+        'Definir o escopo da sprint e alinhar prioridades com base no feedback do cliente.\n',
+        encoding='utf-8',
+    )
+
+    document = load_document(sample_file)
+
+    note = structure_document(document)
+
+    assert note.title == 'ATA DE REUNIAO - SPRINT 14'
+    assert note.summary == 'Definir o escopo da sprint e alinhar prioridades com base no feedback do cliente.'
+
+
+def test_structure_document_falls_back_to_humanized_filename_for_generic_heading(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'requisitos_projeto .md'
+    sample_file.write_text(
+        '## requisitos\n\n'
+        '### nao funcionais\n\n'
+        'O sistema deve operar localmente e permitir integracao com o ERP legado.\n',
+        encoding='utf-8',
+    )
+
+    document = load_document(sample_file)
+
+    note = structure_document(document)
+
+    assert note.title == 'requisitos projeto'
+    assert note.summary == 'O sistema deve operar localmente e permitir integracao com o ERP legado.'
+
+
 def test_notes_build_cli_renders_structured_markdown(sample_markdown_file: Path) -> None:
     result = runner.invoke(app, ['notes', 'build', str(sample_markdown_file)])
 
