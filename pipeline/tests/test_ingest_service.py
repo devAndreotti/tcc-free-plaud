@@ -53,3 +53,14 @@ def test_ingest_show_cli_renders_traceable_summary(sample_pdf_file: Path) -> Non
     assert 'source_type' in result.stdout
     assert 'content_sha256' in result.stdout
     assert 'Conteudo PDF de teste para extracao local-first.' in result.stdout
+
+
+def test_ingest_show_cli_accepts_unquoted_path_with_spaces(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'documento com espacos.md'
+    sample_file.write_text('# Nota\n\nConteudo com espacos.\n', encoding='utf-8')
+
+    result = runner.invoke(app, ['ingest', 'show', *str(sample_file).split(' ')])
+
+    assert result.exit_code == 0
+    assert 'ingestion_id' in result.stdout
+    assert 'documento com espacos.md' in result.stdout

@@ -1,8 +1,7 @@
-from pathlib import Path
-
 import typer
 from rich.console import Console
 
+from free_plaud.app.cli_paths import compose_path
 from free_plaud.ingest.service import ingest_file
 
 app = typer.Typer(help="Comandos de ingestão de artefatos locais.", no_args_is_help=True)
@@ -10,8 +9,9 @@ console = Console()
 
 
 @app.command("show")
-def show(path: Path) -> None:
+def show(path_parts: list[str] = typer.Argument(..., metavar="PATH")) -> None:
     """Executa a ingestão e mostra um resumo rastreável do resultado."""
+    path = compose_path(path_parts)
     result = ingest_file(path)
     console.print(f"[bold]ingestion_id[/bold]: {result.ingestion_id}")
     console.print(f"[bold]correlation_id[/bold]: {result.correlation_id}")

@@ -1,8 +1,7 @@
-from pathlib import Path
-
 import typer
 from rich.console import Console
 
+from free_plaud.app.cli_paths import compose_path
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.retrieval.indexer import index_note
@@ -12,8 +11,13 @@ console = Console()
 
 
 @app.command("chunks")
-def chunks(path: Path, chunk_size: int = 800, overlap: int = 120) -> None:
+def chunks(
+    path_parts: list[str] = typer.Argument(..., metavar="PATH"),
+    chunk_size: int = 800,
+    overlap: int = 120,
+) -> None:
     """Gera chunks a partir de um documento local."""
+    path = compose_path(path_parts)
     document = load_document(path)
     note = structure_document(document)
     generated = index_note(note, chunk_size=chunk_size, overlap=overlap)

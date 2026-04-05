@@ -42,3 +42,13 @@ def test_notes_build_cli_renders_structured_markdown(sample_markdown_file: Path)
     assert result.exit_code == 0
     assert '# Titulo da Nota' in result.stdout
     assert '## Summary' in result.stdout
+
+
+def test_notes_build_cli_accepts_unquoted_path_with_spaces(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'nota com espacos.md'
+    sample_file.write_text('# Nota com espacos\n\nConteudo.\n', encoding='utf-8')
+
+    result = runner.invoke(app, ['notes', 'build', *str(sample_file).split(' ')])
+
+    assert result.exit_code == 0
+    assert '# Nota com espacos' in result.stdout
