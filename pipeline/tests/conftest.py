@@ -89,3 +89,10 @@ def sample_pdf_file(tmp_path: Path) -> Path:
         )
     )
     return file_path
+
+
+@pytest.fixture()
+def empty_text_file(tmp_path: Path) -> Path:
+    file_path = tmp_path / 'empty.txt'
+    file_path.write_text('   \n\n', encoding='utf-8')
+    return file_path
