@@ -153,6 +153,114 @@ def test_structure_document_falls_back_to_humanized_filename_for_generic_heading
     assert note.summary == 'O sistema deve operar localmente e permitir integracao com o ERP legado.'
 
 
+def test_structure_document_prefers_objective_section_over_participants_in_minutes(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'ata_completa.txt'
+    sample_file.write_text(
+        'ATA DE COMITE DE ARQUITETURA - SESSAO 07/2025\n\n'
+        'Documento: ACT-2025-07\n'
+        'Tipo: Ata de Reuniao Tecnica\n'
+        'Data: 25 de marco de 2025\n\n'
+        'PARTICIPANTES\n'
+        'Marcos Vinicius Teixeira - Arquiteto-Chefe\n'
+        'Priscila Alencar - Engenheira de Plataforma\n'
+        'Juliana Ramos - Gerente de Produto\n\n'
+        'OBJETIVO DA SESSAO\n\n'
+        'Avaliar as propostas tecnicas para adocao de um message broker na plataforma e tomar uma decisao formal com documentacao em ADR.\n',
+        encoding='utf-8',
+    )
+
+    document = load_document(sample_file)
+
+    note = structure_document(document)
+
+    assert note.summary == (
+        'Avaliar as propostas tecnicas para adocao de um message broker na plataforma e tomar uma decisao formal com documentacao em ADR.'
+    )
+
+
+def test_structure_document_prefers_more_informative_paragraph_over_short_fragment(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'fragmentado.txt'
+    sample_file.write_text(
+        'docker e containers - estudos\n\n'
+        'o que e container?\n\n'
+        'processo isolado\n'
+        'namespaces + cgroups\n'
+        'nao e VM\n\n'
+        'um trecho importante\n\n'
+        'O modelo de camadas das imagens Docker e uma das caracteristicas mais elegantes do sistema. '
+        'Cada instrucao no Dockerfile cria uma nova camada somente leitura, o que economiza espaco em disco '
+        'e acelera a inicializacao de containers em relacao a maquinas virtuais tradicionais.\n',
+        encoding='utf-8',
+    )
+
+    document = load_document(sample_file)
+
+    note = structure_document(document)
+
+    assert note.summary.startswith('O modelo de camadas das imagens Docker')
+
+
+def test_structure_document_skips_visual_page_noise_from_pdf_like_text(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'contrato.txt'
+    sample_file.write_text(
+        'CONTRATO DE PRESTACAO DE SERVICOS TECNICOS ESPECIALIZADOS No 2025/0047\n'
+        'CONTRATO DE PRESTACAO DE SERVICOS TECNICOS ESPECIALIZADOS No 2025/0047\n\n'
+        '────────────────────────────────────────────────────────────────\n'
+        'Sistema de Gestao Documental v3.1 | Confidencial | Pag. 1 de 8\n'
+        '────────────────────────────────────────────────────────────────\n\n'
+        'CLAUSULA 1 - DO OBJETO\n\n'
+        'O presente contrato tem por objeto a prestacao de servicos tecnicos especializados em desenvolvimento de software, '
+        'manutencao evolutiva e suporte tecnico de primeiro e segundo niveis para os sistemas de gestao interna da Contratante.\n',
+        encoding='utf-8',
+    )
+
+    document = load_document(sample_file)
+
+    note = structure_document(document)
+
+    assert note.summary.startswith('O presente contrato tem por objeto a prestacao de servicos tecnicos especializados')
+
+
+def test_structure_document_repairs_light_ocr_fragmentation_in_title_and_summary(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'ocr.txt'
+    sample_file.write_text(
+        'RELA TORIO DE AVALI ACAO DE FERRAMENTAS\n'
+        'DE MONITORAMENTO DE INFRA ESTRUTURA\n'
+        'Versao: 2 .1\n\n'
+        '1. OBJ ETIVO\n\n'
+        'Este relat orio apr esenta os resultados da avali acao comparativa de tres ferramentas de monitoramento de infra estrutura.\n',
+        encoding='utf-8',
+    )
+
+    document = load_document(sample_file)
+
+    note = structure_document(document)
+
+    assert note.title == 'RELATORIO DE AVALIACAO DE FERRAMENTAS DE MONITORAMENTO DE INFRAESTRUTURA'
+    assert note.summary.startswith('Este relatorio apresenta os resultados da avaliacao comparativa')
+
+
+def test_structure_document_does_not_choose_code_block_as_summary(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'codigo.md'
+    sample_file.write_text(
+        '# Implementacao de Pipeline de Ingestao\n\n'
+        'Abaixo esta a implementacao inicial do modulo de ingestao. O codigo foi escrito na fase de prototipagem.\n\n'
+        '```python\n'
+        'def slugify(title: str) -> str:\n'
+        '    text = title.lower()\n'
+        '    return text.replace(\" \", \"-\")\n'
+        '```\n\n'
+        'Este modulo implementa leitura de arquivo, normalizacao de texto e geracao de slug.\n',
+        encoding='utf-8',
+    )
+
+    document = load_document(sample_file)
+
+    note = structure_document(document)
+
+    assert note.summary == 'Abaixo esta a implementacao inicial do modulo de ingestao. O codigo foi escrito na fase de prototipagem.'
+
+
 def test_notes_build_cli_renders_structured_markdown(sample_markdown_file: Path) -> None:
     result = runner.invoke(app, ['notes', 'build', str(sample_markdown_file)])
 

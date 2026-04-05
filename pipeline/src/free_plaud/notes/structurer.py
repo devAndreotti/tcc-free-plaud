@@ -5,7 +5,7 @@ import unicodedata
 from free_plaud.ingest.models import IngestedDocument
 from free_plaud.notes.markdown import render_note_markdown
 from free_plaud.notes.metadata import build_note_id
-from free_plaud.notes.normalizer import normalize_text
+from free_plaud.notes.normalizer import normalize_text, repair_ocr_summary_text
 from free_plaud.notes.schemas import Note
 
 GENERIC_TITLE_TERMS = {
@@ -19,11 +19,15 @@ GENERIC_TITLE_TERMS = {
 PREFERRED_SUMMARY_HEADINGS = {
     'resumo',
     'sumario executivo',
+    'sumario',
     'visao geral',
     'contexto',
     'introducao',
     'objetivo',
     'objetivo da reuniao',
+    'objetivo da sessao',
+    'do objeto',
+    'objeto',
 }
 
 KNOWN_METADATA_LABELS = {
@@ -141,6 +145,23 @@ def _choose_first_substantive_title(lines: list[str], fallback: str) -> tuple[in
         stripped = line.strip()
         title = _finalize_title(stripped, fallback)
         if title:
+            continuation: list[str] = []
+            probe = index + 1
+            while probe < len(lines):
+                next_line = lines[probe].strip()
+                if not next_line:
+                    break
+                if _looks_like_metadata_line(next_line) or _is_table_line(next_line) or _is_bullet_line(next_line):
+                    break
+                if not _is_heading_line(next_line):
+                    break
+                continuation_title = _finalize_title(next_line, fallback)
+                if not continuation_title or continuation_title == fallback:
+                    break
+                continuation.append(continuation_title)
+                probe += 1
+            if continuation:
+                title = ' '.join([title, *continuation])[:140]
             return index, title
 
     return -1, fallback
@@ -172,7 +193,9 @@ def _heading_key(line: str) -> str:
 
 def _is_preferred_summary_heading(line: str) -> bool:
     key = _heading_key(line)
-    return key in PREFERRED_SUMMARY_HEADINGS
+    return key in PREFERRED_SUMMARY_HEADINGS or any(
+        key.endswith(term) for term in PREFERRED_SUMMARY_HEADINGS
+    )
 
 
 def _is_useful_summary(candidate: str) -> bool:
@@ -180,11 +203,19 @@ def _is_useful_summary(candidate: str) -> bool:
     return len(candidate) >= 40 and len(words) >= 6
 
 
-def _collect_candidate_paragraph(lines: list[str], start_index: int) -> str:
-    fallback = ""
+def _collect_candidate_paragraphs(lines: list[str], start_index: int) -> list[tuple[int, str]]:
+    candidates: list[tuple[int, str]] = []
     index = max(start_index, 0)
+    in_code_block = False
     while index < len(lines):
         current = lines[index].strip()
+        if current.startswith('```'):
+            in_code_block = not in_code_block
+            index += 1
+            continue
+        if in_code_block:
+            index += 1
+            continue
         if not current:
             index += 1
             continue
@@ -193,15 +224,18 @@ def _collect_candidate_paragraph(lines: list[str], start_index: int) -> str:
             or _is_table_line(current)
             or _is_horizontal_rule_line(current)
             or _is_bullet_line(current)
-            or _looks_like_metadata_line(current)
-        ):
+                or _looks_like_metadata_line(current)
+            ):
             index += 1
             continue
 
+        start = index
         paragraph_lines = [_strip_inline_markdown(current)]
         index += 1
         while index < len(lines):
             following = lines[index].strip()
+            if following.startswith('```'):
+                break
             if not following:
                 break
             if (
@@ -216,29 +250,61 @@ def _collect_candidate_paragraph(lines: list[str], start_index: int) -> str:
             index += 1
 
         candidate = ' '.join(part for part in paragraph_lines if part).strip()
-        if candidate and _is_useful_summary(candidate):
-            return candidate[:240]
-        if candidate and not fallback:
-            fallback = candidate[:240]
+        if candidate:
+            candidates.append((start, candidate[:240]))
         index += 1
 
-    return fallback
+    return candidates
 
 
-def _extract_summary(lines: list[str], title_index: int) -> str:
+def _score_summary_candidate(candidate: str, title: str) -> tuple[int, int]:
+    normalized_candidate = _normalize_for_match(candidate)
+    word_count = len(candidate.split())
+    punctuation_hits = len(re.findall(r'[.!?;]', candidate))
+    sentence_like = 1 if punctuation_hits > 0 else 0
+    score = min(len(candidate), 240)
+    score += min(word_count * 3, 45)
+    score += punctuation_hits * 20
+    score += sentence_like * 40
+    if _is_useful_summary(candidate):
+        score += 40
+    if normalized_candidate == _normalize_for_match(title):
+        score -= 250
+    if candidate.count(' - ') >= 2 or candidate.count(' — ') >= 2:
+        score -= 80
+    if 'pag.' in normalized_candidate or 'confidencial' in normalized_candidate:
+        score -= 160
+    if candidate.startswith('```') or candidate.startswith('def ') or candidate.startswith('class '):
+        score -= 240
+    return score, len(candidate)
+
+
+def _choose_best_summary(candidates: list[tuple[int, str]], title: str) -> str:
+    if not candidates:
+        return ""
+    ranked = sorted(
+        candidates,
+        key=lambda item: (_score_summary_candidate(item[1], title), -item[0]),
+        reverse=True,
+    )
+    return ranked[0][1]
+
+
+def _extract_summary(lines: list[str], title_index: int, title: str) -> str:
     start_index = max(title_index + 1, 0)
     for index in range(start_index, len(lines)):
         line = lines[index].strip()
         if _is_heading_line(line) and _is_preferred_summary_heading(line):
-            candidate = _collect_candidate_paragraph(lines, index + 1)
-            if candidate:
+            candidates = _collect_candidate_paragraphs(lines, index + 1)
+            if candidates:
+                candidate = candidates[0][1]
                 return candidate
 
-    candidate = _collect_candidate_paragraph(lines, start_index)
+    candidate = _choose_best_summary(_collect_candidate_paragraphs(lines, start_index), title)
     if candidate:
         return candidate
 
-    return _collect_candidate_paragraph(lines, 0)
+    return _choose_best_summary(_collect_candidate_paragraphs(lines, 0), title)
 
 
 def structure_document(document: IngestedDocument) -> Note:
@@ -251,7 +317,7 @@ def structure_document(document: IngestedDocument) -> Note:
     lines = normalized_text.splitlines()
     fallback_title = _humanize_fallback_title(document.source_path.stem)
     title_index, title = _choose_title(lines, fallback_title, document.source_type)
-    summary = _extract_summary(lines, title_index)
+    summary = repair_ocr_summary_text(_extract_summary(lines, title_index, title))
     note = Note(
         note_id=build_note_id(document.source_path),
         source_type=document.source_type,
