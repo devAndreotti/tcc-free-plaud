@@ -1,11 +1,16 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Note(BaseModel):
     """Representa a unidade primária de conhecimento do sistema."""
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
 
     note_id: str
     source_type: str

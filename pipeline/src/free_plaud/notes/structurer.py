@@ -4,6 +4,11 @@ from free_plaud.notes.metadata import build_note_id
 from free_plaud.notes.schemas import Note
 
 
+def _normalize_title(raw_title: str, fallback: str) -> str:
+    title = raw_title.lstrip('#').strip()
+    return title or fallback
+
+
 def structure_document(document: IngestedDocument) -> Note:
     """Transforma um documento bruto em uma nota estruturada mínima.
 
@@ -11,7 +16,7 @@ def structure_document(document: IngestedDocument) -> Note:
     etapa de estruturação assistida por LLM.
     """
     lines = [line.strip() for line in document.raw_text.splitlines() if line.strip()]
-    title = lines[0][:80] if lines else document.source_path.stem
+    title = _normalize_title(lines[0], document.source_path.stem)[:80] if lines else document.source_path.stem
     summary = lines[1][:240] if len(lines) > 1 else (lines[0][:240] if lines else "")
     note = Note(
         note_id=build_note_id(document.source_path),
