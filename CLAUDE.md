@@ -12,12 +12,31 @@ Fase atual: fundação documental e arquitetura.
 
 Antes de escrever código, ler:
 
-1. `docs/TCC.md`
-2. `docs/Arquitetura.md`
-3. `docs/Arquitetura_Backend.md`
-4. `docs/Arquitetura_Frontend.md`
-5. `docs/Metodologia_Akita_Git.md`
-6. `docs/Plano_de_Arranque.md`
+1. `AGENTS.md`
+2. `docs/ORDEM_DE_LEITURA_IA.md`
+
+Para trabalho de backend, ler tambem:
+
+1. `docs/arquitetura/Arquitetura_Backend.md`
+2. pasta relevante em `Sprints/`
+
+Opcional:
+
+1. `docs/plano_execucao/PLANO_BACKEND_PESSOAL.md` para visao macro
+2. `docs/plano_execucao/CONTRATOS_FRONT_BACK.md` se a tarefa tocar integracao com UI
+
+Para trabalho de alinhamento com frontend, ler tambem:
+
+1. `docs/arquitetura/Arquitetura_Frontend.md`
+2. `docs/plano_execucao/HANDOFF_FRONTEND_JOAO.md`
+3. `docs/plano_execucao/CONTRATOS_FRONT_BACK.md`
+4. pasta relevante em `Sprints/`, se houver material especifico
+
+Observacao:
+
+- `docs/referencias_ia/` contem guias e pesquisas de apoio
+- por padrao, a IA nao precisa ler `docs/tcc/`
+- a fonte de verdade para implementacao continua sendo `docs/arquitetura/`, `docs/planejamento/` e `docs/plano_execucao/`
 
 ## Non-Negotiable Rules
 
@@ -114,7 +133,7 @@ free-plaud/
 
 Quando surgir decisão estrutural nova:
 
-1. atualizar `docs/Arquitetura.md` se afetar o desenho geral
-2. atualizar `docs/Arquitetura_Backend.md` ou `docs/Arquitetura_Frontend.md` se afetar detalhe de camada
-3. atualizar `docs/TCC.md` se alterar escopo, pergunta de pesquisa ou contribuição
+1. atualizar `docs/arquitetura/Arquitetura.md` se afetar o desenho geral
+2. atualizar `docs/arquitetura/Arquitetura_Backend.md` ou `docs/arquitetura/Arquitetura_Frontend.md` se afetar detalhe de camada
+3. atualizar `docs/tcc/TCC.md` se alterar escopo, pergunta de pesquisa ou contribuição
 4. atualizar `README.md` se for algo relevante para entendimento externo do projeto

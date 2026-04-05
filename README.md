@@ -4,13 +4,13 @@ Sistema desktop local-first para captura multimodal, estruturação automática 
 
 ## Status
 
-O repositório está em fase de fundação de TCC:
+O repositório está em fase de fundação de TCC com scaffold inicial do backend já iniciado:
 
 - problema de pesquisa definido
 - perguntas de pesquisa delimitadas
 - arquitetura alvo descrita
 - plano de arranque documentado
-- implementação ainda não iniciada
+- scaffold inicial do backend em Python criado
 
 ## Problema
 
@@ -56,14 +56,14 @@ Essa ordem prioriza a parte científica do TCC antes da parte cosmética do prod
 
 ## Documentação principal
 
-- Visão geral do TCC: [`docs/TCC.md`](docs/TCC.md)
-- Arquitetura do sistema: [`docs/Arquitetura.md`](docs/Arquitetura.md)
-- Backend: [`docs/Arquitetura_Backend.md`](docs/Arquitetura_Backend.md)
-- Frontend: [`docs/Arquitetura_Frontend.md`](docs/Arquitetura_Frontend.md)
-- Plano de arranque: [`docs/Plano_de_Arranque.md`](docs/Plano_de_Arranque.md)
-- Metodologia Akita + git: [`docs/Metodologia_Akita_Git.md`](docs/Metodologia_Akita_Git.md)
-- Perguntas que o trabalho precisa responder: [`docs/Perguntas_a_Serem_Respondidas.md`](docs/Perguntas_a_Serem_Respondidas.md)
-- Prep de defesa: [`docs/Perguntas_do_TCC.md`](docs/Perguntas_do_TCC.md)
+- Visão geral do TCC: [`docs/tcc/TCC.md`](docs/tcc/TCC.md)
+- Arquitetura do sistema: [`docs/arquitetura/Arquitetura.md`](docs/arquitetura/Arquitetura.md)
+- Backend: [`docs/arquitetura/Arquitetura_Backend.md`](docs/arquitetura/Arquitetura_Backend.md)
+- Frontend: [`docs/arquitetura/Arquitetura_Frontend.md`](docs/arquitetura/Arquitetura_Frontend.md)
+- Plano de arranque: [`docs/planejamento/Plano_de_Arranque.md`](docs/planejamento/Plano_de_Arranque.md)
+- Metodologia Akita + git: [`docs/planejamento/Metodologia_Akita_Git.md`](docs/planejamento/Metodologia_Akita_Git.md)
+- Perguntas que o trabalho precisa responder: [`docs/tcc/Perguntas_a_Serem_Respondidas.md`](docs/tcc/Perguntas_a_Serem_Respondidas.md)
+- Prep de defesa: [`docs/tcc/Perguntas_do_TCC.md`](docs/tcc/Perguntas_do_TCC.md)
 
 ## Convenções do repositório
 
@@ -120,6 +120,6 @@ Essa ordem prioriza a parte científica do TCC antes da parte cosmética do prod
 
 ## Observações
 
-- O repositório ainda não tem commit inicial útil.
-- O `origin` atual parece indisponível e deve ser revisado antes do início efetivo da implementação.
+- O backend experimental vive em `pipeline/`.
+- O repositório já possui um baseline inicial para CLI, configuração local e testes.
 - A pasta [`.agents/inspirations`](.agents/inspirations) foi reservada para a direção visual futura do app.
