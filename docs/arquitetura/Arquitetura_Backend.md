@@ -120,6 +120,7 @@ Responsável por:
 - regras de estruturação
 - montagem do Markdown final
 - frontmatter
+- persistência local do artefato canônico da nota
 
 Essa camada é central para o TCC, porque a qualidade da estruturação afeta a recuperação depois.
 
@@ -180,15 +181,19 @@ Se a pergunta de escala ganhar peso, avaliar `LanceDB` como comparativo técnico
 ### Nota
 
 - `note_id`
+- `note_version`
 - `source_type`
 - `source_path`
+- `source_name`
 - `title`
 - `summary`
 - `topics`
 - `tasks`
 - `tags`
 - `raw_text`
+- `normalized_text`
 - `structured_markdown`
+- `content_hash`
 - `created_at`
 - `provider`
 - `model`
