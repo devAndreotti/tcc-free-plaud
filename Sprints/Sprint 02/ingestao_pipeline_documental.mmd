@@ -1,0 +1,34 @@
+flowchart LR
+    A[Entrada\nIngestionCommand\nsource_path + correlation_id] --> B[Inspeção física\nexistência, permissão, tamanho, hash]
+    B --> C[Detecção de tipo\nextensão + MIME + assinatura]
+    C --> D{Tipo suportado?}
+    D -- Não --> Q[Erro tipado\nUNSUPPORTED_MEDIA_TYPE\nou quarentena]
+    D -- Sim --> E[ParserRegistry\nseleção da estratégia]
+    E --> F{Parser por tipo}
+    F --> F1[TXT Parser\nleitura textual]
+    F --> F2[MD Parser\nleitura + normalização]
+    F --> F3[PDF Parser\nextração + metadados por página]
+    F1 --> G[Validação semântica\nvazio, legibilidade, limites]
+    F2 --> G
+    F3 --> G
+    G --> H{Conteúdo válido?}
+    H -- Não --> I[Quarentena / relatório de erro\nartefatos + causa + ação sugerida]
+    H -- Sim --> J[Normalização\nencoding, quebras de linha, schema canônico]
+    J --> K[Persistência de artefatos\noriginal, texto, manifesto, validação]
+    K --> L[Logs estruturados + trilha de auditoria\ningestion_id, document_id, source_path]
+    L --> M[Resultado operacional\nsucesso, warning ou falha]
+
+    N[UI / API / CLI / Job / Fila] -. desacoplado .-> A
+
+    subgraph Proveniência e observabilidade
+      O[Entity\narquivo original]
+      P[Activity\nparse, validação, normalização]
+      R[Agent\nserviço, worker, parser]
+    end
+
+    O -. derivações .-> K
+    P -. eventos .-> L
+    R -. responsabilidade .-> L
+
+    Q --> L
+    I --> L
