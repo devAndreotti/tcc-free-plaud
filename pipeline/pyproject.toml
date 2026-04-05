@@ -1,0 +1,36 @@
+[project]
+name = "free-plaud-pipeline"
+version = "0.1.0"
+description = "Backend local-first para pipeline RAG experimental do TCC free-plaud"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic>=2.11.0",
+  "pydantic-settings>=2.8.0",
+  "typer>=0.16.0",
+  "rich>=14.0.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3.0",
+  "pytest-cov>=5.0.0",
+]
+
+[project.scripts]
+free-plaud = "free_plaud.cli:app"
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/free_plaud"]
