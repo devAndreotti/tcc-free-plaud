@@ -50,8 +50,8 @@ def chunk_text(
 
     while start < len(normalized_text):
         end = min(start + chunk_size, len(normalized_text))
-        piece = normalized_text[start:end].strip()
-        if piece:
+        piece = normalized_text[start:end]
+        if piece.strip():
             chunks.append(
                 Chunk(
                     chunk_id=stable_chunk_id(

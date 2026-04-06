@@ -121,6 +121,20 @@ def test_chunk_ids_include_note_version_and_offsets() -> None:
     assert 'ofs-' in chunks[0].chunk_id
 
 
+def test_index_note_keeps_chunk_text_exactly_aligned_with_offset_span() -> None:
+    note = _build_note(
+        raw_text='Linha 1  \nLinha 2 com espaco no fim \nLinha 3',
+        normalized_text='Linha 1  \nLinha 2 com espaco no fim \nLinha 3',
+        content_hash='f' * 64,
+    )
+
+    chunks = index_note(note, chunk_size=18, overlap=6)
+
+    assert chunks
+    for chunk in chunks:
+        assert note.normalized_text[chunk.char_start:chunk.char_end] == chunk.chunk_text
+
+
 def test_retrieval_chunks_cli_renders_offsets_and_lineage(tmp_path: Path) -> None:
     sample_file = tmp_path / 'doc.md'
     sample_file.write_text(
