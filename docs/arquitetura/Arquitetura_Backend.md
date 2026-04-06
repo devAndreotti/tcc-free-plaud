@@ -202,11 +202,21 @@ Se a pergunta de escala ganhar peso, avaliar `LanceDB` como comparativo técnico
 
 - `chunk_id`
 - `note_id`
+- `note_version`
 - `chunk_index`
+- `char_start`
+- `char_end`
+- `chunk_size`
+- `overlap`
 - `chunk_text`
 - `token_count`
-- `embedding_model`
-- `experiment_id`
+- `strategy`
+- `normalized_text_sha256`
+- `text_sha256`
+- `pipeline_version`
+
+Na implementação atual da Sprint 4.1, o chunking deve ocorrer sobre `normalized_text`, e não sobre `raw_text`.
+Isso existe para manter offsets reproduzíveis e preparar a rastreabilidade `note -> chunk` antes da camada de persistência em SQLite.
 
 ### Execução de benchmark
 

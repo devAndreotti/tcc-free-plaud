@@ -10,6 +10,11 @@ app = typer.Typer(help="Comandos de chunking, indexação e recuperação.", no_
 console = Console()
 
 
+def _safe_console_text(text: str) -> str:
+    encoding = getattr(console.file, 'encoding', None) or 'utf-8'
+    return text.encode(encoding, errors='replace').decode(encoding)
+
+
 @app.command("chunks")
 def chunks(
     path_parts: list[str] = typer.Argument(..., metavar="PATH"),
@@ -22,4 +27,9 @@ def chunks(
     note = structure_document(document)
     generated = index_note(note, chunk_size=chunk_size, overlap=overlap)
     for chunk in generated:
-        console.print(f"[bold]{chunk.chunk_id}[/bold] ({chunk.token_count} tokens) -> {chunk.chunk_text[:120]}")
+        preview = _safe_console_text(chunk.chunk_text[:120])
+        console.print(
+            f"[bold]{chunk.chunk_id}[/bold] "
+            f"(v{chunk.note_version}, ofs={chunk.char_start}:{chunk.char_end}, {chunk.token_count} tokens) "
+            f"-> {preview}"
+        )
