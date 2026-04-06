@@ -43,7 +43,15 @@ def _is_visual_noise_line(line: str) -> bool:
     if re.fullmatch(r'[\u2500-\u257f\s]+', stripped):
         return True
     normalized = stripped.lower()
-    return ('pag.' in normalized or 'pág.' in normalized) and '|' in stripped
+    if ('pag.' in normalized or 'pág.' in normalized) and '|' in stripped:
+        return True
+    tokens = stripped.split()
+    if len(tokens) < 8:
+        return False
+    one_char_tokens = [
+        token for token in tokens if re.fullmatch(r'[A-Za-zÀ-ÿ]', token) is not None
+    ]
+    return len(one_char_tokens) / len(tokens) >= 0.6
 
 
 def _is_word_fragment(token: str) -> bool:
