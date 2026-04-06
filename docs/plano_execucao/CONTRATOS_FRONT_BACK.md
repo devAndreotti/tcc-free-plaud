@@ -23,27 +23,53 @@ Desde cedo, a UI deve trabalhar com objetos estruturados.
 ```ts
 type Citation = {
   note_id: string
+  note_version: number
   chunk_id: string
   snippet: string
   source_path?: string
+  char_start: number
+  char_end: number
+}
+
+type Claim = {
+  text: string
+  citations: Citation[]
+  support_level: 'direct' | 'partial'
+}
+
+type UsedSource = {
+  doc_id: string
+  note_version: number
+  source_path?: string
+  chunk_ids: string[]
 }
 
 type AskResponse = {
-  answer: string
-  citations: Citation[]
-  no_answer: boolean
-  latency_ms: number
   query: string
+  status: 'answer' | 'no_answer'
+  no_answer: boolean
+  answer: string | null
+  claims: Claim[]
+  citations: Citation[]
+  limitations: string[]
+  reason_for_no_answer: string | null
+  used_sources: UsedSource[]
+  latency_ms: number
 }
 ```
 
 ### Comportamento esperado
 
-- `answer` contem a resposta textual
-- `citations` contem a base usada
-- `no_answer` indica falta de evidencia suficiente
+- `query` preserva a pergunta original
+- `status` explicita se houve resposta ou abstencao
+- `no_answer` facilita consumo direto pela UI
+- `answer` contem a resposta textual ou `null`
+- `claims` divide a resposta em afirmacoes citaveis
+- `citations` agrega as citacoes usadas na resposta
+- `reason_for_no_answer` explica a abstencao quando ela acontecer
+- `used_sources` resume quais fontes sustentaram a resposta
 - `latency_ms` ajuda em debug e benchmark visual
-- `query` permite rastrear a pergunta exibida ou registrada
+- `source_path` e offsets ajudam a ligar UI, debug e rastreabilidade
 
 ## Contratos secundarios
 

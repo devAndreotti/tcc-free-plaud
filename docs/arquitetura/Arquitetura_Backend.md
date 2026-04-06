@@ -140,6 +140,8 @@ Deve conter toda a lógica experimental de:
 - overlap
 - top-k
 - thresholds
+- resposta estruturada com citação obrigatória
+- política de `no_answer`
 
 ### `benchmark/`
 
@@ -236,6 +238,27 @@ Isso existe para manter offsets reproduzíveis e preparar a rastreabilidade `not
 - `recall_at_3`
 - `recall_at_5`
 - `recall_at_10`
+
+### Resposta ask
+
+- `query`
+- `status`
+- `no_answer`
+- `answer`
+- `claims`
+- `citations`
+- `limitations`
+- `reason_for_no_answer`
+- `used_sources`
+- `latency_ms`
+
+Na implementação atual da Sprint 5, a resposta `ask` nasce como um baseline local-first sobre
+busca lexical com matching por token inteiro, não por substring. Isso permite:
+
+- devolver payload estruturado para a UI desde cedo
+- exigir citação por claim
+- registrar abstention explícita quando a cobertura lexical for insuficiente
+- manter rastreabilidade `note -> chunk -> citation` sem depender ainda de embeddings reais
 
 ## Ordem de implementação backend
 
