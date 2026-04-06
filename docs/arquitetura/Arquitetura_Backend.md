@@ -159,6 +159,11 @@ Responsável por:
 - persistência de configuração e logs em SQLite
 - persistência vetorial
 
+Na implementação atual da Sprint 4.2, o SQLite local passa a sustentar o schema mínimo de
+`notes`, `chunks`, `processing_logs`, `benchmark_runs` e `benchmark_queries`.
+Essa camada ainda não guarda embeddings reais, mas já preserva a rastreabilidade entre nota,
+chunk, processamento e execução de benchmark.
+
 ## Banco vetorial
 
 ### Escolha atual
