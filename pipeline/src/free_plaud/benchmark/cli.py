@@ -1,11 +1,20 @@
+import json
+from pathlib import Path
+
 import typer
 from rich.console import Console
 
 from free_plaud.app.cli_paths import compose_path
-from free_plaud.benchmark.datasets import demo_dataset
-from free_plaud.benchmark.runners import run_demo_benchmark
+from free_plaud.app.config import get_settings
+from free_plaud.app.paths import ensure_runtime_dirs
+from free_plaud.benchmark.datasets import demo_dataset, load_benchmark_dataset
+from free_plaud.benchmark.reports import export_benchmark_csv, export_benchmark_json
+from free_plaud.benchmark.runners import run_benchmark
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
+from free_plaud.providers.embed import get_embedder
+from free_plaud.storage.sqlite import init_sqlite
+from free_plaud.storage.vector import LocalVectorStore
 
 app = typer.Typer(help="Comandos de benchmark experimental.", no_args_is_help=True)
 console = Console()
@@ -15,8 +24,54 @@ console = Console()
 def run_demo(path_parts: list[str] = typer.Argument(..., metavar="PATH")) -> None:
     """Executa um benchmark mínimo em cima de um único documento."""
     path = compose_path(path_parts)
-    document = load_document(path)
-    note = structure_document(document)
-    results = run_demo_benchmark(note, demo_dataset())
-    for row in results:
-        console.print(row)
+    note = structure_document(load_document(path))
+    result = run_benchmark(note, demo_dataset(), strategy='lexical', top_k=3)
+    typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
+
+
+@app.command("run")
+def run(
+    path_parts: list[str] = typer.Argument(..., metavar="PATH"),
+    dataset_path: Path = typer.Option(..., '--dataset', '-d', help="Arquivo JSON com o dataset de benchmark."),
+    strategy: str = typer.Option('lexical', '--strategy', '-s', help="Estrategia: lexical ou vector."),
+    top_k: int = typer.Option(3, '--top-k', min=1),
+    chunk_size: int = typer.Option(800, '--chunk-size', min=1),
+    overlap: int = typer.Option(120, '--overlap', min=0),
+    run_name: str = typer.Option('benchmark', '--run-name'),
+    export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
+) -> None:
+    """Executa benchmark reproduzível e persiste a execução em SQLite."""
+    if strategy not in {'lexical', 'vector'}:
+        raise typer.BadParameter("strategy deve ser 'lexical' ou 'vector'.")
+
+    settings = get_settings()
+    ensure_runtime_dirs(settings)
+    note = structure_document(load_document(compose_path(path_parts)))
+    dataset = load_benchmark_dataset(dataset_path)
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = None
+    embedder = None
+    if strategy == 'vector':
+        vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+        embedder = get_embedder(settings.embedding_model)
+
+    result = run_benchmark(
+        note,
+        dataset,
+        connection=connection,
+        strategy=strategy,  # type: ignore[arg-type]
+        top_k=top_k,
+        chunk_size=chunk_size,
+        overlap=overlap,
+        run_name=run_name,
+        vector_store=vector_store,
+        embedder=embedder,
+    )
+    payload = result.model_dump(mode='json')
+    if export:
+        output_base = settings.results_dir / result.benchmark_run_id
+        json_path = export_benchmark_json(result, output_base.with_suffix('.json'))
+        csv_path = export_benchmark_csv(result, output_base.with_suffix('.csv'))
+        payload['json_report_path'] = str(json_path)
+        payload['csv_report_path'] = str(csv_path)
+    typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))

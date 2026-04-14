@@ -262,6 +262,12 @@ por uma base vetorial local real e persistente.
 - `recall_at_5`
 - `recall_at_10`
 
+Na implementação atual da Sprint 07, o benchmark passa a ter um runner reproduzível por CLI.
+Ele carrega datasets JSON, executa consultas sobre uma nota canônica, calcula `MRR`,
+`Recall@3`, `Recall@5`, `Recall@10` e latência, persiste a execução em SQLite e pode
+exportar resultados em JSON e CSV. O runner já compara `lexical` e prepara o mesmo contrato
+para `vector`, sem depender de interface gráfica.
+
 ### Resposta ask
 
 - `query`
