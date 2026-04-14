@@ -193,7 +193,74 @@ Preparar a base de recuperacao semantica com rastreabilidade forte.
 
 - Sprint 03
 
-## Sprint 05 - Embeddings e indexacao
+## Estado real atual do backend
+
+No estado atual do projeto, o backend ja possui:
+
+- ingestao de `.txt`, `.md` e `.pdf`
+- nota canonica persistivel
+- chunking com offsets e lineage
+- persistencia minima em `SQLite`
+- `ask` estruturado com citacao obrigatoria
+- regra baseline de `no_answer`
+
+O ponto principal que ainda falta para o pipeline textual ficar mais alinhado ao TCC e:
+
+- embeddings reais
+- indexacao vetorial local
+- retrieval semantico no `ask`
+- benchmark reproduzivel
+
+## Sprints concluidas ate agora
+
+### Sprint 00
+
+- scaffold
+- `uv`
+- configuracao
+- CLI
+- testes iniciais
+
+### Sprint 01
+
+- schemas centrais
+- loaders textuais
+- Markdown estruturado
+
+### Sprint 02
+
+- ingestao operacional
+- validacao
+- logs e rastreabilidade minima
+
+### Sprint 03
+
+- nota canonica
+- persistencia local
+- manifesto minimo
+
+### Sprint 04.1
+
+- chunking com offsets
+- lineage `note -> chunk`
+- `chunk_id` estavel
+
+### Sprint 04.2
+
+- persistencia baseline em `SQLite`
+- notas
+- chunks
+- logs
+- benchmark records basicos
+
+### Sprint 05
+
+- `ask` estruturado
+- citacao obrigatoria
+- `no_answer`
+- baseline lexical funcionando
+
+## Sprint 06.1 - Embeddings e indexacao vetorial
 
 ### Objetivo
 
@@ -216,29 +283,50 @@ Indexar o acervo local para busca semantica.
 
 - Sprint 04
 
-## Sprint 06 - Ask com citacao obrigatoria
-
 ### Objetivo
 
-Fechar a primeira fatia forte do TCC.
+Adicionar retrieval semantico real ao projeto.
 
 ### Entregaveis
 
-- pipeline de pergunta
-- recuperacao `top-k`
-- montagem de contexto
-- resposta com citacao obrigatoria
-- regra de ausencia de base suficiente
+- adaptador de embeddings
+- persistencia vetorial em `ChromaDB`
+- indexacao vetorial dos chunks
+- busca semantica baseline
+
+### Criterios de aceite
+
+- uma nota indexada pode ser encontrada por consulta semanticamente semelhante
+- o `embedding_model` fica registrado
+- a indexacao vetorial nao depende da interface
+
+### Dependencias
+
+- Sprint 05
+
+## Sprint 06.2 - Ask semantico e estrategia de recuperacao
+
+### Objetivo
+
+Ligar o retrieval semantico ao `ask`, mantendo citacao obrigatoria e `no_answer`.
+
+### Entregaveis
+
+- estrategia configuravel de retrieval
+- `ask` usando busca semantica real
+- montagem de contexto melhorada
+- citacao obrigatoria sobre retrieval semantico
+- `no_answer` com sinais minimos do retrieval real
 
 ### Criterios de aceite
 
 - toda resposta aponta a base utilizada
 - quando nao houver base suficiente, o sistema sinaliza isso
-- existe teste de citacao obrigatoria
+- existe teste cobrindo retrieval semantico no `ask`
 
 ### Dependencias
 
-- Sprint 05
+- Sprint 06.1
 
 ## Sprint 07 - Benchmark
 
@@ -262,28 +350,73 @@ Transformar o backend em instrumento experimental defensavel.
 
 ### Dependencias
 
-- Sprint 06
+- Sprint 06.2
 
-## Sprint 08 - Preparacao para integracao com a UI
+## Sprint 08.1 - Contratos e camada de aplicacao para UI
 
 ### Objetivo
 
-Expor o backend de forma limpa para consumo futuro da interface.
+Preparar o backend para consumo limpo pela interface, sem vazar detalhes internos.
 
 ### Entregaveis
 
-- contrato estavel de resposta para `ask`
-- contrato resumido para fila, notas e benchmark
-- camada de adaptacao pronta para ser ligada a bridge, HTTP local ou outro mecanismo
+- contratos estaveis para `ask`
+- contratos resumidos para notas e benchmark
+- camada de aplicacao/servicos
 
 ### Criterios de aceite
 
-- a UI consegue se integrar sem precisar conhecer logica interna do backend
-- a integracao futura nao exige reescrever o dominio
+- a UI nao precisa conhecer a organizacao interna do backend
+- os contratos ficam estaveis o suficiente para mock e integracao real
 
 ### Dependencias
 
 - Sprint 07
+
+## Sprint 08.2 - Integracao inicial com a UI
+
+### Objetivo
+
+Conectar o backend real ao frontend no fluxo minimo de `ask`.
+
+### Entregaveis
+
+- adapter ou bridge inicial
+- troca de mocks por respostas reais no fluxo principal
+- validacao ponta a ponta do chat minimo
+
+### Criterios de aceite
+
+- a UI consegue chamar o backend real
+- o fluxo `ask` funciona ponta a ponta
+
+### Dependencias
+
+- Sprint 08.1
+
+## Sprint 09 - Extensoes futuras
+
+### Objetivo
+
+Organizar o que e importante, mas nao entra antes do core textual ficar validado.
+
+### Entregaveis
+
+- reranker
+- busca hibrida
+- calibragem de thresholds
+- audio
+- imagem
+- shell desktop
+- refinamentos de UX
+
+### Criterios de aceite
+
+- essas frentes nao podem comprometer benchmark e core textual
+
+### Dependencias
+
+- Sprint 08.2
 
 ## Ordem obrigatoria para IA
 
@@ -295,10 +428,12 @@ Se uma IA for usada para implementar ou pesquisar, ela deve seguir esta ordem:
 4. Markdown estruturado
 5. chunking
 6. storage
-7. embeddings
-8. ask com citacao
-9. benchmark
-10. integracao com UI
+7. `ask` baseline com citacao
+8. embeddings e vector store
+9. `ask` semantico
+10. benchmark
+11. contratos de aplicacao para UI
+12. integracao com UI
 
 ## O que a IA nao deve fazer cedo demais
 
@@ -313,6 +448,7 @@ Se uma IA for usada para implementar ou pesquisar, ela deve seguir esta ordem:
 Este plano esta bem executado quando eu tiver:
 
 - backend funcional sem depender do frontend
+- retrieval semantico real em vez de apenas baseline lexical
 - contrato de integracao claro
 - benchmark separado da UI
 - caminho limpo para o Joao integrar a interface depois
