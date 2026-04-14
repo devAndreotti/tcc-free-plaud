@@ -166,6 +166,9 @@ Na implementação atual da Sprint 4.2, o SQLite local passa a sustentar o schem
 Essa camada ainda não guarda embeddings reais, mas já preserva a rastreabilidade entre nota,
 chunk, processamento e execução de benchmark.
 
+Na implementação atual da Sprint 06.1, o armazenamento vetorial local passa a usar `ChromaDB`
+como baseline persistente em disco, desacoplado da interface e encapsulado em `storage/vector.py`.
+
 ## Banco vetorial
 
 ### Escolha atual
@@ -178,6 +181,13 @@ Motivos:
 - persiste localmente
 - boa ergonomia em Python
 - suficiente para a primeira rodada experimental
+
+Na implementação atual da Sprint 06.1:
+
+- o vector store local usa `ChromaDB PersistentClient`
+- a coleção baseline é persistida em `data/results/vector_store`
+- o backend registra `embedding_model` na indexação vetorial
+- a busca semântica inicial já retorna `chunk`, `score` e `strategy`
 
 ### Alternativa futura
 
@@ -225,6 +235,19 @@ Se a pergunta de escala ganhar peso, avaliar `LanceDB` como comparativo técnico
 Na implementação atual da Sprint 4.1, o chunking deve ocorrer sobre `normalized_text`, e não sobre `raw_text`.
 Isso existe para manter offsets reproduzíveis e preparar a rastreabilidade `note -> chunk` antes da camada de persistência em SQLite.
 
+### Embedding e indexação vetorial
+
+- `embedding_model`
+- `vector_collection_name`
+- `collection_dir`
+
+Na implementação atual da Sprint 06.1, o fluxo vetorial passa a ser:
+
+`note -> chunks -> embeddings -> ChromaDB -> semantic search`
+
+Esse fluxo ainda não faz reranking nem busca híbrida, mas já substitui o placeholder anterior
+por uma base vetorial local real e persistente.
+
 ### Execução de benchmark
 
 - `experiment_id`
@@ -253,12 +276,16 @@ Isso existe para manter offsets reproduzíveis e preparar a rastreabilidade `not
 - `latency_ms`
 
 Na implementação atual da Sprint 5, a resposta `ask` nasce como um baseline local-first sobre
-busca lexical com matching por token inteiro, não por substring. Isso permite:
+busca lexical com matching por token inteiro, não por substring. A partir da Sprint 06.2,
+o mesmo contrato passa a aceitar estratégia `lexical` ou `vector`, com abstention explícita
+quando a evidência semântica fica fraca ou mal ancorada. Isso permite:
 
 - devolver payload estruturado para a UI desde cedo
 - exigir citação por claim
 - registrar abstention explícita quando a cobertura lexical for insuficiente
+- registrar abstention explícita quando o retrieval vetorial falha em score, anchors nomeados ou grounding textual
 - manter rastreabilidade `note -> chunk -> citation` sem depender ainda de embeddings reais
+- preparar o caminho para benchmark comparativo entre estratégias de recuperação
 
 ## Ordem de implementação backend
 

@@ -38,6 +38,8 @@ def doctor() -> None:
         "datasets_dir": str(settings.datasets_dir),
         "results_dir": str(settings.results_dir),
         "vector_store_dir": str(settings.vector_store_dir),
+        "vector_collection_name": settings.vector_collection_name,
+        "embedding_model": settings.embedding_model,
         "sqlite_path": str(settings.sqlite_path),
         "default_chunk_size": str(settings.default_chunk_size),
         "default_chunk_overlap": str(settings.default_chunk_overlap),

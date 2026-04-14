@@ -28,7 +28,9 @@ class SearchHit(BaseModel):
     chunk: Chunk
     score: float
     matched_terms: list[str] = Field(default_factory=list)
-    term_coverage: float
+    term_coverage: float = 0.0
+    strategy: str = 'lexical'
+    distance: float | None = None
 
 
 class Citation(BaseModel):

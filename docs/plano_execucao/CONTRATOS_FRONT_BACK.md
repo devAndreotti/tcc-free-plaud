@@ -71,6 +71,23 @@ type AskResponse = {
 - `latency_ms` ajuda em debug e benchmark visual
 - `source_path` e offsets ajudam a ligar UI, debug e rastreabilidade
 
+### Motivos atuais de abstencao
+
+Hoje o backend pode devolver, entre outros, motivos como:
+
+- `query_without_content`
+- `no_retrieval_hits`
+- `insufficient_term_coverage`
+- `insufficient_vector_evidence`
+- `insufficient_grounded_claims`
+- `missing_named_anchor`
+- `insufficient_vector_specificity`
+- `citation_validation_failed`
+
+O frontend nao deve depender de um texto amigavel fixo para esses motivos.
+
+Ele deve tratá-los como codigos de estado, deixando a apresentacao da mensagem com a UI.
+
 ## Contratos secundarios
 
 ### NoteSummary

@@ -1,0 +1,186 @@
+import json
+from pathlib import Path
+
+from typer.testing import CliRunner
+
+from free_plaud.app.config import Settings
+from free_plaud.cli import app
+from free_plaud.notes.schemas import Note
+from free_plaud.retrieval.indexer import index_note_in_vector_store
+from free_plaud.retrieval.models import Chunk, SearchHit
+from free_plaud.retrieval.search import semantic_search
+from free_plaud.storage.vector import LocalVectorStore
+
+runner = CliRunner()
+
+
+class FakeEmbedder:
+    model_name = 'fake-hash'
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        embeddings: list[list[float]] = []
+        for text in texts:
+            vector = [0.0] * 16
+            for token in text.lower().split():
+                slot = sum(ord(char) for char in token) % len(vector)
+                vector[slot] += 1.0
+            embeddings.append(vector)
+        return embeddings
+
+
+def _build_note(tmp_path: Path, **overrides: object) -> Note:
+    payload: dict[str, object] = {
+        'note_id': 'vector-note',
+        'note_version': 1,
+        'source_type': 'md',
+        'source_path': tmp_path / 'vector.md',
+        'source_name': 'vector.md',
+        'title': 'Benchmark vetorial',
+        'summary': 'Resumo vetorial.',
+        'topics': [],
+        'tasks': [],
+        'tags': ['md'],
+        'raw_text': (
+            'O benchmark compara recall e latencia entre estrategias de retrieval. '
+            'O SQLite persiste metadados e logs. '
+            'O frontend renderiza os resultados em uma tela separada.'
+        ),
+        'normalized_text': (
+            'O benchmark compara recall e latencia entre estrategias de retrieval. '
+            'O SQLite persiste metadados e logs. '
+            'O frontend renderiza os resultados em uma tela separada.'
+        ),
+        'structured_markdown': (
+            '# Benchmark vetorial\n\n'
+            'O benchmark compara recall e latencia entre estrategias de retrieval.\n\n'
+            'O SQLite persiste metadados e logs.\n\n'
+            'O frontend renderiza os resultados em uma tela separada.\n'
+        ),
+        'content_hash': 'a' * 64,
+    }
+    payload.update(overrides)
+    return Note(**payload)
+
+
+def test_local_vector_store_upserts_and_queries_chunks_with_metadata(tmp_path: Path) -> None:
+    embedder = FakeEmbedder()
+    note = _build_note(tmp_path)
+    store = LocalVectorStore(tmp_path / 'vector_store', collection_name='test_chunks')
+
+    chunks = index_note_in_vector_store(note, store, embedder, chunk_size=90, overlap=20)
+    hits = store.query(embedder.embed(['benchmark recall'])[0], top_k=2, note_id=note.note_id)
+
+    assert store.healthcheck() is True
+    assert store.count() == len(chunks)
+    assert hits
+    assert hits[0].chunk.note_id == note.note_id
+    assert hits[0].chunk.note_version == note.note_version
+    assert hits[0].chunk.chunk_id
+    assert hits[0].score > 0
+
+
+def test_semantic_search_returns_ranked_hits_for_related_query(tmp_path: Path) -> None:
+    embedder = FakeEmbedder()
+    store = LocalVectorStore(tmp_path / 'vector_store', collection_name='semantic_search')
+    note = _build_note(tmp_path)
+
+    index_note_in_vector_store(note, store, embedder, chunk_size=90, overlap=20)
+    hits = semantic_search('recall latencia retrieval', store, embedder, top_k=3, note_id=note.note_id)
+
+    assert hits
+    assert hits[0].strategy == 'vector'
+    assert hits[0].chunk.note_id == note.note_id
+    assert hits[0].score >= hits[-1].score
+
+
+def test_semantic_search_marks_fuzzy_term_matches_for_vector_hits() -> None:
+    class StubVectorStore:
+        def query(self, query_embedding: list[float], *, top_k: int, note_id: str | None = None) -> list[SearchHit]:
+            chunk = Chunk(
+                chunk_id='chunk-1',
+                note_id='vector-note',
+                note_version=1,
+                chunk_index=0,
+                chunk_text='O estudo esta medindo recall e latencia para avaliar retrieval.',
+                token_count=10,
+                char_start=0,
+                char_end=68,
+                chunk_size=90,
+                overlap=20,
+                strategy='fixed-window',
+                normalized_text_sha256='a' * 64,
+                text_sha256='b' * 64,
+                pipeline_version='test',
+            )
+            return [SearchHit(chunk=chunk, score=0.71, strategy='vector', distance=0.41)]
+
+    hits = semantic_search(
+        'O que o estudo mede?',
+        StubVectorStore(),
+        FakeEmbedder(),
+        top_k=1,
+        note_id='vector-note',
+    )
+
+    assert hits
+    assert hits[0].matched_terms == ['estudo', 'mede']
+    assert hits[0].term_coverage == 1.0
+
+
+def test_index_note_in_vector_store_raises_when_embedding_count_does_not_match_chunks(tmp_path: Path) -> None:
+    class BrokenEmbedder(FakeEmbedder):
+        model_name = 'broken'
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            return super().embed(texts[:-1])
+
+    store = LocalVectorStore(tmp_path / 'vector_store', collection_name='broken_embeddings')
+    note = _build_note(tmp_path)
+
+    try:
+        index_note_in_vector_store(note, store, BrokenEmbedder(), chunk_size=90, overlap=20)
+    except ValueError as exc:
+        assert 'embeddings' in str(exc)
+    else:
+        raise AssertionError('Era esperado ValueError quando a quantidade de embeddings nao bate com os chunks.')
+
+
+def test_retrieval_index_and_semantic_search_cli_use_vector_store(monkeypatch, tmp_path: Path) -> None:
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        datasets_dir=tmp_path / 'data' / 'datasets',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+        vector_collection_name='cli_chunks',
+        embedding_model='fake-hash',
+    )
+    sample_file = tmp_path / 'cli.md'
+    sample_file.write_text(
+        '# Documento vetorial\n\n'
+        'O benchmark compara recall e latencia para retrieval.\n'
+        'O SQLite persiste logs.\n',
+        encoding='utf-8',
+    )
+
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name: FakeEmbedder())
+
+    index_result = runner.invoke(app, ['retrieval', 'index', str(sample_file), '--chunk-size', '80', '--overlap', '20'])
+    search_result = runner.invoke(
+        app,
+        ['retrieval', 'semantic-search', '--query', 'benchmark recall', '--top-k', '2', '--note-id', 'cli'],
+    )
+
+    assert index_result.exit_code == 0
+    payload = json.loads(index_result.stdout)
+    assert payload['embedding_model'] == 'fake-hash'
+    assert payload['chunks_indexed'] >= 1
+
+    assert search_result.exit_code == 0
+    hits = json.loads(search_result.stdout)
+    assert hits
+    assert hits[0]['note_id'] == 'cli'
+    assert hits[0]['strategy'] == 'vector'
