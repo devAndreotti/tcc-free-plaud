@@ -184,3 +184,6 @@ def test_retrieval_index_and_semantic_search_cli_use_vector_store(monkeypatch, t
     assert hits
     assert hits[0]['note_id'] == 'cli'
     assert hits[0]['strategy'] == 'vector'
+    assert 'distance' in hits[0]
+    assert 'matched_terms' in hits[0]
+    assert 'term_coverage' in hits[0]

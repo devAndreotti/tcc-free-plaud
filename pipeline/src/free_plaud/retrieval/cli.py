@@ -51,6 +51,9 @@ def ask(
     strategy: str = typer.Option('lexical', '--strategy', '-s', help="Estrategia de retrieval: lexical ou vector."),
 ) -> None:
     """Executa uma pergunta mínima com resposta estruturada e citação obrigatória."""
+    if strategy not in {'lexical', 'vector'}:
+        raise typer.BadParameter("strategy deve ser 'lexical' ou 'vector'.")
+
     path = compose_path(path_parts)
     document = load_document(path)
     note = structure_document(document)
@@ -133,6 +136,9 @@ def semantic_search_command(
                     'note_id': hit.chunk.note_id,
                     'note_version': hit.chunk.note_version,
                     'score': hit.score,
+                    'distance': hit.distance,
+                    'matched_terms': hit.matched_terms,
+                    'term_coverage': hit.term_coverage,
                     'strategy': hit.strategy,
                     'char_start': hit.chunk.char_start,
                     'char_end': hit.chunk.char_end,

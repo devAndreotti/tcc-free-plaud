@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from free_plaud.cli import app
@@ -297,6 +298,13 @@ def test_answer_with_citations_vector_strategy_abstains_on_short_partial_single_
     assert response.reason_for_no_answer == 'insufficient_vector_specificity'
 
 
+def test_answer_with_citations_rejects_unknown_strategy() -> None:
+    note = _build_note()
+
+    with pytest.raises(ValueError, match='strategy'):
+        answer_with_citations(note, 'O que o benchmark mede?', strategy='hybrid')  # type: ignore[arg-type]
+
+
 def test_extract_named_query_terms_ignores_interrogatives_and_keeps_product_names() -> None:
     assert extract_named_query_terms('Como organizar notas pessoais no Obsidian?') == ['Obsidian']
 
@@ -398,3 +406,28 @@ def test_retrieval_ask_cli_supports_vector_strategy(monkeypatch, tmp_path: Path)
     assert payload['status'] == 'answer'
     assert payload['no_answer'] is False
     assert payload['citations']
+
+
+def test_retrieval_ask_cli_rejects_unknown_strategy(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'ask-invalid.md'
+    sample_file.write_text(
+        '# Nota de teste\n\n'
+        'O benchmark mede recall e latencia para comparar estrategias de recuperacao.\n',
+        encoding='utf-8',
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            'retrieval',
+            'ask',
+            str(sample_file),
+            '--question',
+            'O que o benchmark mede?',
+            '--strategy',
+            'hybrid',
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert 'strategy' in result.output

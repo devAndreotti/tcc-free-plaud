@@ -244,6 +244,9 @@ def _retrieve_hits(
         chunks = index_note(note)
         return lexical_search_hits(question, chunks, top_k=top_k)
 
+    if strategy != 'vector':
+        raise ValueError("strategy deve ser 'lexical' ou 'vector'.")
+
     if vector_store is None or embedder is None:
         raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector.')
 
