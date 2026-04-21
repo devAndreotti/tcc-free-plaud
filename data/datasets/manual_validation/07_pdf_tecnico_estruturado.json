@@ -1,0 +1,33 @@
+{
+  "dataset_name": "manual-validation-07-pdf-tecnico-estruturado",
+  "samples": [
+    {
+      "sample_id": "paper-01",
+      "question": "Qual estrategia oferece o melhor trade-off geral?",
+      "expected_note_id": "07-pdf-tecnico-estruturado",
+      "expected_terms": ["parágrafo", "melhor trade-off geral"],
+      "expected_ref": "Resumo"
+    },
+    {
+      "sample_id": "paper-02",
+      "question": "Qual foi o MRR@10 medio da estrategia semantica?",
+      "expected_note_id": "07-pdf-tecnico-estruturado",
+      "expected_terms": ["Semântico", "0,81"],
+      "expected_ref": "4.1 Qualidade de Recuperacao"
+    },
+    {
+      "sample_id": "paper-03",
+      "question": "Qual modelo de embedding foi usado nos experimentos?",
+      "expected_note_id": "07-pdf-tecnico-estruturado",
+      "expected_terms": ["nomic-embed-text-v1.5", "ChromaDB"],
+      "expected_ref": "3.3 Infraestrutura"
+    },
+    {
+      "sample_id": "paper-04",
+      "question": "Qual estrategia e recomendada para documentos sem estrutura formal?",
+      "expected_note_id": "07-pdf-tecnico-estruturado",
+      "expected_terms": ["chunking semântico", "documentos sem estrutura formal"],
+      "expected_ref": "5. Discussao"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "dataset_name": "manual-validation-04-ata-metadados-longos",
+  "samples": [
+    {
+      "sample_id": "ata-01",
+      "question": "Qual message broker foi adotado como padrao da plataforma?",
+      "expected_note_id": "04-ata-metadados-longos",
+      "expected_terms": ["Apache Kafka", "padrão da plataforma"],
+      "expected_ref": "DECISOES TOMADAS"
+    },
+    {
+      "sample_id": "ata-02",
+      "question": "Qual foi o prazo para o runbook de operacao?",
+      "expected_note_id": "04-ata-metadados-longos",
+      "expected_terms": ["runbook de operação", "15 de abril de 2025"],
+      "expected_ref": "DECISOES TOMADAS"
+    },
+    {
+      "sample_id": "ata-03",
+      "question": "Quais topicos de baixo risco iniciariam o rollout?",
+      "expected_note_id": "04-ata-metadados-longos",
+      "expected_terms": ["notificações de email", "logs de auditoria"],
+      "expected_ref": "DISCUSSAO TECNICA"
+    },
+    {
+      "sample_id": "ata-04",
+      "question": "Qual funcionalidade do RabbitMQ foi considerada insuficiente para auditoria e reprocessamento?",
+      "expected_note_id": "04-ata-metadados-longos",
+      "expected_terms": ["replay de mensagens", "log imutavel"],
+      "expected_ref": "DISCUSSAO TECNICA"
+    }
+  ]
+}

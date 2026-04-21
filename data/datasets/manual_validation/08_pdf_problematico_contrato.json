@@ -1,0 +1,33 @@
+{
+  "dataset_name": "manual-validation-08-pdf-problematico-contrato",
+  "samples": [
+    {
+      "sample_id": "contrato-01",
+      "question": "Qual e o valor total do contrato?",
+      "expected_note_id": "08-pdf-problematico-contrato",
+      "expected_terms": ["R$ 144.000,00"],
+      "expected_ref": "cabecalho"
+    },
+    {
+      "sample_id": "contrato-02",
+      "question": "Qual e o prazo de confidencialidade apos o encerramento da vigencia?",
+      "expected_note_id": "08-pdf-problematico-contrato",
+      "expected_terms": ["3 (três) anos", "obrigação de confidencialidade"],
+      "expected_ref": "CLAUSULA 4"
+    },
+    {
+      "sample_id": "contrato-03",
+      "question": "Quais tecnologias aparecem no Portal do colaborador e no modulo financeiro?",
+      "expected_note_id": "08-pdf-problematico-contrato",
+      "expected_terms": ["React + Node.js", "Python + PostgreSQL"],
+      "expected_ref": "ANEXO I"
+    },
+    {
+      "sample_id": "contrato-04",
+      "question": "Qual e o SLA para prioridade critica?",
+      "expected_note_id": "08-pdf-problematico-contrato",
+      "expected_terms": ["Prioridade Crítica", "SLA: 2h"],
+      "expected_ref": "ANEXO II"
+    }
+  ]
+}
