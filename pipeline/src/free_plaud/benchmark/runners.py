@@ -1,13 +1,21 @@
 from datetime import UTC, datetime
+from pathlib import Path
 from time import perf_counter
 from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from free_plaud.benchmark.datasets import BenchmarkDataset, BenchmarkSample
+from free_plaud.benchmark.datasets import (
+    BenchmarkDataset,
+    BenchmarkSample,
+    BenchmarkSuite,
+    load_benchmark_dataset,
+)
 from free_plaud.benchmark.metrics import mean_reciprocal_rank, recall_at_k_from_ranks
+from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.schemas import Note
+from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import Embedder
 from free_plaud.retrieval.indexer import index_note, index_note_in_vector_store
 from free_plaud.retrieval.models import Chunk, SearchHit
@@ -44,6 +52,42 @@ class BenchmarkRunResult(BaseModel):
     overlap: int
     metrics: dict[str, float | int]
     queries: list[BenchmarkQueryResult]
+    started_at: datetime
+    finished_at: datetime
+    duration_ms: int
+
+
+class BenchmarkStrategySummary(BaseModel):
+    strategy: str
+    case_count: int
+    query_count: int
+    mrr: float
+    recall_at_3: float
+    recall_at_5: float
+    recall_at_10: float
+    duration_ms: int
+    avg_query_latency_ms: float
+
+
+class BenchmarkCaseComparisonResult(BaseModel):
+    case_id: str
+    document_path: str
+    dataset_path: str
+    note_id: str
+    note_title: str
+    lexical: BenchmarkRunResult
+    vector: BenchmarkRunResult
+
+
+class BenchmarkComparisonResult(BaseModel):
+    comparison_id: str
+    suite_name: str
+    embedding_model: str
+    top_k: int
+    chunk_size: int
+    overlap: int
+    summaries: dict[str, BenchmarkStrategySummary]
+    cases: list[BenchmarkCaseComparisonResult]
     started_at: datetime
     finished_at: datetime
     duration_ms: int
@@ -101,6 +145,22 @@ def _run_query(sample: BenchmarkSample, hits: list[SearchHit], latency_ms: int) 
         hit_at_k=1 if relevant_rank else 0,
         reciprocal_rank=reciprocal_rank,
         latency_ms=latency_ms,
+    )
+
+
+def _summarize_strategy(strategy: str, runs: list[BenchmarkRunResult]) -> BenchmarkStrategySummary:
+    ranks = [query.relevant_rank for run in runs for query in run.queries]
+    query_latencies = [query.latency_ms for run in runs for query in run.queries]
+    return BenchmarkStrategySummary(
+        strategy=strategy,
+        case_count=len(runs),
+        query_count=len(ranks),
+        mrr=mean_reciprocal_rank(ranks),
+        recall_at_3=recall_at_k_from_ranks(ranks, 3),
+        recall_at_5=recall_at_k_from_ranks(ranks, 5),
+        recall_at_10=recall_at_k_from_ranks(ranks, 10),
+        duration_ms=sum(run.duration_ms for run in runs),
+        avg_query_latency_ms=(sum(query_latencies) / len(query_latencies)) if query_latencies else 0.0,
     )
 
 
@@ -178,6 +238,89 @@ def run_benchmark(
     if connection is not None:
         _persist_benchmark_result(connection, note, run_result)
     return run_result
+
+
+def compare_benchmark_suite(
+    suite: BenchmarkSuite,
+    *,
+    workspace_dir: Path,
+    connection=None,
+    top_k: int = 3,
+    chunk_size: int = 800,
+    overlap: int = 120,
+    vector_store: LocalVectorStore,
+    embedder: Embedder,
+) -> BenchmarkComparisonResult:
+    """Compara lexical vs vector em múltiplos documentos de forma reproduzível."""
+    started_at = datetime.now(UTC)
+    started_perf = perf_counter()
+    vector_store.reset()
+
+    case_results: list[BenchmarkCaseComparisonResult] = []
+    lexical_runs: list[BenchmarkRunResult] = []
+    vector_runs: list[BenchmarkRunResult] = []
+
+    for case in suite.cases:
+        document_path = workspace_dir / case.document_path
+        dataset_path = workspace_dir / case.dataset_path
+        note = structure_document(load_document(document_path))
+        dataset = load_benchmark_dataset(dataset_path)
+
+        lexical_result = run_benchmark(
+            note,
+            dataset,
+            connection=connection,
+            strategy='lexical',
+            top_k=top_k,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            run_name=f'{suite.suite_name}-{case.case_id}-lexical',
+        )
+        vector_result = run_benchmark(
+            note,
+            dataset,
+            connection=connection,
+            strategy='vector',
+            top_k=top_k,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            run_name=f'{suite.suite_name}-{case.case_id}-vector',
+            vector_store=vector_store,
+            embedder=embedder,
+        )
+
+        lexical_runs.append(lexical_result)
+        vector_runs.append(vector_result)
+        case_results.append(
+            BenchmarkCaseComparisonResult(
+                case_id=case.case_id,
+                document_path=str(case.document_path),
+                dataset_path=str(case.dataset_path),
+                note_id=note.note_id,
+                note_title=note.title,
+                lexical=lexical_result,
+                vector=vector_result,
+            )
+        )
+
+    finished_at = datetime.now(UTC)
+    duration_ms = int((perf_counter() - started_perf) * 1000)
+    return BenchmarkComparisonResult(
+        comparison_id=f'cmp-{uuid4().hex[:12]}',
+        suite_name=suite.suite_name,
+        embedding_model=embedder.model_name,
+        top_k=top_k,
+        chunk_size=chunk_size,
+        overlap=overlap,
+        summaries={
+            'lexical': _summarize_strategy('lexical', lexical_runs),
+            'vector': _summarize_strategy('vector', vector_runs),
+        },
+        cases=case_results,
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_ms=duration_ms,
+    )
 
 
 def _persist_benchmark_result(connection, note: Note, result: BenchmarkRunResult) -> None:

@@ -1,0 +1,25 @@
+{
+  "suite_name": "manual-validation-retrieval-suite",
+  "cases": [
+    {
+      "case_id": "case-04-ata",
+      "document_path": "samples/manual validetion/04_ata_metadados_longos.txt",
+      "dataset_path": "data/datasets/manual_validation/04_ata_metadados_longos.json"
+    },
+    {
+      "case_id": "case-07-paper",
+      "document_path": "samples/manual validetion/07_pdf_tecnico_estruturado.md",
+      "dataset_path": "data/datasets/manual_validation/07_pdf_tecnico_estruturado.json"
+    },
+    {
+      "case_id": "case-08-contrato",
+      "document_path": "samples/manual validetion/08_pdf_problematico_contrato.txt",
+      "dataset_path": "data/datasets/manual_validation/08_pdf_problematico_contrato.json"
+    },
+    {
+      "case_id": "case-10-modelagem",
+      "document_path": "samples/manual validetion/10_documento_longo_modelagem_dados.md",
+      "dataset_path": "data/datasets/manual_validation/10_documento_longo_modelagem_dados.json"
+    }
+  ]
+}

@@ -268,6 +268,10 @@ Ele carrega datasets JSON, executa consultas sobre uma nota canônica, calcula `
 exportar resultados em JSON e CSV. O runner já compara `lexical` e prepara o mesmo contrato
 para `vector`, sem depender de interface gráfica.
 
+Na evolução atual desse benchmark, o backend também passa a aceitar manifestos de suíte
+(`suite.json`) para comparar `lexical` vs `vector` sobre múltiplos documentos reais de forma
+repetível, gerando um resumo agregado por estratégia sem depender da interface.
+
 ### Resposta ask
 
 - `query`

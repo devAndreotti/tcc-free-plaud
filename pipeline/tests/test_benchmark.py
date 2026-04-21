@@ -5,16 +5,36 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from free_plaud.app.config import Settings
-from free_plaud.benchmark.datasets import BenchmarkDataset, BenchmarkSample, load_benchmark_dataset
+from free_plaud.benchmark.datasets import (
+    BenchmarkDataset,
+    BenchmarkSample,
+    load_benchmark_dataset,
+    load_benchmark_suite,
+)
 from free_plaud.benchmark.metrics import mean_reciprocal_rank, recall_at_k_from_ranks
 from free_plaud.benchmark.reports import export_benchmark_csv, export_benchmark_json
-from free_plaud.benchmark.runners import run_benchmark
+from free_plaud.benchmark.runners import compare_benchmark_suite, run_benchmark
 from free_plaud.cli import app
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note
+from free_plaud.storage.vector import LocalVectorStore
 from free_plaud.storage.sqlite import connect_sqlite, init_sqlite
 
 runner = CliRunner()
+
+
+class FakeEmbedder:
+    model_name = 'fake-hash'
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        embeddings: list[list[float]] = []
+        for text in texts:
+            vector = [0.0] * 16
+            for token in text.lower().split():
+                slot = sum(ord(char) for char in token) % len(vector)
+                vector[slot] += 1.0
+            embeddings.append(vector)
+        return embeddings
 
 
 def _build_note(tmp_path: Path) -> Note:
@@ -66,6 +86,32 @@ def test_load_benchmark_dataset_from_json_object(tmp_path: Path) -> None:
     assert dataset.samples[0].sample_id == 'q-1'
     assert dataset.samples[0].expected_note_id == 'benchmark-note'
     assert dataset.samples[0].expected_terms == ['recall', 'latencia']
+
+
+def test_load_benchmark_suite_from_json_object(tmp_path: Path) -> None:
+    suite_path = tmp_path / 'suite.json'
+    suite_path.write_text(
+        json.dumps(
+            {
+                'suite_name': 'manual-validation',
+                'cases': [
+                    {
+                        'case_id': 'case-1',
+                        'document_path': 'samples/doc-1.md',
+                        'dataset_path': 'data/datasets/doc-1.json',
+                    }
+                ],
+            }
+        ),
+        encoding='utf-8',
+    )
+
+    suite = load_benchmark_suite(suite_path)
+
+    assert suite.suite_name == 'manual-validation'
+    assert suite.cases[0].case_id == 'case-1'
+    assert suite.cases[0].document_path == Path('samples/doc-1.md')
+    assert suite.cases[0].dataset_path == Path('data/datasets/doc-1.json')
 
 
 def test_metrics_compute_mrr_and_recall_at_k_from_ranks() -> None:
@@ -222,3 +268,149 @@ def test_benchmark_run_cli_executes_dataset_and_exports_reports(monkeypatch, tmp
     connection = connect_sqlite(settings.sqlite_path)
     row = connection.execute('SELECT COUNT(*) AS total FROM benchmark_runs').fetchone()
     assert row['total'] == 1
+
+
+def test_compare_benchmark_suite_runs_lexical_and_vector_strategies(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'benchmark.md'
+    sample_file.write_text(
+        '# Benchmark\n\n'
+        'O benchmark mede recall, latencia e cobertura de citacoes para comparar retrieval.\n'
+        'A recuperacao vetorial usa embeddings persistidos no ChromaDB local.\n',
+        encoding='utf-8',
+    )
+    dataset_path = tmp_path / 'dataset.json'
+    dataset_path.write_text(
+        json.dumps(
+            {
+                'dataset_name': 'compare-dataset',
+                'samples': [
+                    {
+                        'sample_id': 'q-1',
+                        'question': 'O que o benchmark mede?',
+                        'expected_note_id': 'benchmark',
+                        'expected_terms': ['recall', 'latencia'],
+                    }
+                ],
+            }
+        ),
+        encoding='utf-8',
+    )
+    suite_path = tmp_path / 'suite.json'
+    suite_path.write_text(
+        json.dumps(
+            {
+                'suite_name': 'compare-suite',
+                'cases': [
+                    {
+                        'case_id': 'case-1',
+                        'document_path': sample_file.name,
+                        'dataset_path': dataset_path.name,
+                    }
+                ],
+            }
+        ),
+        encoding='utf-8',
+    )
+    suite = load_benchmark_suite(suite_path)
+    connection = init_sqlite(tmp_path / 'results' / 'free_plaud.sqlite3')
+    vector_store = LocalVectorStore(tmp_path / 'results' / 'vector_store', collection_name='compare_suite')
+
+    result = compare_benchmark_suite(
+        suite,
+        workspace_dir=tmp_path,
+        connection=connection,
+        top_k=3,
+        chunk_size=120,
+        overlap=30,
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+    )
+
+    assert result.suite_name == 'compare-suite'
+    assert result.summaries['lexical'].case_count == 1
+    assert result.summaries['vector'].case_count == 1
+    assert result.summaries['lexical'].query_count == 1
+    assert result.summaries['vector'].query_count == 1
+    assert result.cases[0].lexical.metrics['recall_at_3'] == 1.0
+    assert result.cases[0].vector.metrics['recall_at_3'] == 1.0
+
+
+def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, tmp_path: Path) -> None:
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        datasets_dir=tmp_path / 'data' / 'datasets',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+        vector_collection_name='compare_cli',
+        embedding_model='fake-hash',
+    )
+    sample_file = tmp_path / 'benchmark.md'
+    sample_file.write_text(
+        '# Benchmark\n\n'
+        'O benchmark mede recall, latencia e cobertura de citacoes para comparar retrieval.\n',
+        encoding='utf-8',
+    )
+    dataset_path = tmp_path / 'dataset.json'
+    dataset_path.write_text(
+        json.dumps(
+            {
+                'dataset_name': 'cli-compare-dataset',
+                'samples': [
+                    {
+                        'sample_id': 'q-1',
+                        'question': 'O que o benchmark mede?',
+                        'expected_note_id': 'benchmark',
+                        'expected_terms': ['recall', 'latencia'],
+                    }
+                ],
+            }
+        ),
+        encoding='utf-8',
+    )
+    suite_path = tmp_path / 'suite.json'
+    suite_path.write_text(
+        json.dumps(
+            {
+                'suite_name': 'cli-compare-suite',
+                'cases': [
+                    {
+                        'case_id': 'case-1',
+                        'document_path': sample_file.name,
+                        'dataset_path': dataset_path.name,
+                    }
+                ],
+            }
+        ),
+        encoding='utf-8',
+    )
+
+    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda model_name: FakeEmbedder())
+
+    result = runner.invoke(
+        app,
+        [
+            'benchmark',
+            'compare',
+            '--suite',
+            str(suite_path),
+            '--top-k',
+            '3',
+            '--chunk-size',
+            '120',
+            '--overlap',
+            '30',
+            '--export',
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['suite_name'] == 'cli-compare-suite'
+    assert payload['summaries']['lexical']['recall_at_3'] == 1.0
+    assert payload['summaries']['vector']['recall_at_3'] == 1.0
+    assert Path(payload['json_report_path']).exists()
+    assert Path(payload['csv_report_path']).exists()

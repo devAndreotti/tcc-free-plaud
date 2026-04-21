@@ -14,6 +14,7 @@ Regras praticas deste diretorio:
 - todas as perguntas assumem que existe evidencia relevante no documento
 - casos negativos continuam sendo melhor avaliados pela bateria manual de retrieval
 - `expected_terms` devem apontar para termos locais do chunk esperado, para manter o benchmark util em `lexical` e `vector`
+- `suite.json` agrupa os pares documento/dataset para comparacao repetivel entre estrategias
 
 Arquivos incluidos:
 
@@ -21,3 +22,10 @@ Arquivos incluidos:
 - `07_pdf_tecnico_estruturado.json`
 - `08_pdf_problematico_contrato.json`
 - `10_documento_longo_modelagem_dados.json`
+- `suite.json`
+
+Comparacao repetivel:
+
+```powershell
+uv run free-plaud benchmark compare --suite "D:\Dev\Repos\Own\tcc-free-plaud\data\datasets\manual_validation\suite.json" --export
+```

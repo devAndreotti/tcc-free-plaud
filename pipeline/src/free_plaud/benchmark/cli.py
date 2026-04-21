@@ -7,9 +7,14 @@ from rich.console import Console
 from free_plaud.app.cli_paths import compose_path
 from free_plaud.app.config import get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
-from free_plaud.benchmark.datasets import demo_dataset, load_benchmark_dataset
-from free_plaud.benchmark.reports import export_benchmark_csv, export_benchmark_json
-from free_plaud.benchmark.runners import run_benchmark
+from free_plaud.benchmark.datasets import demo_dataset, load_benchmark_dataset, load_benchmark_suite
+from free_plaud.benchmark.reports import (
+    export_benchmark_comparison_csv,
+    export_benchmark_comparison_json,
+    export_benchmark_csv,
+    export_benchmark_json,
+)
+from free_plaud.benchmark.runners import compare_benchmark_suite, run_benchmark
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import get_embedder
@@ -72,6 +77,45 @@ def run(
         output_base = settings.results_dir / result.benchmark_run_id
         json_path = export_benchmark_json(result, output_base.with_suffix('.json'))
         csv_path = export_benchmark_csv(result, output_base.with_suffix('.csv'))
+        payload['json_report_path'] = str(json_path)
+        payload['csv_report_path'] = str(csv_path)
+    typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
+
+
+@app.command("compare")
+def compare(
+    suite_path: Path = typer.Option(..., '--suite', '-u', help="Manifesto JSON com casos de benchmark."),
+    top_k: int = typer.Option(3, '--top-k', min=1),
+    chunk_size: int = typer.Option(800, '--chunk-size', min=1),
+    overlap: int = typer.Option(120, '--overlap', min=0),
+    export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
+) -> None:
+    """Compara lexical vs vector em uma suíte de documentos e datasets."""
+    settings = get_settings()
+    ensure_runtime_dirs(settings)
+    suite = load_benchmark_suite(suite_path)
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(
+        settings.results_dir / 'benchmark_compare' / suite.suite_name,
+        collection_name=f'{suite.suite_name}_compare',
+    )
+    embedder = get_embedder(settings.embedding_model)
+
+    result = compare_benchmark_suite(
+        suite,
+        workspace_dir=settings.workspace_dir,
+        connection=connection,
+        top_k=top_k,
+        chunk_size=chunk_size,
+        overlap=overlap,
+        vector_store=vector_store,
+        embedder=embedder,
+    )
+    payload = result.model_dump(mode='json')
+    if export:
+        output_base = settings.results_dir / result.comparison_id
+        json_path = export_benchmark_comparison_json(result, output_base.with_suffix('.json'))
+        csv_path = export_benchmark_comparison_csv(result, output_base.with_suffix('.csv'))
         payload['json_report_path'] = str(json_path)
         payload['csv_report_path'] = str(csv_path)
     typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))

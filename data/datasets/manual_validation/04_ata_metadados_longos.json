@@ -26,7 +26,7 @@
       "sample_id": "ata-04",
       "question": "Qual funcionalidade do RabbitMQ foi considerada insuficiente para auditoria e reprocessamento?",
       "expected_note_id": "04-ata-metadados-longos",
-      "expected_terms": ["replay de mensagens", "log imutavel"],
+      "expected_terms": ["replay de mensagens", "log imutável"],
       "expected_ref": "DISCUSSAO TECNICA"
     }
   ]

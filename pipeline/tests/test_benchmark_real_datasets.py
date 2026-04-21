@@ -5,7 +5,7 @@ from free_plaud.benchmark.datasets import load_benchmark_dataset
 
 def test_real_benchmark_datasets_load_and_keep_consistent_note_scope() -> None:
     datasets_dir = Path(__file__).resolve().parents[2] / 'data' / 'datasets' / 'manual_validation'
-    dataset_paths = sorted(datasets_dir.glob('*.json'))
+    dataset_paths = sorted(path for path in datasets_dir.glob('*.json') if path.name != 'suite.json')
 
     assert dataset_paths, 'Esperava datasets reais em data/datasets/manual_validation.'
 

@@ -22,12 +22,33 @@ class BenchmarkDataset(BaseModel):
     samples: list[BenchmarkSample]
 
 
+class BenchmarkSuiteCase(BaseModel):
+    """Relaciona um documento local ao dataset que deve avaliá-lo."""
+
+    case_id: str
+    document_path: Path
+    dataset_path: Path
+
+
+class BenchmarkSuite(BaseModel):
+    """Coleção reproduzível de casos para comparar estratégias."""
+
+    suite_name: str
+    cases: list[BenchmarkSuiteCase]
+
+
 def load_benchmark_dataset(path: Path) -> BenchmarkDataset:
     """Carrega dataset JSON em formato objeto ou lista simples."""
     payload = json.loads(path.read_text(encoding='utf-8'))
     if isinstance(payload, list):
         return BenchmarkDataset(dataset_name=path.stem, samples=[BenchmarkSample(**item) for item in payload])
     return BenchmarkDataset(**payload)
+
+
+def load_benchmark_suite(path: Path) -> BenchmarkSuite:
+    """Carrega manifesto JSON com múltiplos pares documento/dataset."""
+    payload = json.loads(path.read_text(encoding='utf-8'))
+    return BenchmarkSuite(**payload)
 
 
 def demo_dataset() -> BenchmarkDataset:
