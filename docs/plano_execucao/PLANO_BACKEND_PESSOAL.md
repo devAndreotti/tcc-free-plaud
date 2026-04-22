@@ -36,6 +36,31 @@ Nao acoplar o backend ao PyWebView ou a qualquer shell desktop.
 Nao espalhar logica de benchmark pelo frontend.
 Nao acoplar o sistema a um unico provedor desde o inicio.
 
+## Regra de registro experimental
+
+Todo experimento relevante de retrieval, benchmark ou comparacao de estrategia deve ser registrado em:
+
+- `docs/experimentos/`
+
+Padrao:
+
+- um arquivo novo por experimento relevante
+- numeracao sequencial `01`, `02`, `03`...
+- nome curto e objetivo
+
+Conteudo minimo:
+
+1. objetivo
+2. pergunta ou hipotese
+3. corpus ou suite usada
+4. comando executado
+5. configuracao
+6. resultados
+7. interpretacao
+8. proximos passos
+
+Se o experimento gerar numero util para defesa, benchmark ou texto do TCC, ele deve entrar nessa pasta.
+
 ## Ambiente oficial
 
 - Python `3.12.x`
@@ -211,6 +236,12 @@ O ponto principal que ainda falta para o pipeline textual ficar mais alinhado ao
 - retrieval semantico no `ask`
 - benchmark reproduzivel
 
+O ponto principal que agora precisa de calibracao experimental e:
+
+- melhorar a qualidade do retrieval vetorial contra a suite real
+- comparar `lexical` vs `vector` de forma repetivel
+- registrar os resultados em `docs/experimentos/`
+
 ## Sprints concluidas ate agora
 
 ### Sprint 00
@@ -317,6 +348,45 @@ Ligar o retrieval semantico ao `ask`, mantendo citacao obrigatoria e `no_answer`
 - montagem de contexto melhorada
 - citacao obrigatoria sobre retrieval semantico
 - `no_answer` com sinais minimos do retrieval real
+
+## Proximo ciclo experimental recomendado
+
+### Objetivo
+
+Usar a suite real de benchmark para calibrar o retrieval vetorial antes de qualquer prioridade de UI.
+
+### Ordem sugerida
+
+1. rodar `benchmark compare` com a suite atual
+2. variar `chunk_size`
+3. variar `overlap`
+4. trocar `embedding_model`
+5. comparar `MRR`, `Recall@3`, `Recall@5`, `Recall@10` e latencia
+6. registrar cada rodada relevante em `docs/experimentos/`
+
+### Criterio de saida
+
+So vale seguir para refinamentos maiores de produto quando o retrieval vetorial tiver um baseline experimental defendavel contra a suite real do projeto.
+
+### Resultado experimental atual
+
+Ver:
+
+- `docs/experimentos/01_lexical_vs_vector_suite_baseline.md`
+- `docs/experimentos/02_calibracao_retrieval_vetorial.md`
+
+Leitura atual:
+
+- `chunk_size = 800` e `overlap = 120` seguem como melhor baseline vetorial entre as variacoes testadas
+- o gargalo principal agora parece estar mais no `embedding_model` do que no chunking
+
+### Proximo passo recomendado
+
+Antes de qualquer prioridade de UI ou reranking:
+
+1. testar embeddings alternativos
+2. rerodar a mesma suite real
+3. comparar contra `800/120 + chroma-default`
 
 ### Criterios de aceite
 
