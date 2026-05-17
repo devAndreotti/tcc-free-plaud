@@ -313,6 +313,16 @@ Na evolução atual, `hybrid` combina:
 
 sem introduzir reranker, LLM ou dependência de frontend.
 
+Após a calibração registrada em `docs/experimentos/07_calibracao_fusao_hibrida.md`, o backend
+passa a adotar como baseline default de `hybrid`:
+
+- `lexical_weight = 1.5`
+- `vector_weight = 1.0`
+- `rank_constant = 60`
+
+Essa configuração foi suficiente para empatar `hybrid` com `lexical` em `MRR` na suíte real
+atual, mantendo `Recall@3 = 1.0`, sem precisar abrir reranking ainda.
+
 ## Ordem de implementação backend
 
 ### Sprint 1

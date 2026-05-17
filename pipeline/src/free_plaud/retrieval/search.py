@@ -6,6 +6,9 @@ from free_plaud.retrieval.models import Chunk, SearchHit
 from free_plaud.storage.vector import LocalVectorStore
 
 TOKEN_PATTERN = re.compile(r"[0-9A-Za-zÀ-ÖØ-öø-ÿ_]+", re.UNICODE)
+DEFAULT_HYBRID_RANK_CONSTANT = 60
+DEFAULT_HYBRID_LEXICAL_WEIGHT = 1.5
+DEFAULT_HYBRID_VECTOR_WEIGHT = 1.0
 STOPWORDS = {
     'a',
     'ao',
@@ -191,9 +194,9 @@ def _fuse_hits_by_rank(
     vector_hits: list[SearchHit],
     *,
     top_k: int,
-    rank_constant: int = 60,
-    lexical_weight: float = 1.0,
-    vector_weight: float = 1.0,
+    rank_constant: int = DEFAULT_HYBRID_RANK_CONSTANT,
+    lexical_weight: float = DEFAULT_HYBRID_LEXICAL_WEIGHT,
+    vector_weight: float = DEFAULT_HYBRID_VECTOR_WEIGHT,
 ) -> list[SearchHit]:
     fused: dict[str, SearchHit] = {}
     fused_scores: dict[str, float] = {}
@@ -246,9 +249,9 @@ def hybrid_search(
     note_id: str | None = None,
     lexical_pool_size: int | None = None,
     vector_pool_size: int | None = None,
-    rank_constant: int = 60,
-    lexical_weight: float = 1.0,
-    vector_weight: float = 1.0,
+    rank_constant: int = DEFAULT_HYBRID_RANK_CONSTANT,
+    lexical_weight: float = DEFAULT_HYBRID_LEXICAL_WEIGHT,
+    vector_weight: float = DEFAULT_HYBRID_VECTOR_WEIGHT,
 ) -> list[SearchHit]:
     """Combina lexical + vector com rank fusion simples e reproduzível."""
     if not query.strip() or top_k <= 0:

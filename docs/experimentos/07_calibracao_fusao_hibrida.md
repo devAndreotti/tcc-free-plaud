@@ -2,7 +2,7 @@
 
 ## Status
 
-Executado em 2026-05-17
+Executado e encerrado em 2026-05-17
 
 ## Objetivo da rodada
 
@@ -95,21 +95,28 @@ Tambem ficou claro que:
 - o salto relevante apareceu apenas em `1.5`
 - a latencia media de `hybrid` continua acima de `lexical`, mas a rodada atual buscava prioridade de ordenacao
 
-## Conclusao da rodada
+## Conclusao final do experimento
 
-Rodada 1 encerra com evidencia suficiente para seguir para controle de ruido vetorial na Rodada 2, se necessario.
+Rodada 1 encerrou com evidencia suficiente para considerar a fusao calibrada.
 
 Estado atual apos calibracao:
 
 - `lexical`: `MRR 0.96875`, `Recall@3 1.0`
 - `hybrid` calibrado: `MRR 0.96875`, `Recall@3 1.0`
 
+Decisao tomada:
+
+1. promover `lexical_weight = 1.5` como padrao do projeto para `hybrid`
+2. manter `vector_weight = 1.0`
+3. manter `rank_constant = 60`
+4. dispensar Rodada 2 nesta fase
+
 ## Proximo passo recomendado
 
-Nao avancar automaticamente.
+Encerrar este experimento e seguir para proximo ciclo de retrieval apenas se surgir nova hipotese forte.
 
-Se houver nova instrucao, proximo passo tecnico e:
+Nesta fase:
 
-- fixar `lexical_weight = 1.5`
-- abrir Rodada 2 para testar `lexical_pool` e `vector_pool`
-
+- `lexical_weight = 1.5` vira baseline default do `hybrid`
+- Rodada 2 fica dispensada
+- branch `feat/hybrid-retrieval` fica pronta para merge

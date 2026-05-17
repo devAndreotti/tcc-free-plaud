@@ -158,6 +158,8 @@ def test_rank_fusion_supports_lexical_weighting() -> None:
         vector_hits,
         top_k=2,
         rank_constant=1,
+        lexical_weight=1.0,
+        vector_weight=1.0,
     )
     lexical_weighted_hits = _fuse_hits_by_rank(
         lexical_hits,

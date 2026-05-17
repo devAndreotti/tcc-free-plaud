@@ -19,7 +19,14 @@ from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import Embedder
 from free_plaud.retrieval.indexer import index_note, index_note_in_vector_store
 from free_plaud.retrieval.models import Chunk, SearchHit
-from free_plaud.retrieval.search import hybrid_search, lexical_search_hits, semantic_search
+from free_plaud.retrieval.search import (
+    DEFAULT_HYBRID_LEXICAL_WEIGHT,
+    DEFAULT_HYBRID_RANK_CONSTANT,
+    DEFAULT_HYBRID_VECTOR_WEIGHT,
+    hybrid_search,
+    lexical_search_hits,
+    semantic_search,
+)
 from free_plaud.storage.models import BenchmarkQueryRecord, BenchmarkRunRecord
 from free_plaud.storage.sqlite import insert_benchmark_query, insert_benchmark_run, replace_chunks_for_note, upsert_note
 from free_plaud.storage.vector import LocalVectorStore
@@ -179,9 +186,9 @@ def run_benchmark(
     run_name: str = 'benchmark',
     vector_store: LocalVectorStore | None = None,
     embedder: Embedder | None = None,
-    hybrid_rank_constant: int = 60,
-    hybrid_lexical_weight: float = 1.0,
-    hybrid_vector_weight: float = 1.0,
+    hybrid_rank_constant: int = DEFAULT_HYBRID_RANK_CONSTANT,
+    hybrid_lexical_weight: float = DEFAULT_HYBRID_LEXICAL_WEIGHT,
+    hybrid_vector_weight: float = DEFAULT_HYBRID_VECTOR_WEIGHT,
     hybrid_lexical_pool: int | None = None,
     hybrid_vector_pool: int | None = None,
 ) -> BenchmarkRunResult:
@@ -283,9 +290,9 @@ def compare_benchmark_suite(
     overlap: int = 120,
     vector_store: LocalVectorStore,
     embedder: Embedder,
-    hybrid_rank_constant: int = 60,
-    hybrid_lexical_weight: float = 1.0,
-    hybrid_vector_weight: float = 1.0,
+    hybrid_rank_constant: int = DEFAULT_HYBRID_RANK_CONSTANT,
+    hybrid_lexical_weight: float = DEFAULT_HYBRID_LEXICAL_WEIGHT,
+    hybrid_vector_weight: float = DEFAULT_HYBRID_VECTOR_WEIGHT,
     hybrid_lexical_pool: int | None = None,
     hybrid_vector_pool: int | None = None,
 ) -> BenchmarkComparisonResult:

@@ -18,6 +18,11 @@ from free_plaud.benchmark.runners import compare_benchmark_suite, run_benchmark
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import get_embedder
+from free_plaud.retrieval.search import (
+    DEFAULT_HYBRID_LEXICAL_WEIGHT,
+    DEFAULT_HYBRID_RANK_CONSTANT,
+    DEFAULT_HYBRID_VECTOR_WEIGHT,
+)
 from free_plaud.storage.sqlite import init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
 
@@ -44,9 +49,9 @@ def run(
     overlap: int = typer.Option(120, '--overlap', min=0),
     run_name: str = typer.Option('benchmark', '--run-name'),
     embedding_model: str | None = typer.Option(None, '--embedding-model', help="Override do embedding model para strategy=vector ou strategy=hybrid."),
-    hybrid_rank_constant: int = typer.Option(60, '--hybrid-rank-constant', min=1, help='Constante da rank fusion quando strategy=hybrid.'),
-    hybrid_lexical_weight: float = typer.Option(1.0, '--hybrid-lexical-weight', min=0.0, help='Peso do ranking lexical quando strategy=hybrid.'),
-    hybrid_vector_weight: float = typer.Option(1.0, '--hybrid-vector-weight', min=0.0, help='Peso do ranking vetorial quando strategy=hybrid.'),
+    hybrid_rank_constant: int = typer.Option(DEFAULT_HYBRID_RANK_CONSTANT, '--hybrid-rank-constant', min=1, help='Constante da rank fusion quando strategy=hybrid.'),
+    hybrid_lexical_weight: float = typer.Option(DEFAULT_HYBRID_LEXICAL_WEIGHT, '--hybrid-lexical-weight', min=0.0, help='Peso do ranking lexical quando strategy=hybrid.'),
+    hybrid_vector_weight: float = typer.Option(DEFAULT_HYBRID_VECTOR_WEIGHT, '--hybrid-vector-weight', min=0.0, help='Peso do ranking vetorial quando strategy=hybrid.'),
     hybrid_lexical_pool: int | None = typer.Option(None, '--hybrid-lexical-pool', min=1, help='Pool lexical candidato quando strategy=hybrid.'),
     hybrid_vector_pool: int | None = typer.Option(None, '--hybrid-vector-pool', min=1, help='Pool vetorial candidato quando strategy=hybrid.'),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
@@ -101,9 +106,9 @@ def compare(
     chunk_size: int = typer.Option(800, '--chunk-size', min=1),
     overlap: int = typer.Option(120, '--overlap', min=0),
     embedding_model: str | None = typer.Option(None, '--embedding-model', help="Override do embedding model para a comparacao vetorial."),
-    hybrid_rank_constant: int = typer.Option(60, '--hybrid-rank-constant', min=1, help='Constante da rank fusion para strategy=hybrid.'),
-    hybrid_lexical_weight: float = typer.Option(1.0, '--hybrid-lexical-weight', min=0.0, help='Peso do ranking lexical para strategy=hybrid.'),
-    hybrid_vector_weight: float = typer.Option(1.0, '--hybrid-vector-weight', min=0.0, help='Peso do ranking vetorial para strategy=hybrid.'),
+    hybrid_rank_constant: int = typer.Option(DEFAULT_HYBRID_RANK_CONSTANT, '--hybrid-rank-constant', min=1, help='Constante da rank fusion para strategy=hybrid.'),
+    hybrid_lexical_weight: float = typer.Option(DEFAULT_HYBRID_LEXICAL_WEIGHT, '--hybrid-lexical-weight', min=0.0, help='Peso do ranking lexical para strategy=hybrid.'),
+    hybrid_vector_weight: float = typer.Option(DEFAULT_HYBRID_VECTOR_WEIGHT, '--hybrid-vector-weight', min=0.0, help='Peso do ranking vetorial para strategy=hybrid.'),
     hybrid_lexical_pool: int | None = typer.Option(None, '--hybrid-lexical-pool', min=1, help='Pool lexical candidato para strategy=hybrid.'),
     hybrid_vector_pool: int | None = typer.Option(None, '--hybrid-vector-pool', min=1, help='Pool vetorial candidato para strategy=hybrid.'),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
