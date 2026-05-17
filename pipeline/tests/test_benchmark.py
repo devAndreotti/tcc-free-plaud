@@ -175,6 +175,37 @@ def test_run_benchmark_persists_run_and_queries_in_sqlite(tmp_path: Path) -> Non
     assert [row['reciprocal_rank'] for row in query_rows] == [1.0, 0.0]
 
 
+def test_run_benchmark_supports_hybrid_strategy(tmp_path: Path) -> None:
+    note = _build_note(tmp_path)
+    dataset = BenchmarkDataset(
+        dataset_name='rag-hybrid',
+        samples=[
+            BenchmarkSample(
+                sample_id='q-1',
+                question='O que o benchmark mede?',
+                expected_note_id=note.note_id,
+                expected_terms=['recall', 'latencia'],
+            )
+        ],
+    )
+    vector_store = LocalVectorStore(tmp_path / 'results' / 'vector_store', collection_name='hybrid_run')
+
+    result = run_benchmark(
+        note,
+        dataset,
+        strategy='hybrid',
+        top_k=3,
+        chunk_size=120,
+        overlap=30,
+        run_name='hybrid-baseline',
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+    )
+
+    assert result.retrieval_strategy == 'hybrid'
+    assert result.metrics['recall_at_3'] == 1.0
+
+
 def test_export_benchmark_json_and_csv(tmp_path: Path) -> None:
     note = _build_note(tmp_path)
     dataset = BenchmarkDataset(
@@ -270,7 +301,7 @@ def test_benchmark_run_cli_executes_dataset_and_exports_reports(monkeypatch, tmp
     assert row['total'] == 1
 
 
-def test_compare_benchmark_suite_runs_lexical_and_vector_strategies(tmp_path: Path) -> None:
+def test_compare_benchmark_suite_runs_lexical_vector_and_hybrid_strategies(tmp_path: Path) -> None:
     sample_file = tmp_path / 'benchmark.md'
     sample_file.write_text(
         '# Benchmark\n\n'
@@ -329,10 +360,13 @@ def test_compare_benchmark_suite_runs_lexical_and_vector_strategies(tmp_path: Pa
     assert result.suite_name == 'compare-suite'
     assert result.summaries['lexical'].case_count == 1
     assert result.summaries['vector'].case_count == 1
+    assert result.summaries['hybrid'].case_count == 1
     assert result.summaries['lexical'].query_count == 1
     assert result.summaries['vector'].query_count == 1
+    assert result.summaries['hybrid'].query_count == 1
     assert result.cases[0].lexical.metrics['recall_at_3'] == 1.0
     assert result.cases[0].vector.metrics['recall_at_3'] == 1.0
+    assert result.cases[0].hybrid.metrics['recall_at_3'] == 1.0
 
 
 def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, tmp_path: Path) -> None:
@@ -414,6 +448,7 @@ def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, t
     assert payload['suite_name'] == 'cli-compare-suite'
     assert payload['summaries']['lexical']['recall_at_3'] == 1.0
     assert payload['summaries']['vector']['recall_at_3'] == 1.0
+    assert payload['summaries']['hybrid']['recall_at_3'] == 1.0
     assert Path(payload['json_report_path']).exists()
     assert Path(payload['csv_report_path']).exists()
     assert payload['embedding_model'] == 'fake-hash'

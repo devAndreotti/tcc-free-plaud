@@ -48,7 +48,7 @@ def export_benchmark_csv(result: BenchmarkRunResult, path: Path) -> Path:
 
 
 def export_benchmark_comparison_json(result: BenchmarkComparisonResult, path: Path) -> Path:
-    """Exporta comparação lexical vs vector para JSON."""
+    """Exporta comparação de estratégias para JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(result.model_dump(mode='json'), ensure_ascii=False, indent=2),
@@ -81,7 +81,7 @@ def export_benchmark_comparison_csv(result: BenchmarkComparisonResult, path: Pat
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for case in result.cases:
-            for strategy in ('lexical', 'vector'):
+            for strategy in ('lexical', 'vector', 'hybrid'):
                 run = getattr(case, strategy)
                 writer.writerow(
                     {

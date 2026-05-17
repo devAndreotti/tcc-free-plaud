@@ -38,17 +38,17 @@ def run_demo(path_parts: list[str] = typer.Argument(..., metavar="PATH")) -> Non
 def run(
     path_parts: list[str] = typer.Argument(..., metavar="PATH"),
     dataset_path: Path = typer.Option(..., '--dataset', '-d', help="Arquivo JSON com o dataset de benchmark."),
-    strategy: str = typer.Option('lexical', '--strategy', '-s', help="Estrategia: lexical ou vector."),
+    strategy: str = typer.Option('lexical', '--strategy', '-s', help="Estrategia: lexical, vector ou hybrid."),
     top_k: int = typer.Option(3, '--top-k', min=1),
     chunk_size: int = typer.Option(800, '--chunk-size', min=1),
     overlap: int = typer.Option(120, '--overlap', min=0),
     run_name: str = typer.Option('benchmark', '--run-name'),
-    embedding_model: str | None = typer.Option(None, '--embedding-model', help="Override do embedding model para strategy=vector."),
+    embedding_model: str | None = typer.Option(None, '--embedding-model', help="Override do embedding model para strategy=vector ou strategy=hybrid."),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
 ) -> None:
     """Executa benchmark reproduzível e persiste a execução em SQLite."""
-    if strategy not in {'lexical', 'vector'}:
-        raise typer.BadParameter("strategy deve ser 'lexical' ou 'vector'.")
+    if strategy not in {'lexical', 'vector', 'hybrid'}:
+        raise typer.BadParameter("strategy deve ser 'lexical', 'vector' ou 'hybrid'.")
 
     settings = get_settings()
     ensure_runtime_dirs(settings)
@@ -58,7 +58,7 @@ def run(
     vector_store = None
     embedder = None
     resolved_embedding_model = embedding_model or settings.embedding_model
-    if strategy == 'vector':
+    if strategy in {'vector', 'hybrid'}:
         vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
         embedder = get_embedder(resolved_embedding_model)
 
@@ -93,7 +93,7 @@ def compare(
     embedding_model: str | None = typer.Option(None, '--embedding-model', help="Override do embedding model para a comparacao vetorial."),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
 ) -> None:
-    """Compara lexical vs vector em uma suíte de documentos e datasets."""
+    """Compara lexical, vector e hybrid em uma suíte de documentos e datasets."""
     settings = get_settings()
     ensure_runtime_dirs(settings)
     suite = load_benchmark_suite(suite_path)
