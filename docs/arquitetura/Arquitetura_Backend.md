@@ -248,6 +248,12 @@ Na implementação atual da Sprint 06.1, o fluxo vetorial passa a ser:
 Esse fluxo ainda não faz reranking nem busca híbrida, mas já substitui o placeholder anterior
 por uma base vetorial local real e persistente.
 
+Na evolução atual do backend:
+
+- o provider de embeddings aceita `chroma-default`
+- o provider também aceita modelos locais no formato `sentence-transformer:<model_name>`
+- o benchmark pode sobrescrever o `embedding_model` por CLI para comparações reproduzíveis
+
 ### Execução de benchmark
 
 - `experiment_id`

@@ -43,6 +43,7 @@ def run(
     chunk_size: int = typer.Option(800, '--chunk-size', min=1),
     overlap: int = typer.Option(120, '--overlap', min=0),
     run_name: str = typer.Option('benchmark', '--run-name'),
+    embedding_model: str | None = typer.Option(None, '--embedding-model', help="Override do embedding model para strategy=vector."),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
 ) -> None:
     """Executa benchmark reproduzível e persiste a execução em SQLite."""
@@ -56,9 +57,10 @@ def run(
     connection = init_sqlite(settings.sqlite_path)
     vector_store = None
     embedder = None
+    resolved_embedding_model = embedding_model or settings.embedding_model
     if strategy == 'vector':
         vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
-        embedder = get_embedder(settings.embedding_model)
+        embedder = get_embedder(resolved_embedding_model)
 
     result = run_benchmark(
         note,
@@ -88,6 +90,7 @@ def compare(
     top_k: int = typer.Option(3, '--top-k', min=1),
     chunk_size: int = typer.Option(800, '--chunk-size', min=1),
     overlap: int = typer.Option(120, '--overlap', min=0),
+    embedding_model: str | None = typer.Option(None, '--embedding-model', help="Override do embedding model para a comparacao vetorial."),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
 ) -> None:
     """Compara lexical vs vector em uma suíte de documentos e datasets."""
@@ -99,7 +102,8 @@ def compare(
         settings.results_dir / 'benchmark_compare' / suite.suite_name,
         collection_name=f'{suite.suite_name}_compare',
     )
-    embedder = get_embedder(settings.embedding_model)
+    resolved_embedding_model = embedding_model or settings.embedding_model
+    embedder = get_embedder(resolved_embedding_model)
 
     result = compare_benchmark_suite(
         suite,

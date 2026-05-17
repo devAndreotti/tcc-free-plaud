@@ -403,6 +403,8 @@ def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, t
             '120',
             '--overlap',
             '30',
+            '--embedding-model',
+            'fake-hash',
             '--export',
         ],
     )
@@ -414,3 +416,4 @@ def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, t
     assert payload['summaries']['vector']['recall_at_3'] == 1.0
     assert Path(payload['json_report_path']).exists()
     assert Path(payload['csv_report_path']).exists()
+    assert payload['embedding_model'] == 'fake-hash'
