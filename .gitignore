@@ -11,3 +11,11 @@ data/results/
 # Local Python environments outside nested project ignores
 .venv/
 __pycache__/
+
+# TCC written
+book/
+
+# Local temp and agent runtime folders
+.pytest-tmp*/
+.codex-temp-video-frames/
+.codex-temp-video-thumbs/

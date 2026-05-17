@@ -1,5 +1,11 @@
 # AGENTS.md - free-plaud
 
+## Instruction File Status
+
+`AGENTS.md` e o arquivo canonico de instrucao deste repositorio.
+
+Se existir sobreposicao com outros arquivos de instrucao locais, seguir este arquivo como fonte principal.
+
 ## Overview
 
 `free-plaud` é um projeto de TCC focado em um pipeline de IA para captura multimodal, estruturação automatizada em Markdown e recuperação semântica de conhecimento pessoal em português brasileiro.
@@ -134,5 +140,5 @@ Quando surgir decisão estrutural nova:
 
 1. atualizar `docs/arquitetura/Arquitetura.md` se afetar o desenho geral
 2. atualizar `docs/arquitetura/Arquitetura_Backend.md` ou `docs/arquitetura/Arquitetura_Frontend.md` se afetar detalhe de camada
-3. atualizar `docs/tcc/TCC.md` se alterar escopo, pergunta de pesquisa ou contribuição
+3. atualizar `docs/tcc/texto/TCC.md` se alterar escopo, pergunta de pesquisa ou contribuição
 4. atualizar `README.md` se for algo relevante para entendimento externo do projeto
