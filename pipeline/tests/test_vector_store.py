@@ -8,7 +8,7 @@ from free_plaud.cli import app
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note_in_vector_store
 from free_plaud.retrieval.models import Chunk, SearchHit
-from free_plaud.retrieval.search import hybrid_search, semantic_search
+from free_plaud.retrieval.search import _fuse_hits_by_rank, hybrid_search, semantic_search
 from free_plaud.storage.vector import LocalVectorStore
 
 runner = CliRunner()
@@ -113,6 +113,64 @@ def test_hybrid_search_fuses_lexical_and_vector_hits(tmp_path: Path) -> None:
     assert hits[0].chunk.note_id == note.note_id
     assert 'benchmark' in hits[0].matched_terms
     assert hits[0].score >= hits[-1].score
+
+
+def test_rank_fusion_supports_lexical_weighting() -> None:
+    chunk_lexical = Chunk(
+        chunk_id='chunk-lexical',
+        note_id='vector-note',
+        note_version=1,
+        chunk_index=1,
+        chunk_text='Benchmark recall e latencia.',
+        token_count=4,
+        char_start=25,
+        char_end=53,
+        chunk_size=90,
+        overlap=20,
+        strategy='fixed-window',
+        normalized_text_sha256='a' * 64,
+        text_sha256='b' * 64,
+        pipeline_version='test',
+    )
+    chunk_vector = Chunk(
+        chunk_id='chunk-vector',
+        note_id='vector-note',
+        note_version=1,
+        chunk_index=0,
+        chunk_text='Embeddings persistidos no ChromaDB.',
+        token_count=4,
+        char_start=54,
+        char_end=88,
+        chunk_size=90,
+        overlap=20,
+        strategy='fixed-window',
+        normalized_text_sha256='c' * 64,
+        text_sha256='d' * 64,
+        pipeline_version='test',
+    )
+    lexical_hits = [SearchHit(chunk=chunk_lexical, score=2.0, matched_terms=[], term_coverage=0.0, strategy='lexical')]
+    vector_hits = [
+        SearchHit(chunk=chunk_vector, score=0.9, matched_terms=[], term_coverage=0.0, strategy='vector', distance=0.2),
+    ]
+
+    equal_weight_hits = _fuse_hits_by_rank(
+        lexical_hits,
+        vector_hits,
+        top_k=2,
+        rank_constant=1,
+    )
+    lexical_weighted_hits = _fuse_hits_by_rank(
+        lexical_hits,
+        vector_hits,
+        top_k=2,
+        rank_constant=1,
+        lexical_weight=4.0,
+        vector_weight=1.0,
+    )
+
+    assert equal_weight_hits[0].chunk.chunk_id == 'chunk-vector'
+    assert lexical_weighted_hits[0].chunk.chunk_id == 'chunk-lexical'
+    assert lexical_weighted_hits[0].score > equal_weight_hits[0].score
 
 
 def test_semantic_search_marks_fuzzy_term_matches_for_vector_hits() -> None:

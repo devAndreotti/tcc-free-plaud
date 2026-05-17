@@ -44,6 +44,11 @@ def run(
     overlap: int = typer.Option(120, '--overlap', min=0),
     run_name: str = typer.Option('benchmark', '--run-name'),
     embedding_model: str | None = typer.Option(None, '--embedding-model', help="Override do embedding model para strategy=vector ou strategy=hybrid."),
+    hybrid_rank_constant: int = typer.Option(60, '--hybrid-rank-constant', min=1, help='Constante da rank fusion quando strategy=hybrid.'),
+    hybrid_lexical_weight: float = typer.Option(1.0, '--hybrid-lexical-weight', min=0.0, help='Peso do ranking lexical quando strategy=hybrid.'),
+    hybrid_vector_weight: float = typer.Option(1.0, '--hybrid-vector-weight', min=0.0, help='Peso do ranking vetorial quando strategy=hybrid.'),
+    hybrid_lexical_pool: int | None = typer.Option(None, '--hybrid-lexical-pool', min=1, help='Pool lexical candidato quando strategy=hybrid.'),
+    hybrid_vector_pool: int | None = typer.Option(None, '--hybrid-vector-pool', min=1, help='Pool vetorial candidato quando strategy=hybrid.'),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
 ) -> None:
     """Executa benchmark reproduzível e persiste a execução em SQLite."""
@@ -73,6 +78,11 @@ def run(
         run_name=run_name,
         vector_store=vector_store,
         embedder=embedder,
+        hybrid_rank_constant=hybrid_rank_constant,
+        hybrid_lexical_weight=hybrid_lexical_weight,
+        hybrid_vector_weight=hybrid_vector_weight,
+        hybrid_lexical_pool=hybrid_lexical_pool,
+        hybrid_vector_pool=hybrid_vector_pool,
     )
     payload = result.model_dump(mode='json')
     if export:
@@ -91,6 +101,11 @@ def compare(
     chunk_size: int = typer.Option(800, '--chunk-size', min=1),
     overlap: int = typer.Option(120, '--overlap', min=0),
     embedding_model: str | None = typer.Option(None, '--embedding-model', help="Override do embedding model para a comparacao vetorial."),
+    hybrid_rank_constant: int = typer.Option(60, '--hybrid-rank-constant', min=1, help='Constante da rank fusion para strategy=hybrid.'),
+    hybrid_lexical_weight: float = typer.Option(1.0, '--hybrid-lexical-weight', min=0.0, help='Peso do ranking lexical para strategy=hybrid.'),
+    hybrid_vector_weight: float = typer.Option(1.0, '--hybrid-vector-weight', min=0.0, help='Peso do ranking vetorial para strategy=hybrid.'),
+    hybrid_lexical_pool: int | None = typer.Option(None, '--hybrid-lexical-pool', min=1, help='Pool lexical candidato para strategy=hybrid.'),
+    hybrid_vector_pool: int | None = typer.Option(None, '--hybrid-vector-pool', min=1, help='Pool vetorial candidato para strategy=hybrid.'),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
 ) -> None:
     """Compara lexical, vector e hybrid em uma suíte de documentos e datasets."""
@@ -114,6 +129,11 @@ def compare(
         overlap=overlap,
         vector_store=vector_store,
         embedder=embedder,
+        hybrid_rank_constant=hybrid_rank_constant,
+        hybrid_lexical_weight=hybrid_lexical_weight,
+        hybrid_vector_weight=hybrid_vector_weight,
+        hybrid_lexical_pool=hybrid_lexical_pool,
+        hybrid_vector_pool=hybrid_vector_pool,
     )
     payload = result.model_dump(mode='json')
     if export:

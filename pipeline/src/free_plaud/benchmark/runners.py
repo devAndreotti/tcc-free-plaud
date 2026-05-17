@@ -52,6 +52,7 @@ class BenchmarkRunResult(BaseModel):
     overlap: int
     metrics: dict[str, float | int]
     queries: list[BenchmarkQueryResult]
+    hybrid_config: dict[str, int | float | None] | None = None
     started_at: datetime
     finished_at: datetime
     duration_ms: int
@@ -87,6 +88,7 @@ class BenchmarkComparisonResult(BaseModel):
     top_k: int
     chunk_size: int
     overlap: int
+    hybrid_config: dict[str, int | float | None] | None = None
     summaries: dict[str, BenchmarkStrategySummary]
     cases: list[BenchmarkCaseComparisonResult]
     started_at: datetime
@@ -177,6 +179,11 @@ def run_benchmark(
     run_name: str = 'benchmark',
     vector_store: LocalVectorStore | None = None,
     embedder: Embedder | None = None,
+    hybrid_rank_constant: int = 60,
+    hybrid_lexical_weight: float = 1.0,
+    hybrid_vector_weight: float = 1.0,
+    hybrid_lexical_pool: int | None = None,
+    hybrid_vector_pool: int | None = None,
 ) -> BenchmarkRunResult:
     """Executa benchmark reproduzível sobre uma nota canônica."""
     started_at = datetime.now(UTC)
@@ -208,8 +215,11 @@ def run_benchmark(
                 embedder,  # type: ignore[arg-type]
                 top_k=top_k,
                 note_id=note.note_id,
-                lexical_pool_size=max(top_k * 3, top_k),
-                vector_pool_size=max(top_k * 8, 24),
+                lexical_pool_size=hybrid_lexical_pool or max(top_k * 3, top_k),
+                vector_pool_size=hybrid_vector_pool or max(top_k * 8, 24),
+                rank_constant=hybrid_rank_constant,
+                lexical_weight=hybrid_lexical_weight,
+                vector_weight=hybrid_vector_weight,
             )
         else:
             hits = semantic_search(sample.question, vector_store, embedder, top_k=top_k, note_id=note.note_id)  # type: ignore[arg-type]
@@ -242,6 +252,17 @@ def run_benchmark(
         overlap=overlap,
         metrics=metrics,
         queries=query_results,
+        hybrid_config=(
+            {
+                'rank_constant': hybrid_rank_constant,
+                'lexical_weight': hybrid_lexical_weight,
+                'vector_weight': hybrid_vector_weight,
+                'lexical_pool': hybrid_lexical_pool or max(top_k * 3, top_k),
+                'vector_pool': hybrid_vector_pool or max(top_k * 8, 24),
+            }
+            if strategy == 'hybrid'
+            else None
+        ),
         started_at=started_at,
         finished_at=finished_at,
         duration_ms=duration_ms,
@@ -262,6 +283,11 @@ def compare_benchmark_suite(
     overlap: int = 120,
     vector_store: LocalVectorStore,
     embedder: Embedder,
+    hybrid_rank_constant: int = 60,
+    hybrid_lexical_weight: float = 1.0,
+    hybrid_vector_weight: float = 1.0,
+    hybrid_lexical_pool: int | None = None,
+    hybrid_vector_pool: int | None = None,
 ) -> BenchmarkComparisonResult:
     """Compara lexical, vector e hybrid em múltiplos documentos de forma reproduzível."""
     started_at = datetime.now(UTC)
@@ -312,6 +338,11 @@ def compare_benchmark_suite(
             run_name=f'{suite.suite_name}-{case.case_id}-hybrid',
             vector_store=vector_store,
             embedder=embedder,
+            hybrid_rank_constant=hybrid_rank_constant,
+            hybrid_lexical_weight=hybrid_lexical_weight,
+            hybrid_vector_weight=hybrid_vector_weight,
+            hybrid_lexical_pool=hybrid_lexical_pool,
+            hybrid_vector_pool=hybrid_vector_pool,
         )
 
         lexical_runs.append(lexical_result)
@@ -339,6 +370,13 @@ def compare_benchmark_suite(
         top_k=top_k,
         chunk_size=chunk_size,
         overlap=overlap,
+        hybrid_config={
+            'rank_constant': hybrid_rank_constant,
+            'lexical_weight': hybrid_lexical_weight,
+            'vector_weight': hybrid_vector_weight,
+            'lexical_pool': hybrid_lexical_pool or max(top_k * 3, top_k),
+            'vector_pool': hybrid_vector_pool or max(top_k * 8, 24),
+        },
         summaries={
             'lexical': _summarize_strategy('lexical', lexical_runs),
             'vector': _summarize_strategy('vector', vector_runs),
@@ -366,7 +404,11 @@ def _persist_benchmark_result(connection, note: Note, result: BenchmarkRunResult
             query_count=len(result.queries),
             pipeline_version=PIPELINE_VERSION,
             status='success',
-            config={'chunk_size': result.chunk_size, 'overlap': result.overlap},
+            config={
+                'chunk_size': result.chunk_size,
+                'overlap': result.overlap,
+                'hybrid_config': result.hybrid_config,
+            },
             metrics=dict(result.metrics),
             started_at=result.started_at,
             finished_at=result.finished_at,

@@ -192,14 +192,16 @@ def _fuse_hits_by_rank(
     *,
     top_k: int,
     rank_constant: int = 60,
+    lexical_weight: float = 1.0,
+    vector_weight: float = 1.0,
 ) -> list[SearchHit]:
     fused: dict[str, SearchHit] = {}
     fused_scores: dict[str, float] = {}
 
-    for source_hits in (lexical_hits, vector_hits):
+    for source_hits, weight in ((lexical_hits, lexical_weight), (vector_hits, vector_weight)):
         for rank, hit in enumerate(source_hits, start=1):
             chunk_id = hit.chunk.chunk_id
-            fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (1.0 / (rank_constant + rank))
+            fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (weight / (rank_constant + rank))
             existing = fused.get(chunk_id)
             if existing is None:
                 fused[chunk_id] = SearchHit(
@@ -245,6 +247,8 @@ def hybrid_search(
     lexical_pool_size: int | None = None,
     vector_pool_size: int | None = None,
     rank_constant: int = 60,
+    lexical_weight: float = 1.0,
+    vector_weight: float = 1.0,
 ) -> list[SearchHit]:
     """Combina lexical + vector com rank fusion simples e reproduzível."""
     if not query.strip() or top_k <= 0:
@@ -263,4 +267,6 @@ def hybrid_search(
         vector_hits,
         top_k=top_k,
         rank_constant=rank_constant,
+        lexical_weight=lexical_weight,
+        vector_weight=vector_weight,
     )
