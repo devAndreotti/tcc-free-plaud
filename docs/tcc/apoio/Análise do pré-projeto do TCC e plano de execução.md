@@ -22,27 +22,27 @@ O modelo deixa claro que o pré-projeto deve conter, no mínimo, **capa**, **fol
 
 ## 2. O que o projeto já tem pronto ou quase pronto
 
-O repositório já está surpreendentemente maduro em termos de **delimitação conceitual**. O `README.md` e o arquivo `docs/TCC.md` já apresentam de forma clara o problema, a proposta do sistema, o objetivo geral, os objetivos específicos, as perguntas de pesquisa, o escopo, os riscos e o critério de sucesso do trabalho [2] [3]. Em termos práticos, isso significa que vocês **não estão começando do zero**; o que falta agora é transformar material técnico e de planejamento em **redação acadêmica de pré-projeto**.
+O repositório já está surpreendentemente maduro em termos de **delimitação conceitual**. O `README.md` e o arquivo `docs/tcc/texto/TCC.md` já apresentam de forma clara o problema, a proposta do sistema, o objetivo geral, os objetivos específicos, as perguntas de pesquisa, o escopo, os riscos e o critério de sucesso do trabalho [2] [3]. Em termos práticos, isso significa que vocês **não estão começando do zero**; o que falta agora é transformar material técnico e de planejamento em **redação acadêmica de pré-projeto**.
 
 O tema do TCC já está bem definido: trata-se do **desenvolvimento e avaliação de um pipeline de IA para captura multimodal e recuperação semântica de conhecimento pessoal**, com ênfase em arquitetura **local-first**, uso de **RAG com citação obrigatória**, indexação vetorial local, processamento de conteúdo em **Markdown** e avaliação em **português brasileiro** [2] [3]. O problema central também já está bem formulado: usuários capturam informação em áudio, imagem, texto e PDF, mas perdem valor desse material porque a transformação em conhecimento pesquisável ainda exige disciplina manual excessiva [2] [3].
 
 | Conteúdo necessário no pré-projeto | Situação no repositório | Fonte principal |
 | --- | --- | --- |
-| Tema do trabalho | Já definido | `docs/TCC.md` [3] |
-| Problema de pesquisa | Já definido | `README.md`, `docs/TCC.md` [2] [3] |
-| Objetivo geral | Já definido | `docs/TCC.md` [3] |
-| Objetivos específicos | Já definidos | `docs/TCC.md` [3] |
-| Perguntas de pesquisa | Já definidas | `README.md`, `docs/TCC.md`, `docs/Perguntas_a_Serem_Respondidas.md` [2] [3] [4] |
-| Estratégia metodológica inicial | Já esboçada | `docs/TCC.md`, `docs/Arquitetura.md` [3] [5] |
-| Cronograma operacional | Já existe base forte | `docs/Plano_de_Arranque.md` [6] |
-| Argumentos para defesa e relevância científica | Já existem | `docs/Perguntas_do_TCC.md` [7] |
-| Revisão bibliográfica inicial | Já existe | `docs/revisao_bibliografica_rag_tcc.md` [8] |
+| Tema do trabalho | Já definido | `docs/tcc/texto/TCC.md` [3] |
+| Problema de pesquisa | Já definido | `README.md`, `docs/tcc/texto/TCC.md` [2] [3] |
+| Objetivo geral | Já definido | `docs/tcc/texto/TCC.md` [3] |
+| Objetivos específicos | Já definidos | `docs/tcc/texto/TCC.md` [3] |
+| Perguntas de pesquisa | Já definidas | `README.md`, `docs/tcc/texto/TCC.md`, `docs/tcc/perguntas/Perguntas_a_Serem_Respondidas.md` [2] [3] [4] |
+| Estratégia metodológica inicial | Já esboçada | `docs/tcc/texto/TCC.md`, `docs/arquitetura/Arquitetura.md` [3] [5] |
+| Cronograma operacional | Já existe base forte | `docs/planejamento/Plano_de_Arranque.md` [6] |
+| Argumentos para defesa e relevância científica | Já existem | `docs/tcc/perguntas/Perguntas_do_TCC.md` [7] |
+| Revisão bibliográfica inicial | Já existe | `docs/tcc/apoio/revisao_bibliografica_rag_tcc.md` [8] |
 
 ## 3. O que ainda precisa ser feito
 
 O principal trabalho agora não é inventar o projeto, mas sim **converter o que já existe em formato adequado ao pré-projeto**. Em outras palavras, a maior lacuna atual é de **organização, redação e enquadramento acadêmico**, e não de ausência de ideia.
 
-A capa e a folha de rosto ainda dependem de preenchimento manual, porque o repositório não traz dados institucionais, nomes completos dos autores, nome do orientador, cidade oficial e ano final do documento. Isso é um preenchimento simples, mas obrigatório [1]. Já o corpo do texto precisa ser produzido com base no material existente, sobretudo a partir de `docs/TCC.md`, `README.md`, `docs/Perguntas_do_TCC.md`, `docs/Perguntas_a_Serem_Respondidas.md`, `docs/Plano_de_Arranque.md` e da revisão bibliográfica [2] [3] [4] [6] [7] [8].
+A capa e a folha de rosto ainda dependem de preenchimento manual, porque o repositório não traz dados institucionais, nomes completos dos autores, nome do orientador, cidade oficial e ano final do documento. Isso é um preenchimento simples, mas obrigatório [1]. Já o corpo do texto precisa ser produzido com base no material existente, sobretudo a partir de `docs/tcc/texto/TCC.md`, `README.md`, `docs/tcc/perguntas/Perguntas_do_TCC.md`, `docs/tcc/perguntas/Perguntas_a_Serem_Respondidas.md`, `docs/planejamento/Plano_de_Arranque.md` e da revisão bibliográfica [2] [3] [4] [6] [7] [8].
 
 | Item pendente | Situação atual | O que fazer |
 | --- | --- | --- |
@@ -104,7 +104,7 @@ Uma redação metodológica coerente seria apresentar, em sequência, os seguint
 
 ### 4.5 Cronograma
 
-O cronograma pode ser construído a partir do `Plano_de_Arranque.md`, mas deve ser adaptado à lógica acadêmica do TCC. Em vez de reproduzir exatamente as semanas de implementação, o ideal é converter isso em blocos mensais, incluindo atividades de revisão bibliográfica, redação do pré-projeto, desenvolvimento, experimentação, análise e escrita final [6].
+O cronograma pode ser construído a partir do `docs/planejamento/Plano_de_Arranque.md`, mas deve ser adaptado à lógica acadêmica do TCC. Em vez de reproduzir exatamente as semanas de implementação, o ideal é converter isso em blocos mensais, incluindo atividades de revisão bibliográfica, redação do pré-projeto, desenvolvimento, experimentação, análise e escrita final [6].
 
 A estrutura abaixo já é suficiente como ponto de partida e pode ser ajustada conforme o calendário da disciplina.
 
@@ -143,16 +143,16 @@ A boa notícia é que vários desses tópicos **já foram pesquisados** no próp
 
 | Tópico | Arquivo que já ajuda muito | Observação |
 | --- | --- | --- |
-| Fundamentação sobre RAG | `docs/revisao_bibliografica_rag_tcc.md` | Reaproveitar para justificativa e base teórica |
-| Problema e objetivo do trabalho | `docs/TCC.md` | Usar como espinha dorsal do texto |
-| Perguntas de pesquisa | `docs/Perguntas_a_Serem_Respondidas.md` | Útil para coerência metodológica |
-| Defesa da relevância científica | `docs/Perguntas_do_TCC.md` | Excelente para justificar o valor do TCC |
-| Arquitetura e recorte técnico | `docs/Arquitetura.md` | Útil para metodologia e descrição do artefato |
-| Cronograma inicial | `docs/Plano_de_Arranque.md` | Base direta para o cronograma acadêmico |
+| Fundamentação sobre RAG | `docs/tcc/apoio/revisao_bibliografica_rag_tcc.md` | Reaproveitar para justificativa e base teórica |
+| Problema e objetivo do trabalho | `docs/tcc/texto/TCC.md` | Usar como espinha dorsal do texto |
+| Perguntas de pesquisa | `docs/tcc/perguntas/Perguntas_a_Serem_Respondidas.md` | Útil para coerência metodológica |
+| Defesa da relevância científica | `docs/tcc/perguntas/Perguntas_do_TCC.md` | Excelente para justificar o valor do TCC |
+| Arquitetura e recorte técnico | `docs/arquitetura/Arquitetura.md` | Útil para metodologia e descrição do artefato |
+| Cronograma inicial | `docs/planejamento/Plano_de_Arranque.md` | Base direta para o cronograma acadêmico |
 
 ## 6. Estratégia mais eficiente para transformar isso em pré-projeto
 
-A forma mais inteligente de executar este trabalho é usar o `docs/TCC.md` como **coluna vertebral**, porque ele já contém tema, problema, objetivos, hipótese, escopo, estratégia metodológica e contribuições esperadas [3]. Em seguida, a revisão bibliográfica deve ser usada para robustecer a justificativa e alimentar as referências [8]. O documento `Perguntas_do_TCC.md` deve servir como filtro argumentativo: tudo que estiver no pré-projeto precisa ser defensável perante a banca, e esse arquivo já antecipa várias objeções relevantes [7].
+A forma mais inteligente de executar este trabalho é usar o `docs/tcc/texto/TCC.md` como **coluna vertebral**, porque ele já contém tema, problema, objetivos, hipótese, escopo, estratégia metodológica e contribuições esperadas [3]. Em seguida, a revisão bibliográfica deve ser usada para robustecer a justificativa e alimentar as referências [8]. O documento `docs/tcc/perguntas/Perguntas_do_TCC.md` deve servir como filtro argumentativo: tudo que estiver no pré-projeto precisa ser defensável perante a banca, e esse arquivo já antecipa várias objeções relevantes [7].
 
 Em termos práticos, a sequência de execução ideal é a seguinte.
 
@@ -183,7 +183,7 @@ Essa divisão funciona bem porque a primeira frente exige mais leitura, síntese
 
 | Etapa | Pessoa 1 | Pessoa 2 | Entrega conjunta |
 | --- | --- | --- | --- |
-| Levantamento do material | Minerar `revisao_bibliografica_rag_tcc.md` e `Perguntas_do_TCC.md` | Minerar `TCC.md`, `Arquitetura.md` e `Plano_de_Arranque.md` | Mapa comum do conteúdo reutilizável |
+| Levantamento do material | Minerar `docs/tcc/apoio/revisao_bibliografica_rag_tcc.md` e `docs/tcc/perguntas/Perguntas_do_TCC.md` | Minerar `docs/tcc/texto/TCC.md`, `docs/arquitetura/Arquitetura.md` e `docs/planejamento/Plano_de_Arranque.md` | Mapa comum do conteúdo reutilizável |
 | Redação inicial | Introdução e justificativa | Objetivos e metodologia | Primeira versão do texto |
 | Planejamento | Apoiar com coerência argumentativa | Montar cronograma | Estrutura final completa |
 | Revisão | Ajustar estilo, clareza e referências | Ajustar coerência técnica e metodologia | Versão final unificada |
@@ -206,30 +206,30 @@ Essa segunda divisão é boa quando ambos querem participar do texto inteiro, ma
 
 ## 9. O que eu faria primeiro, na prática
 
-Se a ideia é ganhar velocidade imediatamente, o melhor caminho é seguir esta ordem de execução já no próximo encontro de vocês. Primeiro, fechar o **título provisório** e a **questão-problema**. Depois, copiar do `docs/TCC.md` o objetivo geral e os específicos para uma versão inicial do pré-projeto. Em seguida, usar a revisão bibliográfica e o arquivo `Perguntas_do_TCC.md` para escrever a justificativa. Por fim, transformar o desenho já existente em uma metodologia acadêmica enxuta e adaptar o `Plano_de_Arranque.md` para um cronograma compatível com o calendário do curso [3] [6] [7] [8].
+Se a ideia é ganhar velocidade imediatamente, o melhor caminho é seguir esta ordem de execução já no próximo encontro de vocês. Primeiro, fechar o **título provisório** e a **questão-problema**. Depois, copiar do `docs/tcc/texto/TCC.md` o objetivo geral e os específicos para uma versão inicial do pré-projeto. Em seguida, usar a revisão bibliográfica e o arquivo `docs/tcc/perguntas/Perguntas_do_TCC.md` para escrever a justificativa. Por fim, transformar o desenho já existente em uma metodologia acadêmica enxuta e adaptar o `docs/planejamento/Plano_de_Arranque.md` para um cronograma compatível com o calendário do curso [3] [6] [7] [8].
 
 | Prioridade | Tarefa | Fonte-base |
 | --- | --- | --- |
-| Alta | Fechar título e pergunta-problema | `docs/TCC.md`, `README.md` [2] [3] |
-| Alta | Redigir objetivos | `docs/TCC.md` [3] |
-| Alta | Redigir justificativa | `docs/revisao_bibliografica_rag_tcc.md`, `docs/Perguntas_do_TCC.md` [7] [8] |
-| Alta | Redigir metodologia | `docs/TCC.md`, `docs/Arquitetura.md`, `docs/Perguntas_a_Serem_Respondidas.md` [3] [4] [5] |
-| Média | Montar cronograma | `docs/Plano_de_Arranque.md` [6] |
+| Alta | Fechar título e pergunta-problema | `docs/tcc/texto/TCC.md`, `README.md` [2] [3] |
+| Alta | Redigir objetivos | `docs/tcc/texto/TCC.md` [3] |
+| Alta | Redigir justificativa | `docs/tcc/apoio/revisao_bibliografica_rag_tcc.md`, `docs/tcc/perguntas/Perguntas_do_TCC.md` [7] [8] |
+| Alta | Redigir metodologia | `docs/tcc/texto/TCC.md`, `docs/arquitetura/Arquitetura.md`, `docs/tcc/perguntas/Perguntas_a_Serem_Respondidas.md` [3] [4] [5] |
+| Média | Montar cronograma | `docs/planejamento/Plano_de_Arranque.md` [6] |
 | Média | Ajustar referências | revisão bibliográfica + norma da instituição [1] [8] |
 
 ## 10. Conclusão
 
 Em resumo, o projeto já tem **tema, problema, objetivos, perguntas de pesquisa, estratégia técnica e base bibliográfica** suficientemente maduros para produzir um bom pré-projeto [2] [3] [4] [5] [6] [7] [8]. O que falta agora é **organizar**, **escrever academicamente** e **formatar segundo o modelo** [1]. Portanto, a maior parte do esforço de vocês deve ir para transformar material técnico já existente em um texto curto, coerente, defensável e bem formatado.
 
-Se vocês seguirem a estratégia de aproveitar `docs/TCC.md` como eixo central, usar a revisão bibliográfica como base da justificativa e dividir o trabalho entre uma frente argumentativa e outra metodológica, o pré-projeto tende a sair com muito menos retrabalho e com maior consistência entre o que será prometido agora e o que realmente poderá ser implementado depois [3] [6] [7] [8].
+Se vocês seguirem a estratégia de aproveitar `docs/tcc/texto/TCC.md` como eixo central, usar a revisão bibliográfica como base da justificativa e dividir o trabalho entre uma frente argumentativa e outra metodológica, o pré-projeto tende a sair com muito menos retrabalho e com maior consistência entre o que será prometido agora e o que realmente poderá ser implementado depois [3] [6] [7] [8].
 
 ## References
 
 [1]: file:///home/ubuntu/upload/Modelo-de-pre-projeto.pdf "Modelo de pré-projeto de TCC"
 [2]: file:///mnt/desktop/tcc-free-plaud/README.md "README.md do projeto tcc-free-plaud"
-[3]: file:///mnt/desktop/tcc-free-plaud/docs/TCC.md "Documento principal do TCC"
-[4]: file:///mnt/desktop/tcc-free-plaud/docs/Perguntas_a_Serem_Respondidas.md "Perguntas a Serem Respondidas"
-[5]: file:///mnt/desktop/tcc-free-plaud/docs/Arquitetura.md "Arquitetura do Sistema"
-[6]: file:///mnt/desktop/tcc-free-plaud/docs/Plano_de_Arranque.md "Plano de Arranque"
-[7]: file:///mnt/desktop/tcc-free-plaud/docs/Perguntas_do_TCC.md "Perguntas do TCC"
-[8]: file:///mnt/desktop/tcc-free-plaud/docs/revisao_bibliografica_rag_tcc.md "Revisão bibliográfica RAG TCC"
+[3]: file:///mnt/desktop/tcc-free-plaud/docs/tcc/texto/TCC.md "Documento principal do TCC"
+[4]: file:///mnt/desktop/tcc-free-plaud/docs/tcc/perguntas/Perguntas_a_Serem_Respondidas.md "Perguntas a Serem Respondidas"
+[5]: file:///mnt/desktop/tcc-free-plaud/docs/arquitetura/Arquitetura.md "Arquitetura do Sistema"
+[6]: file:///mnt/desktop/tcc-free-plaud/docs/planejamento/Plano_de_Arranque.md "Plano de Arranque"
+[7]: file:///mnt/desktop/tcc-free-plaud/docs/tcc/perguntas/Perguntas_do_TCC.md "Perguntas do TCC"
+[8]: file:///mnt/desktop/tcc-free-plaud/docs/tcc/apoio/revisao_bibliografica_rag_tcc.md "Revisão bibliográfica RAG TCC"

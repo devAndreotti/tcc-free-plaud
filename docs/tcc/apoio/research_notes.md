@@ -2,21 +2,21 @@
 
 ## Contexto do projeto
 
-Com base em `/mnt/desktop/tcc-free-plaud/docs/TCC.md`, o trabalho investiga um pipeline **local-first** para captura multimodal e recuperação semântica de conhecimento pessoal em português brasileiro, com foco em notas Markdown, banco vetorial local e RAG com citação obrigatória.
+Com base em `/mnt/desktop/tcc-free-plaud/docs/tcc/texto/TCC.md`, o trabalho investiga um pipeline **local-first** para captura multimodal e recuperação semântica de conhecimento pessoal em português brasileiro, com foco em notas Markdown, banco vetorial local e RAG com citação obrigatória.
 
 ## Acesso à pasta do projeto
 
 O diretório `/mnt/desktop/tcc-free-plaud` está acessível no sandbox. Foram identificados os seguintes arquivos relevantes:
 
 - `README.md`
-- `docs/Arquitetura.md`
-- `docs/Arquitetura_Backend.md`
-- `docs/Arquitetura_Frontend.md`
+- `docs/arquitetura/Arquitetura.md`
+- `docs/arquitetura/Arquitetura_Backend.md`
+- `docs/arquitetura/Arquitetura_Frontend.md`
 - `docs/Metodologia_Akita_Git.md`
-- `docs/Perguntas_a_Serem_Respondidas.md`
-- `docs/Perguntas_do_TCC.md`
-- `docs/Plano_de_Arranque.md`
-- `docs/TCC.md`
+- `docs/tcc/perguntas/Perguntas_a_Serem_Respondidas.md`
+- `docs/tcc/perguntas/Perguntas_do_TCC.md`
+- `docs/planejamento/Plano_de_Arranque.md`
+- `docs/tcc/texto/TCC.md`
 
 ## Fonte acadêmica já aberta
 
@@ -285,4 +285,3 @@ Achados principais:
 ## Síntese provisória sobre o ecossistema Obsidian + RAG
 
 Os projetos encontrados sugerem três níveis de maturidade no ecossistema. No nível mais simples, aparecem soluções de **busca semântica** e recomendação de notas relacionadas. Em um nível intermediário, surgem protótipos de **RAG local-first** com LangChain, embeddings e armazenamento vetorial. No nível mais avançado, observam-se arquiteturas com **plugin nativo**, **backend dedicado**, **recuperação híbrida**, **reranking**, **GraphRAG** e **atribuição de fontes**. Essa progressão é útil para o TCC porque mostra que o problema possui relevância prática e que as decisões arquiteturais podem ser justificadas com base em soluções reais já adotadas pela comunidade.
-

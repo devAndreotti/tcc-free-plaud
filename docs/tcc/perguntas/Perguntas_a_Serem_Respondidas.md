@@ -134,7 +134,7 @@ O trabalho precisa conseguir responder bem:
 
 Documento complementar:
 
-- [`Perguntas_do_TCC.md`](Perguntas_do_TCC.md)
+- [`Perguntas_do_TCC.md`](../perguntas/Perguntas_do_TCC.md)
 
 ## 4. Perguntas de produto e escopo
 

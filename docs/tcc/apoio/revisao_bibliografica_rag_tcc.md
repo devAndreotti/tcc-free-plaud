@@ -160,38 +160,38 @@ Assim, esta revisão sustenta a relevância científica e aplicada do TCC. Ela m
 
 ## Referências
 
-[1] CHENG, X.; DONG, Z.; SHEN, J.; LIU, Z.; LIU, C.; ZHANG, S.; ARIKAN, B.; ZHANG, Y.; LI, X.; GAO, T.; YAN, Y.; ZHAO, X. **A Survey on Knowledge-Oriented Retrieval-Augmented Generation**. arXiv, 2025. Disponível em: <https://arxiv.org/html/2503.10677v2>. Acesso em: 31 mar. 2026.
+[1] CHENG, Mingyue et al. **A Survey on Knowledge-Oriented Retrieval-Augmented Generation**. arXiv, 2025. Disponível em: <https://arxiv.org/abs/2503.10677>. Acesso em: 9 abr. 2026.
 
-[2] GAO, Y.; XIONG, Y.; GAO, X.; JIA, K.; PAN, J.; BI, Y.; DAI, Y.; SUN, J.; GUO, M.; WANG, H. **Retrieval-Augmented Generation for Large Language Models: A Survey**. arXiv, 2024. DOI: <https://doi.org/10.48550/arXiv.2312.10997>. Disponível em: <https://arxiv.org/abs/2312.10997>. Acesso em: 31 mar. 2026.
+[2] GAO, Yunfan et al. **Retrieval-Augmented Generation for Large Language Models: A Survey**. arXiv, 2023. Disponível em: <https://arxiv.org/abs/2312.10997>. Acesso em: 9 abr. 2026.
 
-[3] GAN, A.; YU, H.; ZHANG, K.; YAN, W.; HUANG, Z.; TONG, S.; CHEN, E.; HU, G. **Retrieval Augmented Generation Evaluation in the Era of Large Language Models: A Comprehensive Survey**. arXiv, 2025. Disponível em: <https://arxiv.org/html/2504.14891v1>. Acesso em: 31 mar. 2026.
+[3] GAN, Aoran et al. **Retrieval Augmented Generation Evaluation in the Era of Large Language Models: A Comprehensive Survey**. arXiv, 2025. Disponível em: <https://arxiv.org/abs/2504.14891>. Acesso em: 9 abr. 2026.
 
-[4] SHARMA, C. **Retrieval-Augmented Generation: A Comprehensive Survey of Architectures, Enhancements, and Robustness Frontiers**. arXiv, 2025. DOI: <https://doi.org/10.48550/arXiv.2506.00054>. Disponível em: <https://arxiv.org/abs/2506.00054>. Acesso em: 31 mar. 2026.
+[4] SHARMA, Chaitanya. **Retrieval-Augmented Generation: A Comprehensive Survey of Architectures, Enhancements, and Robustness Frontiers**. arXiv, 2025. Disponível em: <https://arxiv.org/abs/2506.00054>. Acesso em: 9 abr. 2026.
 
-[5] GOMEZ-CABELLO, C. A.; et al. **Comparative Evaluation of Advanced Chunking for Retrieval-Augmented Generation in Large Language Models for Clinical Decision Support**. *Bioengineering*, 2025. Disponível em: <https://pmc.ncbi.nlm.nih.gov/articles/PMC12649634/>. Acesso em: 31 mar. 2026.
+[5] GOMEZ-CABELLO, Cesar Abraham et al. **Comparative Evaluation of Advanced Chunking for Retrieval-Augmented Generation in Large Language Models for Clinical Decision Support**. *Bioengineering*, v. 12, n. 11, art. 1194, 2025. Disponível em: <https://www.mdpi.com/2306-5354/12/11/1194>. Acesso em: 9 abr. 2026.
 
-[6] RANALDI, L.; HADDOW, B.; BIRCH, A. **Multilingual Retrieval-Augmented Generation for Knowledge-Intensive Task**. arXiv, 2025. Disponível em: <https://arxiv.org/html/2504.03616v1>. Acesso em: 31 mar. 2026.
+[6] RANALDI, Leonardo; HADDOW, Barry; BIRCH, Alexandra. **Multilingual Retrieval-Augmented Generation for Knowledge-Intensive Task**. arXiv, 2025. Disponível em: <https://arxiv.org/abs/2504.03616>. Acesso em: 9 abr. 2026.
 
-[7] ORO, E.; GRANATA, F.; RUFFOLO, M. **A Comprehensive Evaluation of Embedding Models and LLMs for IR and QA Across English and Italian**. *Big Data and Cognitive Computing*, 2025. DOI: <https://doi.org/10.3390/bdcc9050141>. Disponível em: <https://www.mdpi.com/2504-2289/9/5/141>. Acesso em: 31 mar. 2026.
+[7] ORO, Ermelinda; GRANATA, Francesco Maria; RUFFOLO, Massimo. **A Comprehensive Evaluation of Embedding Models and LLMs for IR and QA Across English and Italian**. *Big Data and Cognitive Computing*, v. 9, n. 5, art. 141, 2025. Disponível em: <https://www.mdpi.com/2504-2289/9/5/141>. Acesso em: 9 abr. 2026.
 
-[8] WANG, L.; YANG, N.; HUANG, X.; JIANG, B.; LIN, F.; YANG, S.; ZHOU, H.; ZHOU, Y.; ZHANG, Z.; ZHOU, L. **Multilingual E5 Text Embeddings: A Technical Report**. arXiv, 2024. DOI: <https://doi.org/10.48550/arXiv.2402.05672>. Disponível em: <https://arxiv.org/abs/2402.05672>. Acesso em: 31 mar. 2026.
+[8] WANG, Liang et al. **Multilingual E5 Text Embeddings: A Technical Report**. arXiv, 2024. Disponível em: <https://arxiv.org/abs/2402.05672>. Acesso em: 9 abr. 2026.
 
-[9] JING, Z.; SU, Y.; HAN, Y.; YUAN, B.; XU, H.; LIU, C.; CHEN, K.; ZHANG, M. **When Large Language Models Meet Vector Databases: A Survey**. arXiv, 2024. DOI: <https://doi.org/10.48550/arXiv.2402.01763>. Disponível em: <https://arxiv.org/abs/2402.01763>. Acesso em: 31 mar. 2026.
+[9] JING, Zhi et al. **When Large Language Models Meet Vector Databases: A Survey**. arXiv, 2024. Disponível em: <https://arxiv.org/abs/2402.01763>. Acesso em: 9 abr. 2026.
 
-[10] MA, L.; ZHANG, R.; HAN, Y.; YU, S.; WANG, Z.; NING, Z.; ZHANG, J.; XU, P.; LI, P.; QIAO, Z.; JU, W.; CHEN, C.; WANG, D.; LIU, K.; WANG, P.; WANG, P.; FU, Y.; LIU, C.; ZHOU, Y.; LU, C.-T. **A Comprehensive Survey on Vector Database: Storage and Retrieval Technique, Challenge**. arXiv, 2023. DOI: <https://doi.org/10.48550/arXiv.2310.11703>. Disponível em: <https://arxiv.org/abs/2310.11703>. Acesso em: 31 mar. 2026.
+[10] MA, Le et al. **A Comprehensive Survey on Vector Database: Storage and Retrieval Technique, Challenge**. arXiv, 2023. Disponível em: <https://arxiv.org/abs/2310.11703>. Acesso em: 9 abr. 2026.
 
-[11] LLAMAINDEX. **Loading Data | LlamaIndex OSS Documentation**. 2026. Disponível em: <https://developers.llamaindex.ai/python/framework/module_guides/loading/>. Acesso em: 31 mar. 2026.
+[11] LLAMAINDEX. **Loading Data**. [s. d.]. Disponível em: <https://developers.llamaindex.ai/python/framework/module_guides/loading/>. Acesso em: 9 abr. 2026.
 
-[12] LANGCHAIN. **Document loader integrations - Docs by LangChain**. 2026. Disponível em: <https://docs.langchain.com/oss/python/integrations/document_loaders>. Acesso em: 31 mar. 2026.
+[12] LANGCHAIN. **Document loader integrations**. [s. d.]. Disponível em: <https://docs.langchain.com/oss/python/integrations/document_loaders>. Acesso em: 9 abr. 2026.
 
-[13] LANGCHAIN. **UnstructuredMarkdownLoader integration - Docs by LangChain**. 2026. Disponível em: <https://docs.langchain.com/oss/python/integrations/document_loaders/unstructured_markdown>. Acesso em: 31 mar. 2026.
+[13] LANGCHAIN. **UnstructuredMarkdownLoader integration**. [s. d.]. Disponível em: <https://docs.langchain.com/oss/python/integrations/document_loaders/unstructured_markdown>. Acesso em: 9 abr. 2026.
 
-[14] HAYSTACK. **Converters | Haystack Documentation**. 2026. Disponível em: <https://docs.haystack.deepset.ai/docs/converters>. Acesso em: 31 mar. 2026.
+[14] HAYSTACK. **Converters**. [s. d.]. Disponível em: <https://docs.haystack.deepset.ai/docs/converters>. Acesso em: 9 abr. 2026.
 
-[15] HAYSTACK. **Tutorial: Preprocessing Different File Types**. 2026. Disponível em: <https://haystack.deepset.ai/tutorials/30_file_type_preprocessing_index_pipeline>. Acesso em: 31 mar. 2026.
+[15] HAYSTACK. **Tutorial: Preprocessing Different File Types**. 2026. Disponível em: <https://haystack.deepset.ai/tutorials/30_file_type_preprocessing_index_pipeline>. Acesso em: 9 abr. 2026.
 
-[16] BRIANPETRO. **obsidian-smart-connections: Chat with your notes & see links to related content with AI embeddings**. GitHub, 2026. Disponível em: <https://github.com/brianpetro/obsidian-smart-connections>. Acesso em: 31 mar. 2026.
+[16] BRIANPETRO. **obsidian-smart-connections: Chat with your notes & see links to related content with AI embeddings**. [s. d.]. Disponível em: <https://github.com/brianpetro/obsidian-smart-connections>. Acesso em: 9 abr. 2026.
 
-[17] PARTHSAREEN. **obsidian-rag: Talk to your Obsidian notes!** GitHub, 2026. Disponível em: <https://github.com/ParthSareen/obsidian-rag>. Acesso em: 31 mar. 2026.
+[17] PARTHSAREEN. **obsidian-rag: Talk to your Obsidian notes!** [s. d.]. Disponível em: <https://github.com/ParthSareen/obsidian-rag>. Acesso em: 9 abr. 2026.
 
-[18] VASALLO94. **ObsidianRAG: RAG system to query your Obsidian notes using LangGraph and local LLMs (Ollama)**. GitHub, 2026. Disponível em: <https://github.com/Vasallo94/ObsidianRAG>. Acesso em: 31 mar. 2026.
+[18] VASALLO94. **ObsidianRAG: RAG system to query your Obsidian notes using LangGraph and local LLMs (Ollama)**. [s. d.]. Disponível em: <https://github.com/Vasallo94/ObsidianRAG>. Acesso em: 9 abr. 2026.

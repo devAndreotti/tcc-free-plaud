@@ -56,14 +56,14 @@ Essa ordem prioriza a parte científica do TCC antes da parte cosmética do prod
 
 ## Documentação principal
 
-- Visão geral do TCC: [`docs/tcc/TCC.md`](docs/tcc/TCC.md)
+- Visão geral do TCC: [`docs/tcc/texto/TCC.md`](docs/tcc/texto/TCC.md)
 - Arquitetura do sistema: [`docs/arquitetura/Arquitetura.md`](docs/arquitetura/Arquitetura.md)
 - Backend: [`docs/arquitetura/Arquitetura_Backend.md`](docs/arquitetura/Arquitetura_Backend.md)
 - Frontend: [`docs/arquitetura/Arquitetura_Frontend.md`](docs/arquitetura/Arquitetura_Frontend.md)
 - Plano de arranque: [`docs/planejamento/Plano_de_Arranque.md`](docs/planejamento/Plano_de_Arranque.md)
 - Metodologia Akita + git: [`docs/planejamento/Metodologia_Akita_Git.md`](docs/planejamento/Metodologia_Akita_Git.md)
-- Perguntas que o trabalho precisa responder: [`docs/tcc/Perguntas_a_Serem_Respondidas.md`](docs/tcc/Perguntas_a_Serem_Respondidas.md)
-- Prep de defesa: [`docs/tcc/Perguntas_do_TCC.md`](docs/tcc/Perguntas_do_TCC.md)
+- Perguntas que o trabalho precisa responder: [`docs/tcc/perguntas/Perguntas_a_Serem_Respondidas.md`](docs/tcc/perguntas/Perguntas_a_Serem_Respondidas.md)
+- Prep de defesa: [`docs/tcc/perguntas/Perguntas_do_TCC.md`](docs/tcc/perguntas/Perguntas_do_TCC.md)
 
 ## Convenções do repositório
 

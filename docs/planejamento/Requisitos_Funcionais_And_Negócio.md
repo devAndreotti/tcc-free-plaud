@@ -183,9 +183,9 @@ Esses requisitos podem ser usados como base para documentação do projeto, mode
 ## References
 
 [1]: file:///mnt/desktop/tcc-free-plaud/README.md "README.md do projeto tcc-free-plaud"
-[2]: file:///mnt/desktop/tcc-free-plaud/docs/TCC.md "Documento principal do TCC"
-[3]: file:///mnt/desktop/tcc-free-plaud/docs/Arquitetura_Backend.md "Arquitetura Backend"
-[4]: file:///mnt/desktop/tcc-free-plaud/docs/Arquitetura.md "Arquitetura do Sistema"
-[5]: file:///mnt/desktop/tcc-free-plaud/docs/Arquitetura_Frontend.md "Arquitetura Frontend"
-[6]: file:///mnt/desktop/tcc-free-plaud/docs/Perguntas_do_TCC.md "Perguntas do TCC"
-[7]: file:///mnt/desktop/tcc-free-plaud/docs/Perguntas_a_Serem_Respondidas.md "Perguntas a Serem Respondidas"
+[2]: file:///mnt/desktop/tcc-free-plaud/docs/tcc/texto/TCC.md "Documento principal do TCC"
+[3]: file:///mnt/desktop/tcc-free-plaud/docs/arquitetura/Arquitetura_Backend.md "Arquitetura Backend"
+[4]: file:///mnt/desktop/tcc-free-plaud/docs/arquitetura/Arquitetura.md "Arquitetura do Sistema"
+[5]: file:///mnt/desktop/tcc-free-plaud/docs/arquitetura/Arquitetura_Frontend.md "Arquitetura Frontend"
+[6]: file:///mnt/desktop/tcc-free-plaud/docs/tcc/perguntas/Perguntas_do_TCC.md "Perguntas do TCC"
+[7]: file:///mnt/desktop/tcc-free-plaud/docs/tcc/perguntas/Perguntas_a_Serem_Respondidas.md "Perguntas a Serem Respondidas"
