@@ -188,6 +188,7 @@ Na implementação atual da Sprint 06.1:
 - a coleção baseline é persistida em `data/results/vector_store`
 - o backend registra `embedding_model` na indexação vetorial
 - a busca semântica inicial já retorna `chunk`, `score` e `strategy`
+- a camada de recuperação já prepara terreno para `hybrid` por compartilhamento do mesmo `chunk_id`
 
 ### Alternativa futura
 
@@ -271,12 +272,12 @@ Na evolução atual do backend:
 Na implementação atual da Sprint 07, o benchmark passa a ter um runner reproduzível por CLI.
 Ele carrega datasets JSON, executa consultas sobre uma nota canônica, calcula `MRR`,
 `Recall@3`, `Recall@5`, `Recall@10` e latência, persiste a execução em SQLite e pode
-exportar resultados em JSON e CSV. O runner já compara `lexical` e prepara o mesmo contrato
-para `vector`, sem depender de interface gráfica.
+exportar resultados em JSON e CSV. O runner já compara `lexical`, `vector` e `hybrid`
+sem depender de interface gráfica.
 
 Na evolução atual desse benchmark, o backend também passa a aceitar manifestos de suíte
-(`suite.json`) para comparar `lexical` vs `vector` sobre múltiplos documentos reais de forma
-repetível, gerando um resumo agregado por estratégia sem depender da interface.
+(`suite.json`) para comparar `lexical`, `vector` e `hybrid` sobre múltiplos documentos reais
+de forma repetível, gerando um resumo agregado por estratégia sem depender da interface.
 
 ### Resposta ask
 
@@ -293,15 +294,24 @@ repetível, gerando um resumo agregado por estratégia sem depender da interface
 
 Na implementação atual da Sprint 5, a resposta `ask` nasce como um baseline local-first sobre
 busca lexical com matching por token inteiro, não por substring. A partir da Sprint 06.2,
-o mesmo contrato passa a aceitar estratégia `lexical` ou `vector`, com abstention explícita
-quando a evidência semântica fica fraca ou mal ancorada. Isso permite:
+o mesmo contrato passa a aceitar estratégia `lexical`, `vector` ou `hybrid`, com abstention
+explícita quando a evidência recuperada fica fraca ou mal ancorada. Isso permite:
 
 - devolver payload estruturado para a UI desde cedo
 - exigir citação por claim
 - registrar abstention explícita quando a cobertura lexical for insuficiente
 - registrar abstention explícita quando o retrieval vetorial falha em score, anchors nomeados ou grounding textual
+- registrar abstention explícita quando a fusão híbrida não sustenta grounding mínimo
 - manter rastreabilidade `note -> chunk -> citation` sem depender ainda de embeddings reais
 - preparar o caminho para benchmark comparativo entre estratégias de recuperação
+
+Na evolução atual, `hybrid` combina:
+
+- ranking lexical
+- ranking vetorial
+- fusão por ranking reprodutível
+
+sem introduzir reranker, LLM ou dependência de frontend.
 
 ## Ordem de implementação backend
 
