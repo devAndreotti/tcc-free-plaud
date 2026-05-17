@@ -374,19 +374,21 @@ Ver:
 
 - `docs/experimentos/01_lexical_vs_vector_suite_baseline.md`
 - `docs/experimentos/02_calibracao_retrieval_vetorial.md`
+- `docs/experimentos/03_embeddings_alternativos_suite_baseline.md`
 
 Leitura atual:
 
 - `chunk_size = 800` e `overlap = 120` seguem como melhor baseline vetorial entre as variacoes testadas
-- o gargalo principal agora parece estar mais no `embedding_model` do que no chunking
+- os embeddings alternativos testados nao superaram `chroma-default` na suite real
+- com a evidencia atual, o proximo ganho provavel nao parece vir de um swap simples de embedding
 
 ### Proximo passo recomendado
 
-Antes de qualquer prioridade de UI ou reranking:
+Antes de qualquer prioridade de UI:
 
-1. testar embeddings alternativos
-2. rerodar a mesma suite real
-3. comparar contra `800/120 + chroma-default`
+1. manter `800/120 + chroma-default` como baseline vetorial atual
+2. abrir ciclo experimental para busca hibrida ou reranking
+3. comparar esse proximo ciclo contra `lexical` e contra o baseline vetorial atual
 
 ### Criterios de aceite
 
