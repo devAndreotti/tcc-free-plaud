@@ -217,6 +217,30 @@ def test_answer_with_citations_supports_vector_strategy(tmp_path: Path) -> None:
     assert response.used_sources
 
 
+def test_answer_with_citations_supports_hybrid_strategy(tmp_path: Path) -> None:
+    note = _build_note(
+        source_path=tmp_path / 'hybrid.md',
+        source_name='hybrid.md',
+    )
+    vector_store = LocalVectorStore(tmp_path / 'vector_store', collection_name='hybrid_answer')
+
+    response = answer_with_citations(
+        note,
+        'O que o benchmark mede?',
+        top_k=3,
+        strategy='hybrid',
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+    )
+
+    assert response.status == 'answer'
+    assert response.no_answer is False
+    assert response.answer is not None
+    assert response.citations
+    assert response.claims
+    assert response.used_sources
+
+
 def test_answer_with_citations_vector_strategy_abstains_when_vector_evidence_is_weak(tmp_path: Path) -> None:
     note = _build_note(
         source_path=tmp_path / 'vector.md',
@@ -236,6 +260,27 @@ def test_answer_with_citations_vector_strategy_abstains_when_vector_evidence_is_
     assert response.status == 'no_answer'
     assert response.no_answer is True
     assert response.reason_for_no_answer == 'insufficient_vector_evidence'
+
+
+def test_answer_with_citations_hybrid_strategy_abstains_when_hybrid_evidence_is_weak(tmp_path: Path) -> None:
+    note = _build_note(
+        source_path=tmp_path / 'hybrid.md',
+        source_name='hybrid.md',
+    )
+    vector_store = LocalVectorStore(tmp_path / 'vector_store', collection_name='hybrid_no_answer')
+
+    response = answer_with_citations(
+        note,
+        'Como organizar notas pessoais no Obsidian?',
+        top_k=3,
+        strategy='hybrid',
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+    )
+
+    assert response.status == 'no_answer'
+    assert response.no_answer is True
+    assert response.reason_for_no_answer == 'missing_named_anchor'
 
 
 def test_answer_with_citations_vector_strategy_abstains_when_named_anchor_is_missing(tmp_path: Path) -> None:
@@ -302,7 +347,7 @@ def test_answer_with_citations_rejects_unknown_strategy() -> None:
     note = _build_note()
 
     with pytest.raises(ValueError, match='strategy'):
-        answer_with_citations(note, 'O que o benchmark mede?', strategy='hybrid')  # type: ignore[arg-type]
+        answer_with_citations(note, 'O que o benchmark mede?', strategy='reciprocal')  # type: ignore[arg-type]
 
 
 def test_extract_named_query_terms_ignores_interrogatives_and_keeps_product_names() -> None:
@@ -408,6 +453,50 @@ def test_retrieval_ask_cli_supports_vector_strategy(monkeypatch, tmp_path: Path)
     assert payload['citations']
 
 
+def test_retrieval_ask_cli_supports_hybrid_strategy(monkeypatch, tmp_path: Path) -> None:
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        datasets_dir=tmp_path / 'data' / 'datasets',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+        vector_collection_name='ask_hybrid',
+        embedding_model='fake-hash',
+    )
+    sample_file = tmp_path / 'ask-hybrid.md'
+    sample_file.write_text(
+        '# Nota híbrida\n\n'
+        'O benchmark mede recall e latencia para comparar estrategias de recuperacao.\n',
+        encoding='utf-8',
+    )
+
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name: FakeEmbedder())
+
+    result = runner.invoke(
+        app,
+        [
+            'retrieval',
+            'ask',
+            str(sample_file),
+            '--question',
+            'O que o benchmark mede?',
+            '--top-k',
+            '3',
+            '--strategy',
+            'hybrid',
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['status'] == 'answer'
+    assert payload['no_answer'] is False
+    assert payload['citations']
+
+
 def test_retrieval_ask_cli_rejects_unknown_strategy(tmp_path: Path) -> None:
     sample_file = tmp_path / 'ask-invalid.md'
     sample_file.write_text(
@@ -425,7 +514,7 @@ def test_retrieval_ask_cli_rejects_unknown_strategy(tmp_path: Path) -> None:
             '--question',
             'O que o benchmark mede?',
             '--strategy',
-            'hybrid',
+            'rrf',
         ],
     )
 

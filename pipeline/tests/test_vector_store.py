@@ -8,7 +8,7 @@ from free_plaud.cli import app
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note_in_vector_store
 from free_plaud.retrieval.models import Chunk, SearchHit
-from free_plaud.retrieval.search import semantic_search
+from free_plaud.retrieval.search import hybrid_search, semantic_search
 from free_plaud.storage.vector import LocalVectorStore
 
 runner = CliRunner()
@@ -90,6 +90,28 @@ def test_semantic_search_returns_ranked_hits_for_related_query(tmp_path: Path) -
     assert hits
     assert hits[0].strategy == 'vector'
     assert hits[0].chunk.note_id == note.note_id
+    assert hits[0].score >= hits[-1].score
+
+
+def test_hybrid_search_fuses_lexical_and_vector_hits(tmp_path: Path) -> None:
+    embedder = FakeEmbedder()
+    store = LocalVectorStore(tmp_path / 'vector_store', collection_name='hybrid_search')
+    note = _build_note(tmp_path)
+
+    chunks = index_note_in_vector_store(note, store, embedder, chunk_size=90, overlap=20)
+    hits = hybrid_search(
+        'benchmark recall',
+        chunks,
+        store,
+        embedder,
+        top_k=3,
+        note_id=note.note_id,
+    )
+
+    assert hits
+    assert hits[0].strategy == 'hybrid'
+    assert hits[0].chunk.note_id == note.note_id
+    assert 'benchmark' in hits[0].matched_terms
     assert hits[0].score >= hits[-1].score
 
 

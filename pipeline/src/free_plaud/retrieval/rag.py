@@ -8,6 +8,7 @@ from free_plaud.retrieval.indexer import index_note, index_note_in_vector_store
 from free_plaud.retrieval.models import AnswerClaim, AskResponse, Citation, SearchHit, UsedSource
 from free_plaud.retrieval.search import (
     extract_named_query_terms,
+    hybrid_search,
     lexical_search_hits,
     match_terms_in_text,
     normalize_query_terms,
@@ -236,7 +237,7 @@ def _retrieve_hits(
     question: str,
     *,
     top_k: int,
-    strategy: Literal['lexical', 'vector'],
+    strategy: Literal['lexical', 'vector', 'hybrid'],
     vector_store: LocalVectorStore | None,
     embedder: Embedder | None,
 ) -> list[SearchHit]:
@@ -244,26 +245,39 @@ def _retrieve_hits(
         chunks = index_note(note)
         return lexical_search_hits(question, chunks, top_k=top_k)
 
-    if strategy != 'vector':
-        raise ValueError("strategy deve ser 'lexical' ou 'vector'.")
+    if strategy not in {'vector', 'hybrid'}:
+        raise ValueError("strategy deve ser 'lexical', 'vector' ou 'hybrid'.")
 
     if vector_store is None or embedder is None:
-        raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector.')
+        raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector e strategy=hybrid.')
 
-    index_note_in_vector_store(note, vector_store, embedder)
+    chunks = index_note_in_vector_store(note, vector_store, embedder)
     candidate_pool_size = max(top_k * 8, 24)
-    hits = semantic_search(
+
+    if strategy == 'vector':
+        hits = semantic_search(
+            question,
+            vector_store,
+            embedder,
+            top_k=candidate_pool_size,
+            note_id=note.note_id,
+        )
+        reranked = sorted(
+            hits,
+            key=lambda item: (-item.term_coverage, -len(item.matched_terms), -item.score, item.chunk.chunk_index),
+        )
+        return reranked[:top_k]
+
+    return hybrid_search(
         question,
+        chunks,
         vector_store,
         embedder,
-        top_k=candidate_pool_size,
+        top_k=top_k,
         note_id=note.note_id,
+        lexical_pool_size=max(top_k * 3, top_k),
+        vector_pool_size=candidate_pool_size,
     )
-    reranked = sorted(
-        hits,
-        key=lambda item: (-item.term_coverage, -len(item.matched_terms), -item.score, item.chunk.chunk_index),
-    )
-    return reranked[:top_k]
 
 
 def answer_with_citations(
@@ -271,12 +285,13 @@ def answer_with_citations(
     question: str,
     top_k: int = 3,
     *,
-    strategy: Literal['lexical', 'vector'] = 'lexical',
+    strategy: Literal['lexical', 'vector', 'hybrid'] = 'lexical',
     vector_store: LocalVectorStore | None = None,
     embedder: Embedder | None = None,
     min_term_coverage: float = 0.4,
     min_vector_score: float = 0.55,
     min_vector_term_coverage: float = 0.2,
+    min_hybrid_term_coverage: float = 0.2,
     max_claims: int = 2,
 ) -> AskResponse:
     """Responde apenas quando há evidência recuperada suficiente e citável."""
@@ -332,6 +347,17 @@ def answer_with_citations(
                 latency_ms=int((perf_counter() - started_at) * 1000),
             )
 
+    if strategy == 'hybrid':
+        top_hit = hits[0]
+        if top_hit.term_coverage < min_hybrid_term_coverage and len(top_hit.matched_terms) < 1:
+            return _build_no_answer(
+                question=question,
+                reason='insufficient_hybrid_evidence',
+                limitations=['Os hits hibridos recuperados nao apresentam evidencia lexical suficiente para responder com seguranca.'],
+                used_sources=used_sources,
+                latency_ms=int((perf_counter() - started_at) * 1000),
+            )
+
     claims = _build_claims(note, hits, query_terms, max_claims=max(1, min(max_claims, top_k)))
     citations = _flatten_citations(claims)
     grounded_text = ' '.join(claim.text for claim in claims)
@@ -346,7 +372,7 @@ def answer_with_citations(
             latency_ms=int((perf_counter() - started_at) * 1000),
         )
 
-    if strategy == 'vector' and grounded_coverage < min_vector_term_coverage:
+    if strategy in {'vector', 'hybrid'} and grounded_coverage < min_vector_term_coverage:
         return _build_no_answer(
             question=question,
             reason='insufficient_grounded_claims',
@@ -355,7 +381,7 @@ def answer_with_citations(
             latency_ms=int((perf_counter() - started_at) * 1000),
         )
 
-    if strategy == 'vector' and named_query_terms:
+    if strategy in {'vector', 'hybrid'} and named_query_terms:
         _, named_coverage = match_terms_in_text(named_query_terms, grounded_text)
         if named_coverage < 1.0:
             return _build_no_answer(
@@ -367,7 +393,7 @@ def answer_with_citations(
             )
 
     answer = ' '.join(dict.fromkeys(claim.text for claim in claims))
-    if strategy == 'vector':
+    if strategy in {'vector', 'hybrid'}:
         best_claim_match_count = max((len(match_terms_in_text(query_terms, claim.text)[0]) for claim in claims), default=0)
         if (
             len(query_terms) >= 3
@@ -377,8 +403,12 @@ def answer_with_citations(
         ):
             return _build_no_answer(
                 question=question,
-                reason='insufficient_vector_specificity',
-                limitations=['A resposta vetorial recuperada ficou curta e pouco especifica para os termos da pergunta.'],
+                reason='insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity',
+                limitations=[
+                    'A resposta vetorial recuperada ficou curta e pouco especifica para os termos da pergunta.'
+                    if strategy == 'vector'
+                    else 'A resposta hibrida recuperada ficou curta e pouco especifica para os termos da pergunta.'
+                ],
                 used_sources=used_sources,
                 latency_ms=int((perf_counter() - started_at) * 1000),
             )
@@ -387,7 +417,13 @@ def answer_with_citations(
     if any(claim.support_level == 'partial' for claim in claims):
         limitations.append(
             'Parte da resposta depende de evidencia parcial recuperada por '
-            + ('busca vetorial.' if strategy == 'vector' else 'busca lexical.')
+            + (
+                'busca vetorial.'
+                if strategy == 'vector'
+                else 'busca hibrida.'
+                if strategy == 'hybrid'
+                else 'busca lexical.'
+            )
         )
     if len(citations) == 1:
         limitations.append('A resposta se apoia em um único chunk recuperado.')

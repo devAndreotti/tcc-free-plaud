@@ -184,3 +184,83 @@ def semantic_search(
         hit.matched_terms = matched_terms
         hit.term_coverage = term_coverage
     return hits
+
+
+def _fuse_hits_by_rank(
+    lexical_hits: list[SearchHit],
+    vector_hits: list[SearchHit],
+    *,
+    top_k: int,
+    rank_constant: int = 60,
+) -> list[SearchHit]:
+    fused: dict[str, SearchHit] = {}
+    fused_scores: dict[str, float] = {}
+
+    for source_hits in (lexical_hits, vector_hits):
+        for rank, hit in enumerate(source_hits, start=1):
+            chunk_id = hit.chunk.chunk_id
+            fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (1.0 / (rank_constant + rank))
+            existing = fused.get(chunk_id)
+            if existing is None:
+                fused[chunk_id] = SearchHit(
+                    chunk=hit.chunk,
+                    score=0.0,
+                    matched_terms=list(hit.matched_terms),
+                    term_coverage=hit.term_coverage,
+                    strategy='hybrid',
+                    distance=hit.distance,
+                )
+                continue
+
+            existing.matched_terms = list(dict.fromkeys([*existing.matched_terms, *hit.matched_terms]))
+            existing.term_coverage = max(existing.term_coverage, hit.term_coverage)
+            if existing.distance is None and hit.distance is not None:
+                existing.distance = hit.distance
+
+    ranked = sorted(
+        (
+            SearchHit(
+                chunk=hit.chunk,
+                score=fused_scores[chunk_id],
+                matched_terms=hit.matched_terms,
+                term_coverage=hit.term_coverage,
+                strategy='hybrid',
+                distance=hit.distance,
+            )
+            for chunk_id, hit in fused.items()
+        ),
+        key=lambda item: (-item.score, -item.term_coverage, -len(item.matched_terms), item.chunk.chunk_index),
+    )
+    return ranked[:top_k]
+
+
+def hybrid_search(
+    query: str,
+    chunks: list[Chunk],
+    vector_store: LocalVectorStore,
+    embedder: Embedder,
+    *,
+    top_k: int = 5,
+    note_id: str | None = None,
+    lexical_pool_size: int | None = None,
+    vector_pool_size: int | None = None,
+    rank_constant: int = 60,
+) -> list[SearchHit]:
+    """Combina lexical + vector com rank fusion simples e reproduzível."""
+    if not query.strip() or top_k <= 0:
+        return []
+
+    lexical_hits = lexical_search_hits(query, chunks, top_k=lexical_pool_size or max(top_k * 2, top_k))
+    vector_hits = semantic_search(
+        query,
+        vector_store,
+        embedder,
+        top_k=vector_pool_size or max(top_k * 4, top_k),
+        note_id=note_id,
+    )
+    return _fuse_hits_by_rank(
+        lexical_hits,
+        vector_hits,
+        top_k=top_k,
+        rank_constant=rank_constant,
+    )
