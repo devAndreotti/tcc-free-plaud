@@ -49,7 +49,8 @@ pipeline/
 ├── ingest/
 │   ├── watcher.py
 │   ├── loaders.py
-│   └── validators.py
+│   ├── validators.py
+│   └── obsidian_cleaner.py
 ├── providers/
 │   ├── transcribe.py
 │   ├── vision.py
@@ -87,6 +88,15 @@ Responsável por:
 - validar formato
 - extrair texto bruto
 - decidir qual pipeline aplicar
+
+Ferramentas auxiliares opcionais desta camada podem preparar staging seguro antes da ingestão
+canônica. Na implementação atual do cleaner de Obsidian:
+
+- `ingest/obsidian_cleaner.py` é uma ferramenta explícita, chamada sob demanda
+- a fonte Obsidian permanece `read-only`
+- o output limpo vai para uma área de staging dentro do repositório
+- `dataviewjs` é tratado por parsing estático e heurístico, sem executar JavaScript
+- a limpeza não roda automaticamente para Markdown comum do pipeline
 
 Não deve:
 
