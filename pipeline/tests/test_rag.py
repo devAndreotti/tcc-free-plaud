@@ -226,6 +226,8 @@ def test_answer_with_citations_prefers_specific_list_items_over_generic_rollout_
     assert response.answer is not None
     assert 'notificacoes de email' in response.answer.lower()
     assert 'logs de auditoria' in response.answer.lower()
+    assert 'a primeira condicionante' not in response.answer.lower()
+    assert 'a segunda condicionante' not in response.answer.lower()
 
 
 def test_answer_with_citations_prefers_exact_embedding_model_over_generic_embedding_sentence() -> None:
@@ -260,6 +262,9 @@ def test_answer_with_citations_prefers_exact_embedding_model_over_generic_embedd
     assert response.status == 'answer'
     assert response.answer is not None
     assert 'nomic-embed-text-v1.5' in response.answer.lower()
+    assert 'cpuintel xeon' not in response.answer.lower()
+    assert '128 gbram' not in response.answer.lower()
+    assert 'corpus foi composto por 800 documentos' not in response.answer.lower()
 
 
 def test_answer_with_citations_prefers_semantic_strategy_for_unstructured_documents() -> None:
@@ -296,6 +301,8 @@ def test_answer_with_citations_prefers_semantic_strategy_for_unstructured_docume
     assert response.answer is not None
     assert 'chunking semantico' in response.answer.lower()
     assert 'sem estrutura formal' in response.answer.lower()
+    assert 'melhor trade-off geral' not in response.answer.lower()
+    assert 'recomendacao padrao para documentos com estrutura explicita' not in response.answer.lower()
 
 
 def test_answer_with_citations_merges_adjacent_bullets_for_multi_part_question() -> None:
@@ -332,6 +339,168 @@ def test_answer_with_citations_merges_adjacent_bullets_for_multi_part_question()
     assert response.answer is not None
     assert 'react + node.js' in response.answer.lower()
     assert 'python + postgresql' in response.answer.lower()
+    assert 'anexo i - especificacoes tecnicas' not in response.answer.lower()
+    assert 'os servicos abrangem os seguintes sistemas e modulos' not in response.answer.lower()
+
+
+def test_answer_with_citations_keeps_stable_short_answer_for_message_broker_decision() -> None:
+    note = _build_note(
+        raw_text=(
+            'DECISOES TOMADAS\n\n'
+            '1. Adotar Apache Kafka como message broker padrao da plataforma.\n'
+            '2. Registrar a decisao em ADR-2025-07 com status Aceito.\n'
+        ),
+        normalized_text=(
+            'DECISOES TOMADAS\n\n'
+            '1. Adotar Apache Kafka como message broker padrao da plataforma.\n'
+            '2. Registrar a decisao em ADR-2025-07 com status Aceito.\n'
+        ),
+        structured_markdown=(
+            '# Ata tecnica\n\n'
+            'DECISOES TOMADAS\n\n'
+            '1. Adotar Apache Kafka como message broker padrao da plataforma.\n'
+            '2. Registrar a decisao em ADR-2025-07 com status Aceito.\n'
+        ),
+        content_hash='6' * 64,
+    )
+
+    response = answer_with_citations(note, 'Qual message broker foi adotado como padrao da plataforma?', top_k=3)
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'apache kafka' in response.answer.lower()
+    assert 'message broker padrao da plataforma' in response.answer.lower()
+
+
+def test_answer_with_citations_keeps_qualifier_for_confidentiality_deadline() -> None:
+    note = _build_note(
+        raw_text=(
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia. A obrigacao de confidencialidade nao se aplica a informacoes publicas.\n'
+        ),
+        normalized_text=(
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia. A obrigacao de confidencialidade nao se aplica a informacoes publicas.\n'
+        ),
+        structured_markdown=(
+            '# Contrato\n\n'
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia. A obrigacao de confidencialidade nao se aplica a informacoes publicas.\n'
+        ),
+        content_hash='7' * 64,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Qual e o prazo de confidencialidade apos o encerramento da vigencia?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert '3 (tres) anos' in response.answer.lower()
+    assert (
+        'obrigacao de confidencialidade' in response.answer.lower()
+        or 'sigilo' in response.answer.lower()
+    )
+
+
+def test_answer_with_citations_keeps_priority_context_for_sla() -> None:
+    note = _build_note(
+        raw_text=(
+            'ANEXO II - MATRIZ DE PRIORIDADES\n\n'
+            'Prioridade Critica: sistema fora do ar ou perda de dados em producao. SLA: 2h.\n'
+            'Prioridade Normal: incidentes sem impacto critico. SLA: 8h.\n'
+        ),
+        normalized_text=(
+            'ANEXO II - MATRIZ DE PRIORIDADES\n\n'
+            'Prioridade Critica: sistema fora do ar ou perda de dados em producao. SLA: 2h.\n'
+            'Prioridade Normal: incidentes sem impacto critico. SLA: 8h.\n'
+        ),
+        structured_markdown=(
+            '# Contrato\n\n'
+            'ANEXO II - MATRIZ DE PRIORIDADES\n\n'
+            'Prioridade Critica: sistema fora do ar ou perda de dados em producao. SLA: 2h.\n'
+            'Prioridade Normal: incidentes sem impacto critico. SLA: 8h.\n'
+        ),
+        content_hash='8' * 64,
+    )
+
+    response = answer_with_citations(note, 'Qual e o SLA para prioridade critica?', top_k=3)
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'prioridade critica' in response.answer.lower()
+    assert 'sla: 2h' in response.answer.lower()
+
+
+def test_answer_with_citations_keeps_historical_qualifier_for_scd_type_2() -> None:
+    note = _build_note(
+        raw_text=(
+            'SCD Tipo 2 (Adicionar linha): Uma nova linha e inserida para o cliente com o novo endereco, '
+            'e a linha anterior e marcada como inativa. Preserva o historico completo, mas aumenta o volume da dimensao.\n'
+            'SCD Tipo 3 (Adicionar coluna): Preserva apenas a penultima versao.\n'
+        ),
+        normalized_text=(
+            'SCD Tipo 2 (Adicionar linha): Uma nova linha e inserida para o cliente com o novo endereco, '
+            'e a linha anterior e marcada como inativa. Preserva o historico completo, mas aumenta o volume da dimensao.\n'
+            'SCD Tipo 3 (Adicionar coluna): Preserva apenas a penultima versao.\n'
+        ),
+        structured_markdown=(
+            '# Modelagem\n\n'
+            'SCD Tipo 2 (Adicionar linha): Uma nova linha e inserida para o cliente com o novo endereco, '
+            'e a linha anterior e marcada como inativa. Preserva o historico completo, mas aumenta o volume da dimensao.\n'
+            'SCD Tipo 3 (Adicionar coluna): Preserva apenas a penultima versao.\n'
+        ),
+        content_hash='9' * 64,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Qual tipo de SCD preserva o historico completo adicionando nova linha?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'scd tipo 2' in response.answer.lower()
+    assert 'preserva o historico completo' in response.answer.lower()
+
+
+def test_answer_with_citations_trims_dangling_tail_from_partial_contract_span() -> None:
+    note = _build_note(
+        raw_text=(
+            'de 3 (tres) anos apos o encerramento da vigencia, independentemente do motivo do\n'
+            'A Contratante obriga-se a cumprir os deveres de acesso aos ambientes.\n'
+        ),
+        normalized_text=(
+            'de 3 (tres) anos apos o encerramento da vigencia, independentemente do motivo do\n'
+            'A Contratante obriga-se a cumprir os deveres de acesso aos ambientes.\n'
+        ),
+        structured_markdown=(
+            '# Contrato\n\n'
+            'de 3 (tres) anos apos o encerramento da vigencia, independentemente do motivo do\n'
+            'A Contratante obriga-se a cumprir os deveres de acesso aos ambientes.\n'
+        ),
+        content_hash='a1' * 32,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Qual e o prazo de confidencialidade apos o encerramento da vigencia?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert response.answer.lower().endswith('vigencia')
+    assert not response.answer.lower().endswith('motivo do')
 
 
 def test_answer_with_citations_supports_vector_strategy(tmp_path: Path) -> None:
