@@ -8,7 +8,7 @@ from free_plaud.cli import app
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note_in_vector_store
 from free_plaud.retrieval.models import Chunk, SearchHit
-from free_plaud.retrieval.search import _fuse_hits_by_rank, hybrid_search, semantic_search
+from free_plaud.retrieval.search import _fuse_hits_by_rank, hybrid_search, open_semantic_search, semantic_search
 from free_plaud.storage.vector import LocalVectorStore
 
 runner = CliRunner()
@@ -209,6 +209,121 @@ def test_semantic_search_marks_fuzzy_term_matches_for_vector_hits() -> None:
     assert hits[0].term_coverage == 1.0
 
 
+def test_open_semantic_search_reranks_hits_using_lexical_evidence() -> None:
+    class StubVectorStore:
+        def query(self, query_embedding: list[float], *, top_k: int, note_id: str | None = None) -> list[SearchHit]:
+            weak_chunk = Chunk(
+                chunk_id='chunk-weak',
+                note_id='vector-note',
+                note_version=1,
+                chunk_index=0,
+                chunk_text='Documento sobre governanca geral e processos internos.',
+                token_count=7,
+                char_start=0,
+                char_end=56,
+                chunk_size=90,
+                overlap=20,
+                strategy='fixed-window',
+                normalized_text_sha256='a' * 64,
+                text_sha256='b' * 64,
+                pipeline_version='test',
+            )
+            strong_chunk = Chunk(
+                chunk_id='chunk-strong',
+                note_id='vector-note',
+                note_version=1,
+                chunk_index=1,
+                chunk_text='O pipeline adotou RabbitMQ como message broker padrao da plataforma.',
+                token_count=10,
+                char_start=57,
+                char_end=126,
+                chunk_size=90,
+                overlap=20,
+                strategy='fixed-window',
+                normalized_text_sha256='c' * 64,
+                text_sha256='d' * 64,
+                pipeline_version='test',
+            )
+            return [
+                SearchHit(chunk=weak_chunk, score=0.92, strategy='vector', distance=0.08),
+                SearchHit(chunk=strong_chunk, score=0.71, strategy='vector', distance=0.40),
+            ]
+
+    hits = open_semantic_search(
+        'Qual message broker foi adotado como padrao da plataforma?',
+        StubVectorStore(),
+        FakeEmbedder(),
+        top_k=2,
+    )
+
+    assert hits
+    assert hits[0].chunk.chunk_id == 'chunk-strong'
+    assert 'message' in hits[0].matched_terms
+    assert hits[0].term_coverage > 0.5
+
+
+def test_open_semantic_search_filters_low_evidence_hits_for_long_queries() -> None:
+    class StubVectorStore:
+        def query(self, query_embedding: list[float], *, top_k: int, note_id: str | None = None) -> list[SearchHit]:
+            weak_chunk = Chunk(
+                chunk_id='chunk-weak',
+                note_id='vector-note',
+                note_version=1,
+                chunk_index=0,
+                chunk_text='Texto menciona domina, mas trata de relatorios internos e governanca.',
+                token_count=10,
+                char_start=0,
+                char_end=70,
+                chunk_size=90,
+                overlap=20,
+                strategy='fixed-window',
+                normalized_text_sha256='a' * 64,
+                text_sha256='b' * 64,
+                pipeline_version='test',
+            )
+            return [SearchHit(chunk=weak_chunk, score=0.88, strategy='vector', distance=0.13)]
+
+    hits = open_semantic_search(
+        'Quais tecnologias o candidato domina para desenvolver apps mobile?',
+        StubVectorStore(),
+        FakeEmbedder(),
+        top_k=5,
+    )
+
+    assert hits == []
+
+
+def test_open_semantic_search_filters_hits_that_match_only_low_signal_terms() -> None:
+    class StubVectorStore:
+        def query(self, query_embedding: list[float], *, top_k: int, note_id: str | None = None) -> list[SearchHit]:
+            weak_chunk = Chunk(
+                chunk_id='chunk-weak',
+                note_id='vector-note',
+                note_version=1,
+                chunk_index=0,
+                chunk_text='O RabbitMQ foi escolhido por menor risco tecnico a curto prazo.',
+                token_count=11,
+                char_start=0,
+                char_end=64,
+                chunk_size=90,
+                overlap=20,
+                strategy='fixed-window',
+                normalized_text_sha256='a' * 64,
+                text_sha256='b' * 64,
+                pipeline_version='test',
+            )
+            return [SearchHit(chunk=weak_chunk, score=0.90, strategy='vector', distance=0.11)]
+
+    hits = open_semantic_search(
+        'Qual banco relacional foi escolhido para autenticar o painel web?',
+        StubVectorStore(),
+        FakeEmbedder(),
+        top_k=5,
+    )
+
+    assert hits == []
+
+
 def test_index_note_in_vector_store_raises_when_embedding_count_does_not_match_chunks(tmp_path: Path) -> None:
     class BrokenEmbedder(FakeEmbedder):
         model_name = 'broken'
@@ -269,3 +384,46 @@ def test_retrieval_index_and_semantic_search_cli_use_vector_store(monkeypatch, t
     assert 'distance' in hits[0]
     assert 'matched_terms' in hits[0]
     assert 'term_coverage' in hits[0]
+
+
+def test_open_semantic_search_cli_reranks_shared_collection_results(monkeypatch, tmp_path: Path) -> None:
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        datasets_dir=tmp_path / 'data' / 'datasets',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+        vector_collection_name='cli_open_chunks',
+        embedding_model='fake-hash',
+    )
+    relevant_file = tmp_path / 'relevant.md'
+    noisy_file = tmp_path / 'noisy.md'
+    relevant_file.write_text(
+        '# Plataforma\n\n'
+        'A plataforma adotou RabbitMQ como message broker padrao.\n',
+        encoding='utf-8',
+    )
+    noisy_file.write_text(
+        '# Geral\n\n'
+        'Documento de governanca e padrao de reunioes internas.\n',
+        encoding='utf-8',
+    )
+
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name: FakeEmbedder())
+
+    runner.invoke(app, ['retrieval', 'index', str(relevant_file), '--chunk-size', '80', '--overlap', '20'])
+    runner.invoke(app, ['retrieval', 'index', str(noisy_file), '--chunk-size', '80', '--overlap', '20'])
+
+    search_result = runner.invoke(
+        app,
+        ['retrieval', 'semantic-search', '--query', 'Qual message broker foi adotado como padrao da plataforma?', '--top-k', '3'],
+    )
+
+    assert search_result.exit_code == 0
+    hits = json.loads(search_result.stdout)
+    assert hits
+    assert hits[0]['note_id'] == 'relevant'
+    assert hits[0]['term_coverage'] > 0.5

@@ -11,7 +11,7 @@ from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import get_embedder
 from free_plaud.retrieval.indexer import index_note
 from free_plaud.retrieval.rag import answer_with_citations
-from free_plaud.retrieval.search import semantic_search
+from free_plaud.retrieval.search import open_semantic_search, semantic_search
 from free_plaud.storage.vector import LocalVectorStore
 
 app = typer.Typer(help="Comandos de chunking, indexação e recuperação.", no_args_is_help=True)
@@ -127,7 +127,11 @@ def semantic_search_command(
         collection_name=settings.vector_collection_name,
     )
     embedder = get_embedder(settings.embedding_model)
-    hits = semantic_search(query, vector_store, embedder, top_k=top_k, note_id=note_id)
+    hits = (
+        semantic_search(query, vector_store, embedder, top_k=top_k, note_id=note_id)
+        if note_id
+        else open_semantic_search(query, vector_store, embedder, top_k=top_k)
+    )
     typer.echo(
         json.dumps(
             [

@@ -43,6 +43,26 @@ STOPWORDS = {
     'uma',
     'um',
 }
+LOW_SIGNAL_QUERY_TERMS = {
+    'foi',
+    'foram',
+    'era',
+    'eram',
+    'sao',
+    'ser',
+    'estar',
+    'tem',
+    'teve',
+    'havia',
+    'existe',
+    'existem',
+    'escolhido',
+    'escolhida',
+    'aprovado',
+    'aprovada',
+    'adotado',
+    'adotada',
+}
 
 
 def normalize_query_terms(query: str) -> list[str]:
@@ -187,6 +207,118 @@ def semantic_search(
         hit.matched_terms = matched_terms
         hit.term_coverage = term_coverage
     return hits
+
+
+def _named_anchor_coverage(query: str, text: str) -> float:
+    named_terms = extract_named_query_terms(query)
+    if not named_terms:
+        return 0.0
+    _, coverage = match_terms_in_text(named_terms, text)
+    return coverage
+
+
+def _high_signal_query_terms(query_terms: list[str]) -> list[str]:
+    return [term for term in query_terms if len(term) >= 4 and term not in LOW_SIGNAL_QUERY_TERMS]
+
+
+def _open_hit_evidence_score(
+    hit: SearchHit,
+    *,
+    query_term_count: int,
+    named_anchor_coverage: float,
+    high_signal_match_count: int,
+) -> float:
+    matched_count = len(hit.matched_terms)
+    adjusted = hit.score
+    adjusted += hit.term_coverage * 0.6
+    adjusted += min(matched_count, 4) * 0.06
+    adjusted += min(high_signal_match_count, 3) * 0.08
+    adjusted += named_anchor_coverage * 0.2
+
+    if matched_count == 0:
+        adjusted -= 0.35
+    if hit.term_coverage == 0:
+        adjusted -= 0.25
+    if query_term_count >= 4 and matched_count <= 1:
+        adjusted -= 0.12
+    return adjusted
+
+
+def _is_low_evidence_open_hit(
+    hit: SearchHit,
+    *,
+    query_term_count: int,
+    named_terms_present: bool,
+    named_anchor_coverage: float,
+    high_signal_term_count: int,
+    high_signal_match_count: int,
+) -> bool:
+    matched_count = len(hit.matched_terms)
+    if query_term_count >= 3 and matched_count == 0:
+        return True
+    if query_term_count >= 5 and hit.term_coverage < 0.2 and matched_count < 2:
+        return True
+    if high_signal_term_count >= 3 and high_signal_match_count == 0:
+        return True
+    if named_terms_present and named_anchor_coverage == 0.0 and hit.term_coverage < 0.34:
+        return True
+    return False
+
+
+def open_semantic_search(
+    query: str,
+    vector_store: LocalVectorStore,
+    embedder: Embedder,
+    *,
+    top_k: int = 5,
+) -> list[SearchHit]:
+    """Busca vetorial aberta com reranking lexical-aware e poda leve de falso positivo."""
+    if not query.strip() or top_k <= 0:
+        return []
+
+    query_terms = normalize_query_terms(query)
+    high_signal_terms = _high_signal_query_terms(query_terms)
+    named_terms = extract_named_query_terms(query)
+    candidate_pool = max(top_k * 4, 12)
+    hits = semantic_search(query, vector_store, embedder, top_k=candidate_pool, note_id=None)
+    if not hits:
+        return []
+
+    ranked_rows: list[tuple[float, float, int, float, SearchHit]] = []
+    for hit in hits:
+        anchor_coverage = _named_anchor_coverage(query, hit.chunk.chunk_text)
+        high_signal_matches = [term for term in hit.matched_terms if term in high_signal_terms]
+        evidence_score = _open_hit_evidence_score(
+            hit,
+            query_term_count=len(query_terms),
+            named_anchor_coverage=anchor_coverage,
+            high_signal_match_count=len(high_signal_matches),
+        )
+        ranked_rows.append((evidence_score, hit.term_coverage, len(hit.matched_terms), anchor_coverage, hit))
+
+    reranked = [
+        row[-1]
+        for row in sorted(
+            ranked_rows,
+            key=lambda item: (-item[0], -item[1], -item[2], -item[3], -item[4].score, item[4].chunk.chunk_index),
+        )
+    ]
+
+    filtered = [
+        hit
+        for hit in reranked
+        if not _is_low_evidence_open_hit(
+            hit,
+            query_term_count=len(query_terms),
+            named_terms_present=bool(named_terms),
+            named_anchor_coverage=_named_anchor_coverage(query, hit.chunk.chunk_text),
+            high_signal_term_count=len(high_signal_terms),
+            high_signal_match_count=len([term for term in hit.matched_terms if term in high_signal_terms]),
+        )
+    ]
+
+    selected = filtered if filtered else ([] if len(query_terms) >= 4 else reranked[:1])
+    return selected[:top_k]
 
 
 def _fuse_hits_by_rank(
