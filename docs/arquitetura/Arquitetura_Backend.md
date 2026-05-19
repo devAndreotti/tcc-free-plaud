@@ -255,6 +255,32 @@ Na evolução atual do backend:
 - o provider também aceita modelos locais no formato `sentence-transformer:<model_name>`
 - o benchmark pode sobrescrever o `embedding_model` por CLI para comparações reproduzíveis
 
+Na evolução atual após o experimento `09_melhoria_ranking_falso_positivo.md`:
+
+- `semantic_search()` continua sendo o path vetorial base e compartilhado
+- `open_semantic_search()` passa a concentrar a política de busca aberta sem `note_id`
+- reranking lexical-aware e poda leve de falso positivo ficam confinados ao fluxo aberto do CLI
+- essa política ainda não deve ser promovida automaticamente para todos os consumidores vetoriais
+
+Essa separação existe porque o problema validado nesta rodada foi:
+
+- ruído em busca aberta multi-file
+
+e não:
+
+- falha do retrieval vetorial base por nota
+- falha do `ask`
+- falha do benchmark per-note
+
+Se essa política precisar subir para o path compartilhado no futuro, a mudança deve passar por nova rodada
+de validação cobrindo:
+
+- `semantic-search --note-id`
+- `retrieval ask --strategy vector`
+- `retrieval ask --strategy hybrid`
+- `benchmark compare`
+- queries negativas, positivas e mistas equivalentes às do experimento `09`
+
 ### Execução de benchmark
 
 - `experiment_id`

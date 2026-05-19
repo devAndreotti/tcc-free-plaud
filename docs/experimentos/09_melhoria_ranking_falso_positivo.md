@@ -261,3 +261,12 @@ Decisao:
 - manter mudanca como melhoria do fluxo aberto
 - nao promover ainda para todos os caminhos vetoriais
 - so abrir nova rodada se surgirem queries reais onde filtro ficou agressivo demais
+
+Politica adotada apos este experimento:
+
+- `open_semantic_search()` fica como path local de open retrieval
+- `semantic_search()` continua como path vetorial base e compartilhado
+- promocao para path compartilhado fica bloqueada ate existir:
+  - consumidor real adicional
+  - nova rodada de validacao multi-fluxo
+  - prova de nao regressao em `ask`, `hybrid` e benchmark
