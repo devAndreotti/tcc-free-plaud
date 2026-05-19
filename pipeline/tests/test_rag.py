@@ -193,6 +193,147 @@ def test_answer_with_citations_uses_following_sentence_for_qa_style_chunks() -> 
     assert 'detector de exercicios' in response.answer.lower()
 
 
+def test_answer_with_citations_prefers_specific_list_items_over_generic_rollout_sentence() -> None:
+    note = _build_note(
+        raw_text=(
+            'DISCUSSAO TECNICA\n\n'
+            'A terceira condicionante e que a adocao comeca com dois topicos de baixo risco — '
+            'notificacoes de email e logs de auditoria — antes de migrar os eventos criticos.\n\n'
+            'DECISOES TOMADAS\n\n'
+            '3. Iniciar rollout em Q2/2025, comecando pelos topicos de menor risco.\n'
+        ),
+        normalized_text=(
+            'DISCUSSAO TECNICA\n\n'
+            'A terceira condicionante e que a adocao comeca com dois topicos de baixo risco — '
+            'notificacoes de email e logs de auditoria — antes de migrar os eventos criticos.\n\n'
+            'DECISOES TOMADAS\n\n'
+            '3. Iniciar rollout em Q2/2025, comecando pelos topicos de menor risco.\n'
+        ),
+        structured_markdown=(
+            '# Ata tecnica\n\n'
+            'DISCUSSAO TECNICA\n\n'
+            'A terceira condicionante e que a adocao comeca com dois topicos de baixo risco — '
+            'notificacoes de email e logs de auditoria — antes de migrar os eventos criticos.\n\n'
+            'DECISOES TOMADAS\n\n'
+            '3. Iniciar rollout em Q2/2025, comecando pelos topicos de menor risco.\n'
+        ),
+        content_hash='2' * 64,
+    )
+
+    response = answer_with_citations(note, 'Quais topicos de baixo risco iniciariam o rollout?', top_k=3)
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'notificacoes de email' in response.answer.lower()
+    assert 'logs de auditoria' in response.answer.lower()
+
+
+def test_answer_with_citations_prefers_exact_embedding_model_over_generic_embedding_sentence() -> None:
+    note = _build_note(
+        raw_text=(
+            '### 2.5 Semantico\n\n'
+            'O chunking semantico utiliza embeddings de sentenca para identificar pontos de quebra.\n\n'
+            '### 3.3 Infraestrutura\n\n'
+            'Todos os experimentos foram executados sem GPU dedicada. '
+            'O indice vetorial foi implementado com ChromaDB e os embeddings gerados com `nomic-embed-text-v1.5`.\n'
+        ),
+        normalized_text=(
+            '### 2.5 Semantico\n\n'
+            'O chunking semantico utiliza embeddings de sentenca para identificar pontos de quebra.\n\n'
+            '### 3.3 Infraestrutura\n\n'
+            'Todos os experimentos foram executados sem GPU dedicada. '
+            'O indice vetorial foi implementado com ChromaDB e os embeddings gerados com `nomic-embed-text-v1.5`.\n'
+        ),
+        structured_markdown=(
+            '# Artigo tecnico\n\n'
+            '### 2.5 Semantico\n\n'
+            'O chunking semantico utiliza embeddings de sentenca para identificar pontos de quebra.\n\n'
+            '### 3.3 Infraestrutura\n\n'
+            'Todos os experimentos foram executados sem GPU dedicada. '
+            'O indice vetorial foi implementado com ChromaDB e os embeddings gerados com `nomic-embed-text-v1.5`.\n'
+        ),
+        content_hash='3' * 64,
+    )
+
+    response = answer_with_citations(note, 'Qual modelo de embedding foi usado nos experimentos?', top_k=3)
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'nomic-embed-text-v1.5' in response.answer.lower()
+
+
+def test_answer_with_citations_prefers_semantic_strategy_for_unstructured_documents() -> None:
+    note = _build_note(
+        raw_text=(
+            '## 5. Discussao\n\n'
+            'A estrategia hierarquica e a recomendacao padrao para documentos com estrutura explicita de headings.\n\n'
+            'Para documentos sem estrutura formal - como e-mails, notas pessoais e transcricoes - '
+            'o chunking semantico oferece ganhos mais expressivos.\n'
+        ),
+        normalized_text=(
+            '## 5. Discussao\n\n'
+            'A estrategia hierarquica e a recomendacao padrao para documentos com estrutura explicita de headings.\n\n'
+            'Para documentos sem estrutura formal - como e-mails, notas pessoais e transcricoes - '
+            'o chunking semantico oferece ganhos mais expressivos.\n'
+        ),
+        structured_markdown=(
+            '# Artigo tecnico\n\n'
+            '## 5. Discussao\n\n'
+            'A estrategia hierarquica e a recomendacao padrao para documentos com estrutura explicita de headings.\n\n'
+            'Para documentos sem estrutura formal - como e-mails, notas pessoais e transcricoes - '
+            'o chunking semantico oferece ganhos mais expressivos.\n'
+        ),
+        content_hash='4' * 64,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Qual estrategia e recomendada para documentos sem estrutura formal?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'chunking semantico' in response.answer.lower()
+    assert 'sem estrutura formal' in response.answer.lower()
+
+
+def test_answer_with_citations_merges_adjacent_bullets_for_multi_part_question() -> None:
+    note = _build_note(
+        raw_text=(
+            'ANEXO I - ESPECIFICACOES TECNICAS\n\n'
+            '- Portal do colaborador (React + Node.js)\n'
+            '- Modulo financeiro (Python + PostgreSQL)\n'
+            '- Integracao com ERP legado (API REST)\n'
+        ),
+        normalized_text=(
+            'ANEXO I - ESPECIFICACOES TECNICAS\n\n'
+            '- Portal do colaborador (React + Node.js)\n'
+            '- Modulo financeiro (Python + PostgreSQL)\n'
+            '- Integracao com ERP legado (API REST)\n'
+        ),
+        structured_markdown=(
+            '# Contrato tecnico\n\n'
+            'ANEXO I - ESPECIFICACOES TECNICAS\n\n'
+            '- Portal do colaborador (React + Node.js)\n'
+            '- Modulo financeiro (Python + PostgreSQL)\n'
+            '- Integracao com ERP legado (API REST)\n'
+        ),
+        content_hash='5' * 64,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Quais tecnologias aparecem no Portal do colaborador e no modulo financeiro?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'react + node.js' in response.answer.lower()
+    assert 'python + postgresql' in response.answer.lower()
+
+
 def test_answer_with_citations_supports_vector_strategy(tmp_path: Path) -> None:
     note = _build_note(
         source_path=tmp_path / 'vector.md',

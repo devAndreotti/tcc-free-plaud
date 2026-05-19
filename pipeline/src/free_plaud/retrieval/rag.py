@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from time import perf_counter
 from typing import Literal
 
@@ -17,6 +18,8 @@ from free_plaud.retrieval.search import (
 from free_plaud.storage.vector import LocalVectorStore
 
 SENTENCE_SPLIT_PATTERN = re.compile(r'(?<=[.!?])\s+|\n+')
+QUERY_TOKEN_PATTERN = re.compile(r"[0-9A-Za-zÀ-ÖØ-öø-ÿ_]+", re.UNICODE)
+LEADING_INTERROGATIVES = {'qual', 'quais', 'como', 'onde', 'quando', 'quem', 'porque', 'por', 'que', 'o'}
 
 
 def _collapse_whitespace(text: str) -> str:
@@ -29,6 +32,16 @@ def _clean_claim_candidate(text: str) -> str:
     cleaned = re.sub(r'[`*_]+', '', cleaned)
     cleaned = cleaned.strip(' -|:')
     return _collapse_whitespace(cleaned)
+
+
+def _normalize_token(text: str) -> str:
+    normalized = unicodedata.normalize('NFKD', text)
+    ascii_only = normalized.encode('ascii', 'ignore').decode('ascii')
+    return re.sub(r'[^0-9a-z]+', '', ascii_only.lower())
+
+
+def _tokenize_for_phrase_match(text: str) -> list[str]:
+    return [token for token in (_normalize_token(part) for part in QUERY_TOKEN_PATTERN.findall(text)) if token]
 
 
 def _is_heading_like(candidate: str) -> bool:
@@ -85,42 +98,141 @@ def _sentence_candidates(text: str) -> list[str]:
     return candidates
 
 
-def _best_claim_text(chunk_text: str, query_terms: list[str]) -> str:
-    candidates = _sentence_candidates(chunk_text)
-    if not candidates:
-        return _shorten_snippet(chunk_text)
+def _line_candidates(text: str) -> list[str]:
+    cleaned_lines = [_clean_claim_candidate(line) for line in text.splitlines()]
+    lines = [line for line in cleaned_lines if line]
+    candidates: list[str] = []
 
-    scored: list[tuple[int, int, int, int, int, str]] = []
+    for index, line in enumerate(lines):
+        candidates.append(line)
+        if _is_heading_like(line) and index + 1 < len(lines):
+            next_line = lines[index + 1]
+            if next_line and not _is_heading_like(next_line):
+                candidates.append(f'{line} - {next_line}')
+        if index + 1 < len(lines):
+            next_line = lines[index + 1]
+            if not _is_heading_like(line) and not _is_heading_like(next_line):
+                candidates.append(f'{line} {next_line}')
+        if index + 2 < len(lines):
+            next_line = lines[index + 1]
+            third_line = lines[index + 2]
+            if not any(_is_heading_like(candidate) for candidate in (line, next_line, third_line)):
+                candidates.append(f'{line} {next_line} {third_line}')
+
+    return candidates
+
+
+def _query_phrases(question: str) -> list[tuple[str, ...]]:
+    tokens = _tokenize_for_phrase_match(question)
+    while tokens and tokens[0] in LEADING_INTERROGATIVES:
+        tokens = tokens[1:]
+
+    phrases: list[tuple[str, ...]] = []
+    seen: set[tuple[str, ...]] = set()
+    for size in range(4, 1, -1):
+        for index in range(0, max(len(tokens) - size + 1, 0)):
+            phrase = tuple(tokens[index : index + size])
+            if phrase in seen:
+                continue
+            if sum(1 for token in phrase if len(token) >= 3) < 2:
+                continue
+            seen.add(phrase)
+            phrases.append(phrase)
+    return phrases
+
+
+def _phrase_match_score(question: str, candidate: str) -> tuple[int, int]:
+    candidate_tokens = _tokenize_for_phrase_match(candidate)
+    if not candidate_tokens:
+        return 0, 0
+
+    candidate_windows = {
+        tuple(candidate_tokens[index : index + size])
+        for size in range(2, min(4, len(candidate_tokens)) + 1)
+        for index in range(0, len(candidate_tokens) - size + 1)
+    }
+    longest = 0
+    hits = 0
+    for phrase in _query_phrases(question):
+        if phrase in candidate_windows:
+            longest = max(longest, len(phrase))
+            hits += 1
+    return longest, hits
+
+
+def _enumeration_bonus(question: str, candidate: str) -> int:
+    if not question.lower().startswith('quais'):
+        return 0
+    lowered = candidate.lower()
+    bonus = 0
+    if ' e ' in lowered:
+        bonus += 1
+    if candidate.count('(') >= 2:
+        bonus += 1
+    if len(re.findall(r'(?:^|\s)-\s+\S', candidate)) >= 2:
+        bonus += 1
+    return bonus
+
+
+def _entity_signal_bonus(candidate: str) -> int:
+    bonus = 0
+    if '`' in candidate:
+        bonus += 2
+    if re.search(r'[A-Za-z]+-[A-Za-z0-9.\-]+', candidate):
+        bonus += 1
+    if re.search(r'\([^)]*[A-Za-z][^)]*\)', candidate):
+        bonus += 1
+    return bonus
+
+
+def _rank_claim_candidates(chunk_text: str, question: str, query_terms: list[str]) -> list[tuple[tuple[int, ...], str]]:
+    sentence_candidates = _sentence_candidates(chunk_text)
+    line_candidates = _line_candidates(chunk_text)
+    candidates = list(dict.fromkeys([*sentence_candidates, *line_candidates]))
+    if not candidates:
+        return []
+
+    scored: list[tuple[tuple[int, ...], str]] = []
     for index, candidate in enumerate(candidates):
-        matched_terms, _ = match_terms_in_text(query_terms, candidate)
+        matched_terms, term_coverage = match_terms_in_text(query_terms, candidate)
         matches = len(matched_terms)
         if matches <= 0 and not candidate.endswith('?'):
             continue
-        variants = [(candidate, matches)]
+        variants = [(candidate, matches, term_coverage)]
         if candidate.endswith('?') and matches > 0 and index + 1 < len(candidates):
             next_candidate = candidates[index + 1]
             if next_candidate and not _is_heading_like(next_candidate):
-                variants.append((next_candidate, matches))
+                next_matches, next_coverage = match_terms_in_text(query_terms, next_candidate)
+                variants.append((next_candidate, max(matches, len(next_matches)), max(term_coverage, next_coverage)))
 
-        for variant_text, variant_matches in variants:
+        for variant_text, variant_matches, variant_coverage in variants:
             if variant_matches <= 0:
                 continue
+            phrase_longest, phrase_hits = _phrase_match_score(question, variant_text)
+            enumeration_bonus = _enumeration_bonus(question, variant_text)
+            entity_bonus = _entity_signal_bonus(variant_text)
             is_complete = 1 if variant_text[-1] in '.!?' else 0
-            preferred_length = 1 if 40 <= len(variant_text) <= 240 else 0
+            preferred_length = 1 if 40 <= len(variant_text) <= 260 else 0
             starts_clean = 1 if variant_text[0].isupper() or variant_text[0].isdigit() else 0
             noisy_penalty = 1 if _is_noisy_claim(variant_text) else 0
-            scored.append(
-                (variant_matches, preferred_length, starts_clean, -noisy_penalty, is_complete, variant_text)
+            line_count = min(variant_text.count(' - ') + variant_text.count('\n') + 1, 3)
+            score_key = (
+                phrase_longest,
+                phrase_hits,
+                variant_matches,
+                int(round(variant_coverage * 100)),
+                enumeration_bonus,
+                entity_bonus,
+                line_count,
+                preferred_length,
+                starts_clean,
+                is_complete,
+                -noisy_penalty,
+                -len(variant_text),
             )
+            scored.append((score_key, variant_text))
 
-    if not scored:
-        return _shorten_snippet(chunk_text)
-
-    _, _, _, _, _, best = sorted(
-        scored,
-        key=lambda item: (-item[0], -item[1], -item[2], -item[3], -item[4], -len(item[5])),
-    )[0]
-    return best
+    return sorted(scored, key=lambda item: item[0], reverse=True)
 
 
 def _citation_from_hit(note: Note, hit: SearchHit) -> Citation:
@@ -165,15 +277,35 @@ def _dedupe_hits(hits: list[SearchHit], *, max_overlap_ratio: float = 0.65) -> l
     return deduped
 
 
-def _build_claims(note: Note, hits: list[SearchHit], query_terms: list[str], *, max_claims: int) -> list[AnswerClaim]:
+def _build_claims(
+    note: Note,
+    question: str,
+    hits: list[SearchHit],
+    query_terms: list[str],
+    *,
+    max_claims: int,
+) -> list[AnswerClaim]:
     claims: list[AnswerClaim] = []
     seen_texts: set[str] = set()
-    for hit in hits[:max_claims]:
-        claim_text = _best_claim_text(hit.chunk.chunk_text, query_terms)
+    seen_chunk_ids: set[str] = set()
+    candidate_rows: list[tuple[tuple[int, ...], SearchHit, str]] = []
+
+    for hit_index, hit in enumerate(hits[: max(max_claims, 1) * 2]):
+        ranked_candidates = _rank_claim_candidates(hit.chunk.chunk_text, question, query_terms)
+        for candidate_index, (score_key, claim_text) in enumerate(ranked_candidates[:3]):
+            candidate_rows.append(((*score_key, -hit_index, -candidate_index), hit, claim_text))
+
+    for _, hit, claim_text in sorted(candidate_rows, key=lambda item: item[0], reverse=True):
         normalized = claim_text.lower()
-        if not claim_text or _is_question_like(claim_text) or normalized in seen_texts:
+        if (
+            not claim_text
+            or _is_question_like(claim_text)
+            or normalized in seen_texts
+            or hit.chunk.chunk_id in seen_chunk_ids
+        ):
             continue
         seen_texts.add(normalized)
+        seen_chunk_ids.add(hit.chunk.chunk_id)
         claims.append(
             AnswerClaim(
                 text=claim_text,
@@ -181,6 +313,8 @@ def _build_claims(note: Note, hits: list[SearchHit], query_terms: list[str], *, 
                 support_level=_support_level(hit, query_terms),
             )
         )
+        if len(claims) >= max_claims:
+            break
     return claims
 
 
@@ -358,7 +492,7 @@ def answer_with_citations(
                 latency_ms=int((perf_counter() - started_at) * 1000),
             )
 
-    claims = _build_claims(note, hits, query_terms, max_claims=max(1, min(max_claims, top_k)))
+    claims = _build_claims(note, question, hits, query_terms, max_claims=max(1, min(max_claims, top_k)))
     citations = _flatten_citations(claims)
     grounded_text = ' '.join(claim.text for claim in claims)
     _, grounded_coverage = match_terms_in_text(query_terms, grounded_text)
