@@ -1,17 +1,18 @@
 Screen {
-    background: #12091f;
-    color: #f6eefe;
+    background: #0f0718;
+    color: #f7efff;
 }
 
 Header {
-    background: #24143b;
-    color: #f6eefe;
+    background: #180d26;
+    color: #f7efff;
     text-style: bold;
 }
 
 Footer {
-    background: #1a0f2d;
-    color: #c7afd9;
+    background: #0f0718;
+    color: #bda8cf;
+    border-top: solid #372150;
 }
 
 #content {
@@ -20,21 +21,82 @@ Footer {
 
 #nav-panel {
     width: 28;
-    border-right: solid #4c1d95;
-    background: #1a0f2d;
-    padding: 1 0;
+    height: 1fr;
+    background: #180d26;
+    border-right: solid #372150;
+    padding: 1 1;
 }
 
-#nav-title {
-    color: #d946ef;
+#nav-brand {
+    color: #f7efff;
     text-style: bold;
-    padding: 0 2 1 2;
+    padding: 0 1;
+}
+
+#nav-subtitle {
+    color: #bda8cf;
+    padding: 0 1 1 1;
+}
+
+#nav-actions {
+    height: 1fr;
+    margin-top: 1;
+}
+
+Button.nav-button {
+    width: 100%;
+    height: 3;
+    margin: 0 0 1 0;
+    padding: 0 1;
+    background: #180d26;
+    color: #bda8cf;
+    border: none;
+    text-align: left;
+}
+
+Button.nav-button:hover {
+    background: #211033;
+    color: #f7efff;
+}
+
+Button.nav-button:focus {
+    background: #211033;
+    color: #f7efff;
+    border-left: solid #f04ddf;
+}
+
+Button.nav-active {
+    background: #7c3aed 35%;
+    color: #f7efff;
+    border-left: solid #f04ddf;
+    text-style: bold;
+}
+
+Button.nav-planned {
+    color: #8f7aa3;
+}
+
+#nav-meta {
+    height: auto;
+    border: solid #372150;
+    background: #0f0718;
+    padding: 1;
+}
+
+.nav-meta-label {
+    color: #8f7aa3;
+}
+
+.nav-meta-value {
+    color: #f7efff;
+    text-style: bold;
+    margin-bottom: 1;
 }
 
 #main-panel {
     width: 1fr;
     height: 1fr;
-    background: #12091f;
+    background: #0f0718;
     padding: 1 2;
 }
 
@@ -42,90 +104,126 @@ Footer {
     height: 1fr;
 }
 
-.section-title {
-    color: #d946ef;
-    text-style: bold;
+#ask-hero {
+    height: 3;
+    padding: 0 1;
     margin-bottom: 1;
 }
 
-ListView {
-    background: #1a0f2d;
+.hero-title {
+    color: #f7efff;
+    text-style: bold;
 }
 
-ListView > ListItem {
-    color: #f6eefe;
-    padding: 0 2;
+.hero-subtitle {
+    color: #bda8cf;
 }
 
-ListView > ListItem.--highlight {
-    background: #a855f7 25%;
-    color: #f6eefe;
+#ask-form-card {
+    height: 15;
+    background: #180d26;
+    border: solid #372150;
+    padding: 1 2;
+    margin-bottom: 0;
 }
 
-ListView:focus > ListItem.--highlight {
-    background: #d946ef 40%;
-    color: #f6eefe;
+#ask-result-card {
+    height: 1fr;
+    background: #180d26;
+    border: solid #372150;
+    padding: 1 2;
+}
+
+.placeholder-card {
+    background: #180d26;
+    border: solid #372150;
+    padding: 2;
+}
+
+.card-title {
+    color: #f04ddf;
+    text-style: bold;
+    margin-bottom: 0;
 }
 
 Label {
-    color: #c7afd9;
-    margin-top: 1;
+    color: #bda8cf;
+    margin-top: 0;
 }
 
-Input, Select {
-    border: solid #4c1d95;
-    background: #1a0f2d;
-    color: #f6eefe;
+Input {
+    border: solid #372150;
+    background: #211033;
+    color: #f7efff;
 }
 
-Input:focus, Select:focus {
-    border: solid #d946ef;
+Input:focus {
+    border: solid #f04ddf;
 }
 
-Button {
-    background: #24143b;
-    color: #d946ef;
-    border: solid #4c1d95;
-    margin: 1 0;
+#strategy-row {
+    height: 3;
 }
 
-Button:hover {
-    background: #a855f7 20%;
+Button.strategy-button {
+    width: 8;
+    min-width: 8;
+    max-width: 8;
+    height: 3;
+    margin-right: 1;
+    background: #211033;
+    color: #bda8cf;
+    border: solid #372150;
 }
 
-Button:focus {
-    border: solid #d946ef;
+Button.strategy-button:hover {
+    background: #2a1740;
+    color: #f7efff;
+}
+
+Button.strategy-button:focus {
+    border: solid #f04ddf;
+    color: #f7efff;
+}
+
+Button.strategy-active {
+    background: #7c3aed 45%;
+    color: #f7efff;
+    border: solid #f04ddf;
+    text-style: bold;
+}
+
+Button.primary-action {
+    width: 17;
+    min-width: 17;
+    max-width: 17;
+    height: 3;
+    margin-top: 0;
+    background: #f04ddf 30%;
+    color: #f7efff;
+    border: solid #f04ddf;
+    text-style: bold;
+}
+
+Button.primary-action:hover {
+    background: #f04ddf 45%;
+}
+
+Button.primary-action:focus {
+    border: tall #f7efff;
+}
+
+Button:disabled {
+    background: #211033;
+    color: #8f7aa3;
+    border: solid #372150;
 }
 
 RichLog {
     height: 1fr;
-    border: solid #4c1d95;
-    background: #1a0f2d;
-    color: #f6eefe;
-}
-
-.accent {
-    color: #d946ef;
-}
-
-.muted {
-    color: #c7afd9;
-}
-
-.subtle {
-    color: #8f6daa;
-}
-
-.success {
-    color: #6ee7b7;
-}
-
-.danger {
-    color: #fb7185;
-}
-
-.warning {
-    color: #fbbf24;
+    background: #0f0718;
+    color: #f7efff;
+    border: none;
 }
 
 .hidden {

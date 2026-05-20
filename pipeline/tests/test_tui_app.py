@@ -1,13 +1,14 @@
 import asyncio
+import time
 from pathlib import Path
 
 import pytest
-from textual.widgets import Input, Select
+from textual.widgets import Button, Input
 
 from free_plaud.app.config import Settings
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.models import AskResponse, Citation, UsedSource
-from free_plaud.tui.app import ASK_STRATEGIES, FreePlaudApp, ask_file
+from free_plaud.tui.app import ASK_STRATEGIES, AskPane, FreePlaudApp, ask_file
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -163,7 +164,7 @@ def test_tui_ask_button_runs_worker_and_renders_response(monkeypatch, tmp_path: 
         async with app.run_test(size=(100, 30)) as pilot:
             app.query_one('#ask-file-path', Input).value = str(sample)
             app.query_one('#ask-question', Input).value = 'O que o benchmark mede?'
-            app.query_one('#ask-strategy', Select).value = 'lexical'
+            await pilot.click('#strategy-lexical')
             await pilot.click('#ask-submit')
             await pilot.pause(0.5)
 
@@ -174,3 +175,82 @@ def test_tui_ask_button_runs_worker_and_renders_response(monkeypatch, tmp_path: 
         'question': 'O que o benchmark mede?',
         'strategy': 'lexical',
     }
+
+
+def test_tui_strategy_defaults_to_hybrid_and_updates_active_button() -> None:
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(100, 30)) as pilot:
+            ask_pane = app.query_one(AskPane)
+            assert ask_pane.selected_strategy == 'hybrid'
+            assert app.query_one('#strategy-hybrid', Button).has_class('strategy-active')
+
+            await pilot.click('#strategy-vector')
+            assert ask_pane.selected_strategy == 'vector'
+            assert app.query_one('#strategy-vector', Button).has_class('strategy-active')
+            assert not app.query_one('#strategy-hybrid', Button).has_class('strategy-active')
+
+    asyncio.run(run_app())
+
+
+def test_tui_ask_button_ignores_double_click_while_running(monkeypatch, tmp_path: Path) -> None:
+    sample = tmp_path / 'sample.md'
+    sample.write_text('# Sample\n\nTexto.\n', encoding='utf-8')
+    calls: list[str] = []
+
+    def fake_ask_file(file_path: Path, question: str, strategy: str) -> AskResponse:
+        calls.append(strategy)
+        time.sleep(0.3)
+        return _answer(question)
+
+    monkeypatch.setattr('free_plaud.tui.app.ask_file', fake_ask_file)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(100, 30)) as pilot:
+            app.query_one('#ask-file-path', Input).value = str(sample)
+            app.query_one('#ask-question', Input).value = 'O que o benchmark mede?'
+            await pilot.click('#ask-submit')
+            await pilot.click('#ask-submit')
+            await pilot.pause(0.8)
+            assert not app.query_one('#ask-submit', Button).disabled
+
+    asyncio.run(run_app())
+
+    assert calls == ['hybrid']
+
+
+def test_tui_ask_button_restores_state_after_worker_error(monkeypatch, tmp_path: Path) -> None:
+    sample = tmp_path / 'sample.md'
+    sample.write_text('# Sample\n\nTexto.\n', encoding='utf-8')
+
+    def fail_ask_file(file_path: Path, question: str, strategy: str) -> AskResponse:
+        raise FileNotFoundError('arquivo quebrado')
+
+    monkeypatch.setattr('free_plaud.tui.app.ask_file', fail_ask_file)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(100, 30)) as pilot:
+            app.query_one('#ask-file-path', Input).value = str(sample)
+            app.query_one('#ask-question', Input).value = 'O que o benchmark mede?'
+            await pilot.click('#ask-submit')
+            await pilot.pause(0.5)
+            submit = app.query_one('#ask-submit', Button)
+            assert not submit.disabled
+            assert str(submit.label) == 'Executar ask'
+
+    asyncio.run(run_app())
+
+
+def test_tui_layout_mounts_at_supported_sizes() -> None:
+    async def run_app() -> None:
+        for size in ((80, 24), (100, 30), (120, 36)):
+            app = FreePlaudApp()
+            async with app.run_test(size=size) as pilot:
+                await pilot.pause()
+                assert app.query_one('#nav-panel')
+                assert app.query_one('#ask-form-card')
+                assert app.query_one('#ask-result-card')
+
+    asyncio.run(run_app())

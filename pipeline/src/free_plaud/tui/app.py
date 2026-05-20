@@ -1,19 +1,20 @@
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, RichLog, Select, Static
+from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Static
 
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import get_embedder
-from free_plaud.retrieval.rag import answer_with_citations
 from free_plaud.retrieval.models import AskResponse
+from free_plaud.retrieval.rag import answer_with_citations
 from free_plaud.storage.vector import LocalVectorStore
 
 AskStrategy = Literal['lexical', 'vector', 'hybrid']
@@ -65,48 +66,101 @@ def ask_file(
     )
 
 
+def _short_path(path: str | None, max_length: int = 56) -> str:
+    if not path or len(path) <= max_length:
+        return path or ''
+    return '...' + path[-(max_length - 3) :]
+
+
 class NavPanel(Vertical):
     def compose(self) -> ComposeResult:
-        yield Static('free-plaud', id='nav-title')
-        yield ListView(
-            ListItem(Label('Ask'), id='nav-ask'),
-            ListItem(Label('Notes'), id='nav-notes'),
-            ListItem(Label('Benchmark'), id='nav-benchmark'),
-            id='nav-list',
-        )
+        settings = get_settings()
+        yield Static('free-plaud', id='nav-brand')
+        yield Static('RAG local', id='nav-subtitle')
+        with Vertical(id='nav-actions'):
+            yield Button('Ask', id='nav-ask', classes='nav-button nav-active')
+            yield Button('Notes', id='nav-notes', classes='nav-button nav-planned')
+            yield Button('Benchmark', id='nav-benchmark', classes='nav-button nav-planned')
+        with Vertical(id='nav-meta'):
+            yield Static('modelo', classes='nav-meta-label')
+            yield Static(settings.embedding_model, classes='nav-meta-value')
+            yield Static('top_k', classes='nav-meta-label')
+            yield Static(str(settings.retrieval_top_k), classes='nav-meta-value')
 
 
 class AskPane(Vertical):
+    selected_strategy: AskStrategy
+    _ask_running: bool
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self.selected_strategy = 'hybrid'
+        self._ask_running = False
+
     def compose(self) -> ComposeResult:
-        yield Static('Ask sobre arquivo local', classes='section-title')
-        yield Static('Carrega arquivo, estrutura nota em memoria e chama answer_with_citations.', classes='muted')
-        yield Label('Arquivo')
-        yield Input(placeholder=r'D:\caminho\arquivo.md', id='ask-file-path')
-        yield Label('Estrategia')
-        yield Select(
-            [(strategy, strategy) for strategy in ASK_STRATEGIES],
-            value='hybrid',
-            allow_blank=False,
-            id='ask-strategy',
-        )
-        yield Label('Pergunta')
-        yield Input(placeholder='O que este documento diz?', id='ask-question')
-        yield Button('Executar ask', id='ask-submit')
-        yield RichLog(markup=True, wrap=True, id='ask-output')
+        with Container(id='ask-hero'):
+            yield Static('Ask local', classes='hero-title')
+            yield Static('Consulte um arquivo sem persistir nota no SQLite.', classes='hero-subtitle')
+
+        with Container(id='ask-form-card'):
+            yield Static('Consulta', classes='card-title')
+            yield Label('Arquivo')
+            yield Input(placeholder=r'D:\caminho\arquivo.md', id='ask-file-path')
+            yield Label('Pergunta')
+            yield Input(placeholder='O que este documento diz?', id='ask-question')
+            yield Label('Estrategia')
+            with Horizontal(id='strategy-row'):
+                yield Button('lexical', id='strategy-lexical', classes='strategy-button')
+                yield Button('vector', id='strategy-vector', classes='strategy-button')
+                yield Button('hybrid', id='strategy-hybrid', classes='strategy-button strategy-active')
+                yield Button('Executar ask', id='ask-submit', classes='primary-action')
+
+        with Container(id='ask-result-card'):
+            yield Static('Resposta', classes='card-title')
+            yield RichLog(markup=True, wrap=True, id='ask-output')
+
+    def on_mount(self) -> None:
+        self._render_empty_state()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id != 'ask-submit':
+        button_id = event.button.id or ''
+        if button_id.startswith('strategy-'):
+            event.stop()
+            if not self._ask_running:
+                self._select_strategy(button_id.removeprefix('strategy-'))
+            return
+
+        if button_id != 'ask-submit':
+            return
+
+        event.stop()
+        if self._ask_running:
             return
 
         file_input = self.query_one('#ask-file-path', Input)
         question_input = self.query_one('#ask-question', Input)
-        strategy_select = self.query_one('#ask-strategy', Select)
         output = self.query_one('#ask-output', RichLog)
 
-        strategy = cast(AskStrategy, strategy_select.value)
+        self._set_running(True)
         output.clear()
-        output.write('[#c7afd9]Executando pipeline local...[/]')
-        self._run_ask(Path(file_input.value), question_input.value, strategy)
+        output.write(Panel('Estruturando nota e recuperando evidencias...', title='Executando', border_style='#7c3aed'))
+        self._run_ask(Path(file_input.value), question_input.value, self.selected_strategy)
+
+    def _select_strategy(self, strategy: str) -> None:
+        if strategy not in ASK_STRATEGIES:
+            return
+        self.selected_strategy = strategy  # type: ignore[assignment]
+        for candidate in ASK_STRATEGIES:
+            button = self.query_one(f'#strategy-{candidate}', Button)
+            button.set_class(candidate == strategy, 'strategy-active')
+
+    def _set_running(self, running: bool) -> None:
+        self._ask_running = running
+        submit = self.query_one('#ask-submit', Button)
+        submit.disabled = running
+        submit.label = 'Executando...' if running else 'Executar ask'
+        for strategy in ASK_STRATEGIES:
+            self.query_one(f'#strategy-{strategy}', Button).disabled = running
 
     @work(thread=True)
     def _run_ask(self, file_path: Path, question: str, strategy: AskStrategy) -> None:
@@ -117,10 +171,23 @@ class AskPane(Vertical):
             return
         self.app.call_from_thread(self._render_response, response)
 
+    def _render_empty_state(self) -> None:
+        output = self.query_one('#ask-output', RichLog)
+        output.clear()
+        output.write(
+            Panel(
+                'Informe um arquivo, escolha a estrategia e execute o ask.\n'
+                'A resposta, citacoes, fontes e latencia aparecem aqui.',
+                title='Pronto',
+                border_style='#372150',
+            )
+        )
+
     def _render_error(self, exc: Exception) -> None:
         output = self.query_one('#ask-output', RichLog)
         output.clear()
         output.write(Panel(str(exc), title='Erro', border_style='#fb7185'))
+        self._set_running(False)
 
     def _render_response(self, response: AskResponse) -> None:
         output = self.query_one('#ask-output', RichLog)
@@ -132,28 +199,29 @@ class AskPane(Vertical):
                 body += '\n\n' + '\n'.join(f'- {item}' for item in response.limitations)
             output.write(Panel(body, title='no_answer', border_style='#fbbf24'))
         else:
-            output.write(Panel(response.answer or '', title='Resposta', border_style='#d946ef'))
+            output.write(Panel(response.answer or '', title='Resposta', border_style='#f04ddf'))
 
         if response.citations:
-            table = Table(title='Citacoes', border_style='#4c1d95')
-            table.add_column('chunk')
-            table.add_column('span')
-            table.add_column('fonte')
-            table.add_column('snippet')
+            table = Table(title='Citacoes', border_style='#372150')
+            table.add_column('chunk', overflow='fold')
+            table.add_column('span', no_wrap=True)
+            table.add_column('fonte', overflow='fold')
+            table.add_column('snippet', overflow='fold')
             for citation in response.citations:
                 table.add_row(
                     citation.chunk_id,
                     f'{citation.char_start}-{citation.char_end}',
-                    citation.source_path or '',
+                    _short_path(citation.source_path),
                     citation.snippet,
                 )
             output.write(table)
 
         if response.used_sources:
-            sources = ', '.join(source.source_path or source.doc_id for source in response.used_sources)
-            output.write(f'[#8f6daa]Fontes usadas:[/] {sources}')
+            sources = ', '.join(_short_path(source.source_path) or source.doc_id for source in response.used_sources)
+            output.write(Text.assemble(('Fontes usadas: ', '#8f6daa'), sources))
 
-        output.write(f'[#8f6daa]latencia_ms:[/] {response.latency_ms}')
+        output.write(Text.assemble(('latencia_ms: ', '#8f6daa'), str(response.latency_ms)))
+        self._set_running(False)
 
 
 class PlaceholderPane(Vertical):
@@ -163,13 +231,15 @@ class PlaceholderPane(Vertical):
         self._description = description
 
     def compose(self) -> ComposeResult:
-        yield Static(self._title, classes='section-title')
-        yield Static(self._description, classes='muted')
+        with Container(classes='placeholder-card'):
+            yield Static(self._title, classes='hero-title')
+            yield Static(self._description, classes='hero-subtitle')
 
 
 class FreePlaudApp(App[None]):
     CSS_PATH = Path(__file__).with_name('app.tcss')
-    TITLE = 'free-plaud TUI'
+    TITLE = 'free-plaud'
+    SUB_TITLE = 'RAG local'
     BINDINGS = [('q', 'quit', 'Sair')]
 
     def compose(self) -> ComposeResult:
@@ -180,36 +250,29 @@ class FreePlaudApp(App[None]):
                 yield AskPane(id='ask-pane', classes='screen-pane')
                 yield PlaceholderPane(
                     'Notes',
-                    'Slice futura: persistencia SQLite e listagem de notas.',
+                    'Planejado: persistencia SQLite e listagem de notas.',
                     id='notes-pane',
                     classes='screen-pane hidden',
                 )
                 yield PlaceholderPane(
                     'Benchmark',
-                    'Slice futura: compare_benchmark_suite com suite.json.',
+                    'Planejado: compare_benchmark_suite com suite.json.',
                     id='benchmark-pane',
                     classes='screen-pane hidden',
                 )
         yield Footer()
 
-    def on_mount(self) -> None:
-        self.query_one('#nav-list', ListView).index = 0
-
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        if event.list_view.id != 'nav-list' or event.item.id is None:
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        button_id = event.button.id or ''
+        if button_id not in {'nav-ask', 'nav-notes', 'nav-benchmark'}:
             return
-        target = {
-            'nav-ask': 'ask',
-            'nav-notes': 'notes',
-            'nav-benchmark': 'benchmark',
-        }.get(event.item.id)
-        if target:
-            self._show_pane(target)
+        event.stop()
+        self._show_pane(button_id.removeprefix('nav-'))
 
     def _show_pane(self, pane: str) -> None:
         for pane_id in ('ask', 'notes', 'benchmark'):
-            widget = self.query_one(f'#{pane_id}-pane')
-            widget.set_class(pane_id != pane, 'hidden')
+            self.query_one(f'#{pane_id}-pane').set_class(pane_id != pane, 'hidden')
+            self.query_one(f'#nav-{pane_id}', Button).set_class(pane_id == pane, 'nav-active')
 
 
 def main() -> None:
