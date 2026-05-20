@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from time import perf_counter
 from typing import Literal
 
@@ -7,7 +8,9 @@ from free_plaud.providers.embed import Embedder
 from free_plaud.retrieval.indexer import index_note, index_note_in_vector_store
 from free_plaud.retrieval.models import AnswerClaim, AskResponse, Citation, SearchHit, UsedSource
 from free_plaud.retrieval.search import (
+    LOW_SIGNAL_QUERY_TERMS,
     extract_named_query_terms,
+    hybrid_search,
     lexical_search_hits,
     match_terms_in_text,
     normalize_query_terms,
@@ -16,6 +19,23 @@ from free_plaud.retrieval.search import (
 from free_plaud.storage.vector import LocalVectorStore
 
 SENTENCE_SPLIT_PATTERN = re.compile(r'(?<=[.!?])\s+|\n+')
+QUERY_TOKEN_PATTERN = re.compile(r"[0-9A-Za-zÀ-ÖØ-öø-ÿ_]+", re.UNICODE)
+LEADING_INTERROGATIVES = {'qual', 'quais', 'como', 'onde', 'quando', 'quem', 'porque', 'por', 'que', 'o'}
+ADMIN_PREFIX_MARKERS = {
+    'anexo',
+    'anexoi',
+    'anexoii',
+    'anexoiii',
+    'clausula',
+    'objetivo da sessao',
+    'decisoes tomadas',
+    'discussao',
+    'especificacoes tecnicas',
+    'matriz de prioridades',
+    'infraestrutura',
+}
+DANGLING_TAIL_TOKENS = {'a', 'as', 'o', 'os', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'na', 'nas', 'no', 'nos', 'para', 'por', 'que'}
+LOW_INFORMATION_LEADING_TOKENS = {'a', 'as', 'de', 'da', 'das', 'do', 'dos', 'e', 'em', 'na', 'nas', 'no', 'nos', 'para', 'por'}
 
 
 def _collapse_whitespace(text: str) -> str:
@@ -28,6 +48,16 @@ def _clean_claim_candidate(text: str) -> str:
     cleaned = re.sub(r'[`*_]+', '', cleaned)
     cleaned = cleaned.strip(' -|:')
     return _collapse_whitespace(cleaned)
+
+
+def _normalize_token(text: str) -> str:
+    normalized = unicodedata.normalize('NFKD', text)
+    ascii_only = normalized.encode('ascii', 'ignore').decode('ascii')
+    return re.sub(r'[^0-9a-z]+', '', ascii_only.lower())
+
+
+def _tokenize_for_phrase_match(text: str) -> list[str]:
+    return [token for token in (_normalize_token(part) for part in QUERY_TOKEN_PATTERN.findall(text)) if token]
 
 
 def _is_heading_like(candidate: str) -> bool:
@@ -76,50 +106,419 @@ def _sentence_candidates(text: str) -> list[str]:
     base_candidates = [candidate for candidate in raw_parts if candidate]
     candidates: list[str] = []
     for index, candidate in enumerate(base_candidates):
-        candidates.append(candidate)
         if _is_heading_like(candidate) and index + 1 < len(base_candidates):
             next_candidate = base_candidates[index + 1]
             if next_candidate and not _is_heading_like(next_candidate):
                 candidates.append(f'{candidate} - {next_candidate}')
+                continue
+        candidates.append(candidate)
     return candidates
 
 
-def _best_claim_text(chunk_text: str, query_terms: list[str]) -> str:
-    candidates = _sentence_candidates(chunk_text)
-    if not candidates:
-        return _shorten_snippet(chunk_text)
+def _line_candidates(text: str) -> list[str]:
+    cleaned_lines = [_clean_claim_candidate(line) for line in text.splitlines()]
+    lines = [line for line in cleaned_lines if line]
+    candidates: list[str] = []
 
-    scored: list[tuple[int, int, int, int, int, str]] = []
+    for index, line in enumerate(lines):
+        if _is_heading_like(line) and index + 1 < len(lines):
+            next_line = lines[index + 1]
+            if next_line and not _is_heading_like(next_line):
+                candidates.append(f'{line} - {next_line}')
+                continue
+        candidates.append(line)
+        if index + 1 < len(lines):
+            next_line = lines[index + 1]
+            if not _is_heading_like(line) and not _is_heading_like(next_line):
+                candidates.append(f'{line} {next_line}')
+        if index + 2 < len(lines):
+            next_line = lines[index + 1]
+            third_line = lines[index + 2]
+            if not any(_is_heading_like(candidate) for candidate in (line, next_line, third_line)):
+                candidates.append(f'{line} {next_line} {third_line}')
+
+    return candidates
+
+
+def _query_phrases(question: str) -> list[tuple[str, ...]]:
+    tokens = _tokenize_for_phrase_match(question)
+    while tokens and tokens[0] in LEADING_INTERROGATIVES:
+        tokens = tokens[1:]
+
+    phrases: list[tuple[str, ...]] = []
+    seen: set[tuple[str, ...]] = set()
+    for size in range(4, 1, -1):
+        for index in range(0, max(len(tokens) - size + 1, 0)):
+            phrase = tuple(tokens[index : index + size])
+            if phrase in seen:
+                continue
+            if sum(1 for token in phrase if len(token) >= 3) < 2:
+                continue
+            seen.add(phrase)
+            phrases.append(phrase)
+    return phrases
+
+
+def _phrase_match_score(question: str, candidate: str) -> tuple[int, int, int]:
+    candidate_tokens = _tokenize_for_phrase_match(candidate)
+    if not candidate_tokens:
+        return 0, 0, -999
+
+    candidate_windows = {
+        tuple(candidate_tokens[index : index + size])
+        for size in range(2, min(4, len(candidate_tokens)) + 1)
+        for index in range(0, len(candidate_tokens) - size + 1)
+    }
+    longest = 0
+    hits = 0
+    earliest_index: int | None = None
+    for phrase in _query_phrases(question):
+        if phrase in candidate_windows:
+            longest = max(longest, len(phrase))
+            hits += 1
+            for index in range(0, len(candidate_tokens) - len(phrase) + 1):
+                if tuple(candidate_tokens[index : index + len(phrase)]) == phrase:
+                    if earliest_index is None or index < earliest_index:
+                        earliest_index = index
+                    break
+    return longest, hits, -(earliest_index if earliest_index is not None else 999)
+
+
+def _enumeration_bonus(question: str, candidate: str) -> int:
+    if not question.lower().startswith('quais'):
+        return 0
+    lowered = candidate.lower()
+    bonus = 0
+    if ' e ' in lowered:
+        bonus += 1
+    if candidate.count('(') >= 2:
+        bonus += 1
+    if len(re.findall(r'(?:^|\s)-\s+\S', candidate)) >= 2:
+        bonus += 1
+    return bonus
+
+
+def _entity_signal_bonus(candidate: str) -> int:
+    bonus = 0
+    if '`' in candidate:
+        bonus += 2
+    if re.search(r'[A-Za-z]+-[A-Za-z0-9.\-]+', candidate):
+        bonus += 1
+    if re.search(r'\([^)]*[A-Za-z][^)]*\)', candidate):
+        bonus += 1
+    return bonus
+
+
+def _signal_position_bonus(query_terms: list[str], candidate: str) -> int:
+    lowered = candidate.lower()
+    positions: list[int] = []
+    for term in query_terms:
+        index = lowered.find(term.lower())
+        if index >= 0:
+            positions.append(index)
+    for match in re.finditer(r'[A-Za-z]+-[A-Za-z0-9.\-]+', candidate):
+        positions.append(match.start())
+    if not positions:
+        return -999
+    return -min(positions)
+
+
+def _embedding_answer_bonus(query_terms: list[str], candidate: str) -> tuple[int, int]:
+    normalized_terms = {_normalize_token(term) for term in query_terms}
+    if 'embedding' not in normalized_terms and 'modelo' not in normalized_terms:
+        return 0, -999
+
+    lowered = candidate.lower()
+    positions: list[int] = []
+    strength = 0
+
+    model_match = re.search(r'[A-Za-z]+-[A-Za-z0-9.\-]+', candidate)
+    if model_match:
+        strength += 2
+        positions.append(model_match.start())
+    chroma_index = lowered.find('chromadb')
+    if chroma_index >= 0:
+        strength += 1
+        positions.append(chroma_index)
+    embedding_index = lowered.find('embedding')
+    if embedding_index >= 0:
+        strength += 1
+        positions.append(embedding_index)
+    embeddings_index = lowered.find('embeddings')
+    if embeddings_index >= 0:
+        strength += 1
+        positions.append(embeddings_index)
+
+    if not positions:
+        return strength, -999
+    return strength, -min(positions)
+
+
+def _normalized_contains(haystack: str, needle: str) -> bool:
+    return _normalize_token(needle) in _normalize_token(haystack)
+
+
+def _claim_query_terms(query_terms: list[str]) -> list[str]:
+    informative_terms = [term for term in query_terms if term not in LOW_SIGNAL_QUERY_TERMS]
+    return informative_terms or query_terms
+
+
+def _looks_like_monetary_or_decimal_fragment(text: str, comma_index: int) -> bool:
+    if comma_index <= 0 or comma_index >= len(text) - 1:
+        return False
+    before = text[comma_index - 1]
+    after = text[comma_index + 1]
+    if before.isdigit() and after.isdigit():
+        return True
+    return bool(re.search(r'\b\d{1,3}(?:\.\d{3})*,\d{2}\b', text))
+
+
+def _trim_dangling_tail(candidate: str) -> str:
+    cleaned = candidate.strip()
+    uppercase_tail_match = re.search(
+        r'^(.*?)(?:\s+\b(?:a|as|o|os|da|das|de|do|dos|e|em|na|nas|no|nos|para|por|que)\s+[A-ZÀ-Ö][^:,.!?]{0,120}[.!?]?)$',
+        cleaned,
+    )
+    if uppercase_tail_match:
+        cleaned = uppercase_tail_match.group(1).rstrip()
+    if cleaned.endswith(('.', '!', '?')):
+        return cleaned
+    comma_index = cleaned.rfind(',')
+    if (
+        comma_index >= 0
+        and (len(cleaned) - comma_index) <= 48
+        and not _looks_like_monetary_or_decimal_fragment(cleaned, comma_index)
+    ):
+        truncated = cleaned[:comma_index].strip()
+        if truncated:
+            cleaned = truncated
+    words = cleaned.split()
+    while words and _normalize_token(words[-1]) in DANGLING_TAIL_TOKENS:
+        words.pop()
+    return _collapse_whitespace(' '.join(words)).strip(' -,:;')
+
+
+def _is_administrative_prefix(candidate: str) -> bool:
+    collapsed = _collapse_whitespace(candidate)
+    lowered = collapsed.lower()
+    normalized = _normalize_token(collapsed)
+    if any(_normalized_contains(lowered, marker) for marker in ADMIN_PREFIX_MARKERS):
+        return True
+    if len(collapsed.split()) == 1 and normalized not in {_normalize_token(marker) for marker in ADMIN_PREFIX_MARKERS}:
+        return False
+    if _is_heading_like(collapsed):
+        return True
+    if len(collapsed) <= 60 and collapsed == collapsed.upper() and len(collapsed.split()) >= 2:
+        return True
+    return False
+
+
+def _leading_fragment_penalty(candidate: str) -> int:
+    lowered = candidate.strip().lower()
+    first_word = lowered.split(maxsplit=1)[0] if lowered else ''
+    return 1 if _normalize_token(first_word) in LOW_INFORMATION_LEADING_TOKENS else 0
+
+
+def _claim_variant_score(question: str, query_terms: list[str], candidate: str) -> tuple[int, ...] | None:
+    matched_terms, term_coverage = match_terms_in_text(_claim_query_terms(query_terms), candidate)
+    if not matched_terms:
+        return None
+    phrase_longest, phrase_hits, phrase_position = _phrase_match_score(question, candidate)
+    signal_position = _signal_position_bonus(query_terms, candidate)
+    embedding_bonus, embedding_position = _embedding_answer_bonus(query_terms, candidate)
+    enumeration_bonus = _enumeration_bonus(question, candidate)
+    entity_bonus = _entity_signal_bonus(candidate)
+    leading_fragment_penalty = _leading_fragment_penalty(candidate)
+    is_complete = 1 if candidate[-1] in '.!?' else 0
+    starts_clean = 1 if candidate[0].isupper() or candidate[0].isdigit() else 0
+    noisy_penalty = 1 if _is_noisy_claim(candidate) else 0
+    preferred_length = 1 if 24 <= len(candidate) <= 220 else 0
+    term_density = int((len(matched_terms) * 1000) / max(len(candidate), 1))
+    return (
+        phrase_longest,
+        phrase_hits,
+        len(matched_terms),
+        int(round(term_coverage * 100)),
+        -leading_fragment_penalty,
+        phrase_position,
+        embedding_bonus,
+        embedding_position,
+        signal_position,
+        enumeration_bonus,
+        entity_bonus,
+        term_density,
+        is_complete,
+        starts_clean,
+        preferred_length,
+        -noisy_penalty,
+        -len(candidate),
+    )
+
+
+def _sentence_count(text: str) -> int:
+    parts = [_clean_claim_candidate(part) for part in SENTENCE_SPLIT_PATTERN.split(text)]
+    return len([part for part in parts if part])
+
+
+def _trim_claim_span(question: str, query_terms: list[str], claim_text: str) -> str:
+    variants: list[str] = []
+    seen_variants: set[str] = set()
+
+    def add_variant(text: str) -> None:
+        cleaned = _clean_claim_candidate(text)
+        if not cleaned or cleaned in seen_variants:
+            return
+        seen_variants.add(cleaned)
+        variants.append(cleaned)
+
+    add_variant(claim_text)
+
+    queue = [claim_text]
+    seen_queue: set[str] = {claim_text}
+    while queue:
+        current = queue.pop(0)
+        for separator in (' - ', ': '):
+            if separator not in current:
+                continue
+            prefix, suffix = current.split(separator, 1)
+            if _is_administrative_prefix(prefix):
+                add_variant(suffix)
+                if suffix not in seen_queue:
+                    seen_queue.add(suffix)
+                    queue.append(suffix)
+
+    window_sizes = (1, 2) if _question_needs_multiple_claims(question) else (1,)
+
+    for base in list(variants):
+        parts = [_clean_claim_candidate(part) for part in SENTENCE_SPLIT_PATTERN.split(base)]
+        sentences = [part for part in parts if part]
+        for start in range(len(sentences)):
+            for size in window_sizes:
+                window = sentences[start : start + size]
+                if len(window) != size:
+                    continue
+                add_variant(' '.join(window))
+
+    scored: list[tuple[tuple[int, ...], str]] = []
+    for variant in variants:
+        is_prefixed_administrative = False
+        for separator in (' - ', ': '):
+            if separator not in variant:
+                continue
+            prefix, _ = variant.split(separator, 1)
+            if _is_administrative_prefix(prefix):
+                is_prefixed_administrative = True
+                break
+        if is_prefixed_administrative:
+            continue
+        score = _claim_variant_score(question, query_terms, variant)
+        if score is None:
+            continue
+        scored.append((score, variant))
+
+    if not scored:
+        return claim_text
+
+    non_question_scored = [item for item in scored if not _is_question_like(item[1])]
+    if non_question_scored:
+        scored = non_question_scored
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    if not _question_needs_multiple_claims(question):
+        best_score = scored[0][0]
+        best_phrase_longest = best_score[0]
+        best_matches = best_score[2]
+        best_coverage = best_score[3]
+        minimum_matches = best_matches if best_matches <= 3 else max(best_matches - 1, 1)
+        best_matches = best_score[2]
+        concise_candidates = [
+            item
+            for item in scored
+            if _sentence_count(item[1]) == 1
+            and item[1][-1] in '.!?'
+            and item[0][0] >= max(best_phrase_longest - 1, 1)
+            and item[0][2] >= minimum_matches
+            and item[0][3] >= max(best_coverage - 20, 0)
+        ]
+        clean_started_candidates = [
+            item for item in concise_candidates if item[1][0].isupper() or item[1][0].isdigit()
+        ]
+        if clean_started_candidates:
+            concise_candidates = clean_started_candidates
+        if concise_candidates:
+            return _trim_dangling_tail(concise_candidates[0][1])
+    return _trim_dangling_tail(scored[0][1])
+
+
+def _question_needs_multiple_claims(question: str) -> bool:
+    lowered = _collapse_whitespace(question.lower())
+    clause_count = len(
+        re.findall(r'(^|(?:\se\s+|[,;]\s*))(?:(?:qual|quais|como|onde|quando|quem|porque)\b)', lowered)
+    )
+    if clause_count >= 2:
+        return True
+    return any(marker in lowered for marker in (' e qual ', ' e quais ', ', qual ', ', quais '))
+
+
+def _rank_claim_candidates(chunk_text: str, question: str, query_terms: list[str]) -> list[tuple[tuple[int, ...], str]]:
+    candidate_query_terms = _claim_query_terms(query_terms)
+    sentence_candidates = _sentence_candidates(chunk_text)
+    line_candidates = _line_candidates(chunk_text)
+    candidates = list(dict.fromkeys([*sentence_candidates, *line_candidates]))
+    if not candidates:
+        return []
+
+    scored: list[tuple[tuple[int, ...], str]] = []
     for index, candidate in enumerate(candidates):
-        matched_terms, _ = match_terms_in_text(query_terms, candidate)
+        matched_terms, term_coverage = match_terms_in_text(candidate_query_terms, candidate)
         matches = len(matched_terms)
         if matches <= 0 and not candidate.endswith('?'):
             continue
-        variants = [(candidate, matches)]
+        variants = [(candidate, matches, term_coverage)]
         if candidate.endswith('?') and matches > 0 and index + 1 < len(candidates):
             next_candidate = candidates[index + 1]
             if next_candidate and not _is_heading_like(next_candidate):
-                variants.append((next_candidate, matches))
+                next_matches, next_coverage = match_terms_in_text(candidate_query_terms, next_candidate)
+                variants.append((next_candidate, max(matches, len(next_matches)), max(term_coverage, next_coverage)))
 
-        for variant_text, variant_matches in variants:
+        for variant_text, variant_matches, variant_coverage in variants:
             if variant_matches <= 0:
                 continue
+            phrase_longest, phrase_hits, phrase_position = _phrase_match_score(question, variant_text)
+            signal_position = _signal_position_bonus(query_terms, variant_text)
+            embedding_bonus, embedding_position = _embedding_answer_bonus(query_terms, variant_text)
+            enumeration_bonus = _enumeration_bonus(question, variant_text)
+            entity_bonus = _entity_signal_bonus(variant_text)
+            leading_fragment_penalty = _leading_fragment_penalty(variant_text)
             is_complete = 1 if variant_text[-1] in '.!?' else 0
-            preferred_length = 1 if 40 <= len(variant_text) <= 240 else 0
+            preferred_length = 1 if 40 <= len(variant_text) <= 260 else 0
             starts_clean = 1 if variant_text[0].isupper() or variant_text[0].isdigit() else 0
             noisy_penalty = 1 if _is_noisy_claim(variant_text) else 0
-            scored.append(
-                (variant_matches, preferred_length, starts_clean, -noisy_penalty, is_complete, variant_text)
+            line_count = min(variant_text.count(' - ') + variant_text.count('\n') + 1, 3)
+            term_density = int((variant_matches * 1000) / max(len(variant_text), 1))
+            score_key = (
+                phrase_longest,
+                phrase_hits,
+                variant_matches,
+                int(round(variant_coverage * 100)),
+                -leading_fragment_penalty,
+                phrase_position,
+                embedding_bonus,
+                embedding_position,
+                signal_position,
+                enumeration_bonus,
+                entity_bonus,
+                term_density,
+                line_count,
+                preferred_length,
+                starts_clean,
+                is_complete,
+                -noisy_penalty,
+                -len(variant_text),
             )
+            scored.append((score_key, variant_text))
 
-    if not scored:
-        return _shorten_snippet(chunk_text)
-
-    _, _, _, _, _, best = sorted(
-        scored,
-        key=lambda item: (-item[0], -item[1], -item[2], -item[3], -item[4], -len(item[5])),
-    )[0]
-    return best
+    return sorted(scored, key=lambda item: item[0], reverse=True)
 
 
 def _citation_from_hit(note: Note, hit: SearchHit) -> Citation:
@@ -164,22 +563,78 @@ def _dedupe_hits(hits: list[SearchHit], *, max_overlap_ratio: float = 0.65) -> l
     return deduped
 
 
-def _build_claims(note: Note, hits: list[SearchHit], query_terms: list[str], *, max_claims: int) -> list[AnswerClaim]:
+def _build_claims(
+    note: Note,
+    question: str,
+    hits: list[SearchHit],
+    query_terms: list[str],
+    *,
+    max_claims: int,
+) -> list[AnswerClaim]:
     claims: list[AnswerClaim] = []
     seen_texts: set[str] = set()
-    for hit in hits[:max_claims]:
-        claim_text = _best_claim_text(hit.chunk.chunk_text, query_terms)
-        normalized = claim_text.lower()
-        if not claim_text or _is_question_like(claim_text) or normalized in seen_texts:
+    seen_chunk_ids: set[str] = set()
+    covered_terms: set[str] = set()
+    candidate_rows: list[tuple[tuple[int, ...], SearchHit, str]] = []
+
+    for hit_index, hit in enumerate(hits[: max(max_claims, 1) * 2]):
+        ranked_candidates = _rank_claim_candidates(hit.chunk.chunk_text, question, query_terms)
+        if not ranked_candidates:
+            continue
+        initial_candidate = next(
+            ((score_key, claim_text) for score_key, claim_text in ranked_candidates if not _is_question_like(claim_text)),
+            ranked_candidates[0],
+        )
+        top_score, top_text = initial_candidate
+        selected_score = top_score
+        selected_text = top_text
+        for score_key, claim_text in ranked_candidates[1:5]:
+            if _is_question_like(claim_text):
+                continue
+            starts_clean = 1 if claim_text[0].isupper() or claim_text[0].isdigit() else 0
+            selected_starts_clean = 1 if selected_text[0].isupper() or selected_text[0].isdigit() else 0
+            if score_key[2] < max(selected_score[2] - 1, 1):
+                continue
+            if score_key[3] < max(selected_score[3] - 33, 0):
+                continue
+            preserves_phrase_alignment = score_key[0] >= selected_score[0] and score_key[1] >= max(selected_score[1] - 1, 0)
+            is_more_direct = (
+                preserves_phrase_alignment
+                and score_key[5] > selected_score[5]
+                and len(claim_text) + 20 < len(selected_text)
+            )
+            if starts_clean > selected_starts_clean or (starts_clean == selected_starts_clean and is_more_direct):
+                selected_score = score_key
+                selected_text = claim_text
+
+        candidate_rows.append(((*selected_score, -hit_index, 0), hit, selected_text))
+
+    for _, hit, claim_text in sorted(candidate_rows, key=lambda item: item[0], reverse=True):
+        trimmed_claim = _trim_claim_span(question, query_terms, claim_text)
+        normalized = trimmed_claim.lower()
+        if (
+            not trimmed_claim
+            or _is_question_like(trimmed_claim)
+            or normalized in seen_texts
+            or hit.chunk.chunk_id in seen_chunk_ids
+        ):
+            continue
+        matched_terms, _ = match_terms_in_text(query_terms, trimmed_claim)
+        new_terms = set(matched_terms) - covered_terms
+        if claims and not new_terms:
             continue
         seen_texts.add(normalized)
+        seen_chunk_ids.add(hit.chunk.chunk_id)
+        covered_terms.update(matched_terms)
         claims.append(
             AnswerClaim(
-                text=claim_text,
+                text=trimmed_claim,
                 citations=[_citation_from_hit(note, hit)],
                 support_level=_support_level(hit, query_terms),
             )
         )
+        if len(claims) >= max_claims:
+            break
     return claims
 
 
@@ -236,7 +691,7 @@ def _retrieve_hits(
     question: str,
     *,
     top_k: int,
-    strategy: Literal['lexical', 'vector'],
+    strategy: Literal['lexical', 'vector', 'hybrid'],
     vector_store: LocalVectorStore | None,
     embedder: Embedder | None,
 ) -> list[SearchHit]:
@@ -244,26 +699,39 @@ def _retrieve_hits(
         chunks = index_note(note)
         return lexical_search_hits(question, chunks, top_k=top_k)
 
-    if strategy != 'vector':
-        raise ValueError("strategy deve ser 'lexical' ou 'vector'.")
+    if strategy not in {'vector', 'hybrid'}:
+        raise ValueError("strategy deve ser 'lexical', 'vector' ou 'hybrid'.")
 
     if vector_store is None or embedder is None:
-        raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector.')
+        raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector e strategy=hybrid.')
 
-    index_note_in_vector_store(note, vector_store, embedder)
+    chunks = index_note_in_vector_store(note, vector_store, embedder)
     candidate_pool_size = max(top_k * 8, 24)
-    hits = semantic_search(
+
+    if strategy == 'vector':
+        hits = semantic_search(
+            question,
+            vector_store,
+            embedder,
+            top_k=candidate_pool_size,
+            note_id=note.note_id,
+        )
+        reranked = sorted(
+            hits,
+            key=lambda item: (-item.term_coverage, -len(item.matched_terms), -item.score, item.chunk.chunk_index),
+        )
+        return reranked[:top_k]
+
+    return hybrid_search(
         question,
+        chunks,
         vector_store,
         embedder,
-        top_k=candidate_pool_size,
+        top_k=top_k,
         note_id=note.note_id,
+        lexical_pool_size=max(top_k * 3, top_k),
+        vector_pool_size=candidate_pool_size,
     )
-    reranked = sorted(
-        hits,
-        key=lambda item: (-item.term_coverage, -len(item.matched_terms), -item.score, item.chunk.chunk_index),
-    )
-    return reranked[:top_k]
 
 
 def answer_with_citations(
@@ -271,12 +739,13 @@ def answer_with_citations(
     question: str,
     top_k: int = 3,
     *,
-    strategy: Literal['lexical', 'vector'] = 'lexical',
+    strategy: Literal['lexical', 'vector', 'hybrid'] = 'lexical',
     vector_store: LocalVectorStore | None = None,
     embedder: Embedder | None = None,
     min_term_coverage: float = 0.4,
     min_vector_score: float = 0.55,
     min_vector_term_coverage: float = 0.2,
+    min_hybrid_term_coverage: float = 0.2,
     max_claims: int = 2,
 ) -> AskResponse:
     """Responde apenas quando há evidência recuperada suficiente e citável."""
@@ -332,10 +801,25 @@ def answer_with_citations(
                 latency_ms=int((perf_counter() - started_at) * 1000),
             )
 
-    claims = _build_claims(note, hits, query_terms, max_claims=max(1, min(max_claims, top_k)))
+    if strategy == 'hybrid':
+        top_hit = hits[0]
+        if top_hit.term_coverage < min_hybrid_term_coverage and len(top_hit.matched_terms) < 1:
+            return _build_no_answer(
+                question=question,
+                reason='insufficient_hybrid_evidence',
+                limitations=['Os hits hibridos recuperados nao apresentam evidencia lexical suficiente para responder com seguranca.'],
+                used_sources=used_sources,
+                latency_ms=int((perf_counter() - started_at) * 1000),
+            )
+
+    effective_max_claims = max(1, min(max_claims, top_k))
+    if not _question_needs_multiple_claims(question):
+        effective_max_claims = 1
+
+    claims = _build_claims(note, question, hits, query_terms, max_claims=effective_max_claims)
     citations = _flatten_citations(claims)
     grounded_text = ' '.join(claim.text for claim in claims)
-    _, grounded_coverage = match_terms_in_text(query_terms, grounded_text)
+    grounded_matches, grounded_coverage = match_terms_in_text(query_terms, grounded_text)
 
     if not claims or any(not claim.citations for claim in claims):
         return _build_no_answer(
@@ -346,7 +830,15 @@ def answer_with_citations(
             latency_ms=int((perf_counter() - started_at) * 1000),
         )
 
-    if strategy == 'vector' and grounded_coverage < min_vector_term_coverage:
+    if strategy in {'vector', 'hybrid'} and grounded_coverage < min_vector_term_coverage:
+        if len(grounded_matches) <= 1:
+            return _build_no_answer(
+                question=question,
+                reason='insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity',
+                limitations=['Os claims gerados nao trouxeram especificidade textual suficiente para responder com seguranca.'],
+                used_sources=used_sources,
+                latency_ms=int((perf_counter() - started_at) * 1000),
+            )
         return _build_no_answer(
             question=question,
             reason='insufficient_grounded_claims',
@@ -355,7 +847,7 @@ def answer_with_citations(
             latency_ms=int((perf_counter() - started_at) * 1000),
         )
 
-    if strategy == 'vector' and named_query_terms:
+    if strategy in {'vector', 'hybrid'} and named_query_terms:
         _, named_coverage = match_terms_in_text(named_query_terms, grounded_text)
         if named_coverage < 1.0:
             return _build_no_answer(
@@ -367,7 +859,7 @@ def answer_with_citations(
             )
 
     answer = ' '.join(dict.fromkeys(claim.text for claim in claims))
-    if strategy == 'vector':
+    if strategy in {'vector', 'hybrid'}:
         best_claim_match_count = max((len(match_terms_in_text(query_terms, claim.text)[0]) for claim in claims), default=0)
         if (
             len(query_terms) >= 3
@@ -377,8 +869,12 @@ def answer_with_citations(
         ):
             return _build_no_answer(
                 question=question,
-                reason='insufficient_vector_specificity',
-                limitations=['A resposta vetorial recuperada ficou curta e pouco especifica para os termos da pergunta.'],
+                reason='insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity',
+                limitations=[
+                    'A resposta vetorial recuperada ficou curta e pouco especifica para os termos da pergunta.'
+                    if strategy == 'vector'
+                    else 'A resposta hibrida recuperada ficou curta e pouco especifica para os termos da pergunta.'
+                ],
                 used_sources=used_sources,
                 latency_ms=int((perf_counter() - started_at) * 1000),
             )
@@ -387,7 +883,13 @@ def answer_with_citations(
     if any(claim.support_level == 'partial' for claim in claims):
         limitations.append(
             'Parte da resposta depende de evidencia parcial recuperada por '
-            + ('busca vetorial.' if strategy == 'vector' else 'busca lexical.')
+            + (
+                'busca vetorial.'
+                if strategy == 'vector'
+                else 'busca hibrida.'
+                if strategy == 'hybrid'
+                else 'busca lexical.'
+            )
         )
     if len(citations) == 1:
         limitations.append('A resposta se apoia em um único chunk recuperado.')

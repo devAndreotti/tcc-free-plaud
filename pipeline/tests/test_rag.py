@@ -9,8 +9,11 @@ from free_plaud.app.config import Settings
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note_in_vector_store
 from free_plaud.retrieval.indexer import index_note
+from free_plaud.retrieval.rag import _rank_claim_candidates
+from free_plaud.retrieval.rag import _claim_variant_score
+from free_plaud.retrieval.rag import _trim_dangling_tail
 from free_plaud.retrieval.rag import answer_with_citations
-from free_plaud.retrieval.search import extract_named_query_terms, lexical_search_hits
+from free_plaud.retrieval.search import extract_named_query_terms, lexical_search_hits, normalize_query_terms
 from free_plaud.storage.vector import LocalVectorStore
 
 runner = CliRunner()
@@ -193,6 +196,426 @@ def test_answer_with_citations_uses_following_sentence_for_qa_style_chunks() -> 
     assert 'detector de exercicios' in response.answer.lower()
 
 
+def test_answer_with_citations_prefers_specific_list_items_over_generic_rollout_sentence() -> None:
+    note = _build_note(
+        raw_text=(
+            'DISCUSSAO TECNICA\n\n'
+            'A terceira condicionante e que a adocao comeca com dois topicos de baixo risco — '
+            'notificacoes de email e logs de auditoria — antes de migrar os eventos criticos.\n\n'
+            'DECISOES TOMADAS\n\n'
+            '3. Iniciar rollout em Q2/2025, comecando pelos topicos de menor risco.\n'
+        ),
+        normalized_text=(
+            'DISCUSSAO TECNICA\n\n'
+            'A terceira condicionante e que a adocao comeca com dois topicos de baixo risco — '
+            'notificacoes de email e logs de auditoria — antes de migrar os eventos criticos.\n\n'
+            'DECISOES TOMADAS\n\n'
+            '3. Iniciar rollout em Q2/2025, comecando pelos topicos de menor risco.\n'
+        ),
+        structured_markdown=(
+            '# Ata tecnica\n\n'
+            'DISCUSSAO TECNICA\n\n'
+            'A terceira condicionante e que a adocao comeca com dois topicos de baixo risco — '
+            'notificacoes de email e logs de auditoria — antes de migrar os eventos criticos.\n\n'
+            'DECISOES TOMADAS\n\n'
+            '3. Iniciar rollout em Q2/2025, comecando pelos topicos de menor risco.\n'
+        ),
+        content_hash='2' * 64,
+    )
+
+    response = answer_with_citations(note, 'Quais topicos de baixo risco iniciariam o rollout?', top_k=3)
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'notificacoes de email' in response.answer.lower()
+    assert 'logs de auditoria' in response.answer.lower()
+    assert 'a primeira condicionante' not in response.answer.lower()
+    assert 'a segunda condicionante' not in response.answer.lower()
+
+
+def test_answer_with_citations_prefers_exact_embedding_model_over_generic_embedding_sentence() -> None:
+    note = _build_note(
+        raw_text=(
+            '### 2.5 Semantico\n\n'
+            'O chunking semantico utiliza embeddings de sentenca para identificar pontos de quebra.\n\n'
+            '### 3.3 Infraestrutura\n\n'
+            'Todos os experimentos foram executados sem GPU dedicada. '
+            'O indice vetorial foi implementado com ChromaDB e os embeddings gerados com `nomic-embed-text-v1.5`.\n'
+        ),
+        normalized_text=(
+            '### 2.5 Semantico\n\n'
+            'O chunking semantico utiliza embeddings de sentenca para identificar pontos de quebra.\n\n'
+            '### 3.3 Infraestrutura\n\n'
+            'Todos os experimentos foram executados sem GPU dedicada. '
+            'O indice vetorial foi implementado com ChromaDB e os embeddings gerados com `nomic-embed-text-v1.5`.\n'
+        ),
+        structured_markdown=(
+            '# Artigo tecnico\n\n'
+            '### 2.5 Semantico\n\n'
+            'O chunking semantico utiliza embeddings de sentenca para identificar pontos de quebra.\n\n'
+            '### 3.3 Infraestrutura\n\n'
+            'Todos os experimentos foram executados sem GPU dedicada. '
+            'O indice vetorial foi implementado com ChromaDB e os embeddings gerados com `nomic-embed-text-v1.5`.\n'
+        ),
+        content_hash='3' * 64,
+    )
+
+    response = answer_with_citations(note, 'Qual modelo de embedding foi usado nos experimentos?', top_k=3)
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'nomic-embed-text-v1.5' in response.answer.lower()
+    assert 'cpuintel xeon' not in response.answer.lower()
+    assert '128 gbram' not in response.answer.lower()
+    assert 'corpus foi composto por 800 documentos' not in response.answer.lower()
+
+
+def test_answer_with_citations_prefers_semantic_strategy_for_unstructured_documents() -> None:
+    note = _build_note(
+        raw_text=(
+            '## 5. Discussao\n\n'
+            'A estrategia hierarquica e a recomendacao padrao para documentos com estrutura explicita de headings.\n\n'
+            'Para documentos sem estrutura formal - como e-mails, notas pessoais e transcricoes - '
+            'o chunking semantico oferece ganhos mais expressivos.\n'
+        ),
+        normalized_text=(
+            '## 5. Discussao\n\n'
+            'A estrategia hierarquica e a recomendacao padrao para documentos com estrutura explicita de headings.\n\n'
+            'Para documentos sem estrutura formal - como e-mails, notas pessoais e transcricoes - '
+            'o chunking semantico oferece ganhos mais expressivos.\n'
+        ),
+        structured_markdown=(
+            '# Artigo tecnico\n\n'
+            '## 5. Discussao\n\n'
+            'A estrategia hierarquica e a recomendacao padrao para documentos com estrutura explicita de headings.\n\n'
+            'Para documentos sem estrutura formal - como e-mails, notas pessoais e transcricoes - '
+            'o chunking semantico oferece ganhos mais expressivos.\n'
+        ),
+        content_hash='4' * 64,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Qual estrategia e recomendada para documentos sem estrutura formal?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'chunking semantico' in response.answer.lower()
+    assert 'sem estrutura formal' in response.answer.lower()
+    assert 'melhor trade-off geral' not in response.answer.lower()
+    assert 'recomendacao padrao para documentos com estrutura explicita' not in response.answer.lower()
+
+
+def test_answer_with_citations_merges_adjacent_bullets_for_multi_part_question() -> None:
+    note = _build_note(
+        raw_text=(
+            'ANEXO I - ESPECIFICACOES TECNICAS\n\n'
+            '- Portal do colaborador (React + Node.js)\n'
+            '- Modulo financeiro (Python + PostgreSQL)\n'
+            '- Integracao com ERP legado (API REST)\n'
+        ),
+        normalized_text=(
+            'ANEXO I - ESPECIFICACOES TECNICAS\n\n'
+            '- Portal do colaborador (React + Node.js)\n'
+            '- Modulo financeiro (Python + PostgreSQL)\n'
+            '- Integracao com ERP legado (API REST)\n'
+        ),
+        structured_markdown=(
+            '# Contrato tecnico\n\n'
+            'ANEXO I - ESPECIFICACOES TECNICAS\n\n'
+            '- Portal do colaborador (React + Node.js)\n'
+            '- Modulo financeiro (Python + PostgreSQL)\n'
+            '- Integracao com ERP legado (API REST)\n'
+        ),
+        content_hash='5' * 64,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Quais tecnologias aparecem no Portal do colaborador e no modulo financeiro?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'react + node.js' in response.answer.lower()
+    assert 'python + postgresql' in response.answer.lower()
+    assert 'anexo i - especificacoes tecnicas' not in response.answer.lower()
+    assert 'os servicos abrangem os seguintes sistemas e modulos' not in response.answer.lower()
+
+
+def test_answer_with_citations_keeps_stable_short_answer_for_message_broker_decision() -> None:
+    note = _build_note(
+        raw_text=(
+            'DECISOES TOMADAS\n\n'
+            '1. Adotar Apache Kafka como message broker padrao da plataforma.\n'
+            '2. Registrar a decisao em ADR-2025-07 com status Aceito.\n'
+        ),
+        normalized_text=(
+            'DECISOES TOMADAS\n\n'
+            '1. Adotar Apache Kafka como message broker padrao da plataforma.\n'
+            '2. Registrar a decisao em ADR-2025-07 com status Aceito.\n'
+        ),
+        structured_markdown=(
+            '# Ata tecnica\n\n'
+            'DECISOES TOMADAS\n\n'
+            '1. Adotar Apache Kafka como message broker padrao da plataforma.\n'
+            '2. Registrar a decisao em ADR-2025-07 com status Aceito.\n'
+        ),
+        content_hash='6' * 64,
+    )
+
+    response = answer_with_citations(note, 'Qual message broker foi adotado como padrao da plataforma?', top_k=3)
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'apache kafka' in response.answer.lower()
+    assert 'message broker padrao da plataforma' in response.answer.lower()
+
+
+def test_answer_with_citations_keeps_qualifier_for_confidentiality_deadline() -> None:
+    note = _build_note(
+        raw_text=(
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia. A obrigacao de confidencialidade nao se aplica a informacoes publicas.\n'
+        ),
+        normalized_text=(
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia. A obrigacao de confidencialidade nao se aplica a informacoes publicas.\n'
+        ),
+        structured_markdown=(
+            '# Contrato\n\n'
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia. A obrigacao de confidencialidade nao se aplica a informacoes publicas.\n'
+        ),
+        content_hash='7' * 64,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Qual e o prazo de confidencialidade apos o encerramento da vigencia?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert '3 (tres) anos' in response.answer.lower()
+    assert (
+        'obrigacao de confidencialidade' in response.answer.lower()
+        or 'sigilo' in response.answer.lower()
+    )
+
+
+def test_answer_with_citations_keeps_monetary_amount_with_decimal_cents() -> None:
+    note = _build_note(
+        raw_text=(
+            'PARTES: EMPRESA CONTRATANTE e FORNECEDORA LTDA\n'
+            'Vigencia: 01/04/2025 a 31/03/2026\n'
+            'Valor total: R$ 144.000,00 (cento e quarenta e quatro mil reais).\n'
+        ),
+        normalized_text=(
+            'PARTES: EMPRESA CONTRATANTE e FORNECEDORA LTDA\n'
+            'Vigencia: 01/04/2025 a 31/03/2026\n'
+            'Valor total: R$ 144.000,00 (cento e quarenta e quatro mil reais).\n'
+        ),
+        structured_markdown=(
+            '# Contrato\n\n'
+            'PARTES: EMPRESA CONTRATANTE e FORNECEDORA LTDA\n'
+            'Vigencia: 01/04/2025 a 31/03/2026\n'
+            'Valor total: R$ 144.000,00 (cento e quarenta e quatro mil reais).\n'
+        ),
+        content_hash='a7' * 32,
+    )
+
+    response = answer_with_citations(note, 'Qual e o valor total do contrato?', top_k=3)
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'r$ 144.000,00' in response.answer.lower()
+
+
+def test_answer_with_citations_keeps_confidentiality_subject_when_trimming_clause() -> None:
+    note = _build_note(
+        raw_text=(
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia, independentemente do motivo do encerramento.\n'
+        ),
+        normalized_text=(
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia, independentemente do motivo do encerramento.\n'
+        ),
+        structured_markdown=(
+            '# Contrato\n\n'
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia, independentemente do motivo do encerramento.\n'
+        ),
+        content_hash='b7' * 32,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Qual e o prazo de confidencialidade apos o encerramento da vigencia?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert '3 (tres) anos' in response.answer.lower()
+    assert response.answer.lower().startswith('as partes obrigam-se')
+
+
+def test_trim_dangling_tail_preserves_currency_decimal_groups() -> None:
+    candidate = 'Valor total: R$ 144.000,00 (cento e quarenta e quatro mil reais)'
+
+    trimmed = _trim_dangling_tail(candidate)
+
+    assert trimmed == candidate
+
+
+def test_claim_variant_score_penalizes_low_information_legal_fragments() -> None:
+    question = 'Qual e o prazo de confidencialidade apos o encerramento da vigencia?'
+    query_terms = normalize_query_terms(question)
+    full = (
+        'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+        'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o '
+        'encerramento da vigencia, independentemente do motivo do encerramento.'
+    )
+    fragment = 'de 3 (tres) anos apos o encerramento da vigencia'
+
+    full_score = _claim_variant_score(question, query_terms, full)
+    fragment_score = _claim_variant_score(question, query_terms, fragment)
+
+    assert full_score is not None
+    assert fragment_score is not None
+    assert full_score > fragment_score
+
+
+def test_rank_claim_candidates_prefers_complete_legal_clause_over_time_fragment() -> None:
+    question = 'Qual e o prazo de confidencialidade apos o encerramento da vigencia?'
+    query_terms = normalize_query_terms(question)
+    chunk_text = (
+        'As partes comprometem-se a manter sigilo sobre todas as informacoes tecnicas, '
+        'comerciais e estrategicas as quais tiverem acesso em razao deste contrato, pelo prazo '
+        'de 3 (tres) anos apos o encerramento da vigencia, independentemente do motivo do\n\n'
+        'encerramento. A obrigacao de confidencialidade nao se aplica a informacoes que sejam\n'
+        'de dominio publico, que devam ser divulgadas por determinacao legal ou judicial.\n'
+    )
+
+    ranked = _rank_claim_candidates(chunk_text, question, query_terms)
+
+    assert ranked
+    top_candidate = ranked[0][1].lower()
+    assert '3 (tres) anos' in top_candidate
+    assert 'confidencialidade' in top_candidate or 'sigilo' in top_candidate
+    assert not top_candidate.startswith('de 3 (tres) anos')
+
+
+def test_answer_with_citations_keeps_priority_context_for_sla() -> None:
+    note = _build_note(
+        raw_text=(
+            'ANEXO II - MATRIZ DE PRIORIDADES\n\n'
+            'Prioridade Critica: sistema fora do ar ou perda de dados em producao. SLA: 2h.\n'
+            'Prioridade Normal: incidentes sem impacto critico. SLA: 8h.\n'
+        ),
+        normalized_text=(
+            'ANEXO II - MATRIZ DE PRIORIDADES\n\n'
+            'Prioridade Critica: sistema fora do ar ou perda de dados em producao. SLA: 2h.\n'
+            'Prioridade Normal: incidentes sem impacto critico. SLA: 8h.\n'
+        ),
+        structured_markdown=(
+            '# Contrato\n\n'
+            'ANEXO II - MATRIZ DE PRIORIDADES\n\n'
+            'Prioridade Critica: sistema fora do ar ou perda de dados em producao. SLA: 2h.\n'
+            'Prioridade Normal: incidentes sem impacto critico. SLA: 8h.\n'
+        ),
+        content_hash='8' * 64,
+    )
+
+    response = answer_with_citations(note, 'Qual e o SLA para prioridade critica?', top_k=3)
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'prioridade critica' in response.answer.lower()
+    assert 'sla: 2h' in response.answer.lower()
+
+
+def test_answer_with_citations_keeps_historical_qualifier_for_scd_type_2() -> None:
+    note = _build_note(
+        raw_text=(
+            'SCD Tipo 2 (Adicionar linha): Uma nova linha e inserida para o cliente com o novo endereco, '
+            'e a linha anterior e marcada como inativa. Preserva o historico completo, mas aumenta o volume da dimensao.\n'
+            'SCD Tipo 3 (Adicionar coluna): Preserva apenas a penultima versao.\n'
+        ),
+        normalized_text=(
+            'SCD Tipo 2 (Adicionar linha): Uma nova linha e inserida para o cliente com o novo endereco, '
+            'e a linha anterior e marcada como inativa. Preserva o historico completo, mas aumenta o volume da dimensao.\n'
+            'SCD Tipo 3 (Adicionar coluna): Preserva apenas a penultima versao.\n'
+        ),
+        structured_markdown=(
+            '# Modelagem\n\n'
+            'SCD Tipo 2 (Adicionar linha): Uma nova linha e inserida para o cliente com o novo endereco, '
+            'e a linha anterior e marcada como inativa. Preserva o historico completo, mas aumenta o volume da dimensao.\n'
+            'SCD Tipo 3 (Adicionar coluna): Preserva apenas a penultima versao.\n'
+        ),
+        content_hash='9' * 64,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Qual tipo de SCD preserva o historico completo adicionando nova linha?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'scd tipo 2' in response.answer.lower()
+    assert 'preserva o historico completo' in response.answer.lower()
+
+
+def test_answer_with_citations_trims_dangling_tail_from_partial_contract_span() -> None:
+    note = _build_note(
+        raw_text=(
+            'de 3 (tres) anos apos o encerramento da vigencia, independentemente do motivo do\n'
+            'A Contratante obriga-se a cumprir os deveres de acesso aos ambientes.\n'
+        ),
+        normalized_text=(
+            'de 3 (tres) anos apos o encerramento da vigencia, independentemente do motivo do\n'
+            'A Contratante obriga-se a cumprir os deveres de acesso aos ambientes.\n'
+        ),
+        structured_markdown=(
+            '# Contrato\n\n'
+            'de 3 (tres) anos apos o encerramento da vigencia, independentemente do motivo do\n'
+            'A Contratante obriga-se a cumprir os deveres de acesso aos ambientes.\n'
+        ),
+        content_hash='a1' * 32,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Qual e o prazo de confidencialidade apos o encerramento da vigencia?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert response.answer.lower().endswith('vigencia')
+    assert not response.answer.lower().endswith('motivo do')
+
+
 def test_answer_with_citations_supports_vector_strategy(tmp_path: Path) -> None:
     note = _build_note(
         source_path=tmp_path / 'vector.md',
@@ -205,6 +628,30 @@ def test_answer_with_citations_supports_vector_strategy(tmp_path: Path) -> None:
         'O que o benchmark mede?',
         top_k=3,
         strategy='vector',
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+    )
+
+    assert response.status == 'answer'
+    assert response.no_answer is False
+    assert response.answer is not None
+    assert response.citations
+    assert response.claims
+    assert response.used_sources
+
+
+def test_answer_with_citations_supports_hybrid_strategy(tmp_path: Path) -> None:
+    note = _build_note(
+        source_path=tmp_path / 'hybrid.md',
+        source_name='hybrid.md',
+    )
+    vector_store = LocalVectorStore(tmp_path / 'vector_store', collection_name='hybrid_answer')
+
+    response = answer_with_citations(
+        note,
+        'O que o benchmark mede?',
+        top_k=3,
+        strategy='hybrid',
         vector_store=vector_store,
         embedder=FakeEmbedder(),
     )
@@ -236,6 +683,27 @@ def test_answer_with_citations_vector_strategy_abstains_when_vector_evidence_is_
     assert response.status == 'no_answer'
     assert response.no_answer is True
     assert response.reason_for_no_answer == 'insufficient_vector_evidence'
+
+
+def test_answer_with_citations_hybrid_strategy_abstains_when_hybrid_evidence_is_weak(tmp_path: Path) -> None:
+    note = _build_note(
+        source_path=tmp_path / 'hybrid.md',
+        source_name='hybrid.md',
+    )
+    vector_store = LocalVectorStore(tmp_path / 'vector_store', collection_name='hybrid_no_answer')
+
+    response = answer_with_citations(
+        note,
+        'Como organizar notas pessoais no Obsidian?',
+        top_k=3,
+        strategy='hybrid',
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+    )
+
+    assert response.status == 'no_answer'
+    assert response.no_answer is True
+    assert response.reason_for_no_answer == 'missing_named_anchor'
 
 
 def test_answer_with_citations_vector_strategy_abstains_when_named_anchor_is_missing(tmp_path: Path) -> None:
@@ -302,7 +770,7 @@ def test_answer_with_citations_rejects_unknown_strategy() -> None:
     note = _build_note()
 
     with pytest.raises(ValueError, match='strategy'):
-        answer_with_citations(note, 'O que o benchmark mede?', strategy='hybrid')  # type: ignore[arg-type]
+        answer_with_citations(note, 'O que o benchmark mede?', strategy='reciprocal')  # type: ignore[arg-type]
 
 
 def test_extract_named_query_terms_ignores_interrogatives_and_keeps_product_names() -> None:
@@ -408,6 +876,50 @@ def test_retrieval_ask_cli_supports_vector_strategy(monkeypatch, tmp_path: Path)
     assert payload['citations']
 
 
+def test_retrieval_ask_cli_supports_hybrid_strategy(monkeypatch, tmp_path: Path) -> None:
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        datasets_dir=tmp_path / 'data' / 'datasets',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+        vector_collection_name='ask_hybrid',
+        embedding_model='fake-hash',
+    )
+    sample_file = tmp_path / 'ask-hybrid.md'
+    sample_file.write_text(
+        '# Nota híbrida\n\n'
+        'O benchmark mede recall e latencia para comparar estrategias de recuperacao.\n',
+        encoding='utf-8',
+    )
+
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name: FakeEmbedder())
+
+    result = runner.invoke(
+        app,
+        [
+            'retrieval',
+            'ask',
+            str(sample_file),
+            '--question',
+            'O que o benchmark mede?',
+            '--top-k',
+            '3',
+            '--strategy',
+            'hybrid',
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['status'] == 'answer'
+    assert payload['no_answer'] is False
+    assert payload['citations']
+
+
 def test_retrieval_ask_cli_rejects_unknown_strategy(tmp_path: Path) -> None:
     sample_file = tmp_path / 'ask-invalid.md'
     sample_file.write_text(
@@ -425,7 +937,7 @@ def test_retrieval_ask_cli_rejects_unknown_strategy(tmp_path: Path) -> None:
             '--question',
             'O que o benchmark mede?',
             '--strategy',
-            'hybrid',
+            'rrf',
         ],
     )
 

@@ -175,6 +175,49 @@ def test_run_benchmark_persists_run_and_queries_in_sqlite(tmp_path: Path) -> Non
     assert [row['reciprocal_rank'] for row in query_rows] == [1.0, 0.0]
 
 
+def test_run_benchmark_supports_hybrid_strategy(tmp_path: Path) -> None:
+    note = _build_note(tmp_path)
+    dataset = BenchmarkDataset(
+        dataset_name='rag-hybrid',
+        samples=[
+            BenchmarkSample(
+                sample_id='q-1',
+                question='O que o benchmark mede?',
+                expected_note_id=note.note_id,
+                expected_terms=['recall', 'latencia'],
+            )
+        ],
+    )
+    vector_store = LocalVectorStore(tmp_path / 'results' / 'vector_store', collection_name='hybrid_run')
+
+    result = run_benchmark(
+        note,
+        dataset,
+        strategy='hybrid',
+        top_k=3,
+        chunk_size=120,
+        overlap=30,
+        run_name='hybrid-baseline',
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+        hybrid_rank_constant=40,
+        hybrid_lexical_weight=1.25,
+        hybrid_vector_weight=1.0,
+        hybrid_lexical_pool=6,
+        hybrid_vector_pool=12,
+    )
+
+    assert result.retrieval_strategy == 'hybrid'
+    assert result.metrics['recall_at_3'] == 1.0
+    assert result.hybrid_config == {
+        'rank_constant': 40,
+        'lexical_weight': 1.25,
+        'vector_weight': 1.0,
+        'lexical_pool': 6,
+        'vector_pool': 12,
+    }
+
+
 def test_export_benchmark_json_and_csv(tmp_path: Path) -> None:
     note = _build_note(tmp_path)
     dataset = BenchmarkDataset(
@@ -270,7 +313,86 @@ def test_benchmark_run_cli_executes_dataset_and_exports_reports(monkeypatch, tmp
     assert row['total'] == 1
 
 
-def test_compare_benchmark_suite_runs_lexical_and_vector_strategies(tmp_path: Path) -> None:
+def test_benchmark_run_cli_accepts_hybrid_knobs(monkeypatch, tmp_path: Path) -> None:
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        datasets_dir=tmp_path / 'data' / 'datasets',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+        embedding_model='fake-hash',
+    )
+    sample_file = tmp_path / 'benchmark.md'
+    sample_file.write_text(
+        '# Benchmark\n\n'
+        'O benchmark mede recall, latencia e cobertura de citacoes para comparar retrieval.\n',
+        encoding='utf-8',
+    )
+    dataset_path = tmp_path / 'dataset.json'
+    dataset_path.write_text(
+        json.dumps(
+            {
+                'dataset_name': 'cli-hybrid-dataset',
+                'samples': [
+                    {
+                        'sample_id': 'q-1',
+                        'question': 'O que o benchmark mede?',
+                        'expected_note_id': 'benchmark',
+                        'expected_terms': ['recall', 'latencia'],
+                    }
+                ],
+            }
+        ),
+        encoding='utf-8',
+    )
+
+    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda model_name: FakeEmbedder())
+
+    result = runner.invoke(
+        app,
+        [
+            'benchmark',
+            'run',
+            str(sample_file),
+            '--dataset',
+            str(dataset_path),
+            '--strategy',
+            'hybrid',
+            '--top-k',
+            '3',
+            '--chunk-size',
+            '120',
+            '--overlap',
+            '30',
+            '--hybrid-rank-constant',
+            '40',
+            '--hybrid-lexical-weight',
+            '1.25',
+            '--hybrid-vector-weight',
+            '1.0',
+            '--hybrid-lexical-pool',
+            '6',
+            '--hybrid-vector-pool',
+            '12',
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['retrieval_strategy'] == 'hybrid'
+    assert payload['hybrid_config'] == {
+        'rank_constant': 40,
+        'lexical_weight': 1.25,
+        'vector_weight': 1.0,
+        'lexical_pool': 6,
+        'vector_pool': 12,
+    }
+
+
+def test_compare_benchmark_suite_runs_lexical_vector_and_hybrid_strategies(tmp_path: Path) -> None:
     sample_file = tmp_path / 'benchmark.md'
     sample_file.write_text(
         '# Benchmark\n\n'
@@ -324,15 +446,30 @@ def test_compare_benchmark_suite_runs_lexical_and_vector_strategies(tmp_path: Pa
         overlap=30,
         vector_store=vector_store,
         embedder=FakeEmbedder(),
+        hybrid_rank_constant=40,
+        hybrid_lexical_weight=1.25,
+        hybrid_vector_weight=1.0,
+        hybrid_lexical_pool=6,
+        hybrid_vector_pool=12,
     )
 
     assert result.suite_name == 'compare-suite'
     assert result.summaries['lexical'].case_count == 1
     assert result.summaries['vector'].case_count == 1
+    assert result.summaries['hybrid'].case_count == 1
     assert result.summaries['lexical'].query_count == 1
     assert result.summaries['vector'].query_count == 1
+    assert result.summaries['hybrid'].query_count == 1
+    assert result.hybrid_config == {
+        'rank_constant': 40,
+        'lexical_weight': 1.25,
+        'vector_weight': 1.0,
+        'lexical_pool': 6,
+        'vector_pool': 12,
+    }
     assert result.cases[0].lexical.metrics['recall_at_3'] == 1.0
     assert result.cases[0].vector.metrics['recall_at_3'] == 1.0
+    assert result.cases[0].hybrid.metrics['recall_at_3'] == 1.0
 
 
 def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, tmp_path: Path) -> None:
@@ -405,6 +542,16 @@ def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, t
             '30',
             '--embedding-model',
             'fake-hash',
+            '--hybrid-rank-constant',
+            '40',
+            '--hybrid-lexical-weight',
+            '1.25',
+            '--hybrid-vector-weight',
+            '1.0',
+            '--hybrid-lexical-pool',
+            '6',
+            '--hybrid-vector-pool',
+            '12',
             '--export',
         ],
     )
@@ -414,6 +561,14 @@ def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, t
     assert payload['suite_name'] == 'cli-compare-suite'
     assert payload['summaries']['lexical']['recall_at_3'] == 1.0
     assert payload['summaries']['vector']['recall_at_3'] == 1.0
+    assert payload['summaries']['hybrid']['recall_at_3'] == 1.0
+    assert payload['hybrid_config'] == {
+        'rank_constant': 40,
+        'lexical_weight': 1.25,
+        'vector_weight': 1.0,
+        'lexical_pool': 6,
+        'vector_pool': 12,
+    }
     assert Path(payload['json_report_path']).exists()
     assert Path(payload['csv_report_path']).exists()
     assert payload['embedding_model'] == 'fake-hash'

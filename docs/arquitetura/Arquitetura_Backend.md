@@ -49,7 +49,8 @@ pipeline/
 ├── ingest/
 │   ├── watcher.py
 │   ├── loaders.py
-│   └── validators.py
+│   ├── validators.py
+│   └── obsidian_cleaner.py
 ├── providers/
 │   ├── transcribe.py
 │   ├── vision.py
@@ -87,6 +88,15 @@ Responsável por:
 - validar formato
 - extrair texto bruto
 - decidir qual pipeline aplicar
+
+Ferramentas auxiliares opcionais desta camada podem preparar staging seguro antes da ingestão
+canônica. Na implementação atual do cleaner de Obsidian:
+
+- `ingest/obsidian_cleaner.py` é uma ferramenta explícita, chamada sob demanda
+- a fonte Obsidian permanece `read-only`
+- o output limpo vai para uma área de staging dentro do repositório
+- `dataviewjs` é tratado por parsing estático e heurístico, sem executar JavaScript
+- a limpeza não roda automaticamente para Markdown comum do pipeline
 
 Não deve:
 
@@ -188,6 +198,7 @@ Na implementação atual da Sprint 06.1:
 - a coleção baseline é persistida em `data/results/vector_store`
 - o backend registra `embedding_model` na indexação vetorial
 - a busca semântica inicial já retorna `chunk`, `score` e `strategy`
+- a camada de recuperação já prepara terreno para `hybrid` por compartilhamento do mesmo `chunk_id`
 
 ### Alternativa futura
 
@@ -254,6 +265,32 @@ Na evolução atual do backend:
 - o provider também aceita modelos locais no formato `sentence-transformer:<model_name>`
 - o benchmark pode sobrescrever o `embedding_model` por CLI para comparações reproduzíveis
 
+Na evolução atual após o experimento `09_melhoria_ranking_falso_positivo.md`:
+
+- `semantic_search()` continua sendo o path vetorial base e compartilhado
+- `open_semantic_search()` passa a concentrar a política de busca aberta sem `note_id`
+- reranking lexical-aware e poda leve de falso positivo ficam confinados ao fluxo aberto do CLI
+- essa política ainda não deve ser promovida automaticamente para todos os consumidores vetoriais
+
+Essa separação existe porque o problema validado nesta rodada foi:
+
+- ruído em busca aberta multi-file
+
+e não:
+
+- falha do retrieval vetorial base por nota
+- falha do `ask`
+- falha do benchmark per-note
+
+Se essa política precisar subir para o path compartilhado no futuro, a mudança deve passar por nova rodada
+de validação cobrindo:
+
+- `semantic-search --note-id`
+- `retrieval ask --strategy vector`
+- `retrieval ask --strategy hybrid`
+- `benchmark compare`
+- queries negativas, positivas e mistas equivalentes às do experimento `09`
+
 ### Execução de benchmark
 
 - `experiment_id`
@@ -271,12 +308,12 @@ Na evolução atual do backend:
 Na implementação atual da Sprint 07, o benchmark passa a ter um runner reproduzível por CLI.
 Ele carrega datasets JSON, executa consultas sobre uma nota canônica, calcula `MRR`,
 `Recall@3`, `Recall@5`, `Recall@10` e latência, persiste a execução em SQLite e pode
-exportar resultados em JSON e CSV. O runner já compara `lexical` e prepara o mesmo contrato
-para `vector`, sem depender de interface gráfica.
+exportar resultados em JSON e CSV. O runner já compara `lexical`, `vector` e `hybrid`
+sem depender de interface gráfica.
 
 Na evolução atual desse benchmark, o backend também passa a aceitar manifestos de suíte
-(`suite.json`) para comparar `lexical` vs `vector` sobre múltiplos documentos reais de forma
-repetível, gerando um resumo agregado por estratégia sem depender da interface.
+(`suite.json`) para comparar `lexical`, `vector` e `hybrid` sobre múltiplos documentos reais
+de forma repetível, gerando um resumo agregado por estratégia sem depender da interface.
 
 ### Resposta ask
 
@@ -293,15 +330,34 @@ repetível, gerando um resumo agregado por estratégia sem depender da interface
 
 Na implementação atual da Sprint 5, a resposta `ask` nasce como um baseline local-first sobre
 busca lexical com matching por token inteiro, não por substring. A partir da Sprint 06.2,
-o mesmo contrato passa a aceitar estratégia `lexical` ou `vector`, com abstention explícita
-quando a evidência semântica fica fraca ou mal ancorada. Isso permite:
+o mesmo contrato passa a aceitar estratégia `lexical`, `vector` ou `hybrid`, com abstention
+explícita quando a evidência recuperada fica fraca ou mal ancorada. Isso permite:
 
 - devolver payload estruturado para a UI desde cedo
 - exigir citação por claim
 - registrar abstention explícita quando a cobertura lexical for insuficiente
 - registrar abstention explícita quando o retrieval vetorial falha em score, anchors nomeados ou grounding textual
+- registrar abstention explícita quando a fusão híbrida não sustenta grounding mínimo
 - manter rastreabilidade `note -> chunk -> citation` sem depender ainda de embeddings reais
 - preparar o caminho para benchmark comparativo entre estratégias de recuperação
+
+Na evolução atual, `hybrid` combina:
+
+- ranking lexical
+- ranking vetorial
+- fusão por ranking reprodutível
+
+sem introduzir reranker, LLM ou dependência de frontend.
+
+Após a calibração registrada em `docs/experimentos/07_calibracao_fusao_hibrida.md`, o backend
+passa a adotar como baseline default de `hybrid`:
+
+- `lexical_weight = 1.5`
+- `vector_weight = 1.0`
+- `rank_constant = 60`
+
+Essa configuração foi suficiente para empatar `hybrid` com `lexical` em `MRR` na suíte real
+atual, mantendo `Recall@3 = 1.0`, sem precisar abrir reranking ainda.
 
 ## Ordem de implementação backend
 

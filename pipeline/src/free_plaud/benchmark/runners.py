@@ -19,7 +19,14 @@ from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import Embedder
 from free_plaud.retrieval.indexer import index_note, index_note_in_vector_store
 from free_plaud.retrieval.models import Chunk, SearchHit
-from free_plaud.retrieval.search import lexical_search_hits, semantic_search
+from free_plaud.retrieval.search import (
+    DEFAULT_HYBRID_LEXICAL_WEIGHT,
+    DEFAULT_HYBRID_RANK_CONSTANT,
+    DEFAULT_HYBRID_VECTOR_WEIGHT,
+    hybrid_search,
+    lexical_search_hits,
+    semantic_search,
+)
 from free_plaud.storage.models import BenchmarkQueryRecord, BenchmarkRunRecord
 from free_plaud.storage.sqlite import insert_benchmark_query, insert_benchmark_run, replace_chunks_for_note, upsert_note
 from free_plaud.storage.vector import LocalVectorStore
@@ -52,6 +59,7 @@ class BenchmarkRunResult(BaseModel):
     overlap: int
     metrics: dict[str, float | int]
     queries: list[BenchmarkQueryResult]
+    hybrid_config: dict[str, int | float | None] | None = None
     started_at: datetime
     finished_at: datetime
     duration_ms: int
@@ -77,6 +85,7 @@ class BenchmarkCaseComparisonResult(BaseModel):
     note_title: str
     lexical: BenchmarkRunResult
     vector: BenchmarkRunResult
+    hybrid: BenchmarkRunResult
 
 
 class BenchmarkComparisonResult(BaseModel):
@@ -86,6 +95,7 @@ class BenchmarkComparisonResult(BaseModel):
     top_k: int
     chunk_size: int
     overlap: int
+    hybrid_config: dict[str, int | float | None] | None = None
     summaries: dict[str, BenchmarkStrategySummary]
     cases: list[BenchmarkCaseComparisonResult]
     started_at: datetime
@@ -169,13 +179,18 @@ def run_benchmark(
     dataset: BenchmarkDataset,
     *,
     connection=None,
-    strategy: Literal['lexical', 'vector'] = 'lexical',
+    strategy: Literal['lexical', 'vector', 'hybrid'] = 'lexical',
     top_k: int = 3,
     chunk_size: int = 800,
     overlap: int = 120,
     run_name: str = 'benchmark',
     vector_store: LocalVectorStore | None = None,
     embedder: Embedder | None = None,
+    hybrid_rank_constant: int = DEFAULT_HYBRID_RANK_CONSTANT,
+    hybrid_lexical_weight: float = DEFAULT_HYBRID_LEXICAL_WEIGHT,
+    hybrid_vector_weight: float = DEFAULT_HYBRID_VECTOR_WEIGHT,
+    hybrid_lexical_pool: int | None = None,
+    hybrid_vector_pool: int | None = None,
 ) -> BenchmarkRunResult:
     """Executa benchmark reproduzível sobre uma nota canônica."""
     started_at = datetime.now(UTC)
@@ -183,12 +198,12 @@ def run_benchmark(
 
     if strategy == 'lexical':
         chunks = index_note(note, chunk_size=chunk_size, overlap=overlap)
-    elif strategy == 'vector':
+    elif strategy in {'vector', 'hybrid'}:
         if vector_store is None or embedder is None:
-            raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector.')
+            raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector e strategy=hybrid.')
         chunks = index_note_in_vector_store(note, vector_store, embedder, chunk_size=chunk_size, overlap=overlap)
     else:
-        raise ValueError("strategy deve ser 'lexical' ou 'vector'.")
+        raise ValueError("strategy deve ser 'lexical', 'vector' ou 'hybrid'.")
 
     if connection is not None:
         upsert_note(connection, note)
@@ -199,6 +214,20 @@ def run_benchmark(
         query_started = perf_counter()
         if strategy == 'lexical':
             hits = lexical_search_hits(sample.question, chunks, top_k=top_k)
+        elif strategy == 'hybrid':
+            hits = hybrid_search(
+                sample.question,
+                chunks,
+                vector_store,  # type: ignore[arg-type]
+                embedder,  # type: ignore[arg-type]
+                top_k=top_k,
+                note_id=note.note_id,
+                lexical_pool_size=hybrid_lexical_pool or max(top_k * 3, top_k),
+                vector_pool_size=hybrid_vector_pool or max(top_k * 8, 24),
+                rank_constant=hybrid_rank_constant,
+                lexical_weight=hybrid_lexical_weight,
+                vector_weight=hybrid_vector_weight,
+            )
         else:
             hits = semantic_search(sample.question, vector_store, embedder, top_k=top_k, note_id=note.note_id)  # type: ignore[arg-type]
         latency_ms = int((perf_counter() - query_started) * 1000)
@@ -230,6 +259,17 @@ def run_benchmark(
         overlap=overlap,
         metrics=metrics,
         queries=query_results,
+        hybrid_config=(
+            {
+                'rank_constant': hybrid_rank_constant,
+                'lexical_weight': hybrid_lexical_weight,
+                'vector_weight': hybrid_vector_weight,
+                'lexical_pool': hybrid_lexical_pool or max(top_k * 3, top_k),
+                'vector_pool': hybrid_vector_pool or max(top_k * 8, 24),
+            }
+            if strategy == 'hybrid'
+            else None
+        ),
         started_at=started_at,
         finished_at=finished_at,
         duration_ms=duration_ms,
@@ -250,8 +290,13 @@ def compare_benchmark_suite(
     overlap: int = 120,
     vector_store: LocalVectorStore,
     embedder: Embedder,
+    hybrid_rank_constant: int = DEFAULT_HYBRID_RANK_CONSTANT,
+    hybrid_lexical_weight: float = DEFAULT_HYBRID_LEXICAL_WEIGHT,
+    hybrid_vector_weight: float = DEFAULT_HYBRID_VECTOR_WEIGHT,
+    hybrid_lexical_pool: int | None = None,
+    hybrid_vector_pool: int | None = None,
 ) -> BenchmarkComparisonResult:
-    """Compara lexical vs vector em múltiplos documentos de forma reproduzível."""
+    """Compara lexical, vector e hybrid em múltiplos documentos de forma reproduzível."""
     started_at = datetime.now(UTC)
     started_perf = perf_counter()
     vector_store.reset()
@@ -259,6 +304,7 @@ def compare_benchmark_suite(
     case_results: list[BenchmarkCaseComparisonResult] = []
     lexical_runs: list[BenchmarkRunResult] = []
     vector_runs: list[BenchmarkRunResult] = []
+    hybrid_runs: list[BenchmarkRunResult] = []
 
     for case in suite.cases:
         document_path = workspace_dir / case.document_path
@@ -288,9 +334,27 @@ def compare_benchmark_suite(
             vector_store=vector_store,
             embedder=embedder,
         )
+        hybrid_result = run_benchmark(
+            note,
+            dataset,
+            connection=connection,
+            strategy='hybrid',
+            top_k=top_k,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            run_name=f'{suite.suite_name}-{case.case_id}-hybrid',
+            vector_store=vector_store,
+            embedder=embedder,
+            hybrid_rank_constant=hybrid_rank_constant,
+            hybrid_lexical_weight=hybrid_lexical_weight,
+            hybrid_vector_weight=hybrid_vector_weight,
+            hybrid_lexical_pool=hybrid_lexical_pool,
+            hybrid_vector_pool=hybrid_vector_pool,
+        )
 
         lexical_runs.append(lexical_result)
         vector_runs.append(vector_result)
+        hybrid_runs.append(hybrid_result)
         case_results.append(
             BenchmarkCaseComparisonResult(
                 case_id=case.case_id,
@@ -300,6 +364,7 @@ def compare_benchmark_suite(
                 note_title=note.title,
                 lexical=lexical_result,
                 vector=vector_result,
+                hybrid=hybrid_result,
             )
         )
 
@@ -312,9 +377,17 @@ def compare_benchmark_suite(
         top_k=top_k,
         chunk_size=chunk_size,
         overlap=overlap,
+        hybrid_config={
+            'rank_constant': hybrid_rank_constant,
+            'lexical_weight': hybrid_lexical_weight,
+            'vector_weight': hybrid_vector_weight,
+            'lexical_pool': hybrid_lexical_pool or max(top_k * 3, top_k),
+            'vector_pool': hybrid_vector_pool or max(top_k * 8, 24),
+        },
         summaries={
             'lexical': _summarize_strategy('lexical', lexical_runs),
             'vector': _summarize_strategy('vector', vector_runs),
+            'hybrid': _summarize_strategy('hybrid', hybrid_runs),
         },
         cases=case_results,
         started_at=started_at,
@@ -338,7 +411,11 @@ def _persist_benchmark_result(connection, note: Note, result: BenchmarkRunResult
             query_count=len(result.queries),
             pipeline_version=PIPELINE_VERSION,
             status='success',
-            config={'chunk_size': result.chunk_size, 'overlap': result.overlap},
+            config={
+                'chunk_size': result.chunk_size,
+                'overlap': result.overlap,
+                'hybrid_config': result.hybrid_config,
+            },
             metrics=dict(result.metrics),
             started_at=result.started_at,
             finished_at=result.finished_at,
