@@ -9,8 +9,11 @@ from free_plaud.app.config import Settings
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note_in_vector_store
 from free_plaud.retrieval.indexer import index_note
+from free_plaud.retrieval.rag import _rank_claim_candidates
+from free_plaud.retrieval.rag import _claim_variant_score
+from free_plaud.retrieval.rag import _trim_dangling_tail
 from free_plaud.retrieval.rag import answer_with_citations
-from free_plaud.retrieval.search import extract_named_query_terms, lexical_search_hits
+from free_plaud.retrieval.search import extract_named_query_terms, lexical_search_hits, normalize_query_terms
 from free_plaud.storage.vector import LocalVectorStore
 
 runner = CliRunner()
@@ -409,6 +412,116 @@ def test_answer_with_citations_keeps_qualifier_for_confidentiality_deadline() ->
         'obrigacao de confidencialidade' in response.answer.lower()
         or 'sigilo' in response.answer.lower()
     )
+
+
+def test_answer_with_citations_keeps_monetary_amount_with_decimal_cents() -> None:
+    note = _build_note(
+        raw_text=(
+            'PARTES: EMPRESA CONTRATANTE e FORNECEDORA LTDA\n'
+            'Vigencia: 01/04/2025 a 31/03/2026\n'
+            'Valor total: R$ 144.000,00 (cento e quarenta e quatro mil reais).\n'
+        ),
+        normalized_text=(
+            'PARTES: EMPRESA CONTRATANTE e FORNECEDORA LTDA\n'
+            'Vigencia: 01/04/2025 a 31/03/2026\n'
+            'Valor total: R$ 144.000,00 (cento e quarenta e quatro mil reais).\n'
+        ),
+        structured_markdown=(
+            '# Contrato\n\n'
+            'PARTES: EMPRESA CONTRATANTE e FORNECEDORA LTDA\n'
+            'Vigencia: 01/04/2025 a 31/03/2026\n'
+            'Valor total: R$ 144.000,00 (cento e quarenta e quatro mil reais).\n'
+        ),
+        content_hash='a7' * 32,
+    )
+
+    response = answer_with_citations(note, 'Qual e o valor total do contrato?', top_k=3)
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert 'r$ 144.000,00' in response.answer.lower()
+
+
+def test_answer_with_citations_keeps_confidentiality_subject_when_trimming_clause() -> None:
+    note = _build_note(
+        raw_text=(
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia, independentemente do motivo do encerramento.\n'
+        ),
+        normalized_text=(
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia, independentemente do motivo do encerramento.\n'
+        ),
+        structured_markdown=(
+            '# Contrato\n\n'
+            'CLAUSULA 4 - CONFIDENCIALIDADE\n\n'
+            'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+            'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o encerramento '
+            'da vigencia, independentemente do motivo do encerramento.\n'
+        ),
+        content_hash='b7' * 32,
+    )
+
+    response = answer_with_citations(
+        note,
+        'Qual e o prazo de confidencialidade apos o encerramento da vigencia?',
+        top_k=3,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer is not None
+    assert '3 (tres) anos' in response.answer.lower()
+    assert response.answer.lower().startswith('as partes obrigam-se')
+
+
+def test_trim_dangling_tail_preserves_currency_decimal_groups() -> None:
+    candidate = 'Valor total: R$ 144.000,00 (cento e quarenta e quatro mil reais)'
+
+    trimmed = _trim_dangling_tail(candidate)
+
+    assert trimmed == candidate
+
+
+def test_claim_variant_score_penalizes_low_information_legal_fragments() -> None:
+    question = 'Qual e o prazo de confidencialidade apos o encerramento da vigencia?'
+    query_terms = normalize_query_terms(question)
+    full = (
+        'As partes obrigam-se a manter sigilo sobre informacoes tecnicas, comerciais e estrategicas '
+        'as quais tiverem acesso em razao deste contrato, pelo prazo de 3 (tres) anos apos o '
+        'encerramento da vigencia, independentemente do motivo do encerramento.'
+    )
+    fragment = 'de 3 (tres) anos apos o encerramento da vigencia'
+
+    full_score = _claim_variant_score(question, query_terms, full)
+    fragment_score = _claim_variant_score(question, query_terms, fragment)
+
+    assert full_score is not None
+    assert fragment_score is not None
+    assert full_score > fragment_score
+
+
+def test_rank_claim_candidates_prefers_complete_legal_clause_over_time_fragment() -> None:
+    question = 'Qual e o prazo de confidencialidade apos o encerramento da vigencia?'
+    query_terms = normalize_query_terms(question)
+    chunk_text = (
+        'As partes comprometem-se a manter sigilo sobre todas as informacoes tecnicas, '
+        'comerciais e estrategicas as quais tiverem acesso em razao deste contrato, pelo prazo '
+        'de 3 (tres) anos apos o encerramento da vigencia, independentemente do motivo do\n\n'
+        'encerramento. A obrigacao de confidencialidade nao se aplica a informacoes que sejam\n'
+        'de dominio publico, que devam ser divulgadas por determinacao legal ou judicial.\n'
+    )
+
+    ranked = _rank_claim_candidates(chunk_text, question, query_terms)
+
+    assert ranked
+    top_candidate = ranked[0][1].lower()
+    assert '3 (tres) anos' in top_candidate
+    assert 'confidencialidade' in top_candidate or 'sigilo' in top_candidate
+    assert not top_candidate.startswith('de 3 (tres) anos')
 
 
 def test_answer_with_citations_keeps_priority_context_for_sla() -> None:
