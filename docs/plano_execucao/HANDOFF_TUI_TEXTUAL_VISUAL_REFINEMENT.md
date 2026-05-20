@@ -1,5 +1,19 @@
 # Handoff - Refinamento visual da TUI Textual
 
+## Veredito senior
+
+Status: **aprovado com ajustes**.
+
+O plano esta na direcao certa, mas a primeira versao ainda deixava ambiguidades perigosas para uma IA executar:
+
+- branch base nao estava clara, ja que a TUI atual ainda vive em `feat/tui-textual`
+- testes de `run_test` provam montagem, mas nao provam qualidade visual nem ausencia do azul default
+- troca de `Select` por botoes precisava de contrato de estado, teclado e teste de valor enviado ao `ask_file`
+- estado de execucao do worker precisava bloquear clique duplo e restaurar UI em sucesso/erro
+- commit de docs nao deve ser repetido se este handoff ja estiver commitado
+
+Este documento ja incorpora essas correcoes.
+
 ## Diagnostico
 
 A TUI atual funciona, mas parece prototipo cru. O problema principal nao e a paleta roxo/rosa em si; e a falta de hierarquia visual.
@@ -37,7 +51,7 @@ pipeline/src/free_plaud/tui/app.tcss
 pipeline/tests/test_tui_app.py
 ```
 
-Arquivos opcionais, se realmente reduzir complexidade:
+Arquivos opcionais, se realmente reduzirem complexidade:
 
 ```text
 pipeline/src/free_plaud/tui/theme.py
@@ -53,6 +67,12 @@ Nao mexer:
 - samples
 - frontend React
 - Tauri
+
+Regras de branch:
+
+- se `feat/tui-textual` ainda nao foi mergeada em `main`, executar esta slice em cima dela
+- se `feat/tui-textual` ja foi mergeada, criar `feat/tui-visual-polish` a partir de `main`
+- nao incluir `samples/` se ela estiver untracked
 
 ## Direcao visual
 
@@ -72,6 +92,13 @@ Uso recomendado:
 - vermelho apenas para erro: `#fb7185`
 
 Regra: se tudo tem borda magenta, nada tem destaque. Usar magenta apenas em CTA, foco e status ativo.
+
+Regra pratica de TCSS:
+
+- evitar depender de default theme do Textual para selecao
+- sobrescrever explicitamente estados `:hover`, `:focus`, `.active` e `.--highlight`
+- evitar azul default em `ListView`, `Button`, foco e selecao
+- se criar `theme.py`, usar apenas constantes e helpers simples; nao introduzir dependencia nova
 
 ## Layout alvo
 
@@ -102,6 +129,32 @@ Regra: se tudo tem borda magenta, nada tem destaque. Usar magenta apenas em CTA,
 
 ## Mudancas de implementacao
 
+### 0. Baseline antes da alteracao
+
+Antes de editar, registrar evidencias:
+
+```powershell
+cd D:\Dev\Repos\Own\tcc-free-plaud
+git status --short --branch
+cd pipeline
+uv run pytest --basetemp .pytest-tmp-tui-before tests/test_tui_app.py -q
+```
+
+Abrir manualmente:
+
+```powershell
+uv run free-plaud-tui
+```
+
+Salvar screenshot ou anotar visualmente:
+
+- azul default aparece na sidebar?
+- `Select` ainda parece widget default?
+- empty state da resposta existe?
+- layout quebra em terminal menor?
+
+Sem esse baseline, a mudanca vira subjetiva demais.
+
 ### 1. Sidebar com identidade
 
 Substituir sidebar simples por:
@@ -116,6 +169,7 @@ Aceite:
 - nenhum item selecionado pode ficar azul
 - item ativo precisa usar roxo/violeta da paleta
 - sidebar deve continuar com largura fixa entre `26` e `30`
+- os itens `Notes` e `Benchmark` precisam continuar visivelmente inativos/planejados, nao parecer features prontas
 
 ### 2. Trocar `Select` por toggle segmentado
 
@@ -125,11 +179,20 @@ O `Select` atual e a parte mais feia da tela. Para tres opcoes fixas, usar melho
 - classe `.strategy-active` no botao selecionado
 - estado interno no `AskPane`
 
+Contrato de estado:
+
+- `AskPane` deve manter a estrategia atual em atributo simples, por exemplo `self.selected_strategy`
+- `hybrid` deve ser o valor inicial
+- clicar em um botao remove `.strategy-active` dos outros e aplica no novo ativo
+- `on_button_pressed` do `ask-submit` deve usar `self.selected_strategy`, nao ler texto visual do botao
+
 Aceite:
 
 - `hybrid` continua default
 - clique em `lexical|vector|hybrid` altera a estrategia
 - teste cobre troca de estrategia antes de executar ask
+- navegação por teclado ainda permite chegar nos botoes e no CTA
+- se `Button` segmentado ficar ruim no Textual, alternativa aceita: `RadioSet` com TCSS customizado, desde que o azul default tambem suma
 
 ### 3. Criar cards no painel principal
 
@@ -159,12 +222,15 @@ Botao `Executar ask` deve:
 - ter cor magenta/violeta forte
 - ocupar largura suficiente para parecer acao principal
 - mudar estado durante execucao para `Executando...`
-- desabilitar enquanto worker roda, se simples
+- desabilitar enquanto worker roda
 
 Aceite:
 
 - usuario entende qual acao iniciar
 - erro e sucesso voltam o botao para estado normal
+- clique duplo nao dispara dois workers concorrentes
+- erro de arquivo inexistente nao deixa botao travado
+- manter `self.app.call_from_thread(...)` em worker; nao voltar para `self.call_from_thread(...)`
 
 ### 5. Melhorar resposta e citacoes
 
@@ -181,6 +247,8 @@ Aceite:
 - `no_answer` aparece em amarelo, com motivo e limitacoes
 - resposta com citacao nao mistura tudo em texto solto
 - snippets nao quebram layout em 100 colunas
+- resposta inicial antes da primeira busca mostra instrucao util, nao caixa vazia
+- caminho de fonte longo deve ser encurtado visualmente, sem alterar `Citation.source_path` no backend
 
 ### 6. Responsividade minima
 
@@ -197,20 +265,37 @@ Aceite:
 - sidebar nao invade painel
 - card de resposta continua visivel
 - formulario nao corta labels essenciais
+- em `80x24`, aceitar menos respiro, mas nao aceitar sobreposicao ou overflow inutilizavel
+
+### 7. O que nao deve mudar no comportamento
+
+Esta slice e visual. Portanto:
+
+- `ask_file(...)` deve continuar com mesma assinatura
+- `lexical` nao deve inicializar `LocalVectorStore` nem `get_embedder`
+- `vector` e `hybrid` continuam inicializando vector store e embedder
+- `retrieval_top_k` continua vindo de `Settings`
+- `answer_with_citations(...)` nao deve ser alterado
+- benchmark nao deve ser alterado
 
 ## Ordem de execucao
 
-1. Criar testes/smokes para visual state:
+1. Confirmar branch/status e baseline.
+2. Criar testes/smokes para visual state:
    - estrategia default `hybrid`
    - clique em estrategia muda valor usado no `ask_file`
+   - clique duplo no CTA nao cria duas chamadas concorrentes
+   - erro do worker restaura estado do CTA
    - `run_test(size=(80, 24))` monta sem erro
+   - `run_test(size=(100, 30))` monta sem erro
    - `run_test(size=(120, 36))` monta sem erro
-2. Refatorar `AskPane` sem mudar `ask_file`.
-3. Aplicar nova estrutura de containers.
-4. Reescrever `app.tcss` com foco em sidebar, cards, CTA e estados.
-5. Rodar smoke com clique real em `Ask`.
-6. Rodar testes.
-7. Abrir manualmente `uv run free-plaud-tui` e validar screenshot.
+3. Refatorar `AskPane` sem mudar `ask_file`.
+4. Aplicar nova estrutura de containers.
+5. Reescrever `app.tcss` com foco em sidebar, cards, CTA e estados.
+6. Rodar smoke com clique real em `Ask`.
+7. Rodar testes.
+8. Abrir manualmente `uv run free-plaud-tui` e validar screenshot.
+9. So entao commitar.
 
 ## Validacao
 
@@ -221,6 +306,20 @@ cd D:\Dev\Repos\Own\tcc-free-plaud\pipeline
 uv run pytest --basetemp .pytest-tmp-tui-visual tests/test_tui_app.py -q
 uv run pytest --basetemp .pytest-tmp-full -q
 ```
+
+Guardrail de retrieval, se qualquer arquivo fora de `tui/` for alterado:
+
+```powershell
+cd D:\Dev\Repos\Own\tcc-free-plaud\pipeline
+uv run free-plaud benchmark compare `
+  --suite "D:\Dev\Repos\Own\tcc-free-plaud\data\datasets\manual_validation\suite.json"
+```
+
+Esperado atual:
+
+- `lexical MRR = 0.96875`
+- `hybrid MRR = 0.96875`
+- `hybrid Recall@3 = 1.0`
 
 Smoke programatico:
 
@@ -251,29 +350,33 @@ uv run free-plaud-tui
 Checklist manual:
 
 - sidebar sem azul default
+- foco do teclado tambem sem azul default
 - `hybrid` ativo visualmente
 - `lexical`, `vector`, `hybrid` clicaveis
 - campos com card e padding coerente
 - botao principal destacado
+- clique duplo no botao nao dispara execucao dupla
 - empty state de resposta visivel
 - resposta real mostra citacoes e latencia
 - redimensionamento nao quebra layout
 
 ## Branch e commits
 
-Branch sugerida:
+Branch:
 
 ```text
-feat/tui-visual-polish
+se feat/tui-textual nao foi mergeada: continuar em feat/tui-textual
+se feat/tui-textual ja foi mergeada: criar feat/tui-visual-polish
 ```
 
-Commits sugeridos:
+Commits sugeridos para esta slice:
 
 ```text
 test: adicionar smoke visual da tui textual
 style: refinar layout da tui textual
-docs: registrar plano de refinamento visual da tui
 ```
+
+Nao criar novo commit `docs:` se este handoff ja estiver commitado e nao for alterado durante a implementacao.
 
 ## Fora de escopo
 
@@ -294,5 +397,6 @@ Slice pronta quando:
 - screenshot fica apresentavel para demo/TCC
 - fluxo Ask continua funcionando
 - testes passam
+- smoke de tamanhos passa
 - nenhum contrato de backend muda
 - branch tem commits pequenos e revisaveis
