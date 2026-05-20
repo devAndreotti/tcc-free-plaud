@@ -110,10 +110,10 @@ class AskPane(Vertical):
             yield Input(placeholder='O que este documento diz?', id='ask-question')
             yield Label('Estrategia')
             with Horizontal(id='strategy-row'):
-                yield Button('lexical', id='strategy-lexical', classes='strategy-button')
-                yield Button('vector', id='strategy-vector', classes='strategy-button')
-                yield Button('hybrid', id='strategy-hybrid', classes='strategy-button strategy-active')
-                yield Button('Executar ask', id='ask-submit', classes='primary-action')
+                yield Button('Lexical', id='strategy-lexical', classes='strategy-button')
+                yield Button('Vector', id='strategy-vector', classes='strategy-button')
+                yield Button('Hybrid', id='strategy-hybrid', classes='strategy-button strategy-active')
+                yield Button('Perguntar', id='ask-submit', classes='primary-action')
 
         with Container(id='ask-result-card'):
             yield Static('Resposta', classes='card-title')
@@ -158,7 +158,7 @@ class AskPane(Vertical):
         self._ask_running = running
         submit = self.query_one('#ask-submit', Button)
         submit.disabled = running
-        submit.label = 'Executando...' if running else 'Executar ask'
+        submit.label = 'Executando...' if running else 'Perguntar'
         for strategy in ASK_STRATEGIES:
             self.query_one(f'#strategy-{strategy}', Button).disabled = running
 

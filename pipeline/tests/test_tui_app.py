@@ -1,5 +1,5 @@
 import asyncio
-import time
+import threading
 from pathlib import Path
 
 import pytest
@@ -197,10 +197,13 @@ def test_tui_ask_button_ignores_double_click_while_running(monkeypatch, tmp_path
     sample = tmp_path / 'sample.md'
     sample.write_text('# Sample\n\nTexto.\n', encoding='utf-8')
     calls: list[str] = []
+    started = threading.Event()
+    release = threading.Event()
 
     def fake_ask_file(file_path: Path, question: str, strategy: str) -> AskResponse:
         calls.append(strategy)
-        time.sleep(0.3)
+        started.set()
+        release.wait(timeout=2)
         return _answer(question)
 
     monkeypatch.setattr('free_plaud.tui.app.ask_file', fake_ask_file)
@@ -211,8 +214,10 @@ def test_tui_ask_button_ignores_double_click_while_running(monkeypatch, tmp_path
             app.query_one('#ask-file-path', Input).value = str(sample)
             app.query_one('#ask-question', Input).value = 'O que o benchmark mede?'
             await pilot.click('#ask-submit')
+            assert await asyncio.to_thread(started.wait, 2)
             await pilot.click('#ask-submit')
-            await pilot.pause(0.8)
+            release.set()
+            await pilot.pause(0.5)
             assert not app.query_one('#ask-submit', Button).disabled
 
     asyncio.run(run_app())
@@ -238,19 +243,30 @@ def test_tui_ask_button_restores_state_after_worker_error(monkeypatch, tmp_path:
             await pilot.pause(0.5)
             submit = app.query_one('#ask-submit', Button)
             assert not submit.disabled
-            assert str(submit.label) == 'Executar ask'
+            assert str(submit.label) == 'Perguntar'
 
     asyncio.run(run_app())
 
 
 def test_tui_layout_mounts_at_supported_sizes() -> None:
+    def assert_inside(parent, child) -> None:  # noqa: ANN001
+        parent_region = parent.region
+        child_region = child.region
+        assert child_region.x >= parent_region.x
+        assert child_region.y >= parent_region.y
+        assert child_region.x + child_region.width <= parent_region.x + parent_region.width
+        assert child_region.y + child_region.height < parent_region.y + parent_region.height
+
     async def run_app() -> None:
         for size in ((80, 24), (100, 30), (120, 36)):
             app = FreePlaudApp()
             async with app.run_test(size=size) as pilot:
                 await pilot.pause()
+                form_card = app.query_one('#ask-form-card')
                 assert app.query_one('#nav-panel')
-                assert app.query_one('#ask-form-card')
+                assert form_card
                 assert app.query_one('#ask-result-card')
+                for selector in ('#strategy-lexical', '#strategy-vector', '#strategy-hybrid', '#ask-submit'):
+                    assert_inside(form_card, app.query_one(selector))
 
     asyncio.run(run_app())
