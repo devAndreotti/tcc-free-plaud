@@ -1,0 +1,133 @@
+Screen {
+    background: #12091f;
+    color: #f6eefe;
+}
+
+Header {
+    background: #24143b;
+    color: #f6eefe;
+    text-style: bold;
+}
+
+Footer {
+    background: #1a0f2d;
+    color: #c7afd9;
+}
+
+#content {
+    height: 1fr;
+}
+
+#nav-panel {
+    width: 28;
+    border-right: solid #4c1d95;
+    background: #1a0f2d;
+    padding: 1 0;
+}
+
+#nav-title {
+    color: #d946ef;
+    text-style: bold;
+    padding: 0 2 1 2;
+}
+
+#main-panel {
+    width: 1fr;
+    height: 1fr;
+    background: #12091f;
+    padding: 1 2;
+}
+
+.screen-pane {
+    height: 1fr;
+}
+
+.section-title {
+    color: #d946ef;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+ListView {
+    background: #1a0f2d;
+}
+
+ListView > ListItem {
+    color: #f6eefe;
+    padding: 0 2;
+}
+
+ListView > ListItem.--highlight {
+    background: #a855f7 25%;
+    color: #f6eefe;
+}
+
+ListView:focus > ListItem.--highlight {
+    background: #d946ef 40%;
+    color: #f6eefe;
+}
+
+Label {
+    color: #c7afd9;
+    margin-top: 1;
+}
+
+Input, Select {
+    border: solid #4c1d95;
+    background: #1a0f2d;
+    color: #f6eefe;
+}
+
+Input:focus, Select:focus {
+    border: solid #d946ef;
+}
+
+Button {
+    background: #24143b;
+    color: #d946ef;
+    border: solid #4c1d95;
+    margin: 1 0;
+}
+
+Button:hover {
+    background: #a855f7 20%;
+}
+
+Button:focus {
+    border: solid #d946ef;
+}
+
+RichLog {
+    height: 1fr;
+    border: solid #4c1d95;
+    background: #1a0f2d;
+    color: #f6eefe;
+}
+
+.accent {
+    color: #d946ef;
+}
+
+.muted {
+    color: #c7afd9;
+}
+
+.subtle {
+    color: #8f6daa;
+}
+
+.success {
+    color: #6ee7b7;
+}
+
+.danger {
+    color: #fb7185;
+}
+
+.warning {
+    color: #fbbf24;
+}
+
+.hidden {
+    display: none;
+}
