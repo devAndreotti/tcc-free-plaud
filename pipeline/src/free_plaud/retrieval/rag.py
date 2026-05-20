@@ -35,6 +35,7 @@ ADMIN_PREFIX_MARKERS = {
     'infraestrutura',
 }
 DANGLING_TAIL_TOKENS = {'a', 'as', 'o', 'os', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'na', 'nas', 'no', 'nos', 'para', 'por', 'que'}
+LOW_INFORMATION_LEADING_TOKENS = {'a', 'as', 'de', 'da', 'das', 'do', 'dos', 'e', 'em', 'na', 'nas', 'no', 'nos', 'para', 'por'}
 
 
 def _collapse_whitespace(text: str) -> str:
@@ -262,12 +263,32 @@ def _claim_query_terms(query_terms: list[str]) -> list[str]:
     return informative_terms or query_terms
 
 
+def _looks_like_monetary_or_decimal_fragment(text: str, comma_index: int) -> bool:
+    if comma_index <= 0 or comma_index >= len(text) - 1:
+        return False
+    before = text[comma_index - 1]
+    after = text[comma_index + 1]
+    if before.isdigit() and after.isdigit():
+        return True
+    return bool(re.search(r'\b\d{1,3}(?:\.\d{3})*,\d{2}\b', text))
+
+
 def _trim_dangling_tail(candidate: str) -> str:
     cleaned = candidate.strip()
+    uppercase_tail_match = re.search(
+        r'^(.*?)(?:\s+\b(?:a|as|o|os|da|das|de|do|dos|e|em|na|nas|no|nos|para|por|que)\s+[A-ZÀ-Ö][^:,.!?]{0,120}[.!?]?)$',
+        cleaned,
+    )
+    if uppercase_tail_match:
+        cleaned = uppercase_tail_match.group(1).rstrip()
     if cleaned.endswith(('.', '!', '?')):
         return cleaned
     comma_index = cleaned.rfind(',')
-    if comma_index >= 0 and (len(cleaned) - comma_index) <= 48:
+    if (
+        comma_index >= 0
+        and (len(cleaned) - comma_index) <= 48
+        and not _looks_like_monetary_or_decimal_fragment(cleaned, comma_index)
+    ):
         truncated = cleaned[:comma_index].strip()
         if truncated:
             cleaned = truncated
@@ -280,13 +301,22 @@ def _trim_dangling_tail(candidate: str) -> str:
 def _is_administrative_prefix(candidate: str) -> bool:
     collapsed = _collapse_whitespace(candidate)
     lowered = collapsed.lower()
+    normalized = _normalize_token(collapsed)
     if any(_normalized_contains(lowered, marker) for marker in ADMIN_PREFIX_MARKERS):
         return True
+    if len(collapsed.split()) == 1 and normalized not in {_normalize_token(marker) for marker in ADMIN_PREFIX_MARKERS}:
+        return False
     if _is_heading_like(collapsed):
         return True
-    if len(collapsed) <= 60 and collapsed == collapsed.upper():
+    if len(collapsed) <= 60 and collapsed == collapsed.upper() and len(collapsed.split()) >= 2:
         return True
     return False
+
+
+def _leading_fragment_penalty(candidate: str) -> int:
+    lowered = candidate.strip().lower()
+    first_word = lowered.split(maxsplit=1)[0] if lowered else ''
+    return 1 if _normalize_token(first_word) in LOW_INFORMATION_LEADING_TOKENS else 0
 
 
 def _claim_variant_score(question: str, query_terms: list[str], candidate: str) -> tuple[int, ...] | None:
@@ -298,6 +328,7 @@ def _claim_variant_score(question: str, query_terms: list[str], candidate: str) 
     embedding_bonus, embedding_position = _embedding_answer_bonus(query_terms, candidate)
     enumeration_bonus = _enumeration_bonus(question, candidate)
     entity_bonus = _entity_signal_bonus(candidate)
+    leading_fragment_penalty = _leading_fragment_penalty(candidate)
     is_complete = 1 if candidate[-1] in '.!?' else 0
     starts_clean = 1 if candidate[0].isupper() or candidate[0].isdigit() else 0
     noisy_penalty = 1 if _is_noisy_claim(candidate) else 0
@@ -306,6 +337,9 @@ def _claim_variant_score(question: str, query_terms: list[str], candidate: str) 
     return (
         phrase_longest,
         phrase_hits,
+        len(matched_terms),
+        int(round(term_coverage * 100)),
+        -leading_fragment_penalty,
         phrase_position,
         embedding_bonus,
         embedding_position,
@@ -313,14 +347,17 @@ def _claim_variant_score(question: str, query_terms: list[str], candidate: str) 
         enumeration_bonus,
         entity_bonus,
         term_density,
-        len(matched_terms),
-        int(round(term_coverage * 100)),
         is_complete,
         starts_clean,
         preferred_length,
         -noisy_penalty,
         -len(candidate),
     )
+
+
+def _sentence_count(text: str) -> int:
+    parts = [_clean_claim_candidate(part) for part in SENTENCE_SPLIT_PATTERN.split(text)]
+    return len([part for part in parts if part])
 
 
 def _trim_claim_span(question: str, query_terms: list[str], claim_text: str) -> str:
@@ -382,7 +419,34 @@ def _trim_claim_span(question: str, query_terms: list[str], claim_text: str) -> 
     if not scored:
         return claim_text
 
+    non_question_scored = [item for item in scored if not _is_question_like(item[1])]
+    if non_question_scored:
+        scored = non_question_scored
+
     scored.sort(key=lambda item: item[0], reverse=True)
+    if not _question_needs_multiple_claims(question):
+        best_score = scored[0][0]
+        best_phrase_longest = best_score[0]
+        best_matches = best_score[2]
+        best_coverage = best_score[3]
+        minimum_matches = best_matches if best_matches <= 3 else max(best_matches - 1, 1)
+        best_matches = best_score[2]
+        concise_candidates = [
+            item
+            for item in scored
+            if _sentence_count(item[1]) == 1
+            and item[1][-1] in '.!?'
+            and item[0][0] >= max(best_phrase_longest - 1, 1)
+            and item[0][2] >= minimum_matches
+            and item[0][3] >= max(best_coverage - 20, 0)
+        ]
+        clean_started_candidates = [
+            item for item in concise_candidates if item[1][0].isupper() or item[1][0].isdigit()
+        ]
+        if clean_started_candidates:
+            concise_candidates = clean_started_candidates
+        if concise_candidates:
+            return _trim_dangling_tail(concise_candidates[0][1])
     return _trim_dangling_tail(scored[0][1])
 
 
@@ -425,6 +489,7 @@ def _rank_claim_candidates(chunk_text: str, question: str, query_terms: list[str
             embedding_bonus, embedding_position = _embedding_answer_bonus(query_terms, variant_text)
             enumeration_bonus = _enumeration_bonus(question, variant_text)
             entity_bonus = _entity_signal_bonus(variant_text)
+            leading_fragment_penalty = _leading_fragment_penalty(variant_text)
             is_complete = 1 if variant_text[-1] in '.!?' else 0
             preferred_length = 1 if 40 <= len(variant_text) <= 260 else 0
             starts_clean = 1 if variant_text[0].isupper() or variant_text[0].isdigit() else 0
@@ -434,15 +499,16 @@ def _rank_claim_candidates(chunk_text: str, question: str, query_terms: list[str
             score_key = (
                 phrase_longest,
                 phrase_hits,
+                variant_matches,
+                int(round(variant_coverage * 100)),
+                -leading_fragment_penalty,
                 phrase_position,
                 embedding_bonus,
                 embedding_position,
                 signal_position,
-                term_density,
-                variant_matches,
-                int(round(variant_coverage * 100)),
                 enumeration_bonus,
                 entity_bonus,
+                term_density,
                 line_count,
                 preferred_length,
                 starts_clean,
@@ -513,8 +579,35 @@ def _build_claims(
 
     for hit_index, hit in enumerate(hits[: max(max_claims, 1) * 2]):
         ranked_candidates = _rank_claim_candidates(hit.chunk.chunk_text, question, query_terms)
-        for candidate_index, (score_key, claim_text) in enumerate(ranked_candidates[:3]):
-            candidate_rows.append(((*score_key, -hit_index, -candidate_index), hit, claim_text))
+        if not ranked_candidates:
+            continue
+        initial_candidate = next(
+            ((score_key, claim_text) for score_key, claim_text in ranked_candidates if not _is_question_like(claim_text)),
+            ranked_candidates[0],
+        )
+        top_score, top_text = initial_candidate
+        selected_score = top_score
+        selected_text = top_text
+        for score_key, claim_text in ranked_candidates[1:5]:
+            if _is_question_like(claim_text):
+                continue
+            starts_clean = 1 if claim_text[0].isupper() or claim_text[0].isdigit() else 0
+            selected_starts_clean = 1 if selected_text[0].isupper() or selected_text[0].isdigit() else 0
+            if score_key[2] < max(selected_score[2] - 1, 1):
+                continue
+            if score_key[3] < max(selected_score[3] - 33, 0):
+                continue
+            preserves_phrase_alignment = score_key[0] >= selected_score[0] and score_key[1] >= max(selected_score[1] - 1, 0)
+            is_more_direct = (
+                preserves_phrase_alignment
+                and score_key[5] > selected_score[5]
+                and len(claim_text) + 20 < len(selected_text)
+            )
+            if starts_clean > selected_starts_clean or (starts_clean == selected_starts_clean and is_more_direct):
+                selected_score = score_key
+                selected_text = claim_text
+
+        candidate_rows.append(((*selected_score, -hit_index, 0), hit, selected_text))
 
     for _, hit, claim_text in sorted(candidate_rows, key=lambda item: item[0], reverse=True):
         trimmed_claim = _trim_claim_span(question, query_terms, claim_text)
@@ -726,7 +819,7 @@ def answer_with_citations(
     claims = _build_claims(note, question, hits, query_terms, max_claims=effective_max_claims)
     citations = _flatten_citations(claims)
     grounded_text = ' '.join(claim.text for claim in claims)
-    _, grounded_coverage = match_terms_in_text(query_terms, grounded_text)
+    grounded_matches, grounded_coverage = match_terms_in_text(query_terms, grounded_text)
 
     if not claims or any(not claim.citations for claim in claims):
         return _build_no_answer(
@@ -738,6 +831,14 @@ def answer_with_citations(
         )
 
     if strategy in {'vector', 'hybrid'} and grounded_coverage < min_vector_term_coverage:
+        if len(grounded_matches) <= 1:
+            return _build_no_answer(
+                question=question,
+                reason='insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity',
+                limitations=['Os claims gerados nao trouxeram especificidade textual suficiente para responder com seguranca.'],
+                used_sources=used_sources,
+                latency_ms=int((perf_counter() - started_at) * 1000),
+            )
         return _build_no_answer(
             question=question,
             reason='insufficient_grounded_claims',
