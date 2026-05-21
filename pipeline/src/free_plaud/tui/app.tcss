@@ -197,7 +197,8 @@ Input:focus {
     margin-right: 0;
     background: #1d102d;
     color: #bda8cf;
-    border: solid #38234d;
+    border: none;
+    outline: none;
     content-align: center middle;
     text-align: center;
     pointer: pointer;
@@ -206,26 +207,30 @@ Input:focus {
 .strategy-button:hover {
     background: #25163a;
     color: #c4b5fd;
-    border: solid #38234d;
+    border: none;
+    outline: none;
 }
 
 .strategy-button:focus {
     background: #25163a;
-    border: solid #38234d;
+    border: none;
+    outline: none;
     color: #c4b5fd;
 }
 
 .strategy-active {
     background: #3a1a5c;
     color: #c4b5fd;
-    border: solid #38234d;
+    border: none;
+    outline: none;
     text-style: bold;
 }
 
 .strategy-button.-active {
     background: #3a1a5c;
     color: #c4b5fd;
-    border: solid #38234d;
+    border: none;
+    outline: none;
     tint: transparent;
 }
 
@@ -237,7 +242,8 @@ Input:focus {
     margin-top: 0;
     background: #a21caf 45%;
     color: #f9a8d4;
-    border: solid #7e22ce;
+    border: none;
+    outline: none;
     text-style: bold;
     content-align: center middle;
     text-align: center;
@@ -247,18 +253,21 @@ Input:focus {
 .primary-action:hover {
     background: #a21caf 62%;
     color: #f9a8d4;
-    border: solid #7e22ce;
+    border: none;
+    outline: none;
 }
 
 .primary-action:focus {
     background: #a21caf 62%;
-    border: solid #7e22ce;
+    border: none;
+    outline: none;
     color: #f9a8d4;
 }
 
 .primary-action.-active {
     background: #a21caf 62%;
-    border: solid #7e22ce;
+    border: none;
+    outline: none;
     color: #f9a8d4;
     tint: transparent;
 }
@@ -267,7 +276,8 @@ Input:focus {
 .primary-action:disabled {
     background: #21142f;
     color: #8f7aa3;
-    border: solid #332043;
+    border: none;
+    outline: none;
     pointer: not-allowed;
 }
 

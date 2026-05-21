@@ -321,9 +321,9 @@ def test_tui_buttons_do_not_use_default_active_flash() -> None:
         color = control.styles.color
         assert (color.r, color.g, color.b) != pure_white
 
-    def assert_border_rgb(control, rgb: tuple[int, int, int]) -> None:
-        color = control.styles.border.top[1]
-        assert (color.r, color.g, color.b) == rgb
+    def assert_no_chrome(control) -> None:
+        assert all(edge[0] == '' for edge in control.styles.border)
+        assert all(edge[0] == '' for edge in control.styles.outline)
 
     async def run_app() -> None:
         app = FreePlaudApp()
@@ -345,7 +345,6 @@ def test_tui_buttons_do_not_use_default_active_flash() -> None:
                 await pilot.pause(0.05)
                 assert_not_pure_white(control)
                 assert not control.has_class('-active')
-                expected_border = (126, 34, 206) if selector == '#ask-submit' else (56, 35, 77)
-                assert_border_rgb(control, expected_border)
+                assert_no_chrome(control)
 
     asyncio.run(run_app())
