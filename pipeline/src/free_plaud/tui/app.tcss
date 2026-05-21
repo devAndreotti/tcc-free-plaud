@@ -16,6 +16,7 @@ Footer {
 }
 
 #content {
+    layout: horizontal;
     height: 1fr;
 }
 
@@ -120,7 +121,8 @@ Button.nav-planned {
 }
 
 #ask-form-card {
-    height: 16;
+    height: auto;
+    min-height: 16;
     background: #160b22;
     border: solid #332043;
     padding: 1 2;
@@ -162,14 +164,17 @@ Input:focus {
 }
 
 #strategy-row {
+    layout: grid;
+    grid-size: 4 1;
+    grid-gutter: 1 0;
     height: 3;
     margin-top: 0;
 }
 
 Button.strategy-button {
-    width: 11;
-    min-width: 11;
-    max-width: 11;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     height: 3;
     margin-right: 0;
     background: #21142f;
@@ -196,9 +201,9 @@ Button.strategy-active {
 }
 
 Button.primary-action {
-    width: 13;
-    min-width: 13;
-    max-width: 13;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     height: 3;
     margin-top: 0;
     background: #e84fe6 26%;
@@ -231,4 +236,60 @@ RichLog {
 
 .hidden {
     display: none;
+}
+
+Screen.compact #nav-panel {
+    width: 18;
+}
+
+Screen.compact #nav-subtitle {
+    display: none;
+}
+
+Screen.compact #nav-meta {
+    display: none;
+}
+
+Screen.compact #main-panel {
+    padding: 1;
+}
+
+Screen.compact #ask-hero {
+    height: 1;
+    margin-bottom: 0;
+}
+
+Screen.compact .hero-subtitle {
+    display: none;
+}
+
+Screen.compact #ask-form-card {
+    min-height: 14;
+    margin-bottom: 0;
+    padding: 1;
+}
+
+Screen.compact Input {
+    height: 1;
+    border: none;
+    padding: 0 1;
+}
+
+Screen.compact Input:focus {
+    border: none;
+    background: #2b1a3d;
+}
+
+Screen.compact #ask-form-card .card-title {
+    display: none;
+}
+
+Screen.compact #strategy-label {
+    display: none;
+}
+
+Screen.compact #strategy-row {
+    grid-size: 2 2;
+    grid-gutter: 0;
+    height: 6;
 }

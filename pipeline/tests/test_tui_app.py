@@ -8,7 +8,7 @@ from textual.widgets import Button, Input
 from free_plaud.app.config import Settings
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.models import AskResponse, Citation, UsedSource
-from free_plaud.tui.app import ASK_STRATEGIES, AskPane, FreePlaudApp, ask_file
+from free_plaud.tui.app import ASK_STRATEGIES, COMPACT_WIDTH, AskPane, FreePlaudApp, ask_file
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -268,5 +268,47 @@ def test_tui_layout_mounts_at_supported_sizes() -> None:
                 assert app.query_one('#ask-result-card')
                 for selector in ('#strategy-lexical', '#strategy-vector', '#strategy-hybrid', '#ask-submit'):
                     assert_inside(form_card, app.query_one(selector))
+
+    asyncio.run(run_app())
+
+
+def test_tui_layout_reflows_when_terminal_resizes() -> None:
+    def assert_visible(app: FreePlaudApp, selector: str) -> None:
+        region = app.query_one(selector).region
+        assert region.x >= 0
+        assert region.y >= 0
+        assert region.x + region.width <= app.size.width
+        assert region.y + region.height <= app.size.height
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.pause()
+            assert not app.screen.has_class('compact')
+            assert app.size.width >= COMPACT_WIDTH
+            assert app.query_one('#strategy-row').region.height == 3
+            assert app.query_one('#strategy-lexical').region.y == app.query_one('#strategy-hybrid').region.y
+
+            await pilot.resize_terminal(80, 24)
+            await pilot.pause(0.3)
+            assert app.screen.has_class('compact')
+            assert app.size.width < COMPACT_WIDTH
+            assert app.query_one('#strategy-row').region.height == 6
+            assert app.query_one('#strategy-hybrid').region.y > app.query_one('#strategy-lexical').region.y
+            for selector in (
+                '#nav-panel',
+                '#ask-form-card',
+                '#strategy-lexical',
+                '#strategy-vector',
+                '#strategy-hybrid',
+                '#ask-submit',
+                '#ask-result-card',
+            ):
+                assert_visible(app, selector)
+
+            await pilot.resize_terminal(120, 36)
+            await pilot.pause(0.3)
+            assert not app.screen.has_class('compact')
+            assert app.query_one('#strategy-row').region.height == 3
 
     asyncio.run(run_app())

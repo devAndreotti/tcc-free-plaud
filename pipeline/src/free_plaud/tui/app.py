@@ -4,9 +4,10 @@ from typing import Literal
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Vertical
+from textual.geometry import Size
 from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Static
 
 from free_plaud.app.config import Settings, get_settings
@@ -19,6 +20,7 @@ from free_plaud.storage.vector import LocalVectorStore
 
 AskStrategy = Literal['lexical', 'vector', 'hybrid']
 ASK_STRATEGIES: tuple[AskStrategy, ...] = ('lexical', 'vector', 'hybrid')
+COMPACT_WIDTH = 92
 
 
 def ask_file(
@@ -108,8 +110,8 @@ class AskPane(Vertical):
             yield Input(placeholder=r'D:\caminho\arquivo.md', id='ask-file-path')
             yield Label('Pergunta')
             yield Input(placeholder='O que este documento diz?', id='ask-question')
-            yield Label('Estrategia')
-            with Horizontal(id='strategy-row'):
+            yield Label('Estrategia', id='strategy-label')
+            with Container(id='strategy-row'):
                 yield Button('Lexical', id='strategy-lexical', classes='strategy-button')
                 yield Button('Vector', id='strategy-vector', classes='strategy-button')
                 yield Button('Hybrid', id='strategy-hybrid', classes='strategy-button strategy-active')
@@ -242,9 +244,18 @@ class FreePlaudApp(App[None]):
     SUB_TITLE = 'RAG local'
     BINDINGS = [('q', 'quit', 'Sair')]
 
+    def on_mount(self) -> None:
+        self._sync_responsive_classes(self.size)
+
+    def on_resize(self, event: events.Resize) -> None:
+        self._sync_responsive_classes(event.size)
+
+    def _sync_responsive_classes(self, size: Size) -> None:
+        self.screen.set_class(size.width < COMPACT_WIDTH, 'compact')
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        with Horizontal(id='content'):
+        with Container(id='content'):
             yield NavPanel(id='nav-panel')
             with Container(id='main-panel'):
                 yield AskPane(id='ask-pane', classes='screen-pane')
