@@ -58,33 +58,36 @@ Button.nav-button {
     background: #12091c;
     color: #bda8cf;
     border: none;
+    outline-left: none;
     content-align: center middle;
 }
 
 Button.nav-button:hover {
     background: #1b1029;
-    color: #f8f0ff;
+    color: #ead7f8;
     border: none;
 }
 
 Button.nav-button:focus {
     background: #1b1029;
-    color: #f8f0ff;
+    color: #ead7f8;
     border: none;
     text-style: bold;
 }
 
 Button.nav-active {
     background: #2b1645;
-    color: #f8f0ff;
+    color: #ead7f8;
     border: none;
+    outline-left: solid #e84fe6;
     text-style: bold;
 }
 
 Button.nav-button.-active {
     background: #2b1645;
-    color: #f8f0ff;
+    color: #ead7f8;
     border: none;
+    outline-left: solid #e84fe6;
     tint: transparent;
 }
 
@@ -200,27 +203,27 @@ Button.strategy-button {
 
 Button.strategy-button:hover {
     background: #25163a;
-    color: #f8f0ff;
-    border: solid #5b2f73;
+    color: #c4b5fd;
+    border: solid #38234d;
 }
 
 Button.strategy-button:focus {
     background: #25163a;
-    border: solid #c026d3;
-    color: #f8f0ff;
+    border: solid #38234d;
+    color: #c4b5fd;
 }
 
 Button.strategy-active {
     background: #3a1a5c;
-    color: #f8f0ff;
-    border: solid #c026d3;
+    color: #c4b5fd;
+    border: solid #38234d;
     text-style: bold;
 }
 
 Button.strategy-button.-active {
     background: #3a1a5c;
-    color: #f8f0ff;
-    border: solid #c026d3;
+    color: #c4b5fd;
+    border: solid #38234d;
     tint: transparent;
 }
 
@@ -231,27 +234,28 @@ Button.primary-action {
     height: 3;
     margin-top: 0;
     background: #a21caf 45%;
-    color: #f8f0ff;
-    border: solid #c026d3;
+    color: #f9a8d4;
+    border: solid #7e22ce;
     text-style: bold;
     content-align: center middle;
 }
 
 Button.primary-action:hover {
     background: #a21caf 62%;
-    border: solid #d946ef;
+    color: #f9a8d4;
+    border: solid #7e22ce;
 }
 
 Button.primary-action:focus {
     background: #a21caf 62%;
-    border: solid #d946ef;
-    color: #f8f0ff;
+    border: solid #7e22ce;
+    color: #f9a8d4;
 }
 
 Button.primary-action.-active {
     background: #a21caf 62%;
-    border: solid #d946ef;
-    color: #f8f0ff;
+    border: solid #7e22ce;
+    color: #f9a8d4;
     tint: transparent;
 }
 

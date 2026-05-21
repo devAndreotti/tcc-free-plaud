@@ -315,19 +315,36 @@ def test_tui_layout_reflows_when_terminal_resizes() -> None:
 
 
 def test_tui_buttons_do_not_use_default_active_flash() -> None:
+    pure_white = (248, 240, 255)
+
+    def assert_not_pure_white(button: Button) -> None:
+        color = button.styles.color
+        assert (color.r, color.g, color.b) != pure_white
+
+    def assert_border_rgb(button: Button, rgb: tuple[int, int, int]) -> None:
+        color = button.styles.border.top[1]
+        assert (color.r, color.g, color.b) == rgb
+
     async def run_app() -> None:
         app = FreePlaudApp()
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             assert {button.active_effect_duration for button in app.query(Button)} == {0}
+            assert app.query_one('#nav-ask', Button).styles.outline.left is not None
 
             await pilot.click('#nav-notes')
             await pilot.pause(0.05)
             assert not app.query_one('#nav-notes', Button).has_class('-active')
+            assert app.query_one('#nav-notes', Button).styles.outline.left is not None
 
             await pilot.click('#nav-ask')
-            await pilot.click('#strategy-vector')
-            await pilot.pause(0.05)
-            assert not app.query_one('#strategy-vector', Button).has_class('-active')
+            for selector in ('#strategy-lexical', '#strategy-vector', '#strategy-hybrid', '#ask-submit'):
+                button = app.query_one(selector, Button)
+                button.focus()
+                await pilot.pause(0.05)
+                assert_not_pure_white(button)
+                assert not button.has_class('-active')
+                expected_border = (126, 34, 206) if selector == '#ask-submit' else (56, 35, 77)
+                assert_border_rgb(button, expected_border)
 
     asyncio.run(run_app())
