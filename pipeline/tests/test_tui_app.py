@@ -8,7 +8,7 @@ from textual.widgets import Button, Input
 from free_plaud.app.config import Settings
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.models import AskResponse, Citation, UsedSource
-from free_plaud.tui.app import ASK_STRATEGIES, COMPACT_WIDTH, AskPane, FreePlaudApp, ask_file
+from free_plaud.tui.app import ASK_STRATEGIES, COMPACT_WIDTH, ActionCell, AskPane, FreePlaudApp, ask_file
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -183,12 +183,12 @@ def test_tui_strategy_defaults_to_hybrid_and_updates_active_button() -> None:
         async with app.run_test(size=(100, 30)) as pilot:
             ask_pane = app.query_one(AskPane)
             assert ask_pane.selected_strategy == 'hybrid'
-            assert app.query_one('#strategy-hybrid', Button).has_class('strategy-active')
+            assert app.query_one('#strategy-hybrid', ActionCell).has_class('strategy-active')
 
             await pilot.click('#strategy-vector')
             assert ask_pane.selected_strategy == 'vector'
-            assert app.query_one('#strategy-vector', Button).has_class('strategy-active')
-            assert not app.query_one('#strategy-hybrid', Button).has_class('strategy-active')
+            assert app.query_one('#strategy-vector', ActionCell).has_class('strategy-active')
+            assert not app.query_one('#strategy-hybrid', ActionCell).has_class('strategy-active')
 
     asyncio.run(run_app())
 
@@ -218,7 +218,7 @@ def test_tui_ask_button_ignores_double_click_while_running(monkeypatch, tmp_path
             await pilot.click('#ask-submit')
             release.set()
             await pilot.pause(0.5)
-            assert not app.query_one('#ask-submit', Button).disabled
+            assert not app.query_one('#ask-submit', ActionCell).disabled
 
     asyncio.run(run_app())
 
@@ -241,9 +241,9 @@ def test_tui_ask_button_restores_state_after_worker_error(monkeypatch, tmp_path:
             app.query_one('#ask-question', Input).value = 'O que o benchmark mede?'
             await pilot.click('#ask-submit')
             await pilot.pause(0.5)
-            submit = app.query_one('#ask-submit', Button)
+            submit = app.query_one('#ask-submit', ActionCell)
             assert not submit.disabled
-            assert str(submit.label) == 'Perguntar'
+            assert str(submit.content) == 'Perguntar'
 
     asyncio.run(run_app())
 
@@ -317,12 +317,12 @@ def test_tui_layout_reflows_when_terminal_resizes() -> None:
 def test_tui_buttons_do_not_use_default_active_flash() -> None:
     pure_white = (248, 240, 255)
 
-    def assert_not_pure_white(button: Button) -> None:
-        color = button.styles.color
+    def assert_not_pure_white(control) -> None:
+        color = control.styles.color
         assert (color.r, color.g, color.b) != pure_white
 
-    def assert_border_rgb(button: Button, rgb: tuple[int, int, int]) -> None:
-        color = button.styles.border.top[1]
+    def assert_border_rgb(control, rgb: tuple[int, int, int]) -> None:
+        color = control.styles.border.top[1]
         assert (color.r, color.g, color.b) == rgb
 
     async def run_app() -> None:
@@ -330,6 +330,7 @@ def test_tui_buttons_do_not_use_default_active_flash() -> None:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             assert {button.active_effect_duration for button in app.query(Button)} == {0}
+            assert all(not control.has_class('-active') for control in app.query(ActionCell))
             assert app.query_one('#nav-ask', Button).styles.outline.left is not None
 
             await pilot.click('#nav-notes')
@@ -339,12 +340,12 @@ def test_tui_buttons_do_not_use_default_active_flash() -> None:
 
             await pilot.click('#nav-ask')
             for selector in ('#strategy-lexical', '#strategy-vector', '#strategy-hybrid', '#ask-submit'):
-                button = app.query_one(selector, Button)
-                button.focus()
+                control = app.query_one(selector, ActionCell)
+                control.focus()
                 await pilot.pause(0.05)
-                assert_not_pure_white(button)
-                assert not button.has_class('-active')
+                assert_not_pure_white(control)
+                assert not control.has_class('-active')
                 expected_border = (126, 34, 206) if selector == '#ask-submit' else (56, 35, 77)
-                assert_border_rgb(button, expected_border)
+                assert_border_rgb(control, expected_border)
 
     asyncio.run(run_app())

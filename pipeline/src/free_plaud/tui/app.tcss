@@ -189,7 +189,7 @@ Input:focus {
     margin-top: 0;
 }
 
-Button.strategy-button {
+.strategy-button {
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -199,35 +199,37 @@ Button.strategy-button {
     color: #bda8cf;
     border: solid #38234d;
     content-align: center middle;
+    text-align: center;
+    pointer: pointer;
 }
 
-Button.strategy-button:hover {
+.strategy-button:hover {
     background: #25163a;
     color: #c4b5fd;
     border: solid #38234d;
 }
 
-Button.strategy-button:focus {
+.strategy-button:focus {
     background: #25163a;
     border: solid #38234d;
     color: #c4b5fd;
 }
 
-Button.strategy-active {
+.strategy-active {
     background: #3a1a5c;
     color: #c4b5fd;
     border: solid #38234d;
     text-style: bold;
 }
 
-Button.strategy-button.-active {
+.strategy-button.-active {
     background: #3a1a5c;
     color: #c4b5fd;
     border: solid #38234d;
     tint: transparent;
 }
 
-Button.primary-action {
+.primary-action {
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -238,25 +240,35 @@ Button.primary-action {
     border: solid #7e22ce;
     text-style: bold;
     content-align: center middle;
+    text-align: center;
+    pointer: pointer;
 }
 
-Button.primary-action:hover {
+.primary-action:hover {
     background: #a21caf 62%;
     color: #f9a8d4;
     border: solid #7e22ce;
 }
 
-Button.primary-action:focus {
+.primary-action:focus {
     background: #a21caf 62%;
     border: solid #7e22ce;
     color: #f9a8d4;
 }
 
-Button.primary-action.-active {
+.primary-action.-active {
     background: #a21caf 62%;
     border: solid #7e22ce;
     color: #f9a8d4;
     tint: transparent;
+}
+
+.strategy-button:disabled,
+.primary-action:disabled {
+    background: #21142f;
+    color: #8f7aa3;
+    border: solid #332043;
+    pointer: not-allowed;
 }
 
 Button:disabled {

@@ -6,8 +6,10 @@ from rich.table import Table
 from rich.text import Text
 from textual import events, work
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, Vertical
 from textual.geometry import Size
+from textual.message import Message
 from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Static
 
 from free_plaud.app.config import Settings, get_settings
@@ -74,6 +76,26 @@ def _short_path(path: str | None, max_length: int = 56) -> str:
     return '...' + path[-(max_length - 3) :]
 
 
+class ActionCell(Static, can_focus=True):
+    class Pressed(Message):
+        def __init__(self, cell: 'ActionCell') -> None:
+            super().__init__()
+            self.cell = cell
+
+    BINDINGS = [
+        Binding('enter', 'press', 'Ativar', show=False),
+        Binding('space', 'press', 'Ativar', show=False),
+    ]
+
+    def on_click(self, event: events.Click) -> None:
+        event.stop()
+        self.action_press()
+
+    def action_press(self) -> None:
+        if not self.disabled:
+            self.post_message(self.Pressed(self))
+
+
 class NavPanel(Vertical):
     def compose(self) -> ComposeResult:
         settings = get_settings()
@@ -112,10 +134,10 @@ class AskPane(Vertical):
             yield Input(placeholder='O que este documento diz?', id='ask-question')
             yield Label('Estrategia', id='strategy-label')
             with Container(id='strategy-row'):
-                yield Button('Lexical', id='strategy-lexical', classes='strategy-button')
-                yield Button('Vector', id='strategy-vector', classes='strategy-button')
-                yield Button('Hybrid', id='strategy-hybrid', classes='strategy-button strategy-active')
-                yield Button('Perguntar', id='ask-submit', classes='primary-action')
+                yield ActionCell('Lexical', id='strategy-lexical', classes='strategy-button')
+                yield ActionCell('Vector', id='strategy-vector', classes='strategy-button')
+                yield ActionCell('Hybrid', id='strategy-hybrid', classes='strategy-button strategy-active')
+                yield ActionCell('Perguntar', id='ask-submit', classes='primary-action')
 
         with Container(id='ask-result-card'):
             yield Static('Resposta', classes='card-title')
@@ -124,15 +146,15 @@ class AskPane(Vertical):
     def on_mount(self) -> None:
         self._render_empty_state()
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        button_id = event.button.id or ''
-        if button_id.startswith('strategy-'):
+    def on_action_cell_pressed(self, event: ActionCell.Pressed) -> None:
+        control_id = event.cell.id or ''
+        if control_id.startswith('strategy-'):
             event.stop()
             if not self._ask_running:
-                self._select_strategy(button_id.removeprefix('strategy-'))
+                self._select_strategy(control_id.removeprefix('strategy-'))
             return
 
-        if button_id != 'ask-submit':
+        if control_id != 'ask-submit':
             return
 
         event.stop()
@@ -153,16 +175,16 @@ class AskPane(Vertical):
             return
         self.selected_strategy = strategy  # type: ignore[assignment]
         for candidate in ASK_STRATEGIES:
-            button = self.query_one(f'#strategy-{candidate}', Button)
-            button.set_class(candidate == strategy, 'strategy-active')
+            control = self.query_one(f'#strategy-{candidate}', ActionCell)
+            control.set_class(candidate == strategy, 'strategy-active')
 
     def _set_running(self, running: bool) -> None:
         self._ask_running = running
-        submit = self.query_one('#ask-submit', Button)
+        submit = self.query_one('#ask-submit', ActionCell)
         submit.disabled = running
-        submit.label = 'Executando...' if running else 'Perguntar'
+        submit.update('Executando...' if running else 'Perguntar')
         for strategy in ASK_STRATEGIES:
-            self.query_one(f'#strategy-{strategy}', Button).disabled = running
+            self.query_one(f'#strategy-{strategy}', ActionCell).disabled = running
 
     @work(thread=True)
     def _run_ask(self, file_path: Path, question: str, strategy: AskStrategy) -> None:
