@@ -1,6 +1,12 @@
 Screen {
     background: #0b0712;
     color: #f8f0ff;
+    scrollbar-background: #12091c;
+    scrollbar-background-hover: #160b22;
+    scrollbar-background-active: #160b22;
+    scrollbar-color: #3b2452;
+    scrollbar-color-hover: #5b2f73;
+    scrollbar-color-active: #c026d3;
 }
 
 Header {
@@ -21,7 +27,7 @@ Footer {
 }
 
 #nav-panel {
-    width: 26;
+    width: 27;
     height: 1fr;
     background: #12091c;
     border-right: solid #332043;
@@ -41,36 +47,45 @@ Footer {
 
 #nav-actions {
     height: 1fr;
-    margin-top: 1;
+    margin-top: 2;
 }
 
 Button.nav-button {
     width: 100%;
-    height: 2;
+    height: 3;
     margin: 0 0 1 0;
     padding: 0 1;
     background: #12091c;
     color: #bda8cf;
     border: none;
-    content-align: left middle;
+    content-align: center middle;
 }
 
 Button.nav-button:hover {
-    background: #21142f;
+    background: #1b1029;
     color: #f8f0ff;
+    border: none;
 }
 
 Button.nav-button:focus {
-    background: #21142f;
+    background: #1b1029;
     color: #f8f0ff;
-    border-left: solid #e84fe6;
+    border: none;
+    text-style: bold;
 }
 
 Button.nav-active {
-    background: #7c3aed 28%;
+    background: #2b1645;
     color: #f8f0ff;
-    border-left: solid #e84fe6;
+    border: none;
     text-style: bold;
+}
+
+Button.nav-button.-active {
+    background: #2b1645;
+    color: #f8f0ff;
+    border: none;
+    tint: transparent;
 }
 
 Button.nav-planned {
@@ -177,27 +192,36 @@ Button.strategy-button {
     max-width: 100%;
     height: 3;
     margin-right: 0;
-    background: #21142f;
+    background: #1d102d;
     color: #bda8cf;
-    border: solid #332043;
+    border: solid #38234d;
     content-align: center middle;
 }
 
 Button.strategy-button:hover {
-    background: #2b1a3d;
+    background: #25163a;
     color: #f8f0ff;
+    border: solid #5b2f73;
 }
 
 Button.strategy-button:focus {
-    border: solid #e84fe6;
+    background: #25163a;
+    border: solid #c026d3;
     color: #f8f0ff;
 }
 
 Button.strategy-active {
-    background: #7c3aed 35%;
+    background: #3a1a5c;
     color: #f8f0ff;
-    border: solid #e84fe6;
+    border: solid #c026d3;
     text-style: bold;
+}
+
+Button.strategy-button.-active {
+    background: #3a1a5c;
+    color: #f8f0ff;
+    border: solid #c026d3;
+    tint: transparent;
 }
 
 Button.primary-action {
@@ -206,19 +230,29 @@ Button.primary-action {
     max-width: 100%;
     height: 3;
     margin-top: 0;
-    background: #e84fe6 26%;
+    background: #a21caf 45%;
     color: #f8f0ff;
-    border: solid #e84fe6;
+    border: solid #c026d3;
     text-style: bold;
     content-align: center middle;
 }
 
 Button.primary-action:hover {
-    background: #e84fe6 42%;
+    background: #a21caf 62%;
+    border: solid #d946ef;
 }
 
 Button.primary-action:focus {
-    border: tall #f8f0ff;
+    background: #a21caf 62%;
+    border: solid #d946ef;
+    color: #f8f0ff;
+}
+
+Button.primary-action.-active {
+    background: #a21caf 62%;
+    border: solid #d946ef;
+    color: #f8f0ff;
+    tint: transparent;
 }
 
 Button:disabled {
@@ -232,6 +266,16 @@ RichLog {
     background: #160b22;
     color: #f8f0ff;
     border: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-background: #160b22;
+    scrollbar-background-hover: #160b22;
+    scrollbar-background-active: #160b22;
+    scrollbar-color: #3b2452;
+    scrollbar-color-hover: #5b2f73;
+    scrollbar-color-active: #c026d3;
+    scrollbar-size-horizontal: 0;
+    scrollbar-size-vertical: 1;
 }
 
 .hidden {
@@ -239,7 +283,7 @@ RichLog {
 }
 
 Screen.compact #nav-panel {
-    width: 18;
+    width: 19;
 }
 
 Screen.compact #nav-subtitle {

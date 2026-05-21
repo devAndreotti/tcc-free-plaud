@@ -312,3 +312,22 @@ def test_tui_layout_reflows_when_terminal_resizes() -> None:
             assert app.query_one('#strategy-row').region.height == 3
 
     asyncio.run(run_app())
+
+
+def test_tui_buttons_do_not_use_default_active_flash() -> None:
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert {button.active_effect_duration for button in app.query(Button)} == {0}
+
+            await pilot.click('#nav-notes')
+            await pilot.pause(0.05)
+            assert not app.query_one('#nav-notes', Button).has_class('-active')
+
+            await pilot.click('#nav-ask')
+            await pilot.click('#strategy-vector')
+            await pilot.pause(0.05)
+            assert not app.query_one('#strategy-vector', Button).has_class('-active')
+
+    asyncio.run(run_app())

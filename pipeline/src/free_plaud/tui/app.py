@@ -246,12 +246,17 @@ class FreePlaudApp(App[None]):
 
     def on_mount(self) -> None:
         self._sync_responsive_classes(self.size)
+        self._disable_button_flash()
 
     def on_resize(self, event: events.Resize) -> None:
         self._sync_responsive_classes(event.size)
 
     def _sync_responsive_classes(self, size: Size) -> None:
         self.screen.set_class(size.width < COMPACT_WIDTH, 'compact')
+
+    def _disable_button_flash(self) -> None:
+        for button in self.query(Button):
+            button.active_effect_duration = 0
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
