@@ -12,6 +12,7 @@ dependencies = [
   "rich>=14.0.0",
   "chromadb>=1.5.7",
   "sentence-transformers>=5.4.1",
+  "textual>=8.2.7",
 ]
 
 [dependency-groups]
@@ -22,6 +23,7 @@ dev = [
 
 [project.scripts]
 free-plaud = "free_plaud.cli:app"
+free-plaud-tui = "free_plaud.tui.app:main"
 
 [build-system]
 requires = ["hatchling>=1.27.0"]

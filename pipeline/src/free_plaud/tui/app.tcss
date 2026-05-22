@@ -1,0 +1,365 @@
+Screen {
+    background: #0b0712;
+    color: #f8f0ff;
+    scrollbar-background: #12091c;
+    scrollbar-background-hover: #160b22;
+    scrollbar-background-active: #160b22;
+    scrollbar-color: #3b2452;
+    scrollbar-color-hover: #5b2f73;
+    scrollbar-color-active: #c026d3;
+}
+
+Header {
+    background: #160b22;
+    color: #f8f0ff;
+    text-style: bold;
+}
+
+Footer {
+    background: #0b0712;
+    color: #bda8cf;
+    border-top: solid #332043;
+}
+
+#content {
+    layout: horizontal;
+    height: 1fr;
+}
+
+#nav-panel {
+    width: 27;
+    height: 1fr;
+    background: #12091c;
+    border-right: solid #332043;
+    padding: 1 1;
+}
+
+#nav-brand {
+    color: #f8f0ff;
+    text-style: bold;
+    padding: 0 1;
+}
+
+#nav-subtitle {
+    color: #bda8cf;
+    padding: 0 1 1 1;
+}
+
+#nav-actions {
+    height: 1fr;
+    margin-top: 2;
+}
+
+Button.nav-button {
+    width: 100%;
+    height: 3;
+    margin: 0 0 1 0;
+    padding: 0 1;
+    background: #12091c;
+    color: #bda8cf;
+    border: none;
+    outline-left: none;
+    content-align: center middle;
+}
+
+Button.nav-button:hover {
+    background: #1b1029;
+    color: #ead7f8;
+    border: none;
+}
+
+Button.nav-button:focus {
+    background: #1b1029;
+    color: #ead7f8;
+    border: none;
+    text-style: bold;
+}
+
+Button.nav-active {
+    background: #2b1645;
+    color: #ead7f8;
+    border: none;
+    outline-left: solid #e84fe6;
+    text-style: bold;
+}
+
+Button.nav-button.-active {
+    background: #2b1645;
+    color: #ead7f8;
+    border: none;
+    outline-left: solid #e84fe6;
+    tint: transparent;
+}
+
+Button.nav-planned {
+    color: #8f7aa3;
+}
+
+#nav-meta {
+    height: auto;
+    border: solid #332043;
+    background: #0b0712;
+    padding: 1;
+}
+
+.nav-meta-label {
+    color: #8f7aa3;
+}
+
+.nav-meta-value {
+    color: #f8f0ff;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#main-panel {
+    width: 1fr;
+    height: 1fr;
+    background: #0b0712;
+    padding: 1 2;
+}
+
+.screen-pane {
+    height: 1fr;
+}
+
+#ask-hero {
+    height: 2;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+.hero-title {
+    color: #f8f0ff;
+    text-style: bold;
+}
+
+.hero-subtitle {
+    color: #bda8cf;
+}
+
+#ask-form-card {
+    height: auto;
+    min-height: 16;
+    background: #160b22;
+    border: solid #332043;
+    padding: 1 2;
+    margin-bottom: 1;
+}
+
+#ask-result-card {
+    height: 1fr;
+    background: #160b22;
+    border: solid #332043;
+    padding: 1 2;
+}
+
+.placeholder-card {
+    background: #160b22;
+    border: solid #332043;
+    padding: 2;
+}
+
+.card-title {
+    color: #e84fe6;
+    text-style: bold;
+    margin-bottom: 0;
+}
+
+Label {
+    color: #bda8cf;
+    margin-top: 0;
+}
+
+Input {
+    border: solid #332043;
+    background: #21142f;
+    color: #f8f0ff;
+}
+
+Input:focus {
+    border: solid #e84fe6;
+}
+
+#strategy-row {
+    layout: grid;
+    grid-size: 4 1;
+    grid-gutter: 1 0;
+    height: 3;
+    margin-top: 0;
+}
+
+.strategy-button {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 3;
+    margin-right: 0;
+    background: #1d102d;
+    color: #bda8cf;
+    border: none;
+    outline: none;
+    content-align: center middle;
+    text-align: center;
+    pointer: pointer;
+}
+
+.strategy-button:hover {
+    background: #25163a;
+    color: #c4b5fd;
+    border: none;
+    outline: none;
+}
+
+.strategy-button:focus {
+    background: #25163a;
+    border: none;
+    outline: none;
+    color: #c4b5fd;
+}
+
+.strategy-active {
+    background: #3a1a5c;
+    color: #c4b5fd;
+    border: none;
+    outline: none;
+    text-style: bold;
+}
+
+.strategy-button.-active {
+    background: #3a1a5c;
+    color: #c4b5fd;
+    border: none;
+    outline: none;
+    tint: transparent;
+}
+
+.primary-action {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 3;
+    margin-top: 0;
+    background: #a21caf 45%;
+    color: #f9a8d4;
+    border: none;
+    outline: none;
+    text-style: bold;
+    content-align: center middle;
+    text-align: center;
+    pointer: pointer;
+}
+
+.primary-action:hover {
+    background: #a21caf 62%;
+    color: #f9a8d4;
+    border: none;
+    outline: none;
+}
+
+.primary-action:focus {
+    background: #a21caf 62%;
+    border: none;
+    outline: none;
+    color: #f9a8d4;
+}
+
+.primary-action.-active {
+    background: #a21caf 62%;
+    border: none;
+    outline: none;
+    color: #f9a8d4;
+    tint: transparent;
+}
+
+.strategy-button:disabled,
+.primary-action:disabled {
+    background: #21142f;
+    color: #8f7aa3;
+    border: none;
+    outline: none;
+    pointer: not-allowed;
+}
+
+Button:disabled {
+    background: #21142f;
+    color: #8f7aa3;
+    border: solid #332043;
+}
+
+RichLog {
+    height: 1fr;
+    background: #160b22;
+    color: #f8f0ff;
+    border: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-background: #160b22;
+    scrollbar-background-hover: #160b22;
+    scrollbar-background-active: #160b22;
+    scrollbar-color: #3b2452;
+    scrollbar-color-hover: #5b2f73;
+    scrollbar-color-active: #c026d3;
+    scrollbar-size-horizontal: 0;
+    scrollbar-size-vertical: 1;
+}
+
+.hidden {
+    display: none;
+}
+
+Screen.compact #nav-panel {
+    width: 19;
+}
+
+Screen.compact #nav-subtitle {
+    display: none;
+}
+
+Screen.compact #nav-meta {
+    display: none;
+}
+
+Screen.compact #main-panel {
+    padding: 1;
+}
+
+Screen.compact #ask-hero {
+    height: 1;
+    margin-bottom: 0;
+}
+
+Screen.compact .hero-subtitle {
+    display: none;
+}
+
+Screen.compact #ask-form-card {
+    min-height: 14;
+    margin-bottom: 0;
+    padding: 1;
+}
+
+Screen.compact Input {
+    height: 1;
+    border: none;
+    padding: 0 1;
+}
+
+Screen.compact Input:focus {
+    border: none;
+    background: #2b1a3d;
+}
+
+Screen.compact #ask-form-card .card-title {
+    display: none;
+}
+
+Screen.compact #strategy-label {
+    display: none;
+}
+
+Screen.compact #strategy-row {
+    grid-size: 2 2;
+    grid-gutter: 0;
+    height: 6;
+}

@@ -9,6 +9,7 @@ No estado atual, o backend já cobre:
 - ingestão local de `.txt`, `.md` e `.pdf`
 - estruturação inicial de notas em Markdown
 - CLI modular para inspeção, notas, retrieval, benchmark e storage
+- TUI textual inicial para demonstração local do fluxo `ask`
 - testes automatizados para config, CLI, ingestão, chunking e nota estruturada
 
 ## Estrutura
@@ -20,5 +21,6 @@ O código vive em `src/free_plaud/` e os testes em `tests/`, seguindo o padrão 
 ```bash
 uv sync
 uv run free-plaud --help
+uv run free-plaud-tui
 uv run pytest
 ```
