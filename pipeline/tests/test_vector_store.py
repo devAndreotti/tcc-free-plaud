@@ -79,6 +79,26 @@ def test_local_vector_store_upserts_and_queries_chunks_with_metadata(tmp_path: P
     assert hits[0].score > 0
 
 
+def test_delete_by_note_id_uses_filtered_lookup_without_global_scan(monkeypatch, tmp_path: Path) -> None:
+    embedder = FakeEmbedder()
+    store = LocalVectorStore(tmp_path / 'vector_store', collection_name='delete_by_note')
+    first = _build_note(tmp_path, note_id='first-note')
+    second = _build_note(tmp_path, note_id='second-note', title='Segunda nota')
+    first_chunks = index_note_in_vector_store(first, store, embedder, chunk_size=90, overlap=20)
+    index_note_in_vector_store(second, store, embedder, chunk_size=90, overlap=20)
+
+    def fail_global_scan():
+        raise AssertionError('delete_by_note_id nao deve listar a collection inteira')
+
+    monkeypatch.setattr(store, 'list_records', fail_global_scan)
+
+    deleted = store.delete_by_note_id(first.note_id)
+
+    assert deleted == len(first_chunks)
+    assert store.query(embedder.embed(['benchmark recall'])[0], top_k=5, note_id=first.note_id) == []
+    assert store.query(embedder.embed(['benchmark recall'])[0], top_k=5, note_id=second.note_id)
+
+
 def test_semantic_search_returns_ranked_hits_for_related_query(tmp_path: Path) -> None:
     embedder = FakeEmbedder()
     store = LocalVectorStore(tmp_path / 'vector_store', collection_name='semantic_search')
