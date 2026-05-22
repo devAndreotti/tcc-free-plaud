@@ -148,10 +148,12 @@ Este arquivo existe para reduzir leitura excessiva e evitar que a IA consulte a 
 
 ## Estado atual
 
-Hoje o backend foi implementado ate a Sprint 07, e o projeto esta em fase de calibracao experimental do retrieval antes da integracao com UI.
+Hoje o backend tem ingestao, chunking, SQLite, Chroma, retrieval lexical/vector/hybrid,
+benchmark experimental e um fluxo inicial de corpus multi-documento via CLI.
 
 Para esse ponto especifico, ver:
 
 - `plano_execucao/PLANO_BACKEND_PESSOAL.md`
+- `plano_execucao/HANDOFF_CORPUS_INDEX_E_ASK_MULTI_DOCUMENTO.md`
 - `experimentos/`
 - `../Sprints/STATUS.md`

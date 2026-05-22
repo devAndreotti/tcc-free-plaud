@@ -4,7 +4,13 @@
 
 Criado em 2026-05-22.
 
-Este plano ainda nao foi implementado. Ele existe para guiar uma nova slice tecnica depois do fechamento ou decisao sobre a branch `feat/tui-textual`.
+Atualizado em 2026-05-22.
+
+Slices 1 a 4 foram implementadas na branch `feat/corpus-index-and-ask`: servico de indexacao de corpus,
+CLI `corpus index`, indexacao recursiva de pasta e CLI `corpus ask` multi-documento.
+
+Ainda restam como proximas etapas: benchmark/experimento dedicado de corpus, integracao TUI e documentacao
+operacional final depois do merge.
 
 ## Leitura obrigatoria antes de executar
 

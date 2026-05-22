@@ -179,6 +179,10 @@ chunk, processamento e execução de benchmark.
 Na implementação atual da Sprint 06.1, o armazenamento vetorial local passa a usar `ChromaDB`
 como baseline persistente em disco, desacoplado da interface e encapsulado em `storage/vector.py`.
 
+Na evolução de corpus multi-documento, o SQLite também expõe leitura de `chunks` e `notes`
+persistidos para que o fluxo `corpus ask` consiga recuperar evidências do acervo inteiro sem
+depender de um único arquivo carregado em memória.
+
 ## Banco vetorial
 
 ### Escolha atual
@@ -340,6 +344,12 @@ explícita quando a evidência recuperada fica fraca ou mal ancorada. Isso permi
 - registrar abstention explícita quando a fusão híbrida não sustenta grounding mínimo
 - manter rastreabilidade `note -> chunk -> citation` sem depender ainda de embeddings reais
 - preparar o caminho para benchmark comparativo entre estratégias de recuperação
+
+Na evolução de corpus multi-documento, o backend adiciona `free-plaud corpus ask` como fluxo
+separado de `retrieval ask <arquivo>`. O comando consulta todos os chunks persistidos no SQLite
+e no Chroma, permite `lexical`, `vector` e `hybrid`, e retorna o mesmo contrato `AskResponse`
+com `citations` e `used_sources` atravessando mais de uma nota quando a pergunta exige
+stitching distribuído. O `retrieval ask` continua single-file por compatibilidade experimental.
 
 Na evolução atual, `hybrid` combina:
 
