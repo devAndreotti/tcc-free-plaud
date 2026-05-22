@@ -244,6 +244,31 @@ def list_chunk_ids(connection: sqlite3.Connection) -> set[str]:
     return {str(row['chunk_id']) for row in rows}
 
 
+def list_chunk_ids_for_note(connection: sqlite3.Connection, note_id: str) -> list[str]:
+    rows = connection.execute(
+        'SELECT chunk_id FROM chunks WHERE note_id = ? ORDER BY chunk_index',
+        (note_id,),
+    ).fetchall()
+    return [str(row['chunk_id']) for row in rows]
+
+
+def get_note_content_hash(connection: sqlite3.Connection, note_id: str) -> str | None:
+    row = connection.execute('SELECT content_hash FROM notes WHERE note_id = ?', (note_id,)).fetchone()
+    if row is None:
+        return None
+    return str(row['content_hash'])
+
+
+def note_chunks_match_config(connection: sqlite3.Connection, note_id: str, *, chunk_size: int, overlap: int) -> bool:
+    rows = connection.execute(
+        'SELECT chunk_size, overlap FROM chunks WHERE note_id = ?',
+        (note_id,),
+    ).fetchall()
+    if not rows:
+        return False
+    return all(int(row['chunk_size']) == chunk_size and int(row['overlap']) == overlap for row in rows)
+
+
 def delete_corpus_notes_and_chunks(connection: sqlite3.Connection) -> tuple[int, int]:
     """Remove apenas corpus persistido, preservando benchmark e logs."""
     notes_total = count_notes(connection)

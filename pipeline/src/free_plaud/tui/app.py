@@ -540,6 +540,7 @@ class NotesPane(Vertical):
                 f'status={result.status}\n'
                 f'encontrados={result.total_found}\n'
                 f'indexados={result.indexed_count}\n'
+                f'inalterados={result.unchanged_count}\n'
                 f'falhas={result.failed_count}\n'
                 f'ignorados={result.skipped_count}',
                 title='Indexacao',

@@ -65,6 +65,13 @@ class LocalVectorStore:
     def list_chunk_ids(self) -> set[str]:
         return {chunk_id for chunk_id, _ in self.list_records()}
 
+    def has_chunk_ids(self, chunk_ids: list[str]) -> bool:
+        if not chunk_ids:
+            return False
+        result = self._collection().get(ids=chunk_ids)
+        found_ids = {str(chunk_id) for chunk_id in result.get('ids', [])}
+        return set(chunk_ids).issubset(found_ids)
+
     def delete_by_note_id(self, note_id: str) -> int:
         chunk_ids = [chunk_id for chunk_id, metadata in self.list_records() if metadata.get('note_id') == note_id]
         if not chunk_ids:

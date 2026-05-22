@@ -28,6 +28,15 @@ class BrokenEmbedder(FakeEmbedder):
         return super().embed(texts[:-1])
 
 
+class CountingEmbedder(FakeEmbedder):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls += 1
+        return super().embed(texts)
+
+
 def _settings(tmp_path: Path) -> Settings:
     return Settings(
         workspace_dir=tmp_path,
@@ -81,19 +90,51 @@ def test_index_corpus_file_is_idempotent_for_same_file(tmp_path: Path) -> None:
         encoding='utf-8',
     )
 
+    second_embedder = CountingEmbedder()
+
     first = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
-    second = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
+    second = index_corpus_file(source, settings=settings, embedder=second_embedder)
 
     connection = connect_sqlite(settings.sqlite_path)
     note_count = connection.execute('SELECT COUNT(*) AS total FROM notes WHERE note_id = ?', ('reindexavel',)).fetchone()
     chunk_count = connection.execute('SELECT COUNT(*) AS total FROM chunks WHERE note_id = ?', ('reindexavel',)).fetchone()
 
     assert first.status == 'success'
-    assert second.status == 'success'
+    assert second.status == 'unchanged'
     assert second.chunks_indexed == first.chunks_indexed
     assert second.vector_entries_count == first.vector_entries_count
+    assert second_embedder.calls == 0
     assert note_count['total'] == 1
     assert chunk_count['total'] == first.chunks_indexed
+
+
+def test_index_corpus_file_reindexes_same_hash_when_vectors_are_missing(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'reparavel.md'
+    source.write_text('# Reparavel\n\nTexto que deve ser reindexado se vetor sumir.\n', encoding='utf-8')
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+
+    first = index_corpus_file(
+        source,
+        settings=settings,
+        connection=connection,
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+    )
+    vector_store.reset()
+    second_embedder = CountingEmbedder()
+    second = index_corpus_file(
+        source,
+        settings=settings,
+        connection=connection,
+        vector_store=vector_store,
+        embedder=second_embedder,
+    )
+
+    assert first.status == 'success'
+    assert second.status == 'success'
+    assert second_embedder.calls == 1
 
 
 def test_index_corpus_file_removes_old_vectors_when_chunk_ids_change(tmp_path: Path) -> None:

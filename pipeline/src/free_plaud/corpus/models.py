@@ -24,7 +24,7 @@ class CorpusIndexResult(BaseModel):
     """Resultado estavel de indexacao de um arquivo no corpus local."""
 
     source_path: str
-    status: Literal['success', 'failed', 'cancelled']
+    status: Literal['success', 'failed', 'cancelled', 'unchanged']
     note_id: str | None = None
     chunks_indexed: int = 0
     embedding_model: str | None = None
@@ -44,6 +44,7 @@ class CorpusIndexBatchResult(BaseModel):
     indexed_count: int
     failed_count: int
     skipped_count: int
+    unchanged_count: int = 0
     results: list[CorpusIndexResult] = Field(default_factory=list)
     skipped: list[CorpusSkippedPath] = Field(default_factory=list)
 

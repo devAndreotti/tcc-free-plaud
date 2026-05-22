@@ -23,8 +23,11 @@ from free_plaud.storage.sqlite import (
     count_chunks,
     count_notes,
     delete_corpus_notes_and_chunks,
+    get_note_content_hash,
     init_sqlite,
     list_chunk_ids,
+    list_chunk_ids_for_note,
+    note_chunks_match_config,
     replace_chunks_for_note,
     upsert_note,
 )
@@ -78,6 +81,7 @@ def _cancelled_batch_result(
     failed_count: int,
     skipped_count: int,
     results: list[CorpusIndexResult],
+    unchanged_count: int = 0,
 ) -> CorpusIndexBatchResult:
     return CorpusIndexBatchResult(
         source_path=str(source_path),
@@ -87,7 +91,28 @@ def _cancelled_batch_result(
         indexed_count=indexed_count,
         failed_count=failed_count,
         skipped_count=skipped_count,
+        unchanged_count=unchanged_count,
         results=results,
+    )
+
+
+def _unchanged_result(
+    note,
+    *,
+    source_path: Path,
+    chunk_ids: list[str],
+    vector_store: LocalVectorStore,
+    embedding_model: str,
+) -> CorpusIndexResult:  # noqa: ANN001
+    return CorpusIndexResult(
+        source_path=str(source_path),
+        status='unchanged',
+        note_id=note.note_id,
+        chunks_indexed=len(chunk_ids),
+        embedding_model=embedding_model,
+        vector_collection_name=vector_store.collection_name,
+        vector_entries_count=vector_store.count(),
+        message='Document unchanged.',
     )
 
 
@@ -356,6 +381,27 @@ def index_corpus_file(
             raise ValueError('EMPTY_CONTENT')
 
         note = structure_document(document)
+        existing_hash = get_note_content_hash(resolved_connection, note.note_id)
+        existing_chunk_ids = list_chunk_ids_for_note(resolved_connection, note.note_id)
+        chunks_match_config = note_chunks_match_config(
+            resolved_connection,
+            note.note_id,
+            chunk_size=resolved_chunk_size,
+            overlap=resolved_overlap,
+        )
+        if (
+            existing_hash == note.content_hash
+            and chunks_match_config
+            and resolved_vector_store.has_chunk_ids(existing_chunk_ids)
+        ):
+            return _unchanged_result(
+                note,
+                source_path=document.source_path,
+                chunk_ids=existing_chunk_ids,
+                vector_store=resolved_vector_store,
+                embedding_model=resolved_embedder.model_name,
+            )
+
         chunks = index_note(note, chunk_size=resolved_chunk_size, overlap=resolved_overlap)
         embeddings = resolved_embedder.embed([chunk.chunk_text for chunk in chunks])
         if len(embeddings) != len(chunks):
@@ -389,10 +435,10 @@ def index_corpus_file(
             resolved_connection.close()
 
 
-def _batch_status(indexed_count: int, failed_count: int) -> str:
-    if indexed_count > 0 and failed_count == 0:
+def _batch_status(indexed_count: int, failed_count: int, unchanged_count: int = 0) -> str:
+    if (indexed_count > 0 or unchanged_count > 0) and failed_count == 0:
         return 'success'
-    if indexed_count > 0:
+    if indexed_count > 0 or unchanged_count > 0:
         return 'partial'
     return 'failed'
 
@@ -471,6 +517,7 @@ def index_corpus_path(
             )
             indexed_count = 1 if result.status == 'success' else 0
             failed_count = 1 if result.status == 'failed' else 0
+            unchanged_count = 1 if result.status == 'unchanged' else 0
             _emit_progress(
                 progress,
                 phase='writing',
@@ -479,6 +526,7 @@ def index_corpus_path(
                 total_found=1,
                 processed_count=1,
                 indexed_count=indexed_count,
+                unchanged_count=unchanged_count,
                 failed_count=failed_count,
                 message=f'Finalizado {source_path.name}',
             )
@@ -489,17 +537,19 @@ def index_corpus_path(
                 total_found=1,
                 processed_count=1,
                 indexed_count=indexed_count,
+                unchanged_count=unchanged_count,
                 failed_count=failed_count,
                 message='Indexacao concluida.',
             )
             return CorpusIndexBatchResult(
                 source_path=str(source_path),
                 recursive=recursive,
-                status=_batch_status(indexed_count, failed_count),  # type: ignore[arg-type]
+                status=_batch_status(indexed_count, failed_count, unchanged_count),  # type: ignore[arg-type]
                 total_found=1,
                 indexed_count=indexed_count,
                 failed_count=failed_count,
                 skipped_count=0,
+                unchanged_count=unchanged_count,
                 results=[result],
             )
 
@@ -534,6 +584,7 @@ def index_corpus_path(
 
         results: list[CorpusIndexResult] = []
         indexed_count = 0
+        unchanged_count = 0
         failed_count = 0
         skipped_count = len(discovery.skipped)
         total_found = len(discovery.files)
@@ -565,6 +616,7 @@ def index_corpus_path(
                     recursive=recursive,
                     total_found=total_found,
                     indexed_count=indexed_count,
+                    unchanged_count=unchanged_count,
                     failed_count=failed_count,
                     skipped_count=skipped_count,
                     results=results,
@@ -578,6 +630,7 @@ def index_corpus_path(
                 total_found=total_found,
                 processed_count=processed_count,
                 indexed_count=indexed_count,
+                unchanged_count=unchanged_count,
                 failed_count=failed_count,
                 skipped_count=skipped_count,
                 message=f'Processando {file_path.name}',
@@ -590,6 +643,7 @@ def index_corpus_path(
                 total_found=total_found,
                 processed_count=processed_count,
                 indexed_count=indexed_count,
+                unchanged_count=unchanged_count,
                 failed_count=failed_count,
                 skipped_count=skipped_count,
                 message=f'Estruturando e embedando {file_path.name}',
@@ -608,6 +662,8 @@ def index_corpus_path(
                 indexed_count += 1
             elif result.status == 'failed':
                 failed_count += 1
+            elif result.status == 'unchanged':
+                unchanged_count += 1
             _emit_progress(
                 progress,
                 phase='writing',
@@ -616,6 +672,7 @@ def index_corpus_path(
                 total_found=total_found,
                 processed_count=len(results),
                 indexed_count=indexed_count,
+                unchanged_count=unchanged_count,
                 failed_count=failed_count,
                 skipped_count=skipped_count,
                 message=f'Finalizado {file_path.name}',
@@ -629,6 +686,7 @@ def index_corpus_path(
                     total_found=total_found,
                     processed_count=len(results),
                     indexed_count=indexed_count,
+                    unchanged_count=unchanged_count,
                     failed_count=failed_count,
                     skipped_count=skipped_count,
                     message='Indexacao cancelada.',
@@ -638,6 +696,7 @@ def index_corpus_path(
                     recursive=recursive,
                     total_found=total_found,
                     indexed_count=indexed_count,
+                    unchanged_count=unchanged_count,
                     failed_count=failed_count,
                     skipped_count=skipped_count,
                     results=results,
@@ -657,11 +716,12 @@ def index_corpus_path(
         return CorpusIndexBatchResult(
             source_path=str(source_path),
             recursive=recursive,
-            status=_batch_status(indexed_count, failed_count),  # type: ignore[arg-type]
+            status=_batch_status(indexed_count, failed_count, unchanged_count),  # type: ignore[arg-type]
             total_found=len(discovery.files),
             indexed_count=indexed_count,
             failed_count=failed_count,
             skipped_count=len(discovery.skipped),
+            unchanged_count=unchanged_count,
             results=results,
             skipped=discovery.skipped,
         )
