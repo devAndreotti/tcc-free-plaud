@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from free_plaud.app.config import Settings
-from free_plaud.corpus.service import index_corpus_file
+from free_plaud.corpus.service import index_corpus_file, index_corpus_path
 from free_plaud.storage.sqlite import connect_sqlite
 
 
@@ -149,3 +149,50 @@ def test_index_corpus_file_reports_indexing_failure_without_partial_sqlite_write
 
     assert note_count['total'] == 0
     assert chunk_count['total'] == 0
+
+
+def test_index_corpus_path_indexes_directory_without_stopping_on_file_failure(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    nested = root / 'nested'
+    nested.mkdir(parents=True)
+    (root / 'base.md').write_text(
+        '# Base\n\n'
+        'RabbitMQ foi adotado como message broker padrao.\n',
+        encoding='utf-8',
+    )
+    (nested / 'detalhe.md').write_text(
+        '# Detalhe\n\n'
+        'O time SRE ficou responsavel pelo runbook.\n',
+        encoding='utf-8',
+    )
+    (root / 'vazio.txt').write_text('   \n', encoding='utf-8')
+    (root / 'planilha.xlsx').write_text('fora do escopo', encoding='utf-8')
+
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+
+    assert result.status == 'partial'
+    assert result.total_found == 3
+    assert result.indexed_count == 2
+    assert result.failed_count == 1
+    assert result.skipped_count == 1
+    assert {item.note_id for item in result.results if item.status == 'success'} == {'base', 'detalhe'}
+    failed = [item for item in result.results if item.status == 'failed']
+    assert failed[0].error_code == 'EMPTY_CONTENT'
+
+
+def test_index_corpus_path_non_recursive_skips_nested_files(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    nested = root / 'nested'
+    nested.mkdir(parents=True)
+    (root / 'base.md').write_text('# Base\n\nArquivo raiz.\n', encoding='utf-8')
+    (nested / 'detalhe.md').write_text('# Detalhe\n\nArquivo aninhado.\n', encoding='utf-8')
+
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=False)
+
+    assert result.status == 'success'
+    assert result.total_found == 1
+    assert result.indexed_count == 1
+    assert result.skipped_count == 1
+    assert result.skipped[0].reason == 'directory_requires_recursive'

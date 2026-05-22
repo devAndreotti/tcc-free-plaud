@@ -3,7 +3,8 @@ from pathlib import Path
 
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
-from free_plaud.corpus.models import CorpusIndexResult
+from free_plaud.corpus.discovery import discover_corpus_files
+from free_plaud.corpus.models import CorpusIndexBatchResult, CorpusIndexResult
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import Embedder, get_embedder
@@ -101,6 +102,108 @@ def index_corpus_file(
             message=str(exc),
             vector_store=resolved_vector_store,
             embedding_model=resolved_embedder.model_name,
+        )
+    finally:
+        if owns_connection:
+            resolved_connection.close()
+
+
+def _batch_status(indexed_count: int, failed_count: int) -> str:
+    if indexed_count > 0 and failed_count == 0:
+        return 'success'
+    if indexed_count > 0:
+        return 'partial'
+    return 'failed'
+
+
+def index_corpus_path(
+    path: Path | str,
+    *,
+    settings: Settings | None = None,
+    connection: sqlite3.Connection | None = None,
+    vector_store: LocalVectorStore | None = None,
+    embedder: Embedder | None = None,
+    chunk_size: int | None = None,
+    overlap: int | None = None,
+    recursive: bool = False,
+) -> CorpusIndexBatchResult:
+    """Indexa um arquivo ou diretorio no corpus local."""
+    resolved_settings = settings or get_settings()
+    ensure_runtime_dirs(resolved_settings)
+    source_path = Path(path).expanduser()
+
+    owns_connection = connection is None
+    resolved_connection = connection or init_sqlite(resolved_settings.sqlite_path)
+    resolved_vector_store = vector_store or LocalVectorStore(
+        resolved_settings.vector_store_dir,
+        collection_name=resolved_settings.vector_collection_name,
+    )
+    resolved_embedder = embedder or get_embedder(resolved_settings.embedding_model)
+
+    try:
+        if source_path.is_file():
+            result = index_corpus_file(
+                source_path,
+                settings=resolved_settings,
+                connection=resolved_connection,
+                vector_store=resolved_vector_store,
+                embedder=resolved_embedder,
+                chunk_size=chunk_size,
+                overlap=overlap,
+            )
+            indexed_count = 1 if result.status == 'success' else 0
+            failed_count = 1 if result.status == 'failed' else 0
+            return CorpusIndexBatchResult(
+                source_path=str(source_path),
+                recursive=recursive,
+                status=_batch_status(indexed_count, failed_count),  # type: ignore[arg-type]
+                total_found=1,
+                indexed_count=indexed_count,
+                failed_count=failed_count,
+                skipped_count=0,
+                results=[result],
+            )
+
+        discovery = discover_corpus_files(source_path, recursive=recursive)
+        if not source_path.exists() or not source_path.is_dir():
+            return CorpusIndexBatchResult(
+                source_path=str(source_path),
+                recursive=recursive,
+                status='failed',
+                total_found=0,
+                indexed_count=0,
+                failed_count=0,
+                skipped_count=len(discovery.skipped),
+                results=[],
+                skipped=discovery.skipped,
+            )
+
+        results: list[CorpusIndexResult] = []
+        for file_path in discovery.files:
+            results.append(
+                index_corpus_file(
+                    file_path,
+                    settings=resolved_settings,
+                    connection=resolved_connection,
+                    vector_store=resolved_vector_store,
+                    embedder=resolved_embedder,
+                    chunk_size=chunk_size,
+                    overlap=overlap,
+                )
+            )
+
+        indexed_count = sum(1 for result in results if result.status == 'success')
+        failed_count = sum(1 for result in results if result.status == 'failed')
+        return CorpusIndexBatchResult(
+            source_path=str(source_path),
+            recursive=recursive,
+            status=_batch_status(indexed_count, failed_count),  # type: ignore[arg-type]
+            total_found=len(discovery.files),
+            indexed_count=indexed_count,
+            failed_count=failed_count,
+            skipped_count=len(discovery.skipped),
+            results=results,
+            skipped=discovery.skipped,
         )
     finally:
         if owns_connection:

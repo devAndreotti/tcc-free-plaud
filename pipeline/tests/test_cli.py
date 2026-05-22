@@ -104,3 +104,22 @@ def test_corpus_index_cli_returns_non_zero_for_invalid_file(monkeypatch, tmp_pat
     payload = json.loads(result.stdout)
     assert payload['status'] == 'failed'
     assert payload['error_code'] == 'UNSUPPORTED_MEDIA_TYPE'
+
+
+def test_corpus_index_cli_accepts_recursive_directory(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    nested = root / 'nested'
+    nested.mkdir(parents=True)
+    (root / 'base.md').write_text('# Base\n\nArquivo raiz.\n', encoding='utf-8')
+    (nested / 'detalhe.md').write_text('# Detalhe\n\nArquivo aninhado.\n', encoding='utf-8')
+    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name: FakeEmbedder())
+
+    result = runner.invoke(app, ['corpus', 'index', str(root), '--recursive'])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['status'] == 'success'
+    assert payload['total_found'] == 2
+    assert payload['indexed_count'] == 2
