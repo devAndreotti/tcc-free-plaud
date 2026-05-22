@@ -229,6 +229,21 @@ def list_chunks(connection: sqlite3.Connection) -> list[Chunk]:
     return [_chunk_from_row(row) for row in rows]
 
 
+def count_notes(connection: sqlite3.Connection) -> int:
+    row = connection.execute('SELECT COUNT(*) AS total FROM notes').fetchone()
+    return int(row['total'])
+
+
+def count_chunks(connection: sqlite3.Connection) -> int:
+    row = connection.execute('SELECT COUNT(*) AS total FROM chunks').fetchone()
+    return int(row['total'])
+
+
+def list_chunk_ids(connection: sqlite3.Connection) -> set[str]:
+    rows = connection.execute('SELECT chunk_id FROM chunks').fetchall()
+    return {str(row['chunk_id']) for row in rows}
+
+
 def _note_from_row(row: sqlite3.Row) -> Note:
     return Note(
         note_id=row['note_id'],

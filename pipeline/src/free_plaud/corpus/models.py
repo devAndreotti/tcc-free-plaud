@@ -46,3 +46,20 @@ class CorpusIndexBatchResult(BaseModel):
     skipped_count: int
     results: list[CorpusIndexResult] = Field(default_factory=list)
     skipped: list[CorpusSkippedPath] = Field(default_factory=list)
+
+
+class CorpusStatusResult(BaseModel):
+    """Diagnostico de consistencia entre SQLite e Chroma."""
+
+    sqlite_path: str
+    vector_store_dir: str
+    vector_collection_name: str
+    notes_count: int
+    sqlite_chunks_count: int
+    vector_chunks_count: int
+    stale_vector_chunks_count: int
+    missing_vector_chunks_count: int
+    orphan_vector_note_ids: list[str] = Field(default_factory=list)
+    stale_vector_chunk_ids: list[str] = Field(default_factory=list)
+    missing_vector_chunk_ids: list[str] = Field(default_factory=list)
+    status: Literal['empty', 'clean', 'sqlite_only', 'inconsistent']

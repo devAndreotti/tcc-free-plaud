@@ -50,6 +50,21 @@ class LocalVectorStore:
     def count(self) -> int:
         return self._collection().count()
 
+    def list_records(self) -> list[tuple[str, dict[str, object]]]:
+        """Lista ids e metadados da collection ativa para checagem operacional."""
+        result = self._collection().get(include=['metadatas'])
+        ids = result.get('ids', [])
+        metadatas = result.get('metadatas', [])
+        records: list[tuple[str, dict[str, object]]] = []
+        for chunk_id, metadata in zip(ids, metadatas, strict=False):
+            if metadata is None:
+                continue
+            records.append((str(chunk_id), dict(metadata)))
+        return records
+
+    def list_chunk_ids(self) -> set[str]:
+        return {chunk_id for chunk_id, _ in self.list_records()}
+
     def reset(self) -> None:
         try:
             self._client.delete_collection(self.collection_name)

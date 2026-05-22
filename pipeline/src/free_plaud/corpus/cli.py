@@ -6,12 +6,20 @@ import typer
 from free_plaud.app.cli_paths import compose_path
 from free_plaud.app.config import get_settings
 from free_plaud.corpus.ask import answer_corpus_with_citations
-from free_plaud.corpus.service import index_corpus_file, index_corpus_path
+from free_plaud.corpus.service import get_corpus_status, index_corpus_file, index_corpus_path
 from free_plaud.providers.embed import get_embedder
 from free_plaud.storage.sqlite import init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
 
 app = typer.Typer(help='Comandos para operar o corpus local indexado.', no_args_is_help=True)
+
+
+@app.command('status')
+def status() -> None:
+    """Mostra consistencia entre SQLite e Chroma sem modificar dados."""
+    settings = get_settings()
+    result = get_corpus_status(settings=settings)
+    typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
 
 
 @app.command('index')

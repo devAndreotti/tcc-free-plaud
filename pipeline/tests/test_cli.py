@@ -91,6 +91,20 @@ def test_corpus_index_cli_persists_file(monkeypatch, tmp_path: Path) -> None:
     assert payload['embedding_model'] == 'fake-hash'
 
 
+def test_corpus_status_cli_returns_consistency_json(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+
+    result = runner.invoke(app, ['corpus', 'status'])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['status'] == 'empty'
+    assert payload['notes_count'] == 0
+    assert payload['sqlite_chunks_count'] == 0
+    assert payload['vector_chunks_count'] == 0
+
+
 def test_corpus_index_cli_returns_non_zero_for_invalid_file(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     source = tmp_path / 'planilha.xlsx'
