@@ -244,6 +244,16 @@ def list_chunk_ids(connection: sqlite3.Connection) -> set[str]:
     return {str(row['chunk_id']) for row in rows}
 
 
+def delete_corpus_notes_and_chunks(connection: sqlite3.Connection) -> tuple[int, int]:
+    """Remove apenas corpus persistido, preservando benchmark e logs."""
+    notes_total = count_notes(connection)
+    chunks_total = count_chunks(connection)
+    connection.execute('DELETE FROM chunks')
+    connection.execute('DELETE FROM notes')
+    connection.commit()
+    return notes_total, chunks_total
+
+
 def _note_from_row(row: sqlite3.Row) -> Note:
     return Note(
         note_id=row['note_id'],

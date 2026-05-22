@@ -4,12 +4,20 @@ from pathlib import Path
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.corpus.discovery import discover_corpus_files
-from free_plaud.corpus.models import CorpusIndexBatchResult, CorpusIndexResult, CorpusStatusResult
+from free_plaud.corpus.models import CorpusIndexBatchResult, CorpusIndexResult, CorpusResetResult, CorpusStatusResult
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import Embedder, get_embedder
 from free_plaud.retrieval.indexer import index_note
-from free_plaud.storage.sqlite import count_chunks, count_notes, init_sqlite, list_chunk_ids, replace_chunks_for_note, upsert_note
+from free_plaud.storage.sqlite import (
+    count_chunks,
+    count_notes,
+    delete_corpus_notes_and_chunks,
+    init_sqlite,
+    list_chunk_ids,
+    replace_chunks_for_note,
+    upsert_note,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 
@@ -100,6 +108,54 @@ def get_corpus_status(
             stale_vector_chunk_ids=stale_chunk_ids,
             missing_vector_chunk_ids=missing_chunk_ids,
             status=status,  # type: ignore[arg-type]
+        )
+    finally:
+        if owns_connection:
+            resolved_connection.close()
+
+
+def reset_corpus(
+    *,
+    settings: Settings | None = None,
+    connection: sqlite3.Connection | None = None,
+    vector_store: LocalVectorStore | None = None,
+    dry_run: bool = True,
+) -> CorpusResetResult:
+    """Limpa notas/chunks e collection vetorial ativa, preservando benchmarks."""
+    resolved_settings = settings or get_settings()
+    ensure_runtime_dirs(resolved_settings)
+
+    owns_connection = connection is None
+    resolved_connection = connection or init_sqlite(resolved_settings.sqlite_path)
+    resolved_vector_store = vector_store or LocalVectorStore(
+        resolved_settings.vector_store_dir,
+        collection_name=resolved_settings.vector_collection_name,
+    )
+
+    try:
+        notes_total = count_notes(resolved_connection)
+        chunks_total = count_chunks(resolved_connection)
+        vectors_total = resolved_vector_store.count()
+        if dry_run:
+            return CorpusResetResult(
+                dry_run=True,
+                would_delete_notes=notes_total,
+                would_delete_chunks=chunks_total,
+                would_delete_vectors=vectors_total,
+                status='preview',
+            )
+
+        deleted_notes, deleted_chunks = delete_corpus_notes_and_chunks(resolved_connection)
+        resolved_vector_store.reset()
+        return CorpusResetResult(
+            dry_run=False,
+            would_delete_notes=notes_total,
+            would_delete_chunks=chunks_total,
+            would_delete_vectors=vectors_total,
+            deleted_notes=deleted_notes,
+            deleted_chunks=deleted_chunks,
+            deleted_vectors=vectors_total,
+            status='reset',
         )
     finally:
         if owns_connection:

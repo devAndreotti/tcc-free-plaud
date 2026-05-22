@@ -6,7 +6,7 @@ import typer
 from free_plaud.app.cli_paths import compose_path
 from free_plaud.app.config import get_settings
 from free_plaud.corpus.ask import answer_corpus_with_citations
-from free_plaud.corpus.service import get_corpus_status, index_corpus_file, index_corpus_path
+from free_plaud.corpus.service import get_corpus_status, index_corpus_file, index_corpus_path, reset_corpus
 from free_plaud.providers.embed import get_embedder
 from free_plaud.storage.sqlite import init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
@@ -19,6 +19,17 @@ def status() -> None:
     """Mostra consistencia entre SQLite e Chroma sem modificar dados."""
     settings = get_settings()
     result = get_corpus_status(settings=settings)
+    typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
+
+
+@app.command('reset')
+def reset(
+    dry_run: bool = typer.Option(False, '--dry-run', help='Simula a limpeza sem apagar dados.'),
+    yes: bool = typer.Option(False, '--yes', help='Executa a limpeza do corpus local.'),
+) -> None:
+    """Limpa notas/chunks e vetores do corpus ativo com preview seguro."""
+    settings = get_settings()
+    result = reset_corpus(settings=settings, dry_run=(dry_run or not yes))
     typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
 
 

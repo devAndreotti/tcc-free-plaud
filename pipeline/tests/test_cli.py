@@ -5,6 +5,8 @@ from typer.testing import CliRunner
 
 from free_plaud.app.config import Settings
 from free_plaud.cli import app
+from free_plaud.storage.sqlite import count_chunks, count_notes, init_sqlite
+from free_plaud.storage.vector import LocalVectorStore
 
 runner = CliRunner()
 
@@ -103,6 +105,38 @@ def test_corpus_status_cli_returns_consistency_json(monkeypatch, tmp_path: Path)
     assert payload['notes_count'] == 0
     assert payload['sqlite_chunks_count'] == 0
     assert payload['vector_chunks_count'] == 0
+
+
+def test_corpus_reset_cli_previews_by_default_and_executes_with_yes(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'resetavel.md'
+    source.write_text('# Resetavel\n\nRabbitMQ foi adotado como broker.\n', encoding='utf-8')
+    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name: FakeEmbedder())
+
+    index_result = runner.invoke(app, ['corpus', 'index', str(source)])
+    preview_result = runner.invoke(app, ['corpus', 'reset', '--dry-run'])
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+
+    assert index_result.exit_code == 0
+    assert preview_result.exit_code == 0
+    preview = json.loads(preview_result.stdout)
+    assert preview['status'] == 'preview'
+    assert preview['dry_run'] is True
+    assert count_notes(connection) == 1
+    assert count_chunks(connection) > 0
+    assert vector_store.count() > 0
+
+    reset_result = runner.invoke(app, ['corpus', 'reset', '--yes'])
+    reset = json.loads(reset_result.stdout)
+
+    assert reset_result.exit_code == 0
+    assert reset['status'] == 'reset'
+    assert reset['dry_run'] is False
+    assert count_notes(connection) == 0
+    assert count_chunks(connection) == 0
+    assert vector_store.count() == 0
 
 
 def test_corpus_index_cli_returns_non_zero_for_invalid_file(monkeypatch, tmp_path: Path) -> None:

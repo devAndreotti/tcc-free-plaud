@@ -63,3 +63,16 @@ class CorpusStatusResult(BaseModel):
     stale_vector_chunk_ids: list[str] = Field(default_factory=list)
     missing_vector_chunk_ids: list[str] = Field(default_factory=list)
     status: Literal['empty', 'clean', 'sqlite_only', 'inconsistent']
+
+
+class CorpusResetResult(BaseModel):
+    """Resultado de limpeza segura do corpus local."""
+
+    dry_run: bool
+    would_delete_notes: int
+    would_delete_chunks: int
+    would_delete_vectors: int
+    deleted_notes: int = 0
+    deleted_chunks: int = 0
+    deleted_vectors: int = 0
+    status: Literal['preview', 'reset']
