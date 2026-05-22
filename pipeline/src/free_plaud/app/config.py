@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     retrieval_top_k: int = Field(default=5, ge=1, le=50)
     corpus_embedding_batch_size: int = Field(default=64, ge=1, le=512)
     corpus_upsert_batch_size: int = Field(default=128, ge=1, le=1000)
+    corpus_index_workers: int = Field(default=1, ge=1, le=16)
 
 
 @lru_cache(maxsize=1)

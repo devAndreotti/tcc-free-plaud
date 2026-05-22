@@ -44,4 +44,5 @@ Para pastas grandes, a indexação de corpus usa batches configuráveis:
 ```bash
 FREE_PLAUD_CORPUS_EMBEDDING_BATCH_SIZE=64
 FREE_PLAUD_CORPUS_UPSERT_BATCH_SIZE=128
+FREE_PLAUD_CORPUS_INDEX_WORKERS=1
 ```

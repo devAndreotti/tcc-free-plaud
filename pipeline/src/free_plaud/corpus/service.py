@@ -1,4 +1,5 @@
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -172,6 +173,13 @@ class _PendingCorpusIndex:
     chunks: list[Chunk]
 
 
+@dataclass(frozen=True)
+class _PreparationFailure:
+    source_path: Path
+    error_code: str
+    message: str
+
+
 def _benchmark_settings(base: Settings, workspace_dir: Path) -> Settings:
     data_dir = workspace_dir / 'data'
     return Settings(
@@ -190,6 +198,7 @@ def _benchmark_settings(base: Settings, workspace_dir: Path) -> Settings:
         retrieval_top_k=base.retrieval_top_k,
         corpus_embedding_batch_size=base.corpus_embedding_batch_size,
         corpus_upsert_batch_size=base.corpus_upsert_batch_size,
+        corpus_index_workers=base.corpus_index_workers,
     )
 
 
@@ -524,6 +533,62 @@ def rebuild_corpus(
             resolved_connection.close()
 
 
+def _load_structure_chunk_corpus_file(path: Path, *, chunk_size: int, overlap: int) -> _PendingCorpusIndex | _PreparationFailure:
+    try:
+        document = load_document(path)
+        if not document.raw_text.strip():
+            raise ValueError('EMPTY_CONTENT')
+        note = structure_document(document)
+        return _PendingCorpusIndex(
+            source_path=document.source_path,
+            note=note,
+            chunks=index_note(note, chunk_size=chunk_size, overlap=overlap),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        return _PreparationFailure(
+            source_path=path,
+            error_code=_error_code_for_exception(exc),
+            message=str(exc),
+        )
+
+
+def _resolve_prepared_corpus_file(
+    prepared: _PendingCorpusIndex | _PreparationFailure,
+    *,
+    connection: sqlite3.Connection,
+    vector_store: LocalVectorStore,
+    embedder: Embedder,
+    chunk_size: int,
+    overlap: int,
+) -> _PendingCorpusIndex | CorpusIndexResult:
+    if isinstance(prepared, _PreparationFailure):
+        return _failure_result(
+            prepared.source_path,
+            error_code=prepared.error_code,
+            message=prepared.message,
+            vector_store=vector_store,
+            embedding_model=embedder.model_name,
+        )
+
+    existing_hash = get_note_content_hash(connection, prepared.note.note_id)
+    existing_chunk_ids = list_chunk_ids_for_note(connection, prepared.note.note_id)
+    chunks_match_config = note_chunks_match_config(
+        connection,
+        prepared.note.note_id,
+        chunk_size=chunk_size,
+        overlap=overlap,
+    )
+    if existing_hash == prepared.note.content_hash and chunks_match_config and vector_store.has_chunk_ids(existing_chunk_ids):
+        return _unchanged_result(
+            prepared.note,
+            source_path=prepared.source_path,
+            chunk_ids=existing_chunk_ids,
+            vector_store=vector_store,
+            embedding_model=embedder.model_name,
+        )
+    return prepared
+
+
 def _prepare_corpus_file(
     path: Path,
     *,
@@ -533,42 +598,15 @@ def _prepare_corpus_file(
     chunk_size: int,
     overlap: int,
 ) -> _PendingCorpusIndex | CorpusIndexResult:
-    try:
-        document = load_document(path)
-        if not document.raw_text.strip():
-            raise ValueError('EMPTY_CONTENT')
-
-        note = structure_document(document)
-        existing_hash = get_note_content_hash(connection, note.note_id)
-        existing_chunk_ids = list_chunk_ids_for_note(connection, note.note_id)
-        chunks_match_config = note_chunks_match_config(
-            connection,
-            note.note_id,
-            chunk_size=chunk_size,
-            overlap=overlap,
-        )
-        if existing_hash == note.content_hash and chunks_match_config and vector_store.has_chunk_ids(existing_chunk_ids):
-            return _unchanged_result(
-                note,
-                source_path=document.source_path,
-                chunk_ids=existing_chunk_ids,
-                vector_store=vector_store,
-                embedding_model=embedder.model_name,
-            )
-
-        return _PendingCorpusIndex(
-            source_path=document.source_path,
-            note=note,
-            chunks=index_note(note, chunk_size=chunk_size, overlap=overlap),
-        )
-    except (FileNotFoundError, ValueError) as exc:
-        return _failure_result(
-            path,
-            error_code=_error_code_for_exception(exc),
-            message=str(exc),
-            vector_store=vector_store,
-            embedding_model=embedder.model_name,
-        )
+    prepared = _load_structure_chunk_corpus_file(path, chunk_size=chunk_size, overlap=overlap)
+    return _resolve_prepared_corpus_file(
+        prepared,
+        connection=connection,
+        vector_store=vector_store,
+        embedder=embedder,
+        chunk_size=chunk_size,
+        overlap=overlap,
+    )
 
 
 def index_corpus_file(
@@ -821,120 +859,204 @@ def index_corpus_path(
             skipped_count=skipped_count,
             message=f'{total_found} arquivos suportados encontrados.',
         )
-        for file_path in discovery.files:
-            if _is_cancelled(cancel_token):
-                _emit_progress(
-                    progress,
-                    phase='cancelled',
-                    started_at=started_at,
-                    current_path=file_path,
-                    total_found=total_found,
-                    processed_count=len(prepared_items),
-                    indexed_count=indexed_count,
-                    failed_count=failed_count,
-                    skipped_count=skipped_count,
-                    message='Indexacao cancelada.',
-                )
-                return _cancelled_batch_result(
-                    source_path,
-                    recursive=recursive,
-                    total_found=total_found,
-                    indexed_count=indexed_count,
-                    unchanged_count=unchanged_count,
-                    failed_count=failed_count,
-                    skipped_count=skipped_count,
-                    results=[item for item in prepared_items if isinstance(item, CorpusIndexResult)],
-                )
-            processed_count = len(prepared_items)
+        if resolved_settings.corpus_index_workers > 1 and discovery.files:
             _emit_progress(
                 progress,
                 phase='loading',
                 started_at=started_at,
-                current_path=file_path,
+                current_path=source_path,
                 total_found=total_found,
-                processed_count=processed_count,
-                indexed_count=indexed_count,
-                unchanged_count=unchanged_count,
-                failed_count=failed_count,
                 skipped_count=skipped_count,
-                message=f'Processando {file_path.name}',
+                message=f'Preparando arquivos com {resolved_settings.corpus_index_workers} workers.',
             )
-            if _is_cancelled(cancel_token):
+            prepared_slots: list[_PendingCorpusIndex | CorpusIndexResult | None] = [None] * len(discovery.files)
+            with ThreadPoolExecutor(max_workers=resolved_settings.corpus_index_workers) as executor:
+                futures = {
+                    executor.submit(
+                        _load_structure_chunk_corpus_file,
+                        file_path,
+                        chunk_size=resolved_chunk_size,
+                        overlap=resolved_overlap,
+                    ): (index, file_path)
+                    for index, file_path in enumerate(discovery.files)
+                }
+                for future in as_completed(futures):
+                    index, file_path = futures[future]
+                    prepared = _resolve_prepared_corpus_file(
+                        future.result(),
+                        connection=resolved_connection,
+                        vector_store=resolved_vector_store,
+                        embedder=resolved_embedder,
+                        chunk_size=resolved_chunk_size,
+                        overlap=resolved_overlap,
+                    )
+                    prepared_slots[index] = prepared
+                    if isinstance(prepared, CorpusIndexResult):
+                        if prepared.status == 'failed':
+                            failed_count += 1
+                        elif prepared.status == 'unchanged':
+                            unchanged_count += 1
+                    _emit_progress(
+                        progress,
+                        phase='structuring',
+                        started_at=started_at,
+                        current_path=file_path,
+                        total_found=total_found,
+                        processed_count=sum(item is not None for item in prepared_slots),
+                        indexed_count=indexed_count,
+                        unchanged_count=unchanged_count,
+                        failed_count=failed_count,
+                        skipped_count=skipped_count,
+                        message=f'Preparado {file_path.name}',
+                    )
+                    if _is_cancelled(cancel_token):
+                        for pending_future in futures:
+                            pending_future.cancel()
+                        resolved_results = [item for item in prepared_slots if isinstance(item, CorpusIndexResult)]
+                        _emit_progress(
+                            progress,
+                            phase='cancelled',
+                            started_at=started_at,
+                            current_path=file_path,
+                            total_found=total_found,
+                            processed_count=len(resolved_results),
+                            indexed_count=indexed_count,
+                            unchanged_count=unchanged_count,
+                            failed_count=failed_count,
+                            skipped_count=skipped_count,
+                            message='Indexacao cancelada.',
+                        )
+                        return _cancelled_batch_result(
+                            source_path,
+                            recursive=recursive,
+                            total_found=total_found,
+                            indexed_count=indexed_count,
+                            unchanged_count=unchanged_count,
+                            failed_count=failed_count,
+                            skipped_count=skipped_count,
+                            results=resolved_results,
+                        )
+            for prepared in prepared_slots:
+                if prepared is None:
+                    continue
+                prepared_items.append(prepared)
+                if isinstance(prepared, _PendingCorpusIndex):
+                    pending_items.append(prepared)
+        else:
+            for file_path in discovery.files:
+                if _is_cancelled(cancel_token):
+                    _emit_progress(
+                        progress,
+                        phase='cancelled',
+                        started_at=started_at,
+                        current_path=file_path,
+                        total_found=total_found,
+                        processed_count=len(prepared_items),
+                        indexed_count=indexed_count,
+                        failed_count=failed_count,
+                        skipped_count=skipped_count,
+                        message='Indexacao cancelada.',
+                    )
+                    return _cancelled_batch_result(
+                        source_path,
+                        recursive=recursive,
+                        total_found=total_found,
+                        indexed_count=indexed_count,
+                        unchanged_count=unchanged_count,
+                        failed_count=failed_count,
+                        skipped_count=skipped_count,
+                        results=[item for item in prepared_items if isinstance(item, CorpusIndexResult)],
+                    )
+                processed_count = len(prepared_items)
                 _emit_progress(
                     progress,
-                    phase='cancelled',
+                    phase='loading',
                     started_at=started_at,
                     current_path=file_path,
                     total_found=total_found,
-                    processed_count=len(prepared_items),
+                    processed_count=processed_count,
                     indexed_count=indexed_count,
                     unchanged_count=unchanged_count,
                     failed_count=failed_count,
                     skipped_count=skipped_count,
-                    message='Indexacao cancelada.',
+                    message=f'Processando {file_path.name}',
                 )
-                return _cancelled_batch_result(
-                    source_path,
-                    recursive=recursive,
-                    total_found=total_found,
-                    indexed_count=indexed_count,
-                    unchanged_count=unchanged_count,
-                    failed_count=failed_count,
-                    skipped_count=skipped_count,
-                    results=[item for item in prepared_items if isinstance(item, CorpusIndexResult)],
-                )
-            _emit_progress(
-                progress,
-                phase='structuring',
-                started_at=started_at,
-                current_path=file_path,
-                total_found=total_found,
-                processed_count=processed_count,
-                indexed_count=indexed_count,
-                unchanged_count=unchanged_count,
-                failed_count=failed_count,
-                skipped_count=skipped_count,
-                message=f'Estruturando {file_path.name}',
-            )
-            prepared = _prepare_corpus_file(
-                file_path,
-                connection=resolved_connection,
-                vector_store=resolved_vector_store,
-                embedder=resolved_embedder,
-                chunk_size=resolved_chunk_size,
-                overlap=resolved_overlap,
-            )
-            prepared_items.append(prepared)
-            if isinstance(prepared, _PendingCorpusIndex):
-                pending_items.append(prepared)
-            elif prepared.status == 'failed':
-                failed_count += 1
-            elif prepared.status == 'unchanged':
-                unchanged_count += 1
-            if _is_cancelled(cancel_token):
+                if _is_cancelled(cancel_token):
+                    _emit_progress(
+                        progress,
+                        phase='cancelled',
+                        started_at=started_at,
+                        current_path=file_path,
+                        total_found=total_found,
+                        processed_count=len(prepared_items),
+                        indexed_count=indexed_count,
+                        unchanged_count=unchanged_count,
+                        failed_count=failed_count,
+                        skipped_count=skipped_count,
+                        message='Indexacao cancelada.',
+                    )
+                    return _cancelled_batch_result(
+                        source_path,
+                        recursive=recursive,
+                        total_found=total_found,
+                        indexed_count=indexed_count,
+                        unchanged_count=unchanged_count,
+                        failed_count=failed_count,
+                        skipped_count=skipped_count,
+                        results=[item for item in prepared_items if isinstance(item, CorpusIndexResult)],
+                    )
                 _emit_progress(
                     progress,
-                    phase='cancelled',
+                    phase='structuring',
                     started_at=started_at,
                     current_path=file_path,
                     total_found=total_found,
-                    processed_count=len(prepared_items),
+                    processed_count=processed_count,
                     indexed_count=indexed_count,
                     unchanged_count=unchanged_count,
                     failed_count=failed_count,
                     skipped_count=skipped_count,
-                    message='Indexacao cancelada.',
+                    message=f'Estruturando {file_path.name}',
                 )
-                return _cancelled_batch_result(
-                    source_path,
-                    recursive=recursive,
-                    total_found=total_found,
-                    indexed_count=indexed_count,
-                    unchanged_count=unchanged_count,
-                    failed_count=failed_count,
-                    skipped_count=skipped_count,
-                    results=[item for item in prepared_items if isinstance(item, CorpusIndexResult)],
+                prepared = _prepare_corpus_file(
+                    file_path,
+                    connection=resolved_connection,
+                    vector_store=resolved_vector_store,
+                    embedder=resolved_embedder,
+                    chunk_size=resolved_chunk_size,
+                    overlap=resolved_overlap,
                 )
+                prepared_items.append(prepared)
+                if isinstance(prepared, _PendingCorpusIndex):
+                    pending_items.append(prepared)
+                elif prepared.status == 'failed':
+                    failed_count += 1
+                elif prepared.status == 'unchanged':
+                    unchanged_count += 1
+                if _is_cancelled(cancel_token):
+                    _emit_progress(
+                        progress,
+                        phase='cancelled',
+                        started_at=started_at,
+                        current_path=file_path,
+                        total_found=total_found,
+                        processed_count=len(prepared_items),
+                        indexed_count=indexed_count,
+                        unchanged_count=unchanged_count,
+                        failed_count=failed_count,
+                        skipped_count=skipped_count,
+                        message='Indexacao cancelada.',
+                    )
+                    return _cancelled_batch_result(
+                        source_path,
+                        recursive=recursive,
+                        total_found=total_found,
+                        indexed_count=indexed_count,
+                        unchanged_count=unchanged_count,
+                        failed_count=failed_count,
+                        skipped_count=skipped_count,
+                        results=[item for item in prepared_items if isinstance(item, CorpusIndexResult)],
+                    )
 
         pending_failure_by_note_id: dict[str, CorpusIndexResult] = {}
         success_by_note_id: dict[str, CorpusIndexResult] = {}
