@@ -224,6 +224,36 @@ def test_index_corpus_path_indexes_directory_without_stopping_on_file_failure(tm
     assert failed[0].error_code == 'EMPTY_CONTENT'
 
 
+def test_index_corpus_path_emits_progress_events_for_directory(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    nested = root / 'nested'
+    nested.mkdir(parents=True)
+    (root / 'base.md').write_text('# Base\n\nArquivo raiz.\n', encoding='utf-8')
+    (nested / 'detalhe.md').write_text('# Detalhe\n\nArquivo aninhado.\n', encoding='utf-8')
+    (root / 'image.png').write_text('fora do escopo', encoding='utf-8')
+    events = []
+
+    result = index_corpus_path(
+        root,
+        settings=settings,
+        embedder=FakeEmbedder(),
+        recursive=True,
+        progress=events.append,
+    )
+
+    assert result.status == 'success'
+    assert [event.phase for event in events][0] == 'discovering'
+    assert 'loading' in {event.phase for event in events}
+    assert 'embedding' in {event.phase for event in events}
+    assert events[-1].phase == 'finished'
+    assert events[-1].total_found == 2
+    assert events[-1].processed_count == 2
+    assert events[-1].indexed_count == 2
+    assert events[-1].failed_count == 0
+    assert events[-1].skipped_count == 1
+
+
 def test_index_corpus_path_non_recursive_skips_nested_files(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     root = tmp_path / 'corpus'

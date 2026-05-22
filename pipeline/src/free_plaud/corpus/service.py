@@ -1,11 +1,14 @@
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
+from time import perf_counter
 
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.corpus.discovery import discover_corpus_files
 from free_plaud.corpus.models import (
     CorpusIndexBatchResult,
+    CorpusIndexProgress,
     CorpusIndexResult,
     CorpusRebuildResult,
     CorpusResetResult,
@@ -25,6 +28,40 @@ from free_plaud.storage.sqlite import (
     upsert_note,
 )
 from free_plaud.storage.vector import LocalVectorStore
+
+ProgressCallback = Callable[[CorpusIndexProgress], None]
+
+
+def _emit_progress(
+    progress: ProgressCallback | None,
+    *,
+    phase: str,
+    started_at: float,
+    current_path: Path | str | None = None,
+    total_found: int = 0,
+    processed_count: int = 0,
+    indexed_count: int = 0,
+    unchanged_count: int = 0,
+    failed_count: int = 0,
+    skipped_count: int = 0,
+    message: str | None = None,
+) -> None:
+    if progress is None:
+        return
+    progress(
+        CorpusIndexProgress(
+            phase=phase,  # type: ignore[arg-type]
+            current_path=str(current_path) if current_path else None,
+            total_found=total_found,
+            processed_count=processed_count,
+            indexed_count=indexed_count,
+            unchanged_count=unchanged_count,
+            failed_count=failed_count,
+            skipped_count=skipped_count,
+            elapsed_ms=int((perf_counter() - started_at) * 1000),
+            message=message,
+        )
+    )
 
 
 def _failure_result(
@@ -179,6 +216,7 @@ def rebuild_corpus(
     overlap: int | None = None,
     recursive: bool = False,
     dry_run: bool = True,
+    progress: ProgressCallback | None = None,
 ) -> CorpusRebuildResult:
     """Reconstroi corpus ativo a partir de arquivo ou diretorio controlado."""
     resolved_settings = settings or get_settings()
@@ -236,6 +274,7 @@ def rebuild_corpus(
             chunk_size=chunk_size,
             overlap=overlap,
             recursive=recursive,
+            progress=progress,
         )
         after_status = get_corpus_status(
             settings=resolved_settings,
@@ -339,6 +378,7 @@ def index_corpus_path(
     chunk_size: int | None = None,
     overlap: int | None = None,
     recursive: bool = False,
+    progress: ProgressCallback | None = None,
 ) -> CorpusIndexBatchResult:
     """Indexa um arquivo ou diretorio no corpus local."""
     resolved_settings = settings or get_settings()
@@ -352,9 +392,26 @@ def index_corpus_path(
         collection_name=resolved_settings.vector_collection_name,
     )
     resolved_embedder = embedder or get_embedder(resolved_settings.embedding_model)
+    started_at = perf_counter()
 
     try:
         if source_path.is_file():
+            _emit_progress(
+                progress,
+                phase='loading',
+                started_at=started_at,
+                current_path=source_path,
+                total_found=1,
+                message=f'Carregando {source_path.name}',
+            )
+            _emit_progress(
+                progress,
+                phase='embedding',
+                started_at=started_at,
+                current_path=source_path,
+                total_found=1,
+                message=f'Estruturando e embedando {source_path.name}',
+            )
             result = index_corpus_file(
                 source_path,
                 settings=resolved_settings,
@@ -366,6 +423,27 @@ def index_corpus_path(
             )
             indexed_count = 1 if result.status == 'success' else 0
             failed_count = 1 if result.status == 'failed' else 0
+            _emit_progress(
+                progress,
+                phase='writing',
+                started_at=started_at,
+                current_path=source_path,
+                total_found=1,
+                processed_count=1,
+                indexed_count=indexed_count,
+                failed_count=failed_count,
+                message=f'Finalizado {source_path.name}',
+            )
+            _emit_progress(
+                progress,
+                phase='finished',
+                started_at=started_at,
+                total_found=1,
+                processed_count=1,
+                indexed_count=indexed_count,
+                failed_count=failed_count,
+                message='Indexacao concluida.',
+            )
             return CorpusIndexBatchResult(
                 source_path=str(source_path),
                 recursive=recursive,
@@ -377,8 +455,23 @@ def index_corpus_path(
                 results=[result],
             )
 
+        _emit_progress(
+            progress,
+            phase='discovering',
+            started_at=started_at,
+            current_path=source_path,
+            message='Descobrindo arquivos.',
+        )
         discovery = discover_corpus_files(source_path, recursive=recursive)
         if not source_path.exists() or not source_path.is_dir():
+            _emit_progress(
+                progress,
+                phase='failed',
+                started_at=started_at,
+                current_path=source_path,
+                skipped_count=len(discovery.skipped),
+                message='Pasta nao encontrada.',
+            )
             return CorpusIndexBatchResult(
                 source_path=str(source_path),
                 recursive=recursive,
@@ -392,21 +485,83 @@ def index_corpus_path(
             )
 
         results: list[CorpusIndexResult] = []
+        indexed_count = 0
+        failed_count = 0
+        skipped_count = len(discovery.skipped)
+        total_found = len(discovery.files)
+        _emit_progress(
+            progress,
+            phase='discovering',
+            started_at=started_at,
+            current_path=source_path,
+            total_found=total_found,
+            skipped_count=skipped_count,
+            message=f'{total_found} arquivos suportados encontrados.',
+        )
         for file_path in discovery.files:
-            results.append(
-                index_corpus_file(
-                    file_path,
-                    settings=resolved_settings,
-                    connection=resolved_connection,
-                    vector_store=resolved_vector_store,
-                    embedder=resolved_embedder,
-                    chunk_size=chunk_size,
-                    overlap=overlap,
-                )
+            processed_count = len(results)
+            _emit_progress(
+                progress,
+                phase='loading',
+                started_at=started_at,
+                current_path=file_path,
+                total_found=total_found,
+                processed_count=processed_count,
+                indexed_count=indexed_count,
+                failed_count=failed_count,
+                skipped_count=skipped_count,
+                message=f'Processando {file_path.name}',
+            )
+            _emit_progress(
+                progress,
+                phase='embedding',
+                started_at=started_at,
+                current_path=file_path,
+                total_found=total_found,
+                processed_count=processed_count,
+                indexed_count=indexed_count,
+                failed_count=failed_count,
+                skipped_count=skipped_count,
+                message=f'Estruturando e embedando {file_path.name}',
+            )
+            result = index_corpus_file(
+                file_path,
+                settings=resolved_settings,
+                connection=resolved_connection,
+                vector_store=resolved_vector_store,
+                embedder=resolved_embedder,
+                chunk_size=chunk_size,
+                overlap=overlap,
+            )
+            results.append(result)
+            if result.status == 'success':
+                indexed_count += 1
+            elif result.status == 'failed':
+                failed_count += 1
+            _emit_progress(
+                progress,
+                phase='writing',
+                started_at=started_at,
+                current_path=file_path,
+                total_found=total_found,
+                processed_count=len(results),
+                indexed_count=indexed_count,
+                failed_count=failed_count,
+                skipped_count=skipped_count,
+                message=f'Finalizado {file_path.name}',
             )
 
-        indexed_count = sum(1 for result in results if result.status == 'success')
-        failed_count = sum(1 for result in results if result.status == 'failed')
+        _emit_progress(
+            progress,
+            phase='finished',
+            started_at=started_at,
+            total_found=total_found,
+            processed_count=len(results),
+            indexed_count=indexed_count,
+            failed_count=failed_count,
+            skipped_count=skipped_count,
+            message='Indexacao concluida.',
+        )
         return CorpusIndexBatchResult(
             source_path=str(source_path),
             recursive=recursive,

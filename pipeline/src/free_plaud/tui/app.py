@@ -13,7 +13,7 @@ from textual.message import Message
 from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Static
 
 from free_plaud.app.config import Settings, get_settings
-from free_plaud.corpus.models import CorpusDiscoveryResult
+from free_plaud.corpus.models import CorpusDiscoveryResult, CorpusIndexProgress
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import get_embedder
@@ -325,6 +325,7 @@ class NotesPane(Vertical):
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
         self._operation_running = False
+        self._progress_messages: list[str] = []
 
     def compose(self) -> ComposeResult:
         with Container(id='notes-hero'):
@@ -376,6 +377,7 @@ class NotesPane(Vertical):
             except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
                 self._render_error(exc)
                 return
+            self._progress_messages = []
             self._render_preflight(preflight, rebuild=control_id == 'notes-rebuild')
             self._set_running(True)
             self._run_index(Path(preflight.root_path), control_id == 'notes-rebuild')
@@ -406,7 +408,10 @@ class NotesPane(Vertical):
     @work(thread=True)
     def _run_index(self, folder_path: Path, rebuild: bool) -> None:
         try:
-            result = index_corpus_folder(folder_path, rebuild=rebuild)
+            def report_progress(progress: CorpusIndexProgress) -> None:
+                self.app.call_from_thread(self._render_index_progress, progress)
+
+            result = index_corpus_folder(folder_path, rebuild=rebuild, progress=report_progress)
             status = corpus_status_from_tui()
             notes = list_corpus_notes()
         except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
@@ -450,6 +455,30 @@ class NotesPane(Vertical):
                 border_style='#7c3aed',
             )
         )
+
+    def _render_index_progress(self, progress: CorpusIndexProgress) -> None:
+        output = self.query_one('#notes-output', RichLog)
+        if progress.message:
+            self._progress_messages.append(progress.message)
+            self._progress_messages = self._progress_messages[-10:]
+        last_messages = '\n'.join(f'- {message}' for message in self._progress_messages)
+        current_path = _short_path(progress.current_path, 72)
+        body = (
+            f'fase={progress.phase}\n'
+            f'processados={progress.processed_count}/{progress.total_found}\n'
+            f'indexados={progress.indexed_count}\n'
+            f'inalterados={progress.unchanged_count}\n'
+            f'falhas={progress.failed_count}\n'
+            f'ignorados={progress.skipped_count}\n'
+            f'tempo_ms={progress.elapsed_ms}'
+        )
+        if current_path:
+            body += f'\natual={current_path}'
+        if last_messages:
+            body += f'\n\nultimas:\n{last_messages}'
+
+        output.clear()
+        output.write(Panel(body, title='Indexando', border_style='#7c3aed'))
 
     def _render_status(self, status, notes, *, clear: bool = True) -> None:  # noqa: ANN001
         output = self.query_one('#notes-output', RichLog)

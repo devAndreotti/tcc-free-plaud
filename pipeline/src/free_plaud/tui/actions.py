@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
@@ -10,6 +11,7 @@ from free_plaud.corpus.discovery import discover_corpus_files
 from free_plaud.corpus.models import (
     CorpusDiscoveryResult,
     CorpusIndexBatchResult,
+    CorpusIndexProgress,
     CorpusResetResult,
     CorpusStatusResult,
 )
@@ -21,6 +23,7 @@ from free_plaud.storage.sqlite import get_all_notes, init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
 
 AskStrategy = Literal['lexical', 'vector', 'hybrid']
+ProgressCallback = Callable[[CorpusIndexProgress], None]
 
 
 def ask_corpus(
@@ -112,18 +115,19 @@ def index_corpus_folder(
     *,
     rebuild: bool = False,
     settings: Settings | None = None,
+    progress: ProgressCallback | None = None,
 ) -> CorpusIndexBatchResult:
     target = _resolve_folder_path(folder_path)
     resolved_settings = settings or get_settings()
     ensure_runtime_dirs(resolved_settings)
 
     if rebuild:
-        result = rebuild_corpus(target, settings=resolved_settings, recursive=True, dry_run=False)
+        result = rebuild_corpus(target, settings=resolved_settings, recursive=True, dry_run=False, progress=progress)
         if result.index_result is not None:
             return result.index_result
         return _failed_batch(target, result.message or result.error_code or 'Rebuild failed.')
 
-    return index_corpus_path(target, settings=resolved_settings, recursive=True)
+    return index_corpus_path(target, settings=resolved_settings, recursive=True, progress=progress)
 
 
 def reset_corpus_from_tui(confirm: str, *, settings: Settings | None = None) -> CorpusResetResult:

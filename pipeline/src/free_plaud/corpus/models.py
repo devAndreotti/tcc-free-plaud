@@ -48,6 +48,21 @@ class CorpusIndexBatchResult(BaseModel):
     skipped: list[CorpusSkippedPath] = Field(default_factory=list)
 
 
+class CorpusIndexProgress(BaseModel):
+    """Evento de progresso da indexacao de corpus."""
+
+    phase: Literal['discovering', 'loading', 'structuring', 'embedding', 'writing', 'finished', 'failed']
+    current_path: str | None = None
+    total_found: int = 0
+    processed_count: int = 0
+    indexed_count: int = 0
+    unchanged_count: int = 0
+    failed_count: int = 0
+    skipped_count: int = 0
+    elapsed_ms: int = 0
+    message: str | None = None
+
+
 class CorpusStatusResult(BaseModel):
     """Diagnostico de consistencia entre SQLite e Chroma."""
 
