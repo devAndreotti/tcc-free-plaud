@@ -351,6 +351,12 @@ e no Chroma, permite `lexical`, `vector` e `hybrid`, e retorna o mesmo contrato 
 com `citations` e `used_sources` atravessando mais de uma nota quando a pergunta exige
 stitching distribuído. O `retrieval ask` continua single-file por compatibilidade experimental.
 
+Na evolução operacional do corpus, o backend também passa a expor `corpus status`, `corpus reset`
+e `corpus rebuild`. Esses comandos diagnosticam divergência SQLite/Chroma, limpam apenas notas,
+chunks e a collection vetorial ativa mediante `--yes`, e reconstroem o acervo a partir de arquivo
+ou pasta controlada. O `corpus ask` filtra hits vetoriais cujo `chunk_id` não exista no SQLite antes
+de montar `citations`, `used_sources` e `claims`, evitando resposta baseada em vetor obsoleto.
+
 Na evolução atual, `hybrid` combina:
 
 - ranking lexical
