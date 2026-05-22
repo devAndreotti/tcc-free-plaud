@@ -10,10 +10,12 @@ from free_plaud.retrieval.chunking import chunk_text
 from free_plaud.storage.models import BenchmarkQueryRecord, BenchmarkRunRecord, ProcessingLogRecord
 from free_plaud.storage.sqlite import (
     connect_sqlite,
+    get_notes_by_id,
     init_sqlite,
     insert_benchmark_query,
     insert_benchmark_run,
     insert_processing_log,
+    list_chunks,
     replace_chunks_for_note,
     upsert_note,
 )
@@ -104,6 +106,30 @@ def test_replace_chunks_for_note_persists_offset_aware_lineage(tmp_path: Path) -
     assert rows[0]['char_start'] == 0
     assert rows[0]['char_end'] > rows[0]['char_start']
     assert rows[0]['strategy'] == 'fixed_char_window'
+
+
+def test_list_chunks_and_get_notes_by_id_return_persisted_contract(tmp_path: Path) -> None:
+    db_path = tmp_path / 'free_plaud.sqlite3'
+    note = _build_note(tmp_path)
+    chunks = chunk_text(
+        note.note_id,
+        note.note_version,
+        note.normalized_text,
+        chunk_size=12,
+        overlap=4,
+        normalized_text_sha256=note.content_hash,
+    )
+
+    connection = init_sqlite(db_path)
+    upsert_note(connection, note)
+    replace_chunks_for_note(connection, note.note_id, chunks)
+
+    persisted_chunks = list_chunks(connection)
+    notes = get_notes_by_id(connection, [note.note_id])
+
+    assert [chunk.chunk_id for chunk in persisted_chunks] == [chunk.chunk_id for chunk in chunks]
+    assert notes[note.note_id].note_id == note.note_id
+    assert notes[note.note_id].source_path == note.source_path
 
 
 def test_insert_processing_log_and_benchmark_records(tmp_path: Path) -> None:

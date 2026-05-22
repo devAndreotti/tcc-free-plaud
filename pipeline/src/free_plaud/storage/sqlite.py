@@ -1,5 +1,7 @@
 import json
 import sqlite3
+from collections.abc import Iterable
+from datetime import datetime
 from pathlib import Path
 
 from free_plaud.notes.schemas import Note
@@ -191,6 +193,82 @@ def replace_chunks_for_note(connection: sqlite3.Connection, note_id: str, chunks
         ],
     )
     connection.commit()
+
+
+def _chunk_from_row(row: sqlite3.Row) -> Chunk:
+    return Chunk(
+        chunk_id=row['chunk_id'],
+        note_id=row['note_id'],
+        note_version=row['note_version'],
+        chunk_index=row['chunk_index'],
+        char_start=row['char_start'],
+        char_end=row['char_end'],
+        chunk_size=row['chunk_size'],
+        overlap=row['overlap'],
+        chunk_text=row['chunk_text'],
+        token_count=row['token_count'],
+        strategy=row['strategy'],
+        normalized_text_sha256=row['normalized_text_sha256'],
+        text_sha256=row['text_sha256'],
+        pipeline_version=row['pipeline_version'],
+    )
+
+
+def list_chunks(connection: sqlite3.Connection) -> list[Chunk]:
+    """Lista chunks persistidos em ordem estavel para retrieval de corpus."""
+    rows = connection.execute(
+        """
+        SELECT
+            chunk_id, note_id, note_version, chunk_index, char_start, char_end, chunk_size,
+            overlap, chunk_text, token_count, strategy, normalized_text_sha256,
+            text_sha256, pipeline_version
+        FROM chunks
+        ORDER BY note_id, note_version, chunk_index
+        """
+    ).fetchall()
+    return [_chunk_from_row(row) for row in rows]
+
+
+def _note_from_row(row: sqlite3.Row) -> Note:
+    return Note(
+        note_id=row['note_id'],
+        note_version=row['note_version'],
+        source_type=row['source_type'],
+        source_path=Path(row['source_path']),
+        source_name=row['source_name'],
+        title=row['title'],
+        summary=row['summary'],
+        topics=[],
+        tasks=[],
+        tags=[row['source_type']],
+        raw_text=row['raw_text'],
+        normalized_text=row['normalized_text'],
+        structured_markdown=row['structured_markdown'],
+        content_hash=row['content_hash'],
+        provider=row['provider'],
+        model=row['model'],
+        created_at=datetime.fromisoformat(str(row['created_at']).replace('Z', '+00:00')),
+    )
+
+
+def get_notes_by_id(connection: sqlite3.Connection, note_ids: Iterable[str]) -> dict[str, Note]:
+    """Retorna notas persistidas por id, preservando contrato Pydantic de Note."""
+    unique_ids = list(dict.fromkeys(note_ids))
+    if not unique_ids:
+        return {}
+
+    placeholders = ', '.join('?' for _ in unique_ids)
+    rows = connection.execute(
+        f"""
+        SELECT
+            note_id, note_version, source_type, source_path, source_name, title, summary,
+            raw_text, normalized_text, structured_markdown, content_hash, provider, model, created_at
+        FROM notes
+        WHERE note_id IN ({placeholders})
+        """,
+        unique_ids,
+    ).fetchall()
+    return {row['note_id']: _note_from_row(row) for row in rows}
 
 
 def insert_processing_log(connection: sqlite3.Connection, record: ProcessingLogRecord) -> None:

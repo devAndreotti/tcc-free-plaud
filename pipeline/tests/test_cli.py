@@ -123,3 +123,43 @@ def test_corpus_index_cli_accepts_recursive_directory(monkeypatch, tmp_path: Pat
     assert payload['status'] == 'success'
     assert payload['total_found'] == 2
     assert payload['indexed_count'] == 2
+
+
+def test_corpus_ask_cli_answers_against_indexed_directory(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    (root / 'broker.md').write_text(
+        '# Broker\n\nRabbitMQ foi adotado como message broker padrao do pipeline.\n',
+        encoding='utf-8',
+    )
+    (root / 'runbook.md').write_text(
+        '# Runbook\n\nO time SRE ficou responsavel pelo runbook de operacao.\n',
+        encoding='utf-8',
+    )
+    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.corpus.cli.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name: FakeEmbedder())
+
+    index_result = runner.invoke(app, ['corpus', 'index', str(root), '--recursive'])
+    ask_result = runner.invoke(
+        app,
+        [
+            'corpus',
+            'ask',
+            '--question',
+            'Qual message broker foi adotado e qual equipe ficou responsavel pelo runbook?',
+            '--strategy',
+            'hybrid',
+            '--top-k',
+            '4',
+        ],
+    )
+
+    assert index_result.exit_code == 0
+    assert ask_result.exit_code == 0
+    payload = json.loads(ask_result.stdout)
+    assert payload['status'] == 'answer'
+    assert 'RabbitMQ' in payload['answer']
+    assert 'SRE' in payload['answer']
+    assert len({citation['note_id'] for citation in payload['citations']}) >= 2
