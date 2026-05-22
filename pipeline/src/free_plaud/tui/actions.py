@@ -7,6 +7,7 @@ from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.benchmark.datasets import load_benchmark_suite
 from free_plaud.benchmark.runners import BenchmarkComparisonResult, compare_benchmark_suite
 from free_plaud.corpus.ask import answer_corpus_with_citations
+from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.discovery import discover_corpus_files
 from free_plaud.corpus.models import (
     CorpusDiscoveryResult,
@@ -116,18 +117,32 @@ def index_corpus_folder(
     rebuild: bool = False,
     settings: Settings | None = None,
     progress: ProgressCallback | None = None,
+    cancel_token: CancellationToken | None = None,
 ) -> CorpusIndexBatchResult:
     target = _resolve_folder_path(folder_path)
     resolved_settings = settings or get_settings()
     ensure_runtime_dirs(resolved_settings)
 
     if rebuild:
-        result = rebuild_corpus(target, settings=resolved_settings, recursive=True, dry_run=False, progress=progress)
+        result = rebuild_corpus(
+            target,
+            settings=resolved_settings,
+            recursive=True,
+            dry_run=False,
+            progress=progress,
+            cancel_token=cancel_token,
+        )
         if result.index_result is not None:
             return result.index_result
         return _failed_batch(target, result.message or result.error_code or 'Rebuild failed.')
 
-    return index_corpus_path(target, settings=resolved_settings, recursive=True, progress=progress)
+    return index_corpus_path(
+        target,
+        settings=resolved_settings,
+        recursive=True,
+        progress=progress,
+        cancel_token=cancel_token,
+    )
 
 
 def reset_corpus_from_tui(confirm: str, *, settings: Settings | None = None) -> CorpusResetResult:

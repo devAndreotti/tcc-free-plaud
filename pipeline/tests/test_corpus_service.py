@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from free_plaud.app.config import Settings
+from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.service import get_corpus_status, index_corpus_file, index_corpus_path
 from free_plaud.storage.sqlite import connect_sqlite, init_sqlite, list_chunk_ids
 from free_plaud.storage.vector import LocalVectorStore
@@ -252,6 +253,48 @@ def test_index_corpus_path_emits_progress_events_for_directory(tmp_path: Path) -
     assert events[-1].indexed_count == 2
     assert events[-1].failed_count == 0
     assert events[-1].skipped_count == 1
+
+
+def test_index_corpus_path_honors_cancel_token_before_processing(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'cancelavel.md'
+    source.write_text('# Cancelavel\n\nTexto.', encoding='utf-8')
+    token = CancellationToken()
+    token.cancel()
+
+    result = index_corpus_path(source, settings=settings, embedder=FakeEmbedder(), cancel_token=token)
+
+    assert result.status == 'cancelled'
+    assert result.total_found == 1
+    assert result.indexed_count == 0
+    assert result.failed_count == 0
+
+
+def test_index_corpus_path_stops_between_files_when_cancelled(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    (root / 'a.md').write_text('# A\n\nPrimeiro arquivo.', encoding='utf-8')
+    (root / 'b.md').write_text('# B\n\nSegundo arquivo.', encoding='utf-8')
+    token = CancellationToken()
+
+    def cancel_after_first(progress) -> None:  # noqa: ANN001
+        if progress.phase == 'writing' and progress.processed_count == 1:
+            token.cancel()
+
+    result = index_corpus_path(
+        root,
+        settings=settings,
+        embedder=FakeEmbedder(),
+        recursive=True,
+        progress=cancel_after_first,
+        cancel_token=token,
+    )
+
+    assert result.status == 'cancelled'
+    assert result.total_found == 2
+    assert result.indexed_count == 1
+    assert len(result.results) == 1
 
 
 def test_index_corpus_path_non_recursive_skips_nested_files(tmp_path: Path) -> None:

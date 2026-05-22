@@ -24,7 +24,7 @@ class CorpusIndexResult(BaseModel):
     """Resultado estavel de indexacao de um arquivo no corpus local."""
 
     source_path: str
-    status: Literal['success', 'failed']
+    status: Literal['success', 'failed', 'cancelled']
     note_id: str | None = None
     chunks_indexed: int = 0
     embedding_model: str | None = None
@@ -39,7 +39,7 @@ class CorpusIndexBatchResult(BaseModel):
 
     source_path: str
     recursive: bool
-    status: Literal['success', 'partial', 'failed']
+    status: Literal['success', 'partial', 'failed', 'cancelled']
     total_found: int
     indexed_count: int
     failed_count: int
@@ -51,7 +51,7 @@ class CorpusIndexBatchResult(BaseModel):
 class CorpusIndexProgress(BaseModel):
     """Evento de progresso da indexacao de corpus."""
 
-    phase: Literal['discovering', 'loading', 'structuring', 'embedding', 'writing', 'finished', 'failed']
+    phase: Literal['discovering', 'loading', 'structuring', 'embedding', 'writing', 'finished', 'failed', 'cancelled']
     current_path: str | None = None
     total_found: int = 0
     processed_count: int = 0
@@ -99,7 +99,7 @@ class CorpusRebuildResult(BaseModel):
     source_path: str
     recursive: bool
     dry_run: bool
-    status: Literal['preview', 'success', 'partial', 'failed']
+    status: Literal['preview', 'success', 'partial', 'failed', 'cancelled']
     before_status: CorpusStatusResult
     reset: CorpusResetResult | None = None
     index_result: CorpusIndexBatchResult | None = None

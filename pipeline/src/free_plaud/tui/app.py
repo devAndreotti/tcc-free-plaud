@@ -13,6 +13,7 @@ from textual.message import Message
 from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Static
 
 from free_plaud.app.config import Settings, get_settings
+from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.models import CorpusDiscoveryResult, CorpusIndexProgress
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
@@ -326,6 +327,7 @@ class NotesPane(Vertical):
         super().__init__(**kwargs)
         self._operation_running = False
         self._progress_messages: list[str] = []
+        self._cancel_token: CancellationToken | None = None
 
     def compose(self) -> ComposeResult:
         with Container(id='notes-hero'):
@@ -340,6 +342,7 @@ class NotesPane(Vertical):
                 yield ActionCell('Indexar pasta', id='notes-index', classes='strategy-button')
                 yield ActionCell('Rebuild pasta', id='notes-rebuild', classes='strategy-button')
                 yield ActionCell('Limpar DB', id='notes-reset', classes='primary-action')
+                yield ActionCell('Cancelar', id='notes-cancel', classes='strategy-button')
             yield Label('Confirmacao para limpar')
             yield Input(placeholder='Digite LIMPAR', id='notes-reset-confirm')
         with Container(id='notes-result-card'):
@@ -355,9 +358,14 @@ class NotesPane(Vertical):
                 'Limpar DB apaga notas, chunks e vetores apos digitar LIMPAR.',
             )
         )
+        self._set_running(False)
 
     def on_action_cell_pressed(self, event: ActionCell.Pressed) -> None:
         control_id = event.cell.id or ''
+        if control_id == 'notes-cancel':
+            event.stop()
+            self._cancel_index()
+            return
         if not control_id.startswith('notes-') or self._operation_running:
             return
         event.stop()
@@ -379,8 +387,9 @@ class NotesPane(Vertical):
                 return
             self._progress_messages = []
             self._render_preflight(preflight, rebuild=control_id == 'notes-rebuild')
+            self._cancel_token = CancellationToken()
             self._set_running(True)
-            self._run_index(Path(preflight.root_path), control_id == 'notes-rebuild')
+            self._run_index(Path(preflight.root_path), control_id == 'notes-rebuild', self._cancel_token)
             return
         if control_id == 'notes-reset':
             confirm = self.query_one('#notes-reset-confirm', Input).value
@@ -394,6 +403,13 @@ class NotesPane(Vertical):
         self._operation_running = running
         for selector in ('#notes-status', '#notes-index', '#notes-rebuild', '#notes-reset'):
             self.query_one(selector, ActionCell).disabled = running
+        self.query_one('#notes-cancel', ActionCell).disabled = not running
+
+    def _cancel_index(self) -> None:
+        if self._cancel_token is None or not self._operation_running:
+            return
+        self._cancel_token.cancel()
+        self._render_message('Cancelando indexacao...')
 
     @work(thread=True)
     def _run_status(self) -> None:
@@ -406,12 +422,17 @@ class NotesPane(Vertical):
         self.app.call_from_thread(self._render_status, status, notes)
 
     @work(thread=True)
-    def _run_index(self, folder_path: Path, rebuild: bool) -> None:
+    def _run_index(self, folder_path: Path, rebuild: bool, cancel_token: CancellationToken) -> None:
         try:
             def report_progress(progress: CorpusIndexProgress) -> None:
                 self.app.call_from_thread(self._render_index_progress, progress)
 
-            result = index_corpus_folder(folder_path, rebuild=rebuild, progress=report_progress)
+            result = index_corpus_folder(
+                folder_path,
+                rebuild=rebuild,
+                progress=report_progress,
+                cancel_token=cancel_token,
+            )
             status = corpus_status_from_tui()
             notes = list_corpus_notes()
         except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
@@ -439,6 +460,7 @@ class NotesPane(Vertical):
         output = self.query_one('#notes-output', RichLog)
         output.clear()
         output.write(Panel(str(exc), title='Erro', border_style='#fb7185'))
+        self._cancel_token = None
         self._set_running(False)
 
     def _render_preflight(self, preflight: CorpusDiscoveryResult, *, rebuild: bool) -> None:
@@ -507,6 +529,7 @@ class NotesPane(Vertical):
         if not notes:
             notes_table.add_row('-', 'sem notas', '-')
         output.write(notes_table)
+        self._cancel_token = None
         self._set_running(False)
 
     def _render_index_result(self, result, status, notes) -> None:  # noqa: ANN001

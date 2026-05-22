@@ -6,6 +6,7 @@ import pytest
 from textual.widgets import Button, Input
 
 from free_plaud.app.config import Settings
+from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.models import (
     CorpusDiscoveryResult,
     CorpusIndexBatchResult,
@@ -451,7 +452,13 @@ def test_tui_buttons_do_not_use_default_active_flash() -> None:
 def test_tui_notes_can_index_folder_and_reset_with_confirmation(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def fake_index_folder(path: Path, *, rebuild: bool, progress=None) -> CorpusIndexBatchResult:  # noqa: ANN001
+    def fake_index_folder(  # noqa: ANN001
+        path: Path,
+        *,
+        rebuild: bool,
+        progress=None,
+        cancel_token=None,
+    ) -> CorpusIndexBatchResult:
         captured['index_path'] = path
         captured['rebuild'] = rebuild
         return CorpusIndexBatchResult(
@@ -518,7 +525,13 @@ def test_tui_notes_can_index_folder_and_reset_with_confirmation(monkeypatch, tmp
 def test_tui_notes_rejects_empty_folder_before_index(monkeypatch) -> None:
     calls = 0
 
-    def fake_index_folder(path: Path, *, rebuild: bool, progress=None) -> CorpusIndexBatchResult:  # noqa: ANN001
+    def fake_index_folder(  # noqa: ANN001
+        path: Path,
+        *,
+        rebuild: bool,
+        progress=None,
+        cancel_token=None,
+    ) -> CorpusIndexBatchResult:
         nonlocal calls
         calls += 1
         raise AssertionError('indexacao nao deve iniciar com pasta vazia')
@@ -551,7 +564,13 @@ def test_tui_notes_runs_preflight_before_index(monkeypatch, tmp_path: Path) -> N
             skipped=[CorpusSkippedPath(path=str(tmp_path / 'image.png'), reason='unsupported_extension')],
         )
 
-    def fake_index_folder(path: Path, *, rebuild: bool, progress=None) -> CorpusIndexBatchResult:  # noqa: ANN001
+    def fake_index_folder(  # noqa: ANN001
+        path: Path,
+        *,
+        rebuild: bool,
+        progress=None,
+        cancel_token=None,
+    ) -> CorpusIndexBatchResult:
         events.append(('index', path))
         return CorpusIndexBatchResult(
             source_path=str(path),
@@ -602,7 +621,13 @@ def test_tui_notes_runs_preflight_before_index(monkeypatch, tmp_path: Path) -> N
 def test_tui_notes_passes_progress_callback_to_indexer(monkeypatch, tmp_path: Path) -> None:
     progress_called = False
 
-    def fake_index_folder(path: Path, *, rebuild: bool, progress=None) -> CorpusIndexBatchResult:  # noqa: ANN001
+    def fake_index_folder(  # noqa: ANN001
+        path: Path,
+        *,
+        rebuild: bool,
+        progress=None,
+        cancel_token=None,
+    ) -> CorpusIndexBatchResult:
         nonlocal progress_called
         assert progress is not None
         progress(
@@ -659,6 +684,68 @@ def test_tui_notes_passes_progress_callback_to_indexer(monkeypatch, tmp_path: Pa
     asyncio.run(run_app())
 
     assert progress_called is True
+
+
+def test_tui_notes_cancel_button_cancels_running_index(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, CancellationToken | None] = {'token': None}
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_index_folder(
+        path: Path,
+        *,
+        rebuild: bool,
+        progress=None,  # noqa: ANN001
+        cancel_token: CancellationToken | None = None,
+    ) -> CorpusIndexBatchResult:
+        captured['token'] = cancel_token
+        started.set()
+        release.wait(timeout=2)
+        return CorpusIndexBatchResult(
+            source_path=str(path),
+            recursive=True,
+            status='cancelled',
+            total_found=2,
+            indexed_count=0,
+            failed_count=0,
+            skipped_count=0,
+            results=[],
+        )
+
+    (tmp_path / 'nota.md').write_text('# Nota\n\nTexto.', encoding='utf-8')
+    monkeypatch.setattr('free_plaud.tui.app.index_corpus_folder', fake_index_folder)
+    monkeypatch.setattr(
+        'free_plaud.tui.app.corpus_status_from_tui',
+        lambda: CorpusStatusResult(
+            sqlite_path='db',
+            vector_store_dir='vec',
+            vector_collection_name='test',
+            notes_count=0,
+            sqlite_chunks_count=0,
+            vector_chunks_count=0,
+            stale_vector_chunks_count=0,
+            missing_vector_chunks_count=0,
+            status='empty',
+        ),
+    )
+    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', lambda: [])
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.click('#nav-notes')
+            await pilot.pause(0.1)
+            app.query_one('#notes-folder-path', Input).value = str(tmp_path)
+            await pilot.click('#notes-index')
+            assert await asyncio.to_thread(started.wait, 2)
+            await pilot.click('#notes-cancel')
+            release.set()
+            await pilot.pause(0.5)
+
+    asyncio.run(run_app())
+
+    assert captured['token'] is not None
+    assert captured['token'].is_cancelled()
 
 
 def test_tui_reset_requires_literal_confirmation(monkeypatch) -> None:

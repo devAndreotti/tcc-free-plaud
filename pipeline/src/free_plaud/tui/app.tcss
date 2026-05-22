@@ -213,7 +213,7 @@ Input:focus {
 
 #notes-action-row {
     layout: grid;
-    grid-size: 4 1;
+    grid-size: 5 1;
     grid-gutter: 1 0;
     height: 3;
     margin-top: 1;
@@ -418,7 +418,7 @@ Screen.compact #mode-row {
 }
 
 Screen.compact #notes-action-row {
-    grid-size: 2 2;
+    grid-size: 3 2;
     grid-gutter: 0;
     height: 6;
 }

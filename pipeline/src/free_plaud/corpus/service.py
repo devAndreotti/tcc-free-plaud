@@ -5,6 +5,7 @@ from time import perf_counter
 
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
+from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.discovery import discover_corpus_files
 from free_plaud.corpus.models import (
     CorpusIndexBatchResult,
@@ -61,6 +62,32 @@ def _emit_progress(
             elapsed_ms=int((perf_counter() - started_at) * 1000),
             message=message,
         )
+    )
+
+
+def _is_cancelled(cancel_token: CancellationToken | None) -> bool:
+    return bool(cancel_token and cancel_token.is_cancelled())
+
+
+def _cancelled_batch_result(
+    source_path: Path,
+    *,
+    recursive: bool,
+    total_found: int,
+    indexed_count: int,
+    failed_count: int,
+    skipped_count: int,
+    results: list[CorpusIndexResult],
+) -> CorpusIndexBatchResult:
+    return CorpusIndexBatchResult(
+        source_path=str(source_path),
+        recursive=recursive,
+        status='cancelled',
+        total_found=total_found,
+        indexed_count=indexed_count,
+        failed_count=failed_count,
+        skipped_count=skipped_count,
+        results=results,
     )
 
 
@@ -217,6 +244,7 @@ def rebuild_corpus(
     recursive: bool = False,
     dry_run: bool = True,
     progress: ProgressCallback | None = None,
+    cancel_token: CancellationToken | None = None,
 ) -> CorpusRebuildResult:
     """Reconstroi corpus ativo a partir de arquivo ou diretorio controlado."""
     resolved_settings = settings or get_settings()
@@ -275,6 +303,7 @@ def rebuild_corpus(
             overlap=overlap,
             recursive=recursive,
             progress=progress,
+            cancel_token=cancel_token,
         )
         after_status = get_corpus_status(
             settings=resolved_settings,
@@ -379,6 +408,7 @@ def index_corpus_path(
     overlap: int | None = None,
     recursive: bool = False,
     progress: ProgressCallback | None = None,
+    cancel_token: CancellationToken | None = None,
 ) -> CorpusIndexBatchResult:
     """Indexa um arquivo ou diretorio no corpus local."""
     resolved_settings = settings or get_settings()
@@ -396,6 +426,24 @@ def index_corpus_path(
 
     try:
         if source_path.is_file():
+            if _is_cancelled(cancel_token):
+                _emit_progress(
+                    progress,
+                    phase='cancelled',
+                    started_at=started_at,
+                    current_path=source_path,
+                    total_found=1,
+                    message='Indexacao cancelada.',
+                )
+                return _cancelled_batch_result(
+                    source_path,
+                    recursive=recursive,
+                    total_found=1,
+                    indexed_count=0,
+                    failed_count=0,
+                    skipped_count=0,
+                    results=[],
+                )
             _emit_progress(
                 progress,
                 phase='loading',
@@ -499,6 +547,28 @@ def index_corpus_path(
             message=f'{total_found} arquivos suportados encontrados.',
         )
         for file_path in discovery.files:
+            if _is_cancelled(cancel_token):
+                _emit_progress(
+                    progress,
+                    phase='cancelled',
+                    started_at=started_at,
+                    current_path=file_path,
+                    total_found=total_found,
+                    processed_count=len(results),
+                    indexed_count=indexed_count,
+                    failed_count=failed_count,
+                    skipped_count=skipped_count,
+                    message='Indexacao cancelada.',
+                )
+                return _cancelled_batch_result(
+                    source_path,
+                    recursive=recursive,
+                    total_found=total_found,
+                    indexed_count=indexed_count,
+                    failed_count=failed_count,
+                    skipped_count=skipped_count,
+                    results=results,
+                )
             processed_count = len(results)
             _emit_progress(
                 progress,
@@ -550,6 +620,28 @@ def index_corpus_path(
                 skipped_count=skipped_count,
                 message=f'Finalizado {file_path.name}',
             )
+            if _is_cancelled(cancel_token):
+                _emit_progress(
+                    progress,
+                    phase='cancelled',
+                    started_at=started_at,
+                    current_path=file_path,
+                    total_found=total_found,
+                    processed_count=len(results),
+                    indexed_count=indexed_count,
+                    failed_count=failed_count,
+                    skipped_count=skipped_count,
+                    message='Indexacao cancelada.',
+                )
+                return _cancelled_batch_result(
+                    source_path,
+                    recursive=recursive,
+                    total_found=total_found,
+                    indexed_count=indexed_count,
+                    failed_count=failed_count,
+                    skipped_count=skipped_count,
+                    results=results,
+                )
 
         _emit_progress(
             progress,
