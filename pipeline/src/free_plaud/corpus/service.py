@@ -293,6 +293,7 @@ def index_corpus_file(
         if len(embeddings) != len(chunks):
             raise ValueError('A quantidade de embeddings precisa bater com a quantidade de chunks.')
 
+        resolved_vector_store.delete_by_note_id(note.note_id)
         resolved_vector_store.upsert_chunks(chunks, embeddings, embedding_model=resolved_embedder.model_name)
         upsert_note(resolved_connection, note)
         replace_chunks_for_note(resolved_connection, note.note_id, chunks)

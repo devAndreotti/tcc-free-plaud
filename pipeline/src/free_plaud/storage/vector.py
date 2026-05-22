@@ -65,6 +65,13 @@ class LocalVectorStore:
     def list_chunk_ids(self) -> set[str]:
         return {chunk_id for chunk_id, _ in self.list_records()}
 
+    def delete_by_note_id(self, note_id: str) -> int:
+        chunk_ids = [chunk_id for chunk_id, metadata in self.list_records() if metadata.get('note_id') == note_id]
+        if not chunk_ids:
+            return 0
+        self._collection().delete(ids=chunk_ids)
+        return len(chunk_ids)
+
     def reset(self) -> None:
         try:
             self._client.delete_collection(self.collection_name)

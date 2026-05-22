@@ -1,8 +1,9 @@
 from pathlib import Path
 
 from free_plaud.app.config import Settings
-from free_plaud.corpus.service import index_corpus_file, index_corpus_path
-from free_plaud.storage.sqlite import connect_sqlite
+from free_plaud.corpus.service import get_corpus_status, index_corpus_file, index_corpus_path
+from free_plaud.storage.sqlite import connect_sqlite, init_sqlite, list_chunk_ids
+from free_plaud.storage.vector import LocalVectorStore
 
 
 class FakeEmbedder:
@@ -92,6 +93,48 @@ def test_index_corpus_file_is_idempotent_for_same_file(tmp_path: Path) -> None:
     assert second.vector_entries_count == first.vector_entries_count
     assert note_count['total'] == 1
     assert chunk_count['total'] == first.chunks_indexed
+
+
+def test_index_corpus_file_removes_old_vectors_when_chunk_ids_change(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'rechunk.md'
+    source.write_text(
+        '# Rechunk\n\n'
+        + 'A reindexacao precisa remover vetores antigos antes de gravar novos chunks. ' * 40,
+        encoding='utf-8',
+    )
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+
+    first = index_corpus_file(
+        source,
+        settings=settings,
+        connection=connection,
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+        chunk_size=120,
+        overlap=20,
+    )
+    first_chunk_ids = list_chunk_ids(connection)
+    second = index_corpus_file(
+        source,
+        settings=settings,
+        connection=connection,
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+        chunk_size=100,
+        overlap=20,
+    )
+    second_chunk_ids = list_chunk_ids(connection)
+    status = get_corpus_status(settings=settings, connection=connection, vector_store=vector_store)
+
+    assert first.status == 'success'
+    assert second.status == 'success'
+    assert first_chunk_ids != second_chunk_ids
+    assert vector_store.count() == second.chunks_indexed
+    assert status.status == 'clean'
+    assert status.stale_vector_chunks_count == 0
+    assert status.missing_vector_chunks_count == 0
 
 
 def test_index_corpus_file_returns_failure_without_partial_write_for_invalid_input(tmp_path: Path) -> None:
