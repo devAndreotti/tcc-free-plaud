@@ -1,6 +1,7 @@
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from time import perf_counter
 
 from free_plaud.app.config import Settings, get_settings
@@ -9,6 +10,8 @@ from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.discovery import discover_corpus_files
 from free_plaud.corpus.models import (
     CorpusIndexBatchResult,
+    CorpusIndexBenchmarkResult,
+    CorpusIndexBenchmarkRunResult,
     CorpusIndexProgress,
     CorpusIndexResult,
     CorpusRebuildResult,
@@ -148,6 +151,61 @@ def _error_code_for_exception(exc: Exception) -> str:
     return 'INDEXING_FAILED'
 
 
+class _CountingEmbedder:
+    def __init__(self, embedder: Embedder) -> None:
+        self._embedder = embedder
+        self.model_name = embedder.model_name
+        self.calls = 0
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls += 1
+        return self._embedder.embed(texts)
+
+
+def _benchmark_settings(base: Settings, workspace_dir: Path) -> Settings:
+    data_dir = workspace_dir / 'data'
+    return Settings(
+        environment=base.environment,
+        workspace_dir=workspace_dir,
+        data_dir=data_dir,
+        notes_dir=data_dir / 'corpus' / 'notes',
+        datasets_dir=data_dir / 'datasets',
+        results_dir=data_dir / 'results',
+        sqlite_path=data_dir / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=data_dir / 'results' / 'vector_store',
+        vector_collection_name=base.vector_collection_name,
+        embedding_model=base.embedding_model,
+        default_chunk_size=base.default_chunk_size,
+        default_chunk_overlap=base.default_chunk_overlap,
+        retrieval_top_k=base.retrieval_top_k,
+    )
+
+
+def _write_index_benchmark_fixture(root: Path, files: int) -> int:
+    root.mkdir(parents=True, exist_ok=True)
+    for index in range(files):
+        suffix = '.txt' if index % 5 == 0 else '.md'
+        path = root / f'documento-{index:03d}{suffix}'
+        repeated = 12 if index % 4 == 0 else 3
+        body = (
+            f'# Documento {index:03d}\n\n'
+            f'Arquivo sintetico {index:03d} para benchmark de indexacao local-first. '
+            'RabbitMQ, runbook SRE e pipeline Bronze Silver Gold aparecem como termos controlados. '
+        )
+        path.write_text(body * repeated, encoding='utf-8')
+
+    (root / 'ignorado.png').write_text('fora do corpus', encoding='utf-8')
+    (root / 'ignorado.docx').write_text('fora do corpus', encoding='utf-8')
+    (root / 'ignorado.canvas').write_text('fora do corpus', encoding='utf-8')
+    return 3
+
+
+def _rate(amount: int, elapsed_ms: int) -> float:
+    if amount <= 0 or elapsed_ms <= 0:
+        return 0.0
+    return round(amount / (elapsed_ms / 1000), 3)
+
+
 def get_corpus_status(
     *,
     settings: Settings | None = None,
@@ -255,6 +313,105 @@ def reset_corpus(
     finally:
         if owns_connection:
             resolved_connection.close()
+
+
+def benchmark_corpus_indexing(
+    *,
+    files: int = 100,
+    repeat: int = 2,
+    settings: Settings | None = None,
+    embedder: Embedder | None = None,
+    chunk_size: int | None = None,
+    overlap: int | None = None,
+) -> CorpusIndexBenchmarkResult:
+    """Mede indexacao em corpus sintetico dentro de workspace temporario."""
+    if files <= 0:
+        raise ValueError('files precisa ser maior que zero.')
+    if repeat <= 0:
+        raise ValueError('repeat precisa ser maior que zero.')
+
+    resolved_settings = settings or get_settings()
+    resolved_embedder = embedder or get_embedder(resolved_settings.embedding_model)
+    counting_embedder = _CountingEmbedder(resolved_embedder)
+    resolved_chunk_size = chunk_size or resolved_settings.default_chunk_size
+    resolved_overlap = resolved_settings.default_chunk_overlap if overlap is None else overlap
+
+    with TemporaryDirectory(prefix='free-plaud-corpus-benchmark-', ignore_cleanup_errors=True) as temporary_dir:
+        workspace_dir = Path(temporary_dir)
+        benchmark_settings = _benchmark_settings(resolved_settings, workspace_dir)
+        source_dir = workspace_dir / 'fixture'
+        ignored_files = _write_index_benchmark_fixture(source_dir, files)
+        total_started_at = perf_counter()
+        runs: list[CorpusIndexBenchmarkRunResult] = []
+
+        for repeat_index in range(1, repeat + 1):
+            calls_before = counting_embedder.calls
+            started_at = perf_counter()
+            batch_result = index_corpus_path(
+                source_dir,
+                settings=benchmark_settings,
+                embedder=counting_embedder,
+                chunk_size=resolved_chunk_size,
+                overlap=resolved_overlap,
+                recursive=True,
+            )
+            elapsed_ms = int((perf_counter() - started_at) * 1000)
+            chunks_indexed = sum(item.chunks_indexed for item in batch_result.results if item.status == 'success')
+            chunks_seen = sum(item.chunks_indexed for item in batch_result.results)
+            processed_files = batch_result.indexed_count + batch_result.unchanged_count + batch_result.failed_count
+            runs.append(
+                CorpusIndexBenchmarkRunResult(
+                    repeat_index=repeat_index,
+                    status=batch_result.status,
+                    elapsed_ms=elapsed_ms,
+                    files_per_second=_rate(processed_files, elapsed_ms),
+                    chunks_per_second=_rate(chunks_seen, elapsed_ms),
+                    total_found=batch_result.total_found,
+                    indexed_count=batch_result.indexed_count,
+                    unchanged_count=batch_result.unchanged_count,
+                    failed_count=batch_result.failed_count,
+                    skipped_count=batch_result.skipped_count,
+                    chunks_indexed=chunks_indexed,
+                    embedding_calls=counting_embedder.calls - calls_before,
+                )
+            )
+
+        total_elapsed_ms = int((perf_counter() - total_started_at) * 1000)
+
+    indexed_count = sum(run.indexed_count for run in runs)
+    unchanged_count = sum(run.unchanged_count for run in runs)
+    failed_count = sum(run.failed_count for run in runs)
+    skipped_count = runs[-1].skipped_count if runs else ignored_files
+    chunks_indexed = sum(run.chunks_indexed for run in runs)
+    processed_files = indexed_count + unchanged_count + failed_count
+
+    if failed_count and (indexed_count or unchanged_count):
+        status = 'partial'
+    elif failed_count:
+        status = 'failed'
+    else:
+        status = 'success'
+
+    return CorpusIndexBenchmarkResult(
+        status=status,  # type: ignore[arg-type]
+        files_requested=files,
+        supported_files=files,
+        ignored_files=ignored_files,
+        repeat=repeat,
+        embedding_model=counting_embedder.model_name,
+        chunk_size=resolved_chunk_size,
+        overlap=resolved_overlap,
+        total_elapsed_ms=total_elapsed_ms,
+        files_per_second=_rate(processed_files, total_elapsed_ms),
+        chunks_per_second=_rate(chunks_indexed, total_elapsed_ms),
+        indexed_count=indexed_count,
+        unchanged_count=unchanged_count,
+        failed_count=failed_count,
+        skipped_count=skipped_count,
+        chunks_indexed=chunks_indexed,
+        embedding_calls=counting_embedder.calls,
+        runs=runs,
+    )
 
 
 def rebuild_corpus(

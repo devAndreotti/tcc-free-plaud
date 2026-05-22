@@ -6,7 +6,14 @@ import typer
 from free_plaud.app.cli_paths import compose_path
 from free_plaud.app.config import get_settings
 from free_plaud.corpus.ask import answer_corpus_with_citations
-from free_plaud.corpus.service import get_corpus_status, index_corpus_file, index_corpus_path, rebuild_corpus, reset_corpus
+from free_plaud.corpus.service import (
+    benchmark_corpus_indexing,
+    get_corpus_status,
+    index_corpus_file,
+    index_corpus_path,
+    rebuild_corpus,
+    reset_corpus,
+)
 from free_plaud.providers.embed import get_embedder
 from free_plaud.storage.sqlite import init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
@@ -52,6 +59,27 @@ def rebuild(
         overlap=overlap,
         recursive=recursive,
         dry_run=(dry_run or not yes),
+    )
+    typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
+    if result.status == 'failed':
+        raise typer.Exit(code=1)
+
+
+@app.command('index-benchmark')
+def index_benchmark(
+    files: int = typer.Option(100, '--files', min=1, help='Quantidade de arquivos suportados sinteticos.'),
+    repeat: int = typer.Option(2, '--repeat', min=1, help='Quantidade de rodadas sobre o mesmo corpus temporario.'),
+    chunk_size: int | None = typer.Option(None, '--chunk-size', min=1),
+    overlap: int | None = typer.Option(None, '--overlap', min=0),
+) -> None:
+    """Mede indexacao de corpus em workspace temporario nao destrutivo."""
+    settings = get_settings()
+    result = benchmark_corpus_indexing(
+        files=files,
+        repeat=repeat,
+        settings=settings,
+        chunk_size=chunk_size,
+        overlap=overlap,
     )
     typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
     if result.status == 'failed':

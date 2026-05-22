@@ -107,3 +107,43 @@ class CorpusRebuildResult(BaseModel):
     after_status: CorpusStatusResult | None = None
     error_code: str | None = None
     message: str | None = None
+
+
+class CorpusIndexBenchmarkRunResult(BaseModel):
+    """Metrica operacional de uma rodada de indexacao sintetica."""
+
+    repeat_index: int
+    status: Literal['success', 'partial', 'failed', 'cancelled']
+    elapsed_ms: int
+    files_per_second: float
+    chunks_per_second: float
+    total_found: int
+    indexed_count: int
+    unchanged_count: int
+    failed_count: int
+    skipped_count: int
+    chunks_indexed: int
+    embedding_calls: int
+
+
+class CorpusIndexBenchmarkResult(BaseModel):
+    """Resultado agregado do benchmark operacional de indexacao."""
+
+    status: Literal['success', 'partial', 'failed', 'cancelled']
+    files_requested: int
+    supported_files: int
+    ignored_files: int
+    repeat: int
+    embedding_model: str
+    chunk_size: int
+    overlap: int
+    total_elapsed_ms: int
+    files_per_second: float
+    chunks_per_second: float
+    indexed_count: int
+    unchanged_count: int
+    failed_count: int
+    skipped_count: int
+    chunks_indexed: int
+    embedding_calls: int
+    runs: list[CorpusIndexBenchmarkRunResult] = Field(default_factory=list)
