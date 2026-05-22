@@ -13,6 +13,7 @@ from textual.message import Message
 from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Static
 
 from free_plaud.app.config import Settings, get_settings
+from free_plaud.corpus.models import CorpusDiscoveryResult
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import get_embedder
@@ -25,6 +26,7 @@ from free_plaud.tui.actions import (
     corpus_status_from_tui,
     index_corpus_folder,
     list_corpus_notes,
+    preflight_corpus_folder,
     reset_corpus_from_tui,
 )
 
@@ -369,8 +371,14 @@ class NotesPane(Vertical):
             return
         if control_id in {'notes-index', 'notes-rebuild'}:
             folder = self.query_one('#notes-folder-path', Input).value
+            try:
+                preflight = preflight_corpus_folder(folder)
+            except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+                self._render_error(exc)
+                return
+            self._render_preflight(preflight, rebuild=control_id == 'notes-rebuild')
             self._set_running(True)
-            self._run_index(Path(folder), control_id == 'notes-rebuild')
+            self._run_index(Path(preflight.root_path), control_id == 'notes-rebuild')
             return
         if control_id == 'notes-reset':
             confirm = self.query_one('#notes-reset-confirm', Input).value
@@ -427,6 +435,21 @@ class NotesPane(Vertical):
         output.clear()
         output.write(Panel(str(exc), title='Erro', border_style='#fb7185'))
         self._set_running(False)
+
+    def _render_preflight(self, preflight: CorpusDiscoveryResult, *, rebuild: bool) -> None:
+        output = self.query_one('#notes-output', RichLog)
+        output.clear()
+        output.write(
+            Panel(
+                f'pasta={_short_path(preflight.root_path, 72)}\n'
+                f'acao={"rebuild" if rebuild else "indexar"}\n'
+                f'encontrados={len(preflight.files)}\n'
+                f'ignorados={len(preflight.skipped)}\n'
+                'status=iniciando',
+                title='Preflight',
+                border_style='#7c3aed',
+            )
+        )
 
     def _render_status(self, status, notes, *, clear: bool = True) -> None:  # noqa: ANN001
         output = self.query_one('#notes-output', RichLog)

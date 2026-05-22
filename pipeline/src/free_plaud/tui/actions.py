@@ -6,7 +6,13 @@ from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.benchmark.datasets import load_benchmark_suite
 from free_plaud.benchmark.runners import BenchmarkComparisonResult, compare_benchmark_suite
 from free_plaud.corpus.ask import answer_corpus_with_citations
-from free_plaud.corpus.models import CorpusIndexBatchResult, CorpusResetResult, CorpusStatusResult
+from free_plaud.corpus.discovery import discover_corpus_files
+from free_plaud.corpus.models import (
+    CorpusDiscoveryResult,
+    CorpusIndexBatchResult,
+    CorpusResetResult,
+    CorpusStatusResult,
+)
 from free_plaud.corpus.service import get_corpus_status, index_corpus_path, rebuild_corpus, reset_corpus
 from free_plaud.notes.schemas import Note
 from free_plaud.providers.embed import get_embedder
@@ -68,6 +74,24 @@ def corpus_status_from_tui(*, settings: Settings | None = None) -> CorpusStatusR
     return get_corpus_status(settings=settings or get_settings())
 
 
+def _resolve_folder_path(folder_path: Path | str) -> Path:
+    raw_path = str(folder_path).strip()
+    if not raw_path:
+        raise ValueError('Informe uma pasta para indexar.')
+
+    target = Path(raw_path).expanduser()
+    if not target.exists():
+        raise FileNotFoundError(f'Pasta nao encontrada: {target}')
+    if not target.is_dir():
+        raise ValueError(f'Path precisa ser pasta: {target}')
+    return target
+
+
+def preflight_corpus_folder(folder_path: Path | str) -> CorpusDiscoveryResult:
+    target = _resolve_folder_path(folder_path)
+    return discover_corpus_files(target, recursive=True)
+
+
 def _failed_batch(path: Path, message: str) -> CorpusIndexBatchResult:
     _ = message
     return CorpusIndexBatchResult(
@@ -89,13 +113,9 @@ def index_corpus_folder(
     rebuild: bool = False,
     settings: Settings | None = None,
 ) -> CorpusIndexBatchResult:
+    target = _resolve_folder_path(folder_path)
     resolved_settings = settings or get_settings()
     ensure_runtime_dirs(resolved_settings)
-    target = Path(folder_path).expanduser()
-    if not target.exists():
-        return _failed_batch(target, 'Path not found.')
-    if not target.is_dir():
-        return _failed_batch(target, 'Path precisa ser pasta.')
 
     if rebuild:
         result = rebuild_corpus(target, settings=resolved_settings, recursive=True, dry_run=False)

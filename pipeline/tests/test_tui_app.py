@@ -6,7 +6,13 @@ import pytest
 from textual.widgets import Button, Input
 
 from free_plaud.app.config import Settings
-from free_plaud.corpus.models import CorpusIndexBatchResult, CorpusResetResult, CorpusStatusResult
+from free_plaud.corpus.models import (
+    CorpusDiscoveryResult,
+    CorpusIndexBatchResult,
+    CorpusResetResult,
+    CorpusSkippedPath,
+    CorpusStatusResult,
+)
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.models import AskResponse, Citation, UsedSource
 from free_plaud.tui.app import (
@@ -506,6 +512,90 @@ def test_tui_notes_can_index_folder_and_reset_with_confirmation(monkeypatch, tmp
     assert captured['index_path'] == tmp_path
     assert captured['rebuild'] is False
     assert captured['reset_confirm'] == 'LIMPAR'
+
+
+def test_tui_notes_rejects_empty_folder_before_index(monkeypatch) -> None:
+    calls = 0
+
+    def fake_index_folder(path: Path, *, rebuild: bool) -> CorpusIndexBatchResult:
+        nonlocal calls
+        calls += 1
+        raise AssertionError('indexacao nao deve iniciar com pasta vazia')
+
+    monkeypatch.setattr('free_plaud.tui.app.index_corpus_folder', fake_index_folder)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.click('#nav-notes')
+            await pilot.pause(0.1)
+            await pilot.click('#notes-index')
+            await pilot.pause(0.3)
+            assert not app.query_one('#notes-index', ActionCell).disabled
+
+    asyncio.run(run_app())
+
+    assert calls == 0
+
+
+def test_tui_notes_runs_preflight_before_index(monkeypatch, tmp_path: Path) -> None:
+    events: list[tuple[str, object]] = []
+
+    def fake_preflight_folder(path: str) -> CorpusDiscoveryResult:
+        events.append(('preflight', path))
+        return CorpusDiscoveryResult(
+            root_path=str(tmp_path),
+            recursive=True,
+            files=[tmp_path / 'nota.md', tmp_path / 'nested' / 'aula.txt'],
+            skipped=[CorpusSkippedPath(path=str(tmp_path / 'image.png'), reason='unsupported_extension')],
+        )
+
+    def fake_index_folder(path: Path, *, rebuild: bool) -> CorpusIndexBatchResult:
+        events.append(('index', path))
+        return CorpusIndexBatchResult(
+            source_path=str(path),
+            recursive=True,
+            status='success',
+            total_found=2,
+            indexed_count=2,
+            failed_count=0,
+            skipped_count=1,
+            results=[],
+        )
+
+    monkeypatch.setattr('free_plaud.tui.app.preflight_corpus_folder', fake_preflight_folder)
+    monkeypatch.setattr('free_plaud.tui.app.index_corpus_folder', fake_index_folder)
+    monkeypatch.setattr(
+        'free_plaud.tui.app.corpus_status_from_tui',
+        lambda: CorpusStatusResult(
+            sqlite_path='db',
+            vector_store_dir='vec',
+            vector_collection_name='test',
+            notes_count=0,
+            sqlite_chunks_count=0,
+            vector_chunks_count=0,
+            stale_vector_chunks_count=0,
+            missing_vector_chunks_count=0,
+            status='empty',
+        ),
+    )
+    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', lambda: [])
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.click('#nav-notes')
+            await pilot.pause(0.1)
+            app.query_one('#notes-folder-path', Input).value = str(tmp_path)
+            await pilot.click('#notes-index')
+            await pilot.pause(0.5)
+
+    asyncio.run(run_app())
+
+    assert events == [
+        ('preflight', str(tmp_path)),
+        ('index', tmp_path),
+    ]
 
 
 def test_tui_reset_requires_literal_confirmation(monkeypatch) -> None:
