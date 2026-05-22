@@ -1,0 +1,107 @@
+import sqlite3
+from pathlib import Path
+
+from free_plaud.app.config import Settings, get_settings
+from free_plaud.app.paths import ensure_runtime_dirs
+from free_plaud.corpus.models import CorpusIndexResult
+from free_plaud.ingest.loaders import load_document
+from free_plaud.notes.structurer import structure_document
+from free_plaud.providers.embed import Embedder, get_embedder
+from free_plaud.retrieval.indexer import index_note
+from free_plaud.storage.sqlite import init_sqlite, replace_chunks_for_note, upsert_note
+from free_plaud.storage.vector import LocalVectorStore
+
+
+def _failure_result(
+    source_path: Path,
+    *,
+    error_code: str,
+    message: str,
+    vector_store: LocalVectorStore,
+    embedding_model: str | None,
+) -> CorpusIndexResult:
+    return CorpusIndexResult(
+        source_path=str(source_path),
+        status='failed',
+        chunks_indexed=0,
+        embedding_model=embedding_model,
+        vector_collection_name=vector_store.collection_name,
+        vector_entries_count=vector_store.count(),
+        error_code=error_code,
+        message=message,
+    )
+
+
+def _error_code_for_exception(exc: Exception) -> str:
+    if isinstance(exc, FileNotFoundError):
+        return 'INPUT_NOT_FOUND'
+    if isinstance(exc, ValueError):
+        text = str(exc)
+        if text == 'EMPTY_CONTENT':
+            return 'EMPTY_CONTENT'
+        if 'Extensão não suportada' in text:
+            return 'UNSUPPORTED_MEDIA_TYPE'
+    return 'INDEXING_FAILED'
+
+
+def index_corpus_file(
+    path: Path | str,
+    *,
+    settings: Settings | None = None,
+    connection: sqlite3.Connection | None = None,
+    vector_store: LocalVectorStore | None = None,
+    embedder: Embedder | None = None,
+    chunk_size: int | None = None,
+    overlap: int | None = None,
+) -> CorpusIndexResult:
+    """Estrutura, persiste e indexa um arquivo no corpus local."""
+    resolved_settings = settings or get_settings()
+    ensure_runtime_dirs(resolved_settings)
+    source_path = Path(path).expanduser()
+
+    owns_connection = connection is None
+    resolved_connection = connection or init_sqlite(resolved_settings.sqlite_path)
+    resolved_vector_store = vector_store or LocalVectorStore(
+        resolved_settings.vector_store_dir,
+        collection_name=resolved_settings.vector_collection_name,
+    )
+    resolved_embedder = embedder or get_embedder(resolved_settings.embedding_model)
+    resolved_chunk_size = chunk_size or resolved_settings.default_chunk_size
+    resolved_overlap = resolved_settings.default_chunk_overlap if overlap is None else overlap
+
+    try:
+        document = load_document(source_path)
+        if not document.raw_text.strip():
+            raise ValueError('EMPTY_CONTENT')
+
+        note = structure_document(document)
+        chunks = index_note(note, chunk_size=resolved_chunk_size, overlap=resolved_overlap)
+        embeddings = resolved_embedder.embed([chunk.chunk_text for chunk in chunks])
+        if len(embeddings) != len(chunks):
+            raise ValueError('A quantidade de embeddings precisa bater com a quantidade de chunks.')
+
+        resolved_vector_store.upsert_chunks(chunks, embeddings, embedding_model=resolved_embedder.model_name)
+        upsert_note(resolved_connection, note)
+        replace_chunks_for_note(resolved_connection, note.note_id, chunks)
+
+        return CorpusIndexResult(
+            source_path=str(document.source_path),
+            status='success',
+            note_id=note.note_id,
+            chunks_indexed=len(chunks),
+            embedding_model=resolved_embedder.model_name,
+            vector_collection_name=resolved_vector_store.collection_name,
+            vector_entries_count=resolved_vector_store.count(),
+            message='Document indexed successfully.',
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        return _failure_result(
+            source_path,
+            error_code=_error_code_for_exception(exc),
+            message=str(exc),
+            vector_store=resolved_vector_store,
+            embedding_model=resolved_embedder.model_name,
+        )
+    finally:
+        if owns_connection:
+            resolved_connection.close()
