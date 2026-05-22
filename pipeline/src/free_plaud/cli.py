@@ -6,6 +6,7 @@ from rich.console import Console
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.benchmark.cli import app as benchmark_app
+from free_plaud.corpus.cli import app as corpus_app
 from free_plaud.ingest.cli import app as ingest_app
 from free_plaud.notes.cli import app as notes_app
 from free_plaud.retrieval.cli import app as retrieval_app
@@ -23,6 +24,7 @@ app.add_typer(notes_app, name="notes")
 app.add_typer(retrieval_app, name="retrieval")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(storage_app, name="storage")
+app.add_typer(corpus_app, name="corpus")
 
 
 @app.command("doctor")
