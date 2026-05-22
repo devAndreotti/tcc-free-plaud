@@ -14,7 +14,7 @@ from free_plaud.corpus.service import (
     rebuild_corpus,
     reset_corpus,
 )
-from free_plaud.providers.embed import get_embedder
+from free_plaud.providers.embed import describe_embedding_config, get_embedder
 from free_plaud.storage.sqlite import init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
 
@@ -26,6 +26,14 @@ def status() -> None:
     """Mostra consistencia entre SQLite e Chroma sem modificar dados."""
     settings = get_settings()
     result = get_corpus_status(settings=settings)
+    typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
+
+
+@app.command('embedding-info')
+def embedding_info() -> None:
+    """Mostra modelo de embedding e device efetivo."""
+    settings = get_settings()
+    result = describe_embedding_config(settings.embedding_model, device=settings.embedding_device)
     typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
 
 
@@ -134,7 +142,7 @@ def ask(
     embedder = None
     if strategy in {'vector', 'hybrid'}:
         vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
-        embedder = get_embedder(settings.embedding_model)
+        embedder = get_embedder(settings.embedding_model, device=settings.embedding_device)
 
     try:
         response = answer_corpus_with_citations(

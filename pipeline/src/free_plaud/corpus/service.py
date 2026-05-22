@@ -193,6 +193,7 @@ def _benchmark_settings(base: Settings, workspace_dir: Path) -> Settings:
         vector_store_dir=data_dir / 'results' / 'vector_store',
         vector_collection_name=base.vector_collection_name,
         embedding_model=base.embedding_model,
+        embedding_device=base.embedding_device,
         default_chunk_size=base.default_chunk_size,
         default_chunk_overlap=base.default_chunk_overlap,
         retrieval_top_k=base.retrieval_top_k,
@@ -357,7 +358,10 @@ def benchmark_corpus_indexing(
         raise ValueError('repeat precisa ser maior que zero.')
 
     resolved_settings = settings or get_settings()
-    resolved_embedder = embedder or get_embedder(resolved_settings.embedding_model)
+    resolved_embedder = embedder or get_embedder(
+        resolved_settings.embedding_model,
+        device=resolved_settings.embedding_device,
+    )
     counting_embedder = _CountingEmbedder(resolved_embedder)
     resolved_chunk_size = chunk_size or resolved_settings.default_chunk_size
     resolved_overlap = resolved_settings.default_chunk_overlap if overlap is None else overlap
@@ -465,7 +469,10 @@ def rebuild_corpus(
         resolved_settings.vector_store_dir,
         collection_name=resolved_settings.vector_collection_name,
     )
-    resolved_embedder = embedder or get_embedder(resolved_settings.embedding_model)
+    resolved_embedder = embedder or get_embedder(
+        resolved_settings.embedding_model,
+        device=resolved_settings.embedding_device,
+    )
 
     try:
         before_status = get_corpus_status(
@@ -630,7 +637,10 @@ def index_corpus_file(
         resolved_settings.vector_store_dir,
         collection_name=resolved_settings.vector_collection_name,
     )
-    resolved_embedder = embedder or get_embedder(resolved_settings.embedding_model)
+    resolved_embedder = embedder or get_embedder(
+        resolved_settings.embedding_model,
+        device=resolved_settings.embedding_device,
+    )
     resolved_chunk_size = chunk_size or resolved_settings.default_chunk_size
     resolved_overlap = resolved_settings.default_chunk_overlap if overlap is None else overlap
 
@@ -726,7 +736,10 @@ def index_corpus_path(
         resolved_settings.vector_store_dir,
         collection_name=resolved_settings.vector_collection_name,
     )
-    resolved_embedder = embedder or get_embedder(resolved_settings.embedding_model)
+    resolved_embedder = embedder or get_embedder(
+        resolved_settings.embedding_model,
+        device=resolved_settings.embedding_device,
+    )
     resolved_chunk_size = chunk_size or resolved_settings.default_chunk_size
     resolved_overlap = resolved_settings.default_chunk_overlap if overlap is None else overlap
     started_at = perf_counter()

@@ -349,7 +349,7 @@ def test_benchmark_run_cli_accepts_hybrid_knobs(monkeypatch, tmp_path: Path) -> 
     )
 
     monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(
         app,
@@ -525,7 +525,7 @@ def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, t
     )
 
     monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(
         app,

@@ -383,7 +383,7 @@ def test_retrieval_index_and_semantic_search_cli_use_vector_store(monkeypatch, t
     )
 
     monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     index_result = runner.invoke(app, ['retrieval', 'index', str(sample_file), '--chunk-size', '80', '--overlap', '20'])
     search_result = runner.invoke(
@@ -432,7 +432,7 @@ def test_open_semantic_search_cli_reranks_shared_collection_results(monkeypatch,
     )
 
     monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     runner.invoke(app, ['retrieval', 'index', str(relevant_file), '--chunk-size', '80', '--overlap', '20'])
     runner.invoke(app, ['retrieval', 'index', str(noisy_file), '--chunk-size', '80', '--overlap', '20'])

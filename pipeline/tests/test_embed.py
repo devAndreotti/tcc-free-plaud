@@ -3,15 +3,21 @@ from chromadb.utils import embedding_functions
 from free_plaud.providers.embed import (
     ChromaDefaultEmbedder,
     SentenceTransformerEmbedder,
+    describe_embedding_config,
     get_embedder,
 )
 
 
 def test_get_embedder_resolves_chroma_default() -> None:
-    embedder = get_embedder('chroma-default')
+    embedder = get_embedder('chroma-default', device='cuda')
 
     assert isinstance(embedder, ChromaDefaultEmbedder)
     assert embedder.model_name == 'chroma-default'
+
+    diagnostics = describe_embedding_config('chroma-default', device='cuda')
+    assert diagnostics.device_applicable is False
+    assert diagnostics.resolved_device is None
+    assert 'nao se aplica' in diagnostics.message
 
 
 def test_get_embedder_resolves_sentence_transformer_alias(monkeypatch) -> None:
@@ -32,7 +38,10 @@ def test_get_embedder_resolves_sentence_transformer_alias(monkeypatch) -> None:
         FakeSentenceTransformerEmbeddingFunction,
     )
 
-    embedder = get_embedder('sentence-transformer:sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+    embedder = get_embedder(
+        'sentence-transformer:sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
+        device='cpu',
+    )
 
     assert isinstance(embedder, SentenceTransformerEmbedder)
     assert embedder.model_name == 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
@@ -42,6 +51,39 @@ def test_get_embedder_resolves_sentence_transformer_alias(monkeypatch) -> None:
         'normalize_embeddings': False,
     }
     assert embedder.embed(['teste']) == [[1.0, 2.0]]
+
+
+def test_get_embedder_rejects_unavailable_cuda(monkeypatch) -> None:
+    monkeypatch.setattr('free_plaud.providers.embed._cuda_available', lambda: False)
+
+    try:
+        get_embedder('sentence-transformer:sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', device='cuda')
+    except ValueError as exc:
+        assert 'CUDA indisponivel' in str(exc)
+    else:
+        raise AssertionError('Era esperado ValueError quando CUDA foi solicitada mas nao esta disponivel.')
+
+
+def test_get_embedder_auto_uses_cuda_when_available(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeSentenceTransformerEmbeddingFunction:
+        def __init__(self, *, model_name: str, device: str, normalize_embeddings: bool) -> None:
+            captured['device'] = device
+
+        def __call__(self, texts: list[str]) -> list[list[float]]:
+            return [[1.0, 2.0] for _ in texts]
+
+    monkeypatch.setattr('free_plaud.providers.embed._cuda_available', lambda: True)
+    monkeypatch.setattr(
+        embedding_functions,
+        'SentenceTransformerEmbeddingFunction',
+        FakeSentenceTransformerEmbeddingFunction,
+    )
+
+    get_embedder('sentence-transformer:modelo-local', device='auto')
+
+    assert captured['device'] == 'cuda'
 
 
 def test_get_embedder_rejects_unknown_model() -> None:

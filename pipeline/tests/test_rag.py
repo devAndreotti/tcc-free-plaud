@@ -852,7 +852,7 @@ def test_retrieval_ask_cli_supports_vector_strategy(monkeypatch, tmp_path: Path)
     )
 
     monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(
         app,
@@ -896,7 +896,7 @@ def test_retrieval_ask_cli_supports_hybrid_strategy(monkeypatch, tmp_path: Path)
     )
 
     monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(
         app,

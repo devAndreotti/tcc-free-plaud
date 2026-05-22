@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
     vector_store_dir: Path = Field(default=Path(__file__).resolve().parents[4] / "data" / "results" / "vector_store")
     vector_collection_name: str = Field(default="free_plaud_chunks")
     embedding_model: str = Field(default="chroma-default")
+    embedding_device: Literal['cpu', 'cuda', 'auto'] = Field(default='cpu')
     default_chunk_size: int = Field(default=800, ge=100, le=4000)
     default_chunk_overlap: int = Field(default=120, ge=0, le=1000)
     retrieval_top_k: int = Field(default=5, ge=1, le=50)

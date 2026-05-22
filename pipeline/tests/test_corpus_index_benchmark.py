@@ -74,7 +74,7 @@ def test_benchmark_corpus_indexing_measures_repeat_and_unchanged(tmp_path: Path)
 def test_corpus_index_benchmark_cli_outputs_json(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(app, ['corpus', 'index-benchmark', '--files', '4', '--repeat', '2'])
 

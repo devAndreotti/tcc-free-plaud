@@ -70,7 +70,7 @@ def run(
     resolved_embedding_model = embedding_model or settings.embedding_model
     if strategy in {'vector', 'hybrid'}:
         vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
-        embedder = get_embedder(resolved_embedding_model)
+        embedder = get_embedder(resolved_embedding_model, device=settings.embedding_device)
 
     result = run_benchmark(
         note,
@@ -123,7 +123,7 @@ def compare(
         collection_name=f'{suite.suite_name}_compare',
     )
     resolved_embedding_model = embedding_model or settings.embedding_model
-    embedder = get_embedder(resolved_embedding_model)
+    embedder = get_embedder(resolved_embedding_model, device=settings.embedding_device)
 
     result = compare_benchmark_suite(
         suite,

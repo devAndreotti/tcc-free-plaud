@@ -49,7 +49,7 @@ def ask_corpus(
             resolved_settings.vector_store_dir,
             collection_name=resolved_settings.vector_collection_name,
         )
-        embedder = get_embedder(resolved_settings.embedding_model)
+        embedder = get_embedder(resolved_settings.embedding_model, device=resolved_settings.embedding_device)
 
     try:
         return answer_corpus_with_citations(
@@ -168,7 +168,7 @@ def compare_suite_from_tui(
         resolved_settings.results_dir / 'benchmark_compare' / suite.suite_name,
         collection_name=f'{suite.suite_name}_compare',
     )
-    embedder = get_embedder(resolved_settings.embedding_model)
+    embedder = get_embedder(resolved_settings.embedding_model, device=resolved_settings.embedding_device)
     try:
         return compare_benchmark_suite(
             suite,

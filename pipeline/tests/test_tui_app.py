@@ -141,7 +141,7 @@ def test_ask_file_hybrid_initializes_vector_dependencies(monkeypatch, tmp_path: 
     monkeypatch.setattr('free_plaud.tui.app.load_document', lambda path: ('document', path))
     monkeypatch.setattr('free_plaud.tui.app.structure_document', lambda document: _note(sample))
     monkeypatch.setattr('free_plaud.tui.app.LocalVectorStore', FakeVectorStore)
-    monkeypatch.setattr('free_plaud.tui.app.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.tui.app.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     def fake_answer_with_citations(note, question, top_k, **kwargs):  # noqa: ANN001, ANN002, ANN003
         captured.update(note=note, question=question, top_k=top_k, kwargs=kwargs)

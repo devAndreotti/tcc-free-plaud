@@ -76,7 +76,7 @@ def ask_file(
         resolved_settings.vector_store_dir,
         collection_name=resolved_settings.vector_collection_name,
     )
-    embedder = get_embedder(resolved_settings.embedding_model)
+    embedder = get_embedder(resolved_settings.embedding_model, device=resolved_settings.embedding_device)
     return answer_with_citations(
         note,
         cleaned_question,
@@ -125,6 +125,8 @@ class NavPanel(Vertical):
         with Vertical(id='nav-meta'):
             yield Static('modelo', classes='nav-meta-label')
             yield Static(settings.embedding_model, classes='nav-meta-value')
+            yield Static('device', classes='nav-meta-label')
+            yield Static(settings.embedding_device, classes='nav-meta-value')
             yield Static('top_k', classes='nav-meta-label')
             yield Static(str(settings.retrieval_top_k), classes='nav-meta-value')
 

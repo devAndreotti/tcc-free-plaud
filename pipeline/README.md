@@ -33,6 +33,7 @@ uv run pytest
 uv run free-plaud corpus rebuild "D:\caminho\pasta" --recursive --yes
 uv run free-plaud corpus ask --question "Pergunta" --strategy hybrid --top-k 6
 uv run free-plaud corpus index-benchmark --files 100 --repeat 2
+uv run free-plaud corpus embedding-info
 uv run free-plaud-tui
 ```
 
@@ -45,4 +46,5 @@ Para pastas grandes, a indexação de corpus usa batches configuráveis:
 FREE_PLAUD_CORPUS_EMBEDDING_BATCH_SIZE=64
 FREE_PLAUD_CORPUS_UPSERT_BATCH_SIZE=128
 FREE_PLAUD_CORPUS_INDEX_WORKERS=1
+FREE_PLAUD_EMBEDDING_DEVICE=cpu
 ```

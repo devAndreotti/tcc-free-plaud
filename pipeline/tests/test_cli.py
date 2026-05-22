@@ -92,7 +92,7 @@ def test_corpus_index_cli_persists_file(monkeypatch, tmp_path: Path) -> None:
         encoding='utf-8',
     )
     monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(app, ['corpus', 'index', *str(source).split(' ')])
 
@@ -118,12 +118,27 @@ def test_corpus_status_cli_returns_consistency_json(monkeypatch, tmp_path: Path)
     assert payload['vector_chunks_count'] == 0
 
 
+def test_corpus_embedding_info_cli_reports_device(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    settings.embedding_model = 'chroma-default'
+    settings.embedding_device = 'cuda'
+    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+
+    result = runner.invoke(app, ['corpus', 'embedding-info'])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['model_name'] == 'chroma-default'
+    assert payload['requested_device'] == 'cuda'
+    assert payload['device_applicable'] is False
+
+
 def test_corpus_reset_cli_previews_by_default_and_executes_with_yes(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     source = tmp_path / 'resetavel.md'
     source.write_text('# Resetavel\n\nRabbitMQ foi adotado como broker.\n', encoding='utf-8')
     monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     index_result = runner.invoke(app, ['corpus', 'index', str(source)])
     preview_result = runner.invoke(app, ['corpus', 'reset', '--dry-run'])
@@ -157,7 +172,7 @@ def test_corpus_rebuild_cli_rebuilds_directory_with_yes(monkeypatch, tmp_path: P
     (target / 'broker.md').write_text('# Broker\n\nRabbitMQ foi adotado como broker.\n', encoding='utf-8')
     (target / 'runbook.md').write_text('# Runbook\n\nO time SRE ficou responsavel pelo runbook.\n', encoding='utf-8')
     monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     preview_result = runner.invoke(app, ['corpus', 'rebuild', str(target), '--recursive', '--dry-run'])
     rebuild_result = runner.invoke(app, ['corpus', 'rebuild', str(target), '--recursive', '--yes'])
@@ -181,7 +196,7 @@ def test_corpus_index_cli_returns_non_zero_for_invalid_file(monkeypatch, tmp_pat
     source = tmp_path / 'planilha.xlsx'
     source.write_text('conteudo', encoding='utf-8')
     monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(app, ['corpus', 'index', str(source)])
 
@@ -199,7 +214,7 @@ def test_corpus_index_cli_accepts_recursive_directory(monkeypatch, tmp_path: Pat
     (root / 'base.md').write_text('# Base\n\nArquivo raiz.\n', encoding='utf-8')
     (nested / 'detalhe.md').write_text('# Detalhe\n\nArquivo aninhado.\n', encoding='utf-8')
     monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(app, ['corpus', 'index', str(root), '--recursive'])
 
@@ -223,8 +238,8 @@ def test_corpus_ask_cli_answers_against_indexed_directory(monkeypatch, tmp_path:
         encoding='utf-8',
     )
     monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.cli.get_embedder', lambda model_name: FakeEmbedder())
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.corpus.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     index_result = runner.invoke(app, ['corpus', 'index', str(root), '--recursive'])
     ask_result = runner.invoke(

@@ -66,7 +66,7 @@ def ask(
             settings.vector_store_dir,
             collection_name=settings.vector_collection_name,
         )
-        embedder = get_embedder(settings.embedding_model)
+        embedder = get_embedder(settings.embedding_model, device=settings.embedding_device)
     response = answer_with_citations(
         note,
         question,
@@ -91,7 +91,7 @@ def index(
         settings.vector_store_dir,
         collection_name=settings.vector_collection_name,
     )
-    embedder = get_embedder(settings.embedding_model)
+    embedder = get_embedder(settings.embedding_model, device=settings.embedding_device)
     path = compose_path(path_parts)
     document = load_document(path)
     note = structure_document(document)
@@ -126,7 +126,7 @@ def semantic_search_command(
         settings.vector_store_dir,
         collection_name=settings.vector_collection_name,
     )
-    embedder = get_embedder(settings.embedding_model)
+    embedder = get_embedder(settings.embedding_model, device=settings.embedding_device)
     hits = (
         semantic_search(query, vector_store, embedder, top_k=top_k, note_id=note_id)
         if note_id
