@@ -6,7 +6,7 @@ import typer
 from free_plaud.app.cli_paths import compose_path
 from free_plaud.app.config import get_settings
 from free_plaud.corpus.ask import answer_corpus_with_citations
-from free_plaud.corpus.service import get_corpus_status, index_corpus_file, index_corpus_path, reset_corpus
+from free_plaud.corpus.service import get_corpus_status, index_corpus_file, index_corpus_path, rebuild_corpus, reset_corpus
 from free_plaud.providers.embed import get_embedder
 from free_plaud.storage.sqlite import init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
@@ -31,6 +31,31 @@ def reset(
     settings = get_settings()
     result = reset_corpus(settings=settings, dry_run=(dry_run or not yes))
     typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
+
+
+@app.command('rebuild')
+def rebuild(
+    path_parts: list[str] = typer.Argument(..., metavar='PATH'),
+    chunk_size: int | None = typer.Option(None, '--chunk-size', min=1),
+    overlap: int | None = typer.Option(None, '--overlap', min=0),
+    recursive: bool = typer.Option(False, '--recursive', help='Indexa subpastas recursivamente quando PATH for diretorio.'),
+    dry_run: bool = typer.Option(False, '--dry-run', help='Simula rebuild sem apagar ou indexar.'),
+    yes: bool = typer.Option(False, '--yes', help='Executa reset e indexacao do corpus.'),
+) -> None:
+    """Reconstroi o corpus ativo a partir de arquivo ou pasta."""
+    settings = get_settings()
+    target = compose_path(path_parts)
+    result = rebuild_corpus(
+        target,
+        settings=settings,
+        chunk_size=chunk_size,
+        overlap=overlap,
+        recursive=recursive,
+        dry_run=(dry_run or not yes),
+    )
+    typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
+    if result.status == 'failed':
+        raise typer.Exit(code=1)
 
 
 @app.command('index')

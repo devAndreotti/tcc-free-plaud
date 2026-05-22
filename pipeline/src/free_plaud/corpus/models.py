@@ -76,3 +76,18 @@ class CorpusResetResult(BaseModel):
     deleted_chunks: int = 0
     deleted_vectors: int = 0
     status: Literal['preview', 'reset']
+
+
+class CorpusRebuildResult(BaseModel):
+    """Resultado de rebuild seguro a partir de arquivo ou pasta."""
+
+    source_path: str
+    recursive: bool
+    dry_run: bool
+    status: Literal['preview', 'success', 'partial', 'failed']
+    before_status: CorpusStatusResult
+    reset: CorpusResetResult | None = None
+    index_result: CorpusIndexBatchResult | None = None
+    after_status: CorpusStatusResult | None = None
+    error_code: str | None = None
+    message: str | None = None

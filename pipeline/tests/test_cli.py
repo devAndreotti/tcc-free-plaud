@@ -139,6 +139,32 @@ def test_corpus_reset_cli_previews_by_default_and_executes_with_yes(monkeypatch,
     assert vector_store.count() == 0
 
 
+def test_corpus_rebuild_cli_rebuilds_directory_with_yes(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    target = tmp_path / 'target'
+    target.mkdir()
+    (target / 'broker.md').write_text('# Broker\n\nRabbitMQ foi adotado como broker.\n', encoding='utf-8')
+    (target / 'runbook.md').write_text('# Runbook\n\nO time SRE ficou responsavel pelo runbook.\n', encoding='utf-8')
+    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name: FakeEmbedder())
+
+    preview_result = runner.invoke(app, ['corpus', 'rebuild', str(target), '--recursive', '--dry-run'])
+    rebuild_result = runner.invoke(app, ['corpus', 'rebuild', str(target), '--recursive', '--yes'])
+
+    assert preview_result.exit_code == 0
+    preview = json.loads(preview_result.stdout)
+    assert preview['status'] == 'preview'
+    assert preview['dry_run'] is True
+    assert preview['index_result'] is None
+
+    assert rebuild_result.exit_code == 0
+    payload = json.loads(rebuild_result.stdout)
+    assert payload['status'] == 'success'
+    assert payload['dry_run'] is False
+    assert payload['index_result']['indexed_count'] == 2
+    assert payload['after_status']['status'] == 'clean'
+
+
 def test_corpus_index_cli_returns_non_zero_for_invalid_file(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     source = tmp_path / 'planilha.xlsx'
