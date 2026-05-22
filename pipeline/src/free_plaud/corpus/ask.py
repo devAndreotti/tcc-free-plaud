@@ -74,6 +74,17 @@ def _hits_for_citations(hits: list[SearchHit], citations: list[Citation]) -> lis
     return [hit for hit in hits if hit.chunk.chunk_id in cited_chunk_ids]
 
 
+def _filter_hits_to_persisted_chunks(hits: list[SearchHit], valid_chunk_ids: set[str]) -> tuple[list[SearchHit], int]:
+    filtered: list[SearchHit] = []
+    stale_chunk_ids: set[str] = set()
+    for hit in hits:
+        if hit.chunk.chunk_id in valid_chunk_ids:
+            filtered.append(hit)
+        else:
+            stale_chunk_ids.add(hit.chunk.chunk_id)
+    return filtered, len(stale_chunk_ids)
+
+
 def _trim_claim_preserving_query_terms(question: str, query_terms: list[str], claim_text: str) -> str:
     trimmed = _trim_claim_span(question, query_terms, claim_text)
     original_matches = set(match_terms_in_text(query_terms, claim_text)[0])
@@ -246,16 +257,28 @@ def answer_corpus_with_citations(
             latency_ms=int((perf_counter() - started_at) * 1000),
         )
 
-    hits = _dedupe_hits(
-        _retrieve_corpus_hits(
-            question,
-            chunks,
-            top_k=top_k,
-            strategy=strategy,
-            vector_store=vector_store,
-            embedder=embedder,
-        )
+    raw_hits = _retrieve_corpus_hits(
+        question,
+        chunks,
+        top_k=top_k,
+        strategy=strategy,
+        vector_store=vector_store,
+        embedder=embedder,
     )
+    filtered_hits, stale_vector_hits_count = _filter_hits_to_persisted_chunks(
+        raw_hits,
+        {chunk.chunk_id for chunk in chunks},
+    )
+    hits = _dedupe_hits(filtered_hits)
+    stale_limitations = (
+        [f'{stale_vector_hits_count} hit(s) vetoriais stale foram descartados por nao existirem no SQLite.']
+        if stale_vector_hits_count
+        else []
+    )
+
+    def _with_stale_limitations(limitations: list[str]) -> list[str]:
+        return [*stale_limitations, *limitations]
+
     note_lookup = get_notes_by_id(connection, [hit.chunk.note_id for hit in hits])
     used_sources = _summarize_corpus_sources(hits, note_lookup)
 
@@ -263,7 +286,7 @@ def answer_corpus_with_citations(
         return _build_no_answer(
             question=question,
             reason='no_retrieval_hits',
-            limitations=['Nenhum chunk do corpus contem termos informativos suficientes da pergunta.'],
+            limitations=_with_stale_limitations(['Nenhum chunk do corpus contem termos informativos suficientes da pergunta.']),
             used_sources=used_sources,
             latency_ms=int((perf_counter() - started_at) * 1000),
         )
@@ -272,7 +295,9 @@ def answer_corpus_with_citations(
         return _build_no_answer(
             question=question,
             reason='insufficient_term_coverage',
-            limitations=['Os trechos recuperados compartilham poucos termos informativos com a pergunta.'],
+            limitations=_with_stale_limitations(
+                ['Os trechos recuperados compartilham poucos termos informativos com a pergunta.']
+            ),
             used_sources=used_sources,
             latency_ms=int((perf_counter() - started_at) * 1000),
         )
@@ -283,7 +308,9 @@ def answer_corpus_with_citations(
             return _build_no_answer(
                 question=question,
                 reason='insufficient_vector_evidence',
-                limitations=['Os hits vetoriais recuperados nao apresentam evidencia lexical ou score suficiente.'],
+                limitations=_with_stale_limitations(
+                    ['Os hits vetoriais recuperados nao apresentam evidencia lexical ou score suficiente.']
+                ),
                 used_sources=used_sources,
                 latency_ms=int((perf_counter() - started_at) * 1000),
             )
@@ -294,7 +321,9 @@ def answer_corpus_with_citations(
             return _build_no_answer(
                 question=question,
                 reason='insufficient_hybrid_evidence',
-                limitations=['Os hits hibridos recuperados nao apresentam evidencia lexical suficiente.'],
+                limitations=_with_stale_limitations(
+                    ['Os hits hibridos recuperados nao apresentam evidencia lexical suficiente.']
+                ),
                 used_sources=used_sources,
                 latency_ms=int((perf_counter() - started_at) * 1000),
             )
@@ -318,7 +347,9 @@ def answer_corpus_with_citations(
         return _build_no_answer(
             question=question,
             reason='citation_validation_failed',
-            limitations=['A evidencia foi recuperada, mas nao gerou claims citaveis de forma consistente.'],
+            limitations=_with_stale_limitations(
+                ['A evidencia foi recuperada, mas nao gerou claims citaveis de forma consistente.']
+            ),
             used_sources=used_sources,
             latency_ms=int((perf_counter() - started_at) * 1000),
         )
@@ -328,14 +359,18 @@ def answer_corpus_with_citations(
             return _build_no_answer(
                 question=question,
                 reason='insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity',
-                limitations=['Os claims gerados nao trouxeram especificidade textual suficiente.'],
+                limitations=_with_stale_limitations(
+                    ['Os claims gerados nao trouxeram especificidade textual suficiente.']
+                ),
                 used_sources=used_sources,
                 latency_ms=int((perf_counter() - started_at) * 1000),
             )
         return _build_no_answer(
             question=question,
             reason='insufficient_grounded_claims',
-            limitations=['Os claims gerados nao mantiveram ancoragem textual suficiente com a pergunta.'],
+            limitations=_with_stale_limitations(
+                ['Os claims gerados nao mantiveram ancoragem textual suficiente com a pergunta.']
+            ),
             used_sources=used_sources,
             latency_ms=int((perf_counter() - started_at) * 1000),
         )
@@ -346,7 +381,9 @@ def answer_corpus_with_citations(
             return _build_no_answer(
                 question=question,
                 reason='missing_named_anchor',
-                limitations=['A resposta nao sustentou os anchors nomeados presentes na pergunta.'],
+                limitations=_with_stale_limitations(
+                    ['A resposta nao sustentou os anchors nomeados presentes na pergunta.']
+                ),
                 used_sources=used_sources,
                 latency_ms=int((perf_counter() - started_at) * 1000),
             )
@@ -363,13 +400,15 @@ def answer_corpus_with_citations(
             return _build_no_answer(
                 question=question,
                 reason='insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity',
-                limitations=['A resposta recuperada ficou curta e pouco especifica para os termos da pergunta.'],
+                limitations=_with_stale_limitations(
+                    ['A resposta recuperada ficou curta e pouco especifica para os termos da pergunta.']
+                ),
                 used_sources=used_sources,
                 latency_ms=int((perf_counter() - started_at) * 1000),
             )
 
     cited_sources = _summarize_corpus_sources(_hits_for_citations(hits, citations), note_lookup)
-    limitations: list[str] = []
+    limitations: list[str] = list(stale_limitations)
     if any(claim.support_level == 'partial' for claim in claims):
         limitations.append('Parte da resposta depende de evidencia parcial recuperada.')
     if len(citations) == 1:

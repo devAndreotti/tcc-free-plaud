@@ -3,7 +3,8 @@ from pathlib import Path
 from free_plaud.app.config import Settings
 from free_plaud.corpus.ask import answer_corpus_with_citations
 from free_plaud.corpus.service import index_corpus_path
-from free_plaud.storage.sqlite import init_sqlite
+from free_plaud.retrieval.models import Chunk, SearchHit
+from free_plaud.storage.sqlite import init_sqlite, list_chunks
 from free_plaud.storage.vector import LocalVectorStore
 
 
@@ -21,6 +22,14 @@ class FakeEmbedder:
         return embeddings
 
 
+class StubVectorStore:
+    def __init__(self, hits: list[SearchHit]) -> None:
+        self.hits = hits
+
+    def query(self, query_embedding: list[float], *, top_k: int = 5, note_id: str | None = None) -> list[SearchHit]:
+        return self.hits[:top_k]
+
+
 def _settings(tmp_path: Path) -> Settings:
     return Settings(
         workspace_dir=tmp_path,
@@ -34,6 +43,25 @@ def _settings(tmp_path: Path) -> Settings:
         embedding_model='fake-hash',
         default_chunk_size=220,
         default_chunk_overlap=40,
+    )
+
+
+def _chunk(chunk_id: str, note_id: str, text: str) -> Chunk:
+    return Chunk(
+        chunk_id=chunk_id,
+        note_id=note_id,
+        note_version=1,
+        chunk_index=0,
+        char_start=0,
+        char_end=len(text),
+        chunk_size=220,
+        overlap=40,
+        chunk_text=text,
+        token_count=len(text.split()),
+        strategy='fixed_window',
+        normalized_text_sha256=f'{chunk_id}-normalized',
+        text_sha256=f'{chunk_id}-text',
+        pipeline_version='test',
     )
 
 
@@ -112,3 +140,58 @@ def test_answer_corpus_with_citations_returns_no_answer_for_irrelevant_question(
     assert response.status == 'no_answer'
     assert response.no_answer is True
     assert response.reason_for_no_answer is not None
+
+
+def test_answer_corpus_filters_stale_vector_hits_before_citations(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+    stale = _chunk('stale-mobile-1', 'stale-mobile', 'Flutter e React Native sao tecnologias mobile dominadas.')
+    vector_store = StubVectorStore([SearchHit(chunk=stale, score=0.99, strategy='vector')])
+
+    response = answer_corpus_with_citations(
+        'Quais tecnologias mobile o candidato domina?',
+        connection=connection,
+        vector_store=vector_store,  # type: ignore[arg-type]
+        embedder=FakeEmbedder(),
+        strategy='vector',
+        top_k=4,
+    )
+
+    assert response.status == 'no_answer'
+    assert response.no_answer is True
+    assert response.citations == []
+    assert all(source.doc_id != 'stale-mobile' for source in response.used_sources)
+    assert any('stale' in limitation.lower() or 'obsoleto' in limitation.lower() for limitation in response.limitations)
+
+
+def test_answer_corpus_uses_valid_vector_hit_after_dropping_stale_hit(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+    valid_chunk = next(chunk for chunk in list_chunks(connection) if chunk.note_id == '01-contexto-base')
+    stale = _chunk('stale-broker-1', 'stale-broker', 'RabbitMQ foi adotado como message broker em outro corpus.')
+    vector_store = StubVectorStore(
+        [
+            SearchHit(chunk=stale, score=0.99, strategy='vector'),
+            SearchHit(chunk=valid_chunk, score=0.95, strategy='vector'),
+        ]
+    )
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        vector_store=vector_store,  # type: ignore[arg-type]
+        embedder=FakeEmbedder(),
+        strategy='vector',
+        top_k=4,
+    )
+
+    assert response.status == 'answer'
+    assert 'RabbitMQ' in (response.answer or '')
+    assert {citation.note_id for citation in response.citations} == {'01-contexto-base'}
+    assert all(citation.note_id != 'stale-broker' for citation in response.citations)
