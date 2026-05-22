@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     default_chunk_size: int = Field(default=800, ge=100, le=4000)
     default_chunk_overlap: int = Field(default=120, ge=0, le=1000)
     retrieval_top_k: int = Field(default=5, ge=1, le=50)
+    corpus_embedding_batch_size: int = Field(default=64, ge=1, le=512)
+    corpus_upsert_batch_size: int = Field(default=128, ge=1, le=1000)
 
 
 @lru_cache(maxsize=1)

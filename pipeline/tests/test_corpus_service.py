@@ -320,7 +320,7 @@ def test_index_corpus_path_stops_between_files_when_cancelled(tmp_path: Path) ->
     token = CancellationToken()
 
     def cancel_after_first(progress) -> None:  # noqa: ANN001
-        if progress.phase == 'writing' and progress.processed_count == 1:
+        if progress.phase == 'loading' and progress.processed_count == 1:
             token.cancel()
 
     result = index_corpus_path(
@@ -334,8 +334,8 @@ def test_index_corpus_path_stops_between_files_when_cancelled(tmp_path: Path) ->
 
     assert result.status == 'cancelled'
     assert result.total_found == 2
-    assert result.indexed_count == 1
-    assert len(result.results) == 1
+    assert result.indexed_count == 0
+    assert len(result.results) == 0
 
 
 def test_index_corpus_path_non_recursive_skips_nested_files(tmp_path: Path) -> None:

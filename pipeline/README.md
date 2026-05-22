@@ -32,8 +32,16 @@ uv run pytest
 ```bash
 uv run free-plaud corpus rebuild "D:\caminho\pasta" --recursive --yes
 uv run free-plaud corpus ask --question "Pergunta" --strategy hybrid --top-k 6
+uv run free-plaud corpus index-benchmark --files 100 --repeat 2
 uv run free-plaud-tui
 ```
 
 Na TUI, o modo `Corpus` pergunta contra SQLite + Chroma sem exigir arquivo novo.
 O modo `Arquivo` continua disponível para consulta isolada.
+
+Para pastas grandes, a indexação de corpus usa batches configuráveis:
+
+```bash
+FREE_PLAUD_CORPUS_EMBEDDING_BATCH_SIZE=64
+FREE_PLAUD_CORPUS_UPSERT_BATCH_SIZE=128
+```

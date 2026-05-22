@@ -1,5 +1,6 @@
 import sqlite3
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
@@ -19,9 +20,11 @@ from free_plaud.corpus.models import (
     CorpusStatusResult,
 )
 from free_plaud.ingest.loaders import load_document
+from free_plaud.notes.schemas import Note
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import Embedder, get_embedder
 from free_plaud.retrieval.indexer import index_note
+from free_plaud.retrieval.models import Chunk
 from free_plaud.storage.sqlite import (
     count_chunks,
     count_notes,
@@ -162,6 +165,13 @@ class _CountingEmbedder:
         return self._embedder.embed(texts)
 
 
+@dataclass(frozen=True)
+class _PendingCorpusIndex:
+    source_path: Path
+    note: Note
+    chunks: list[Chunk]
+
+
 def _benchmark_settings(base: Settings, workspace_dir: Path) -> Settings:
     data_dir = workspace_dir / 'data'
     return Settings(
@@ -178,6 +188,8 @@ def _benchmark_settings(base: Settings, workspace_dir: Path) -> Settings:
         default_chunk_size=base.default_chunk_size,
         default_chunk_overlap=base.default_chunk_overlap,
         retrieval_top_k=base.retrieval_top_k,
+        corpus_embedding_batch_size=base.corpus_embedding_batch_size,
+        corpus_upsert_batch_size=base.corpus_upsert_batch_size,
     )
 
 
@@ -204,6 +216,11 @@ def _rate(amount: int, elapsed_ms: int) -> float:
     if amount <= 0 or elapsed_ms <= 0:
         return 0.0
     return round(amount / (elapsed_ms / 1000), 3)
+
+
+def _batched(items: list, batch_size: int):  # noqa: ANN001, ANN202
+    for start in range(0, len(items), batch_size):
+        yield items[start : start + batch_size]
 
 
 def get_corpus_status(
@@ -507,6 +524,53 @@ def rebuild_corpus(
             resolved_connection.close()
 
 
+def _prepare_corpus_file(
+    path: Path,
+    *,
+    connection: sqlite3.Connection,
+    vector_store: LocalVectorStore,
+    embedder: Embedder,
+    chunk_size: int,
+    overlap: int,
+) -> _PendingCorpusIndex | CorpusIndexResult:
+    try:
+        document = load_document(path)
+        if not document.raw_text.strip():
+            raise ValueError('EMPTY_CONTENT')
+
+        note = structure_document(document)
+        existing_hash = get_note_content_hash(connection, note.note_id)
+        existing_chunk_ids = list_chunk_ids_for_note(connection, note.note_id)
+        chunks_match_config = note_chunks_match_config(
+            connection,
+            note.note_id,
+            chunk_size=chunk_size,
+            overlap=overlap,
+        )
+        if existing_hash == note.content_hash and chunks_match_config and vector_store.has_chunk_ids(existing_chunk_ids):
+            return _unchanged_result(
+                note,
+                source_path=document.source_path,
+                chunk_ids=existing_chunk_ids,
+                vector_store=vector_store,
+                embedding_model=embedder.model_name,
+            )
+
+        return _PendingCorpusIndex(
+            source_path=document.source_path,
+            note=note,
+            chunks=index_note(note, chunk_size=chunk_size, overlap=overlap),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        return _failure_result(
+            path,
+            error_code=_error_code_for_exception(exc),
+            message=str(exc),
+            vector_store=vector_store,
+            embedding_model=embedder.model_name,
+        )
+
+
 def index_corpus_file(
     path: Path | str,
     *,
@@ -625,6 +689,8 @@ def index_corpus_path(
         collection_name=resolved_settings.vector_collection_name,
     )
     resolved_embedder = embedder or get_embedder(resolved_settings.embedding_model)
+    resolved_chunk_size = chunk_size or resolved_settings.default_chunk_size
+    resolved_overlap = resolved_settings.default_chunk_overlap if overlap is None else overlap
     started_at = perf_counter()
 
     try:
@@ -739,7 +805,8 @@ def index_corpus_path(
                 skipped=discovery.skipped,
             )
 
-        results: list[CorpusIndexResult] = []
+        prepared_items: list[CorpusIndexResult | _PendingCorpusIndex] = []
+        pending_items: list[_PendingCorpusIndex] = []
         indexed_count = 0
         unchanged_count = 0
         failed_count = 0
@@ -762,7 +829,7 @@ def index_corpus_path(
                     started_at=started_at,
                     current_path=file_path,
                     total_found=total_found,
-                    processed_count=len(results),
+                    processed_count=len(prepared_items),
                     indexed_count=indexed_count,
                     failed_count=failed_count,
                     skipped_count=skipped_count,
@@ -776,9 +843,9 @@ def index_corpus_path(
                     unchanged_count=unchanged_count,
                     failed_count=failed_count,
                     skipped_count=skipped_count,
-                    results=results,
+                    results=[item for item in prepared_items if isinstance(item, CorpusIndexResult)],
                 )
-            processed_count = len(results)
+            processed_count = len(prepared_items)
             _emit_progress(
                 progress,
                 phase='loading',
@@ -792,48 +859,6 @@ def index_corpus_path(
                 skipped_count=skipped_count,
                 message=f'Processando {file_path.name}',
             )
-            _emit_progress(
-                progress,
-                phase='embedding',
-                started_at=started_at,
-                current_path=file_path,
-                total_found=total_found,
-                processed_count=processed_count,
-                indexed_count=indexed_count,
-                unchanged_count=unchanged_count,
-                failed_count=failed_count,
-                skipped_count=skipped_count,
-                message=f'Estruturando e embedando {file_path.name}',
-            )
-            result = index_corpus_file(
-                file_path,
-                settings=resolved_settings,
-                connection=resolved_connection,
-                vector_store=resolved_vector_store,
-                embedder=resolved_embedder,
-                chunk_size=chunk_size,
-                overlap=overlap,
-            )
-            results.append(result)
-            if result.status == 'success':
-                indexed_count += 1
-            elif result.status == 'failed':
-                failed_count += 1
-            elif result.status == 'unchanged':
-                unchanged_count += 1
-            _emit_progress(
-                progress,
-                phase='writing',
-                started_at=started_at,
-                current_path=file_path,
-                total_found=total_found,
-                processed_count=len(results),
-                indexed_count=indexed_count,
-                unchanged_count=unchanged_count,
-                failed_count=failed_count,
-                skipped_count=skipped_count,
-                message=f'Finalizado {file_path.name}',
-            )
             if _is_cancelled(cancel_token):
                 _emit_progress(
                     progress,
@@ -841,7 +866,7 @@ def index_corpus_path(
                     started_at=started_at,
                     current_path=file_path,
                     total_found=total_found,
-                    processed_count=len(results),
+                    processed_count=len(prepared_items),
                     indexed_count=indexed_count,
                     unchanged_count=unchanged_count,
                     failed_count=failed_count,
@@ -856,8 +881,172 @@ def index_corpus_path(
                     unchanged_count=unchanged_count,
                     failed_count=failed_count,
                     skipped_count=skipped_count,
-                    results=results,
+                    results=[item for item in prepared_items if isinstance(item, CorpusIndexResult)],
                 )
+            _emit_progress(
+                progress,
+                phase='structuring',
+                started_at=started_at,
+                current_path=file_path,
+                total_found=total_found,
+                processed_count=processed_count,
+                indexed_count=indexed_count,
+                unchanged_count=unchanged_count,
+                failed_count=failed_count,
+                skipped_count=skipped_count,
+                message=f'Estruturando {file_path.name}',
+            )
+            prepared = _prepare_corpus_file(
+                file_path,
+                connection=resolved_connection,
+                vector_store=resolved_vector_store,
+                embedder=resolved_embedder,
+                chunk_size=resolved_chunk_size,
+                overlap=resolved_overlap,
+            )
+            prepared_items.append(prepared)
+            if isinstance(prepared, _PendingCorpusIndex):
+                pending_items.append(prepared)
+            elif prepared.status == 'failed':
+                failed_count += 1
+            elif prepared.status == 'unchanged':
+                unchanged_count += 1
+            if _is_cancelled(cancel_token):
+                _emit_progress(
+                    progress,
+                    phase='cancelled',
+                    started_at=started_at,
+                    current_path=file_path,
+                    total_found=total_found,
+                    processed_count=len(prepared_items),
+                    indexed_count=indexed_count,
+                    unchanged_count=unchanged_count,
+                    failed_count=failed_count,
+                    skipped_count=skipped_count,
+                    message='Indexacao cancelada.',
+                )
+                return _cancelled_batch_result(
+                    source_path,
+                    recursive=recursive,
+                    total_found=total_found,
+                    indexed_count=indexed_count,
+                    unchanged_count=unchanged_count,
+                    failed_count=failed_count,
+                    skipped_count=skipped_count,
+                    results=[item for item in prepared_items if isinstance(item, CorpusIndexResult)],
+                )
+
+        pending_failure_by_note_id: dict[str, CorpusIndexResult] = {}
+        success_by_note_id: dict[str, CorpusIndexResult] = {}
+        if pending_items and not _is_cancelled(cancel_token):
+            chunk_pairs = [(item, chunk) for item in pending_items for chunk in item.chunks]
+            embeddings_by_chunk_id: dict[str, list[float]] = {}
+            for chunk_batch in _batched(chunk_pairs, resolved_settings.corpus_embedding_batch_size):
+                if _is_cancelled(cancel_token):
+                    _emit_progress(
+                        progress,
+                        phase='cancelled',
+                        started_at=started_at,
+                        current_path=chunk_batch[0][0].source_path if chunk_batch else source_path,
+                        total_found=total_found,
+                        processed_count=failed_count + unchanged_count,
+                        indexed_count=indexed_count,
+                        unchanged_count=unchanged_count,
+                        failed_count=failed_count,
+                        skipped_count=skipped_count,
+                        message='Indexacao cancelada antes da gravacao.',
+                    )
+                    return _cancelled_batch_result(
+                        source_path,
+                        recursive=recursive,
+                        total_found=total_found,
+                        indexed_count=indexed_count,
+                        unchanged_count=unchanged_count,
+                        failed_count=failed_count,
+                        skipped_count=skipped_count,
+                        results=[item for item in prepared_items if isinstance(item, CorpusIndexResult)],
+                    )
+                _emit_progress(
+                    progress,
+                    phase='embedding',
+                    started_at=started_at,
+                    current_path=chunk_batch[0][0].source_path if chunk_batch else source_path,
+                    total_found=total_found,
+                    processed_count=failed_count + unchanged_count,
+                    indexed_count=indexed_count,
+                    unchanged_count=unchanged_count,
+                    failed_count=failed_count,
+                    skipped_count=skipped_count,
+                    message=f'Embedando {len(chunk_batch)} chunks.',
+                )
+                chunks = [chunk for _, chunk in chunk_batch]
+                embeddings = resolved_embedder.embed([chunk.chunk_text for chunk in chunks])
+                if len(embeddings) != len(chunks):
+                    pending_failure_by_note_id = {
+                        item.note.note_id: _failure_result(
+                            item.source_path,
+                            error_code='INDEXING_FAILED',
+                            message='A quantidade de embeddings precisa bater com a quantidade de chunks.',
+                            vector_store=resolved_vector_store,
+                            embedding_model=resolved_embedder.model_name,
+                        )
+                        for item in pending_items
+                    }
+                    failed_count += len(pending_items)
+                    pending_items = []
+                    break
+                for chunk, embedding in zip(chunks, embeddings, strict=True):
+                    embeddings_by_chunk_id[chunk.chunk_id] = embedding
+
+            if pending_items:
+                _emit_progress(
+                    progress,
+                    phase='writing',
+                    started_at=started_at,
+                    current_path=source_path,
+                    total_found=total_found,
+                    processed_count=failed_count + unchanged_count,
+                    indexed_count=indexed_count,
+                    unchanged_count=unchanged_count,
+                    failed_count=failed_count,
+                    skipped_count=skipped_count,
+                    message=f'Gravando {len(pending_items)} arquivos indexados.',
+                )
+                for item in pending_items:
+                    resolved_vector_store.delete_by_note_id(item.note.note_id)
+                all_chunks = [chunk for item in pending_items for chunk in item.chunks]
+                for chunk_batch in _batched(all_chunks, resolved_settings.corpus_upsert_batch_size):
+                    resolved_vector_store.upsert_chunks(
+                        chunk_batch,
+                        [embeddings_by_chunk_id[chunk.chunk_id] for chunk in chunk_batch],
+                        embedding_model=resolved_embedder.model_name,
+                    )
+                for item in pending_items:
+                    upsert_note(resolved_connection, item.note)
+                    replace_chunks_for_note(resolved_connection, item.note.note_id, item.chunks)
+                    indexed_count += 1
+                    success_by_note_id[item.note.note_id] = CorpusIndexResult(
+                        source_path=str(item.source_path),
+                        status='success',
+                        note_id=item.note.note_id,
+                        chunks_indexed=len(item.chunks),
+                        embedding_model=resolved_embedder.model_name,
+                        vector_collection_name=resolved_vector_store.collection_name,
+                        vector_entries_count=0,
+                        message='Document indexed successfully.',
+                    )
+
+        vector_entries_count = resolved_vector_store.count()
+        results: list[CorpusIndexResult] = []
+        for item in prepared_items:
+            if isinstance(item, CorpusIndexResult):
+                results.append(item)
+                continue
+            result = success_by_note_id.get(item.note.note_id) or pending_failure_by_note_id.get(item.note.note_id)
+            if result is None:
+                continue
+            result.vector_entries_count = vector_entries_count
+            results.append(result)
 
         _emit_progress(
             progress,
@@ -866,6 +1055,7 @@ def index_corpus_path(
             total_found=total_found,
             processed_count=len(results),
             indexed_count=indexed_count,
+            unchanged_count=unchanged_count,
             failed_count=failed_count,
             skipped_count=skipped_count,
             message='Indexacao concluida.',
