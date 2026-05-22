@@ -296,6 +296,20 @@ def get_notes_by_id(connection: sqlite3.Connection, note_ids: Iterable[str]) -> 
     return {row['note_id']: _note_from_row(row) for row in rows}
 
 
+def get_all_notes(connection: sqlite3.Connection) -> list[Note]:
+    """Lista notas persistidas para telas operacionais e inspecao local."""
+    rows = connection.execute(
+        """
+        SELECT
+            note_id, note_version, source_type, source_path, source_name, title, summary,
+            raw_text, normalized_text, structured_markdown, content_hash, provider, model, created_at
+        FROM notes
+        ORDER BY created_at DESC, note_id
+        """
+    ).fetchall()
+    return [_note_from_row(row) for row in rows]
+
+
 def insert_processing_log(connection: sqlite3.Connection, record: ProcessingLogRecord) -> None:
     connection.execute(
         """

@@ -11,6 +11,7 @@ from free_plaud.ingest.cli import app as ingest_app
 from free_plaud.notes.cli import app as notes_app
 from free_plaud.retrieval.cli import app as retrieval_app
 from free_plaud.storage.cli import app as storage_app
+from free_plaud.terminal_menu import run_terminal_menu
 
 app = typer.Typer(
     help="CLI principal do backend experimental free-plaud.",
@@ -58,3 +59,9 @@ def tree(base: Path | None = None) -> None:
     console.print(f"[bold]workspace[/bold]: {target}")
     for child in sorted(target.iterdir()):
         console.print(f"- {child.name}")
+
+
+@app.command("menu")
+def menu() -> None:
+    """Abre um menu numerado para operar corpus, ask e benchmark no terminal."""
+    run_terminal_menu()

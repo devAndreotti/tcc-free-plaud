@@ -47,6 +47,17 @@ def test_root_help_works() -> None:
     assert 'ingest' in result.stdout
     assert 'benchmark' in result.stdout
     assert 'corpus' in result.stdout
+    assert 'menu' in result.stdout
+
+
+def test_terminal_menu_can_open_and_exit() -> None:
+    result = runner.invoke(app, ['menu'], input='0\n')
+
+    assert result.exit_code == 0
+    assert 'free-plaud terminal' in result.stdout
+    assert 'ACOES:\n\n' in result.stdout
+    assert '[0] Sair\n\n' in result.stdout
+    assert 'Sair' in result.stdout
 
 
 def test_doctor_creates_runtime_directories(monkeypatch, tmp_path: Path) -> None:

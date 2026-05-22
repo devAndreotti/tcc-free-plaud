@@ -19,10 +19,24 @@ from free_plaud.providers.embed import get_embedder
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.retrieval.rag import answer_with_citations
 from free_plaud.storage.vector import LocalVectorStore
+from free_plaud.tui.actions import (
+    ask_corpus,
+    compare_suite_from_tui,
+    corpus_status_from_tui,
+    index_corpus_folder,
+    list_corpus_notes,
+    reset_corpus_from_tui,
+)
 
+AskMode = Literal['corpus', 'file']
 AskStrategy = Literal['lexical', 'vector', 'hybrid']
+ASK_MODES: tuple[AskMode, ...] = ('corpus', 'file')
 ASK_STRATEGIES: tuple[AskStrategy, ...] = ('lexical', 'vector', 'hybrid')
 COMPACT_WIDTH = 92
+
+
+def _bullet_help(*items: str) -> str:
+    return '\n\n'.join(f'- {item}' for item in items)
 
 
 def ask_file(
@@ -103,8 +117,8 @@ class NavPanel(Vertical):
         yield Static('RAG local', id='nav-subtitle')
         with Vertical(id='nav-actions'):
             yield Button('Ask', id='nav-ask', classes='nav-button nav-active')
-            yield Button('Notes', id='nav-notes', classes='nav-button nav-planned')
-            yield Button('Benchmark', id='nav-benchmark', classes='nav-button nav-planned')
+            yield Button('Notes', id='nav-notes', classes='nav-button')
+            yield Button('Benchmark', id='nav-benchmark', classes='nav-button')
         with Vertical(id='nav-meta'):
             yield Static('modelo', classes='nav-meta-label')
             yield Static(settings.embedding_model, classes='nav-meta-value')
@@ -113,22 +127,28 @@ class NavPanel(Vertical):
 
 
 class AskPane(Vertical):
+    selected_mode: AskMode
     selected_strategy: AskStrategy
     _ask_running: bool
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
+        self.selected_mode = 'corpus'
         self.selected_strategy = 'hybrid'
         self._ask_running = False
 
     def compose(self) -> ComposeResult:
         with Container(id='ask-hero'):
             yield Static('Ask local', classes='hero-title')
-            yield Static('Consulte um arquivo sem persistir nota no SQLite.', classes='hero-subtitle')
+            yield Static('Pergunte contra o corpus indexado ou contra um arquivo isolado.', classes='hero-subtitle')
 
         with Container(id='ask-form-card'):
             yield Static('Consulta', classes='card-title')
-            yield Label('Arquivo')
+            yield Label('Modo', id='mode-label')
+            with Container(id='mode-row'):
+                yield ActionCell('Corpus', id='mode-corpus', classes='strategy-button strategy-active')
+                yield ActionCell('Arquivo', id='mode-file', classes='strategy-button')
+            yield Label('Arquivo', id='file-label')
             yield Input(placeholder=r'D:\caminho\arquivo.md', id='ask-file-path')
             yield Label('Pergunta')
             yield Input(placeholder='O que este documento diz?', id='ask-question')
@@ -137,21 +157,36 @@ class AskPane(Vertical):
                 yield ActionCell('Lexical', id='strategy-lexical', classes='strategy-button')
                 yield ActionCell('Vector', id='strategy-vector', classes='strategy-button')
                 yield ActionCell('Hybrid', id='strategy-hybrid', classes='strategy-button strategy-active')
+            with Container(id='ask-action-row'):
                 yield ActionCell('Perguntar', id='ask-submit', classes='primary-action')
+                yield ActionCell('Limpar', id='ask-clear', classes='strategy-button')
 
         with Container(id='ask-result-card'):
             yield Static('Resposta', classes='card-title')
             yield RichLog(markup=True, wrap=True, id='ask-output')
 
     def on_mount(self) -> None:
+        self._sync_mode_controls()
         self._render_empty_state()
 
     def on_action_cell_pressed(self, event: ActionCell.Pressed) -> None:
         control_id = event.cell.id or ''
+        if control_id.startswith('mode-'):
+            event.stop()
+            if not self._ask_running:
+                self._select_mode(control_id.removeprefix('mode-'))
+            return
+
         if control_id.startswith('strategy-'):
             event.stop()
             if not self._ask_running:
                 self._select_strategy(control_id.removeprefix('strategy-'))
+            return
+
+        if control_id == 'ask-clear':
+            event.stop()
+            if not self._ask_running:
+                self._render_empty_state()
             return
 
         if control_id != 'ask-submit':
@@ -167,8 +202,24 @@ class AskPane(Vertical):
 
         self._set_running(True)
         output.clear()
-        output.write(Panel('Estruturando nota e recuperando evidencias...', title='Executando', border_style='#7c3aed'))
-        self._run_ask(Path(file_input.value), question_input.value, self.selected_strategy)
+        output.write(Panel('Recuperando evidencias...', title='Executando', border_style='#7c3aed'))
+        if self.selected_mode == 'corpus':
+            self._run_corpus_ask(question_input.value, self.selected_strategy)
+        else:
+            self._run_file_ask(Path(file_input.value), question_input.value, self.selected_strategy)
+
+    def _select_mode(self, mode: str) -> None:
+        if mode not in ASK_MODES:
+            return
+        self.selected_mode = mode  # type: ignore[assignment]
+        self._sync_mode_controls()
+
+    def _sync_mode_controls(self) -> None:
+        for candidate in ASK_MODES:
+            control = self.query_one(f'#mode-{candidate}', ActionCell)
+            control.set_class(candidate == self.selected_mode, 'strategy-active')
+        file_input = self.query_one('#ask-file-path', Input)
+        file_input.disabled = self.selected_mode == 'corpus'
 
     def _select_strategy(self, strategy: str) -> None:
         if strategy not in ASK_STRATEGIES:
@@ -181,15 +232,30 @@ class AskPane(Vertical):
     def _set_running(self, running: bool) -> None:
         self._ask_running = running
         submit = self.query_one('#ask-submit', ActionCell)
+        clear = self.query_one('#ask-clear', ActionCell)
         submit.disabled = running
+        clear.disabled = running
         submit.update('Executando...' if running else 'Perguntar')
+        for mode in ASK_MODES:
+            self.query_one(f'#mode-{mode}', ActionCell).disabled = running
         for strategy in ASK_STRATEGIES:
             self.query_one(f'#strategy-{strategy}', ActionCell).disabled = running
+        if not running:
+            self._sync_mode_controls()
 
     @work(thread=True)
-    def _run_ask(self, file_path: Path, question: str, strategy: AskStrategy) -> None:
+    def _run_file_ask(self, file_path: Path, question: str, strategy: AskStrategy) -> None:
         try:
             response = ask_file(file_path, question, strategy)
+        except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+            self.app.call_from_thread(self._render_error, exc)
+            return
+        self.app.call_from_thread(self._render_response, response)
+
+    @work(thread=True)
+    def _run_corpus_ask(self, question: str, strategy: AskStrategy) -> None:
+        try:
+            response = ask_corpus(question, strategy)
         except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
             self.app.call_from_thread(self._render_error, exc)
             return
@@ -200,8 +266,11 @@ class AskPane(Vertical):
         output.clear()
         output.write(
             Panel(
-                'Informe um arquivo, escolha a estrategia e execute o ask.\n'
-                'A resposta, citacoes, fontes e latencia aparecem aqui.',
+                _bullet_help(
+                    'Modo Corpus usa SQLite + Chroma ja indexados.',
+                    'Modo Arquivo consulta um arquivo isolado.',
+                    'A resposta, citacoes, fontes e latencia aparecem aqui.',
+                ),
                 title='Pronto',
                 border_style='#372150',
             )
@@ -248,6 +317,272 @@ class AskPane(Vertical):
         self._set_running(False)
 
 
+class NotesPane(Vertical):
+    _operation_running: bool
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self._operation_running = False
+
+    def compose(self) -> ComposeResult:
+        with Container(id='notes-hero'):
+            yield Static('Notes', classes='hero-title')
+            yield Static('Indexe pastas recursivas e opere o corpus local.', classes='hero-subtitle')
+        with Container(id='notes-form-card'):
+            yield Static('Corpus', classes='card-title')
+            yield Label('Pasta')
+            yield Input(placeholder=r'D:\caminho\pasta', id='notes-folder-path')
+            with Container(id='notes-action-row'):
+                yield ActionCell('Status', id='notes-status', classes='strategy-button')
+                yield ActionCell('Indexar pasta', id='notes-index', classes='strategy-button')
+                yield ActionCell('Rebuild pasta', id='notes-rebuild', classes='strategy-button')
+                yield ActionCell('Limpar DB', id='notes-reset', classes='primary-action')
+            yield Label('Confirmacao para limpar')
+            yield Input(placeholder='Digite LIMPAR', id='notes-reset-confirm')
+        with Container(id='notes-result-card'):
+            yield Static('Banco local', classes='card-title')
+            yield RichLog(markup=True, wrap=True, id='notes-output')
+
+    def on_mount(self) -> None:
+        self._render_message(
+            _bullet_help(
+                'Status mostra consistencia entre SQLite e Chroma.',
+                'Indexar pasta adiciona arquivos suportados, incluindo subpastas.',
+                'Rebuild pasta limpa e recria o corpus pela pasta escolhida.',
+                'Limpar DB apaga notas, chunks e vetores apos digitar LIMPAR.',
+            )
+        )
+
+    def on_action_cell_pressed(self, event: ActionCell.Pressed) -> None:
+        control_id = event.cell.id or ''
+        if not control_id.startswith('notes-') or self._operation_running:
+            return
+        event.stop()
+        self.handle_action(control_id)
+
+    def handle_action(self, control_id: str) -> None:
+        if self._operation_running:
+            return
+        if control_id == 'notes-status':
+            self._set_running(True)
+            self._run_status()
+            return
+        if control_id in {'notes-index', 'notes-rebuild'}:
+            folder = self.query_one('#notes-folder-path', Input).value
+            self._set_running(True)
+            self._run_index(Path(folder), control_id == 'notes-rebuild')
+            return
+        if control_id == 'notes-reset':
+            confirm = self.query_one('#notes-reset-confirm', Input).value
+            if confirm.strip() != 'LIMPAR':
+                self._render_error(ValueError('Digite LIMPAR para confirmar reset do corpus.'))
+                return
+            self._set_running(True)
+            self._run_reset(confirm)
+
+    def _set_running(self, running: bool) -> None:
+        self._operation_running = running
+        for selector in ('#notes-status', '#notes-index', '#notes-rebuild', '#notes-reset'):
+            self.query_one(selector, ActionCell).disabled = running
+
+    @work(thread=True)
+    def _run_status(self) -> None:
+        try:
+            status = corpus_status_from_tui()
+            notes = list_corpus_notes()
+        except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+            self.app.call_from_thread(self._render_error, exc)
+            return
+        self.app.call_from_thread(self._render_status, status, notes)
+
+    @work(thread=True)
+    def _run_index(self, folder_path: Path, rebuild: bool) -> None:
+        try:
+            result = index_corpus_folder(folder_path, rebuild=rebuild)
+            status = corpus_status_from_tui()
+            notes = list_corpus_notes()
+        except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+            self.app.call_from_thread(self._render_error, exc)
+            return
+        self.app.call_from_thread(self._render_index_result, result, status, notes)
+
+    @work(thread=True)
+    def _run_reset(self, confirm: str) -> None:
+        try:
+            result = reset_corpus_from_tui(confirm)
+            status = corpus_status_from_tui()
+            notes = list_corpus_notes()
+        except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+            self.app.call_from_thread(self._render_error, exc)
+            return
+        self.app.call_from_thread(self._render_reset_result, result, status, notes)
+
+    def _render_message(self, message: str) -> None:
+        output = self.query_one('#notes-output', RichLog)
+        output.clear()
+        output.write(Panel(message, title='Pronto', border_style='#372150'))
+
+    def _render_error(self, exc: Exception) -> None:
+        output = self.query_one('#notes-output', RichLog)
+        output.clear()
+        output.write(Panel(str(exc), title='Erro', border_style='#fb7185'))
+        self._set_running(False)
+
+    def _render_status(self, status, notes, *, clear: bool = True) -> None:  # noqa: ANN001
+        output = self.query_one('#notes-output', RichLog)
+        if clear:
+            output.clear()
+        status_table = Table(title='Status', border_style='#372150')
+        status_table.add_column('campo')
+        status_table.add_column('valor')
+        for key, value in (
+            ('status', status.status),
+            ('notes', str(status.notes_count)),
+            ('sqlite_chunks', str(status.sqlite_chunks_count)),
+            ('vector_chunks', str(status.vector_chunks_count)),
+            ('stale_vectors', str(status.stale_vector_chunks_count)),
+            ('missing_vectors', str(status.missing_vector_chunks_count)),
+        ):
+            status_table.add_row(key, value)
+        output.write(status_table)
+
+        notes_table = Table(title='Notas', border_style='#372150')
+        notes_table.add_column('note_id', overflow='fold')
+        notes_table.add_column('titulo', overflow='fold')
+        notes_table.add_column('fonte', overflow='fold')
+        for note in notes[:20]:
+            notes_table.add_row(note.note_id, note.title, _short_path(str(note.source_path)))
+        if not notes:
+            notes_table.add_row('-', 'sem notas', '-')
+        output.write(notes_table)
+        self._set_running(False)
+
+    def _render_index_result(self, result, status, notes) -> None:  # noqa: ANN001
+        output = self.query_one('#notes-output', RichLog)
+        output.clear()
+        output.write(
+            Panel(
+                f'status={result.status}\n'
+                f'encontrados={result.total_found}\n'
+                f'indexados={result.indexed_count}\n'
+                f'falhas={result.failed_count}\n'
+                f'ignorados={result.skipped_count}',
+                title='Indexacao',
+                border_style='#7c3aed',
+            )
+        )
+        self._render_status(status, notes, clear=False)
+
+    def _render_reset_result(self, result, status, notes) -> None:  # noqa: ANN001
+        output = self.query_one('#notes-output', RichLog)
+        output.clear()
+        output.write(
+            Panel(
+                f'notas_apagadas={result.deleted_notes}\n'
+                f'chunks_apagados={result.deleted_chunks}\n'
+                f'vetores_apagados={result.deleted_vectors}',
+                title='Reset',
+                border_style='#fb7185',
+            )
+        )
+        self._render_status(status, notes, clear=False)
+
+
+class BenchmarkPane(Vertical):
+    _operation_running: bool
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self._operation_running = False
+
+    def compose(self) -> ComposeResult:
+        default_suite = get_settings().datasets_dir / 'manual_validation' / 'suite.json'
+        with Container(id='benchmark-hero'):
+            yield Static('Benchmark', classes='hero-title')
+            yield Static('Compare lexical, vector e hybrid em uma suite.', classes='hero-subtitle')
+        with Container(id='benchmark-form-card'):
+            yield Static('Suite', classes='card-title')
+            yield Label('suite.json')
+            yield Input(value=str(default_suite), id='benchmark-suite-path')
+            with Container(id='benchmark-action-row'):
+                yield ActionCell('Comparar', id='benchmark-run', classes='primary-action')
+        with Container(id='benchmark-result-card'):
+            yield Static('Resultado', classes='card-title')
+            yield RichLog(markup=True, wrap=True, id='benchmark-output')
+
+    def on_mount(self) -> None:
+        output = self.query_one('#benchmark-output', RichLog)
+        output.write(
+            Panel(
+                _bullet_help(
+                    'Informe o suite.json.',
+                    'Comparar roda lexical, vector e hybrid.',
+                    'O resultado mostra MRR, Recall@3 e latencia media.',
+                ),
+                title='Pronto',
+                border_style='#372150',
+            )
+        )
+
+    def on_action_cell_pressed(self, event: ActionCell.Pressed) -> None:
+        control_id = event.cell.id or ''
+        if control_id != 'benchmark-run' or self._operation_running:
+            return
+        event.stop()
+        self.handle_action(control_id)
+
+    def handle_action(self, control_id: str) -> None:
+        if control_id != 'benchmark-run' or self._operation_running:
+            return
+        self._set_running(True)
+        suite = Path(self.query_one('#benchmark-suite-path', Input).value)
+        output = self.query_one('#benchmark-output', RichLog)
+        output.clear()
+        output.write(Panel('Executando benchmark...', title='Executando', border_style='#7c3aed'))
+        self._run_benchmark(suite)
+
+    def _set_running(self, running: bool) -> None:
+        self._operation_running = running
+        self.query_one('#benchmark-run', ActionCell).disabled = running
+
+    @work(thread=True)
+    def _run_benchmark(self, suite_path: Path) -> None:
+        try:
+            result = compare_suite_from_tui(suite_path)
+        except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+            self.app.call_from_thread(self._render_error, exc)
+            return
+        self.app.call_from_thread(self._render_result, result)
+
+    def _render_error(self, exc: Exception) -> None:
+        output = self.query_one('#benchmark-output', RichLog)
+        output.clear()
+        output.write(Panel(str(exc), title='Erro', border_style='#fb7185'))
+        self._set_running(False)
+
+    def _render_result(self, result) -> None:  # noqa: ANN001
+        output = self.query_one('#benchmark-output', RichLog)
+        output.clear()
+        output.write(Panel(f'{result.comparison_id}\n{result.suite_name}', title='Comparacao', border_style='#7c3aed'))
+        table = Table(title='Metricas', border_style='#372150')
+        table.add_column('strategy')
+        table.add_column('queries', justify='right')
+        table.add_column('MRR', justify='right')
+        table.add_column('Recall@3', justify='right')
+        table.add_column('latencia media', justify='right')
+        for strategy in ('lexical', 'vector', 'hybrid'):
+            summary = result.summaries[strategy]
+            table.add_row(
+                summary.strategy,
+                str(summary.query_count),
+                f'{summary.mrr:.4f}',
+                f'{summary.recall_at_3:.4f}',
+                f'{summary.avg_query_latency_ms:.1f} ms',
+            )
+        output.write(table)
+        self._set_running(False)
+
+
 class PlaceholderPane(Vertical):
     def __init__(self, title: str, description: str, **kwargs: object) -> None:
         super().__init__(**kwargs)
@@ -286,18 +621,8 @@ class FreePlaudApp(App[None]):
             yield NavPanel(id='nav-panel')
             with Container(id='main-panel'):
                 yield AskPane(id='ask-pane', classes='screen-pane')
-                yield PlaceholderPane(
-                    'Notes',
-                    'Planejado: persistencia SQLite e listagem de notas.',
-                    id='notes-pane',
-                    classes='screen-pane hidden',
-                )
-                yield PlaceholderPane(
-                    'Benchmark',
-                    'Planejado: compare_benchmark_suite com suite.json.',
-                    id='benchmark-pane',
-                    classes='screen-pane hidden',
-                )
+                yield NotesPane(id='notes-pane', classes='screen-pane hidden')
+                yield BenchmarkPane(id='benchmark-pane', classes='screen-pane hidden')
         yield Footer()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -306,6 +631,15 @@ class FreePlaudApp(App[None]):
             return
         event.stop()
         self._show_pane(button_id.removeprefix('nav-'))
+
+    def on_action_cell_pressed(self, event: ActionCell.Pressed) -> None:
+        control_id = event.cell.id or ''
+        if control_id.startswith('notes-'):
+            event.stop()
+            self.query_one(NotesPane).handle_action(control_id)
+        elif control_id == 'benchmark-run':
+            event.stop()
+            self.query_one(BenchmarkPane).handle_action(control_id)
 
     def _show_pane(self, pane: str) -> None:
         for pane_id in ('ask', 'notes', 'benchmark'):

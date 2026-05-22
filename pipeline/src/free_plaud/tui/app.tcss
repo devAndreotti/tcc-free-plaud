@@ -123,7 +123,9 @@ Button.nav-planned {
     height: 1fr;
 }
 
-#ask-hero {
+#ask-hero,
+#notes-hero,
+#benchmark-hero {
     height: 2;
     padding: 0 1;
     margin-bottom: 1;
@@ -138,16 +140,20 @@ Button.nav-planned {
     color: #bda8cf;
 }
 
-#ask-form-card {
+#ask-form-card,
+#notes-form-card,
+#benchmark-form-card {
     height: auto;
-    min-height: 16;
+    min-height: 18;
     background: #160b22;
     border: solid #332043;
     padding: 1 2;
     margin-bottom: 1;
 }
 
-#ask-result-card {
+#ask-result-card,
+#notes-result-card,
+#benchmark-result-card {
     height: 1fr;
     background: #160b22;
     border: solid #332043;
@@ -181,12 +187,43 @@ Input:focus {
     border: solid #e84fe6;
 }
 
+#mode-row {
+    layout: grid;
+    grid-size: 2 1;
+    grid-gutter: 1 0;
+    height: 3;
+    margin-top: 0;
+}
+
 #strategy-row {
+    layout: grid;
+    grid-size: 3 1;
+    grid-gutter: 1 0;
+    height: 3;
+    margin-top: 0;
+}
+
+#ask-action-row {
+    layout: grid;
+    grid-size: 2 1;
+    grid-gutter: 1 0;
+    height: 3;
+    margin-top: 1;
+}
+
+#notes-action-row {
     layout: grid;
     grid-size: 4 1;
     grid-gutter: 1 0;
     height: 3;
-    margin-top: 0;
+    margin-top: 1;
+}
+
+#benchmark-action-row {
+    layout: grid;
+    grid-size: 1 1;
+    height: 3;
+    margin-top: 1;
 }
 
 .strategy-button {
@@ -324,7 +361,9 @@ Screen.compact #main-panel {
     padding: 1;
 }
 
-Screen.compact #ask-hero {
+Screen.compact #ask-hero,
+Screen.compact #notes-hero,
+Screen.compact #benchmark-hero {
     height: 1;
     margin-bottom: 0;
 }
@@ -333,7 +372,9 @@ Screen.compact .hero-subtitle {
     display: none;
 }
 
-Screen.compact #ask-form-card {
+Screen.compact #ask-form-card,
+Screen.compact #notes-form-card,
+Screen.compact #benchmark-form-card {
     min-height: 14;
     margin-bottom: 0;
     padding: 1;
@@ -350,15 +391,33 @@ Screen.compact Input:focus {
     background: #2b1a3d;
 }
 
-Screen.compact #ask-form-card .card-title {
+Screen.compact #ask-form-card .card-title,
+Screen.compact #notes-form-card .card-title,
+Screen.compact #benchmark-form-card .card-title {
     display: none;
 }
 
-Screen.compact #strategy-label {
+Screen.compact #strategy-label,
+Screen.compact #mode-label,
+Screen.compact #file-label {
     display: none;
 }
 
 Screen.compact #strategy-row {
+    grid-size: 3 1;
+    grid-gutter: 0;
+    height: 3;
+}
+
+Screen.compact #ask-action-row {
+    grid-gutter: 0;
+}
+
+Screen.compact #mode-row {
+    grid-gutter: 0;
+}
+
+Screen.compact #notes-action-row {
     grid-size: 2 2;
     grid-gutter: 0;
     height: 6;
