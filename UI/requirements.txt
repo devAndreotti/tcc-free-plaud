@@ -1,0 +1,5 @@
+# Dependências Python do Assistente IA (interface desktop)
+
+# PyWebView: abre janela nativa do Windows com renderizador Edge WebView2
+# Documentação: https://pywebview.flowrl.com/
+pywebview>=5.0
