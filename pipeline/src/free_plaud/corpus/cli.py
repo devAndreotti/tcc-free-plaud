@@ -15,6 +15,7 @@ from free_plaud.corpus.service import (
     rebuild_corpus,
     reset_corpus,
 )
+from free_plaud.providers.answer import get_answer_provider
 from free_plaud.providers.embed import describe_embedding_config, get_embedder
 from free_plaud.storage.sqlite import init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
@@ -186,6 +187,14 @@ def ask(
             embedder=embedder,
             strategy=strategy,
             top_k=top_k,
+            answer_provider=get_answer_provider(
+                settings.answer_provider,
+                model=settings.answer_model,
+                base_url=settings.answer_base_url,
+                api_key=settings.answer_api_key,
+                temperature=settings.answer_temperature,
+                timeout_seconds=settings.answer_timeout_seconds,
+            ),
         )
         typer.echo(json.dumps(response.model_dump(mode='json'), ensure_ascii=True, indent=2))
     finally:

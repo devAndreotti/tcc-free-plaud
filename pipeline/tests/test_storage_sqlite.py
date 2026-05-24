@@ -10,6 +10,7 @@ from free_plaud.retrieval.chunking import chunk_text
 from free_plaud.storage.models import BenchmarkQueryRecord, BenchmarkRunRecord, ProcessingLogRecord
 from free_plaud.storage.sqlite import (
     connect_sqlite,
+    count_fts_chunks,
     get_notes_by_id,
     init_sqlite,
     insert_benchmark_query,
@@ -17,6 +18,7 @@ from free_plaud.storage.sqlite import (
     insert_processing_log,
     list_chunks,
     replace_chunks_for_note,
+    search_chunks_fts,
     upsert_note,
 )
 
@@ -106,6 +108,38 @@ def test_replace_chunks_for_note_persists_offset_aware_lineage(tmp_path: Path) -
     assert rows[0]['char_start'] == 0
     assert rows[0]['char_end'] > rows[0]['char_start']
     assert rows[0]['strategy'] == 'fixed_char_window'
+
+
+def test_replace_chunks_for_note_maintains_fts_index(tmp_path: Path) -> None:
+    db_path = tmp_path / 'free_plaud.sqlite3'
+    note = _build_note(tmp_path)
+    note.normalized_text = (
+        'RabbitMQ foi adotado como broker operacional. '
+        'O runbook SRE cobre filas e reprocessamento.'
+    )
+    chunks = chunk_text(
+        note.note_id,
+        note.note_version,
+        note.normalized_text,
+        chunk_size=80,
+        overlap=10,
+        normalized_text_sha256=note.content_hash,
+    )
+
+    connection = init_sqlite(db_path)
+    upsert_note(connection, note)
+    replace_chunks_for_note(connection, note.note_id, chunks)
+
+    hits = search_chunks_fts(connection, 'rabbitmq OR runbook', limit=10)
+
+    assert count_fts_chunks(connection) == len(chunks)
+    assert [chunk.chunk_id for chunk, _ in hits]
+    assert any('RabbitMQ' in chunk.chunk_text for chunk, _ in hits)
+
+    replace_chunks_for_note(connection, note.note_id, [])
+
+    assert count_fts_chunks(connection) == 0
+    assert search_chunks_fts(connection, 'rabbitmq', limit=10) == []
 
 
 def test_list_chunks_and_get_notes_by_id_return_persisted_contract(tmp_path: Path) -> None:

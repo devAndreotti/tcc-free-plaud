@@ -3,7 +3,8 @@ from pathlib import Path
 from free_plaud.app.config import Settings
 from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.service import get_corpus_status, index_corpus_file, index_corpus_path
-from free_plaud.storage.sqlite import connect_sqlite, init_sqlite, list_chunk_ids
+from free_plaud.notes.metadata import build_note_id
+from free_plaud.storage.sqlite import connect_sqlite, count_notes, init_sqlite, list_chunk_ids
 from free_plaud.storage.vector import LocalVectorStore
 
 
@@ -179,6 +180,108 @@ def test_index_corpus_file_removes_old_vectors_when_chunk_ids_change(tmp_path: P
     assert status.missing_vector_chunks_count == 0
 
 
+def test_index_corpus_path_uses_distinct_note_ids_for_same_stem_files(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'vault'
+    nested = root / 'AI'
+    nested.mkdir(parents=True)
+    (nested / 'AI.md').write_text('# AI\n\nNota sobre modelos generativos.\n', encoding='utf-8')
+    (nested / '🤖 AI.md').write_text('# AI\n\nNota sobre agentes locais.\n', encoding='utf-8')
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+
+    result = index_corpus_path(
+        root,
+        settings=settings,
+        connection=connection,
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+        recursive=True,
+        commit_mode='atomic',
+    )
+    status = get_corpus_status(settings=settings, connection=connection, vector_store=vector_store)
+    success_ids = [item.note_id for item in result.results if item.status == 'success']
+
+    assert result.status == 'success'
+    assert result.indexed_count == 2
+    assert len(success_ids) == 2
+    assert len(set(success_ids)) == 2
+    assert all(note_id and note_id.startswith('ai--') for note_id in success_ids)
+    assert count_notes(connection) == 2
+    assert status.status == 'clean'
+    assert status.stale_vector_chunks_count == 0
+
+
+def test_index_corpus_path_fails_batch_when_note_id_duplicates_remain(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    (root / 'a.md').write_text('# A\n\nPrimeira nota.\n', encoding='utf-8')
+    (root / 'b.md').write_text('# B\n\nSegunda nota.\n', encoding='utf-8')
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+    monkeypatch.setattr('free_plaud.notes.structurer.build_note_id', lambda path, **kwargs: 'duplicado')
+
+    result = index_corpus_path(
+        root,
+        settings=settings,
+        connection=connection,
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+        recursive=True,
+        commit_mode='atomic',
+    )
+
+    assert result.status == 'failed'
+    assert result.indexed_count == 0
+    assert result.failed_count == 2
+    assert {item.error_code for item in result.results} == {'DUPLICATE_NOTE_ID'}
+    assert count_notes(connection) == 0
+    assert vector_store.count() == 0
+
+
+def test_index_corpus_path_replaces_legacy_file_note_id_for_same_source_path(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    source = root / 'migravel.md'
+    source.write_text('# Migravel\n\nNota que muda de ID quando passa a ser indexada por pasta.\n', encoding='utf-8')
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+
+    legacy = index_corpus_file(
+        source,
+        settings=settings,
+        connection=connection,
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+    )
+    migrated = index_corpus_path(
+        root,
+        settings=settings,
+        connection=connection,
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+        recursive=True,
+        commit_mode='atomic',
+    )
+    new_note_id = build_note_id(source, root_path=root)
+    status = get_corpus_status(settings=settings, connection=connection, vector_store=vector_store)
+    note_ids = [
+        row['note_id']
+        for row in connection.execute('SELECT note_id FROM notes ORDER BY note_id').fetchall()
+    ]
+
+    assert legacy.status == 'success'
+    assert legacy.note_id == 'migravel'
+    assert migrated.status == 'success'
+    assert migrated.results[0].note_id == new_note_id
+    assert note_ids == [new_note_id]
+    assert count_notes(connection) == 1
+    assert status.status == 'clean'
+    assert status.stale_vector_chunks_count == 0
+
+
 def test_index_corpus_file_returns_failure_without_partial_write_for_invalid_input(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     source = tmp_path / 'vazio.md'
@@ -261,7 +364,10 @@ def test_index_corpus_path_indexes_directory_without_stopping_on_file_failure(tm
     assert result.indexed_count == 2
     assert result.failed_count == 1
     assert result.skipped_count == 1
-    assert {item.note_id for item in result.results if item.status == 'success'} == {'base', 'detalhe'}
+    assert {item.note_id for item in result.results if item.status == 'success'} == {
+        build_note_id(root / 'base.md', root_path=root),
+        build_note_id(nested / 'detalhe.md', root_path=root),
+    }
     failed = [item for item in result.results if item.status == 'failed']
     assert failed[0].error_code == 'EMPTY_CONTENT'
 

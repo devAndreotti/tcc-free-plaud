@@ -12,7 +12,7 @@ from textual.geometry import Size
 from textual.message import Message
 from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Static
 
-from free_plaud.app.config import Settings, get_settings
+from free_plaud.app.config import Settings, get_settings, reset_user_settings, save_user_settings, user_settings_path_for
 from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.models import CorpusDiscoveryResult, CorpusIndexProgress
 from free_plaud.corpus.runtime import CorpusRuntime
@@ -141,13 +141,14 @@ class NavPanel(Vertical):
             yield Button('Ask', id='nav-ask', classes='nav-button nav-active')
             yield Button('Notes', id='nav-notes', classes='nav-button')
             yield Button('Benchmark', id='nav-benchmark', classes='nav-button')
+            yield Button('Settings', id='nav-settings', classes='nav-button')
         with Vertical(id='nav-meta'):
             yield Static('modelo', classes='nav-meta-label')
-            yield Static(settings.embedding_model, classes='nav-meta-value')
+            yield Static(settings.embedding_model, id='nav-meta-model', classes='nav-meta-value')
             yield Static('device', classes='nav-meta-label')
-            yield Static(settings.embedding_device, classes='nav-meta-value')
+            yield Static(settings.embedding_device, id='nav-meta-device', classes='nav-meta-value')
             yield Static('top_k', classes='nav-meta-label')
-            yield Static(str(settings.retrieval_top_k), classes='nav-meta-value')
+            yield Static(str(settings.retrieval_top_k), id='nav-meta-top-k', classes='nav-meta-value')
 
 
 class AskPane(Vertical):
@@ -157,8 +158,9 @@ class AskPane(Vertical):
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
+        settings = get_settings()
         self.selected_mode = 'corpus'
-        self.selected_strategy = 'hybrid'
+        self.selected_strategy = settings.default_ask_strategy
         self._ask_running = False
 
     def compose(self) -> ComposeResult:
@@ -181,9 +183,10 @@ class AskPane(Vertical):
                     yield Input(placeholder='O que este documento diz?', id='ask-question')
             yield Label('Estrategia', id='strategy-label')
             with Container(id='ask-control-row'):
-                yield ActionCell('Lexical', id='strategy-lexical', classes='strategy-button')
-                yield ActionCell('Vector', id='strategy-vector', classes='strategy-button')
-                yield ActionCell('Hybrid', id='strategy-hybrid', classes='strategy-button strategy-active')
+                for strategy in ASK_STRATEGIES:
+                    label = strategy.capitalize()
+                    classes = 'strategy-button strategy-active' if strategy == self.selected_strategy else 'strategy-button'
+                    yield ActionCell(label, id=f'strategy-{strategy}', classes=classes)
                 yield ActionCell('Perguntar', id='ask-submit', classes='primary-action')
                 yield ActionCell('Limpar', id='ask-clear', classes='strategy-button')
 
@@ -356,13 +359,14 @@ class NotesPane(Vertical):
         self._cancel_token: CancellationToken | None = None
 
     def compose(self) -> ComposeResult:
+        settings = get_settings()
         with Container(id='notes-hero'):
             yield Static('Notes', classes='hero-title')
             yield Static('Indexe pastas recursivas e opere o corpus local.', classes='hero-subtitle')
         with Container(id='notes-form-card'):
             yield Static('Corpus', classes='card-title')
             yield Label('Pasta')
-            yield Input(placeholder=r'D:\caminho\pasta', id='notes-folder-path')
+            yield Input(value=str(settings.default_corpus_path or ''), placeholder=r'D:\caminho\pasta', id='notes-folder-path')
             with Container(id='notes-action-row'):
                 yield ActionCell('Status', id='notes-status', classes='strategy-button')
                 yield ActionCell('Indexar pasta', id='notes-index', classes='strategy-button')
@@ -430,6 +434,10 @@ class NotesPane(Vertical):
         for selector in ('#notes-status', '#notes-index', '#notes-rebuild', '#notes-reset'):
             self.query_one(selector, ActionCell).disabled = running
         self.query_one('#notes-cancel', ActionCell).disabled = not running
+
+    def load_defaults(self, settings: Settings) -> None:
+        if not self._operation_running:
+            self.query_one('#notes-folder-path', Input).value = str(settings.default_corpus_path or '')
 
     def _cancel_index(self) -> None:
         if self._cancel_token is None or not self._operation_running:
@@ -704,6 +712,160 @@ class BenchmarkPane(Vertical):
         self._set_running(False)
 
 
+class SettingsPane(Vertical):
+    selected_device: str
+    selected_strategy: str
+    selected_commit_mode: str
+    recursive_default: bool
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        settings = get_settings()
+        self.selected_device = settings.embedding_device
+        self.selected_strategy = settings.default_ask_strategy
+        self.selected_commit_mode = settings.corpus_commit_mode
+        self.recursive_default = settings.corpus_recursive_default
+
+    def compose(self) -> ComposeResult:
+        settings = get_settings()
+        with Container(id='settings-hero'):
+            yield Static('Settings', classes='hero-title')
+            yield Static('Preferencias do app salvas em user_settings.json.', classes='hero-subtitle')
+        with Container(id='settings-form-card'):
+            yield Static('Runtime', classes='card-title')
+            with Container(id='settings-device-row'):
+                yield ActionCell('Auto', id='settings-device-auto', classes='strategy-button')
+                yield ActionCell('CPU', id='settings-device-cpu', classes='strategy-button')
+                yield ActionCell('CUDA', id='settings-device-cuda', classes='strategy-button')
+            yield Input(value=settings.embedding_model, placeholder='embedding_model', id='settings-model')
+            with Container(id='settings-strategy-row'):
+                yield ActionCell('Lexical', id='settings-strategy-lexical', classes='strategy-button')
+                yield ActionCell('Vector', id='settings-strategy-vector', classes='strategy-button')
+                yield ActionCell('Hybrid', id='settings-strategy-hybrid', classes='strategy-button')
+            with Container(id='settings-number-row'):
+                yield Input(value=str(settings.retrieval_top_k), placeholder='top_k', id='settings-top-k')
+                yield Input(value=str(settings.default_chunk_size), placeholder='chunk_size', id='settings-chunk-size')
+                yield Input(value=str(settings.default_chunk_overlap), placeholder='overlap', id='settings-overlap')
+            with Container(id='settings-commit-row'):
+                yield ActionCell('Auto', id='settings-commit-auto', classes='strategy-button')
+                yield ActionCell('Atomic', id='settings-commit-atomic', classes='strategy-button')
+                yield ActionCell('Microbatch', id='settings-commit-microbatch', classes='strategy-button')
+                yield ActionCell('Recursivo', id='settings-recursive', classes='strategy-button')
+            yield Input(value=str(settings.default_corpus_path or ''), placeholder=r'D:\caminho\pasta padrao', id='settings-corpus-path')
+            with Container(id='settings-worker-row'):
+                yield Input(
+                    value=str(settings.corpus_embedding_batch_size),
+                    placeholder='embedding_batch',
+                    id='settings-embedding-batch',
+                )
+                yield Input(value=str(settings.corpus_index_workers), placeholder='workers', id='settings-workers')
+            with Container(id='settings-action-row'):
+                yield ActionCell('Salvar', id='settings-save', classes='primary-action')
+                yield ActionCell('Resetar', id='settings-reset', classes='strategy-button')
+        with Container(id='settings-result-card'):
+            yield Static('Estado', classes='card-title')
+            yield RichLog(markup=True, wrap=True, id='settings-output')
+
+    def on_mount(self) -> None:
+        self._sync_controls()
+        self._render_message(f'user_settings={user_settings_path_for(get_settings())}')
+
+    def on_action_cell_pressed(self, event: ActionCell.Pressed) -> None:
+        control_id = event.cell.id or ''
+        if control_id.startswith('settings-device-'):
+            event.stop()
+            self.selected_device = control_id.removeprefix('settings-device-')
+            self._sync_controls()
+            return
+        if control_id.startswith('settings-strategy-'):
+            event.stop()
+            self.selected_strategy = control_id.removeprefix('settings-strategy-')
+            self._sync_controls()
+            return
+        if control_id.startswith('settings-commit-'):
+            event.stop()
+            self.selected_commit_mode = control_id.removeprefix('settings-commit-')
+            self._sync_controls()
+            return
+        if control_id == 'settings-recursive':
+            event.stop()
+            self.recursive_default = not self.recursive_default
+            self._sync_controls()
+            return
+        if control_id == 'settings-save':
+            event.stop()
+            self._save()
+            return
+        if control_id == 'settings-reset':
+            event.stop()
+            settings = reset_user_settings()
+            self.app.corpus_runtime.clear()
+            self.app.refresh_settings_nav(settings)
+            self._load_from_settings(settings)
+            self._sync_controls()
+            self._render_message('Configuracoes resetadas.')
+
+    def _load_from_settings(self, settings: Settings) -> None:
+        self.selected_device = settings.embedding_device
+        self.selected_strategy = settings.default_ask_strategy
+        self.selected_commit_mode = settings.corpus_commit_mode
+        self.recursive_default = settings.corpus_recursive_default
+        self.query_one('#settings-model', Input).value = settings.embedding_model
+        self.query_one('#settings-top-k', Input).value = str(settings.retrieval_top_k)
+        self.query_one('#settings-chunk-size', Input).value = str(settings.default_chunk_size)
+        self.query_one('#settings-overlap', Input).value = str(settings.default_chunk_overlap)
+        self.query_one('#settings-corpus-path', Input).value = str(settings.default_corpus_path or '')
+        self.query_one('#settings-embedding-batch', Input).value = str(settings.corpus_embedding_batch_size)
+        self.query_one('#settings-workers', Input).value = str(settings.corpus_index_workers)
+
+    def _sync_controls(self) -> None:
+        for device in ('auto', 'cpu', 'cuda'):
+            self.query_one(f'#settings-device-{device}', ActionCell).set_class(device == self.selected_device, 'strategy-active')
+        for strategy in ASK_STRATEGIES:
+            self.query_one(f'#settings-strategy-{strategy}', ActionCell).set_class(
+                strategy == self.selected_strategy,
+                'strategy-active',
+            )
+        for mode in ('auto', 'atomic', 'microbatch'):
+            self.query_one(f'#settings-commit-{mode}', ActionCell).set_class(mode == self.selected_commit_mode, 'strategy-active')
+        recursive = self.query_one('#settings-recursive', ActionCell)
+        recursive.update('Recursivo: Sim' if self.recursive_default else 'Recursivo: Nao')
+        recursive.set_class(self.recursive_default, 'strategy-active')
+
+    def _save(self) -> None:
+        try:
+            values = {
+                'embedding_device': self.selected_device,
+                'embedding_model': self.query_one('#settings-model', Input).value,
+                'retrieval_top_k': int(self.query_one('#settings-top-k', Input).value),
+                'default_ask_strategy': self.selected_strategy,
+                'default_chunk_size': int(self.query_one('#settings-chunk-size', Input).value),
+                'default_chunk_overlap': int(self.query_one('#settings-overlap', Input).value),
+                'corpus_commit_mode': self.selected_commit_mode,
+                'default_corpus_path': self.query_one('#settings-corpus-path', Input).value.strip() or None,
+                'corpus_recursive_default': self.recursive_default,
+                'corpus_embedding_batch_size': int(self.query_one('#settings-embedding-batch', Input).value),
+                'corpus_index_workers': int(self.query_one('#settings-workers', Input).value),
+            }
+            updated = save_user_settings(values)
+        except Exception as exc:  # noqa: BLE001 - UI precisa exibir validacao.
+            self._render_error(exc)
+            return
+        self.app.corpus_runtime.clear()
+        self.app.refresh_settings_nav(updated)
+        self._render_message('Configuracoes salvas. Runtime limpo.')
+
+    def _render_message(self, message: str) -> None:
+        output = self.query_one('#settings-output', RichLog)
+        output.clear()
+        output.write(Panel(message, title='Settings', border_style='#7c3aed'))
+
+    def _render_error(self, exc: Exception) -> None:
+        output = self.query_one('#settings-output', RichLog)
+        output.clear()
+        output.write(Panel(str(exc), title='Erro', border_style='#fb7185'))
+
+
 class PlaceholderPane(Vertical):
     def __init__(self, title: str, description: str, **kwargs: object) -> None:
         super().__init__(**kwargs)
@@ -749,11 +911,12 @@ class FreePlaudApp(App[None]):
                 yield AskPane(id='ask-pane', classes='screen-pane')
                 yield NotesPane(id='notes-pane', classes='screen-pane hidden')
                 yield BenchmarkPane(id='benchmark-pane', classes='screen-pane hidden')
+                yield SettingsPane(id='settings-pane', classes='screen-pane hidden')
         yield Footer()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id or ''
-        if button_id not in {'nav-ask', 'nav-notes', 'nav-benchmark'}:
+        if button_id not in {'nav-ask', 'nav-notes', 'nav-benchmark', 'nav-settings'}:
             return
         event.stop()
         self._show_pane(button_id.removeprefix('nav-'))
@@ -768,9 +931,18 @@ class FreePlaudApp(App[None]):
             self.query_one(BenchmarkPane).handle_action(control_id)
 
     def _show_pane(self, pane: str) -> None:
-        for pane_id in ('ask', 'notes', 'benchmark'):
+        for pane_id in ('ask', 'notes', 'benchmark', 'settings'):
             self.query_one(f'#{pane_id}-pane').set_class(pane_id != pane, 'hidden')
             self.query_one(f'#nav-{pane_id}', Button).set_class(pane_id == pane, 'nav-active')
+
+    def refresh_settings_nav(self, settings: Settings) -> None:
+        self.query_one('#nav-meta-model', Static).update(settings.embedding_model)
+        self.query_one('#nav-meta-device', Static).update(settings.embedding_device)
+        self.query_one('#nav-meta-top-k', Static).update(str(settings.retrieval_top_k))
+        ask_pane = self.query_one(AskPane)
+        if not ask_pane._ask_running:
+            ask_pane._select_strategy(settings.default_ask_strategy)
+        self.query_one(NotesPane).load_defaults(settings)
 
 
 def main() -> None:

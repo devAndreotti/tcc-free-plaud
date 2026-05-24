@@ -24,6 +24,7 @@ from free_plaud.tui.app import (
     ActionCell,
     AskPane,
     FreePlaudApp,
+    SettingsPane,
     _bullet_help,
     _progress_rate_and_eta,
     ask_file,
@@ -277,6 +278,100 @@ def test_tui_strategy_defaults_to_hybrid_and_updates_active_button() -> None:
             assert ask_pane.selected_mode == 'file'
             assert app.query_one('#mode-file', ActionCell).has_class('strategy-active')
             assert not app.query_one('#mode-corpus', ActionCell).has_class('strategy-active')
+
+    asyncio.run(run_app())
+
+
+def test_tui_ask_strategy_uses_saved_default(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    settings.default_ask_strategy = 'lexical'
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(100, 30)):
+            ask_pane = app.query_one(AskPane)
+            assert ask_pane.selected_strategy == 'lexical'
+            assert app.query_one('#strategy-lexical', ActionCell).has_class('strategy-active')
+
+    asyncio.run(run_app())
+
+
+def test_tui_settings_pane_saves_device_and_clears_runtime(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    cleared = False
+    saved: dict[str, object] = {}
+
+    def fake_save_user_settings(values: dict[str, object], *, settings=None):  # noqa: ANN001, ANN202
+        saved.update(values)
+        updated = _settings(tmp_path)
+        updated.embedding_device = values['embedding_device']  # type: ignore[assignment]
+        return updated
+
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.tui.app.save_user_settings', fake_save_user_settings)
+
+    async def run_app() -> None:
+        nonlocal cleared
+        app = FreePlaudApp()
+        original_clear = app.corpus_runtime.clear
+
+        def clear_runtime() -> None:
+            nonlocal cleared
+            cleared = True
+            original_clear()
+
+        app.corpus_runtime.clear = clear_runtime  # type: ignore[method-assign]
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.click('#nav-settings')
+            await pilot.click('#settings-device-cuda')
+            await pilot.click('#settings-save')
+            await pilot.pause(0.2)
+            pane = app.query_one(SettingsPane)
+            assert pane.selected_device == 'cuda'
+
+    asyncio.run(run_app())
+
+    assert saved['embedding_device'] == 'cuda'
+    assert cleared is True
+
+
+def test_tui_notes_uses_saved_default_corpus_path(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    settings.default_corpus_path = tmp_path / 'vault'
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.click('#nav-notes')
+            assert app.query_one('#notes-folder-path', Input).value == str(tmp_path / 'vault')
+
+    asyncio.run(run_app())
+
+
+def test_tui_settings_layout_keeps_actions_visible() -> None:
+    def assert_visible(app: FreePlaudApp, selector: str) -> None:
+        region = app.query_one(selector).region
+        assert region.x >= 0
+        assert region.y >= 0
+        assert region.x + region.width <= app.size.width
+        assert region.y + region.height <= app.size.height
+
+    async def run_app() -> None:
+        for size in ((80, 24), (120, 36)):
+            app = FreePlaudApp()
+            async with app.run_test(size=size) as pilot:
+                await pilot.click('#nav-settings')
+                await pilot.pause(0.1)
+                for selector in (
+                    '#settings-device-auto',
+                    '#settings-strategy-hybrid',
+                    '#settings-commit-microbatch',
+                    '#settings-save',
+                    '#settings-reset',
+                ):
+                    assert_visible(app, selector)
 
     asyncio.run(run_app())
 

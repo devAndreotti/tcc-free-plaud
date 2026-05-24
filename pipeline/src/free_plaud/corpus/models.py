@@ -96,6 +96,8 @@ class CorpusStatusResult(BaseModel):
     vector_collection_name: str
     notes_count: int
     sqlite_chunks_count: int
+    fts_chunks_count: int = 0
+    fts_status: Literal['ready', 'missing', 'stale', 'unavailable'] = 'unavailable'
     vector_chunks_count: int
     stale_vector_chunks_count: int
     missing_vector_chunks_count: int

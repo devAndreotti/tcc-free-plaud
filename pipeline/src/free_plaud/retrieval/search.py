@@ -134,6 +134,10 @@ def _stem_like(token: str) -> str:
 def _term_matches(query_term: str, candidate_term: str) -> bool:
     left = _stem_like(query_term)
     right = _stem_like(candidate_term)
+    return _stem_matches(left, right)
+
+
+def _stem_matches(left: str, right: str) -> bool:
     if not left or not right:
         return False
     if left == right:
@@ -145,10 +149,9 @@ def _term_matches(query_term: str, candidate_term: str) -> bool:
 def match_terms_in_text(query_terms: list[str], text: str) -> tuple[list[str], float]:
     if not query_terms:
         return [], 0.0
-    haystack_terms = set(TOKEN_PATTERN.findall(text.lower()))
-    matched_terms = [
-        term for term in query_terms if any(_term_matches(term, candidate) for candidate in haystack_terms)
-    ]
+    haystack_stems = {_stem_like(candidate) for candidate in TOKEN_PATTERN.findall(text.lower())}
+    query_stems = [(term, _stem_like(term)) for term in query_terms]
+    matched_terms = [term for term, stem in query_stems if any(_stem_matches(stem, candidate) for candidate in haystack_stems)]
     return matched_terms, len(matched_terms) / len(query_terms)
 
 
@@ -369,6 +372,26 @@ def _fuse_hits_by_rank(
         key=lambda item: (-item.score, -item.term_coverage, -len(item.matched_terms), item.chunk.chunk_index),
     )
     return ranked[:top_k]
+
+
+def fuse_hits_by_rank(
+    lexical_hits: list[SearchHit],
+    vector_hits: list[SearchHit],
+    *,
+    top_k: int,
+    rank_constant: int = DEFAULT_HYBRID_RANK_CONSTANT,
+    lexical_weight: float = DEFAULT_HYBRID_LEXICAL_WEIGHT,
+    vector_weight: float = DEFAULT_HYBRID_VECTOR_WEIGHT,
+) -> list[SearchHit]:
+    """API publica para fusao de hits ja recuperados por caminhos diferentes."""
+    return _fuse_hits_by_rank(
+        lexical_hits,
+        vector_hits,
+        top_k=top_k,
+        rank_constant=rank_constant,
+        lexical_weight=lexical_weight,
+        vector_weight=vector_weight,
+    )
 
 
 def hybrid_search(

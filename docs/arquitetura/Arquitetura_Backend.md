@@ -230,6 +230,12 @@ Se a pergunta de escala ganhar peso, avaliar `LanceDB` como comparativo técnico
 - `provider`
 - `model`
 
+Na indexação de pastas de corpus, o `note_id` é derivado do nome do arquivo mais um hash curto
+do caminho relativo ao root indexado. Isso evita colisão entre arquivos com o mesmo título em
+pastas diferentes, preservando estabilidade de reindexação dentro do mesmo vault. Na indexação
+de arquivo isolado, o ID legível baseado no nome do arquivo continua válido por compatibilidade
+operacional.
+
 ### Chunk
 
 - `chunk_id`
@@ -357,6 +363,12 @@ chunks e a collection vetorial ativa mediante `--yes`, e reconstroem o acervo a 
 ou pasta controlada. O `corpus ask` filtra hits vetoriais cujo `chunk_id` não exista no SQLite antes
 de montar `citations`, `used_sources` e `claims`, evitando resposta baseada em vetor obsoleto.
 
+Na evolução de consistência e performance do corpus, o SQLite mantém um índice FTS5/BM25
+persistido em `chunks_fts`. O `corpus ask` usa esse índice para a etapa lexical de `lexical` e
+`hybrid`, evitando varrer todos os chunks em Python. O índice FTS é atualizado junto com
+`replace_chunks_for_note()`, limpo em `reset` e auto-reconstruído quando um banco antigo ainda não
+possui FTS sincronizado.
+
 Na evolução de performance do corpus, a indexação de pastas passa a escolher entre commit
 `atomic` e `microbatch`. O modo `auto` mantém operação atômica para corpus pequeno e usa
 micro-lotes para pastas maiores, gravando Chroma e SQLite por grupos de arquivos/chunks. Isso
@@ -364,6 +376,22 @@ torna `corpus status` e `corpus ask` úteis antes do fim da indexação, com o t
 de corpus parcial quando uma indexação ou rebuild grande é interrompido. O TUI e o menu terminal
 também passam a reaproveitar embedder e vector store no processo, evitando pagar o cold-start de
 SentenceTransformer em cada pergunta.
+
+Na evolução de configuração operacional, o app passa a separar preferências de usuário e overrides
+técnicos. Preferências editáveis pelo TUI, menu terminal e `free-plaud config` ficam em
+`data/results/user_settings.json`; variáveis `FREE_PLAUD_*` e `.env` continuam tendo precedência.
+O V1 cobre device/modelo de embedding, `top_k`, estratégia default do Ask, chunk size/overlap,
+modo de commit do corpus, pasta padrão, recursividade, batch de embedding e número de workers.
+Ao alterar modelo ou device pelo app, o `CorpusRuntime` limpa cache de embedder/vector store para
+evitar reutilizar runtime antigo.
+
+Na evolução generativa do RAG, `corpus ask` mantém recuperação e validação de citações como gate
+obrigatório antes de qualquer chamada de IA. Se o corpus estiver vazio, se não houver hits, ou se
+os hits não gerarem claims citáveis, o fluxo retorna `no_answer` sem chamar provider generativo.
+Quando há evidência validada, um provider OpenAI-compatible pode reescrever a resposta final a
+partir de contextos citáveis. O mesmo adaptador cobre Ollama, LM Studio e APIs remotas compatíveis
+com `/chat/completions`. A API key fica apenas em `.env` ou variável `FREE_PLAUD_ANSWER_API_KEY`;
+`user_settings.json` guarda somente provider, modelo, base URL, temperatura e timeout.
 
 Na evolução atual, `hybrid` combina:
 

@@ -47,6 +47,13 @@ CREATE TABLE IF NOT EXISTS chunks (
     UNIQUE (note_id, note_version, chunk_index)
 );
 
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+    chunk_id UNINDEXED,
+    note_id UNINDEXED,
+    chunk_text,
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+
 CREATE TABLE IF NOT EXISTS processing_logs (
     log_id INTEGER PRIMARY KEY AUTOINCREMENT,
     process_id TEXT NOT NULL,
@@ -165,6 +172,7 @@ def upsert_note(connection: sqlite3.Connection, note: Note) -> None:
 
 def replace_chunks_for_note(connection: sqlite3.Connection, note_id: str, chunks: list[Chunk]) -> None:
     connection.execute('DELETE FROM chunks WHERE note_id = ?', (note_id,))
+    connection.execute('DELETE FROM chunks_fts WHERE note_id = ?', (note_id,))
     connection.executemany(
         """
         INSERT INTO chunks (
@@ -191,6 +199,13 @@ def replace_chunks_for_note(connection: sqlite3.Connection, note_id: str, chunks
             )
             for chunk in chunks
         ],
+    )
+    connection.executemany(
+        """
+        INSERT INTO chunks_fts (chunk_id, note_id, chunk_text)
+        VALUES (?, ?, ?)
+        """,
+        [(chunk.chunk_id, chunk.note_id, chunk.chunk_text) for chunk in chunks],
     )
     connection.commit()
 
@@ -239,6 +254,62 @@ def count_chunks(connection: sqlite3.Connection) -> int:
     return int(row['total'])
 
 
+def count_fts_chunks(connection: sqlite3.Connection) -> int:
+    row = connection.execute('SELECT COUNT(*) AS total FROM chunks_fts').fetchone()
+    return int(row['total'])
+
+
+def rebuild_chunks_fts(connection: sqlite3.Connection) -> int:
+    """Reconstrói o indice FTS a partir da tabela canonica de chunks."""
+    connection.execute('DELETE FROM chunks_fts')
+    connection.execute(
+        """
+        INSERT INTO chunks_fts (chunk_id, note_id, chunk_text)
+        SELECT chunk_id, note_id, chunk_text
+        FROM chunks
+        ORDER BY note_id, note_version, chunk_index
+        """
+    )
+    connection.commit()
+    return count_fts_chunks(connection)
+
+
+def ensure_chunks_fts_current(connection: sqlite3.Connection) -> str:
+    """Garante FTS sincronizado para bancos antigos ou importados."""
+    chunks_total = count_chunks(connection)
+    fts_total = count_fts_chunks(connection)
+    if fts_total == chunks_total:
+        return 'ready'
+    if chunks_total == 0:
+        connection.execute('DELETE FROM chunks_fts')
+        connection.commit()
+        return 'ready'
+    rebuild_chunks_fts(connection)
+    return 'rebuilt'
+
+
+def search_chunks_fts(connection: sqlite3.Connection, match_query: str, *, limit: int) -> list[tuple[Chunk, float]]:
+    """Busca candidatos lexicais via FTS5/BM25."""
+    if not match_query.strip() or limit <= 0:
+        return []
+    rows = connection.execute(
+        """
+        SELECT
+            c.chunk_id, c.note_id, c.note_version, c.chunk_index, c.char_start, c.char_end,
+            c.chunk_size, c.overlap, c.chunk_text, c.token_count, c.strategy,
+            c.normalized_text_sha256, c.text_sha256, c.pipeline_version,
+            bm25(chunks_fts) AS bm25_score
+        FROM chunks_fts
+        JOIN chunks AS c ON c.chunk_id = chunks_fts.chunk_id
+        WHERE chunks_fts MATCH ?
+        ORDER BY bm25_score
+        LIMIT ?
+        """,
+        (match_query, limit),
+    ).fetchall()
+    return [(_chunk_from_row(row), float(row['bm25_score'])) for row in rows]
+
+
 def list_chunk_ids(connection: sqlite3.Connection) -> set[str]:
     rows = connection.execute('SELECT chunk_id FROM chunks').fetchall()
     return {str(row['chunk_id']) for row in rows}
@@ -259,6 +330,21 @@ def get_note_content_hash(connection: sqlite3.Connection, note_id: str) -> str |
     return str(row['content_hash'])
 
 
+def list_note_ids_by_source_path(connection: sqlite3.Connection, source_path: Path | str) -> list[str]:
+    rows = connection.execute(
+        'SELECT note_id FROM notes WHERE source_path = ? ORDER BY note_id',
+        (str(source_path),),
+    ).fetchall()
+    return [str(row['note_id']) for row in rows]
+
+
+def delete_note_and_chunks(connection: sqlite3.Connection, note_id: str) -> None:
+    connection.execute('DELETE FROM chunks_fts WHERE note_id = ?', (note_id,))
+    connection.execute('DELETE FROM chunks WHERE note_id = ?', (note_id,))
+    connection.execute('DELETE FROM notes WHERE note_id = ?', (note_id,))
+    connection.commit()
+
+
 def note_chunks_match_config(connection: sqlite3.Connection, note_id: str, *, chunk_size: int, overlap: int) -> bool:
     rows = connection.execute(
         'SELECT chunk_size, overlap FROM chunks WHERE note_id = ?',
@@ -273,6 +359,7 @@ def delete_corpus_notes_and_chunks(connection: sqlite3.Connection) -> tuple[int,
     """Remove apenas corpus persistido, preservando benchmark e logs."""
     notes_total = count_notes(connection)
     chunks_total = count_chunks(connection)
+    connection.execute('DELETE FROM chunks_fts')
     connection.execute('DELETE FROM chunks')
     connection.execute('DELETE FROM notes')
     connection.commit()

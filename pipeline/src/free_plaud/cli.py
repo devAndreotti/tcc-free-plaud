@@ -6,6 +6,7 @@ from rich.console import Console
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.benchmark.cli import app as benchmark_app
+from free_plaud.config_cli import app as config_app
 from free_plaud.corpus.cli import app as corpus_app
 from free_plaud.ingest.cli import app as ingest_app
 from free_plaud.notes.cli import app as notes_app
@@ -26,6 +27,7 @@ app.add_typer(retrieval_app, name="retrieval")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(storage_app, name="storage")
 app.add_typer(corpus_app, name="corpus")
+app.add_typer(config_app, name="config")
 
 
 @app.command("doctor")
@@ -43,6 +45,11 @@ def doctor() -> None:
         "vector_store_dir": str(settings.vector_store_dir),
         "vector_collection_name": settings.vector_collection_name,
         "embedding_model": settings.embedding_model,
+        "embedding_device": settings.embedding_device,
+        "answer_provider": settings.answer_provider,
+        "answer_model": settings.answer_model,
+        "answer_base_url": settings.answer_base_url or "",
+        "default_ask_strategy": settings.default_ask_strategy,
         "sqlite_path": str(settings.sqlite_path),
         "default_chunk_size": str(settings.default_chunk_size),
         "default_chunk_overlap": str(settings.default_chunk_overlap),

@@ -125,7 +125,8 @@ Button.nav-planned {
 
 #ask-hero,
 #notes-hero,
-#benchmark-hero {
+#benchmark-hero,
+#settings-hero {
     height: 2;
     padding: 0 1;
     margin-bottom: 1;
@@ -142,7 +143,8 @@ Button.nav-planned {
 
 #ask-form-card,
 #notes-form-card,
-#benchmark-form-card {
+#benchmark-form-card,
+#settings-form-card {
     height: auto;
     min-height: 18;
     background: #160b22;
@@ -157,7 +159,8 @@ Button.nav-planned {
 
 #ask-result-card,
 #notes-result-card,
-#benchmark-result-card {
+#benchmark-result-card,
+#settings-result-card {
     height: 1fr;
     background: #160b22;
     border: solid #332043;
@@ -246,6 +249,44 @@ Input:focus {
 #benchmark-action-row {
     layout: grid;
     grid-size: 1 1;
+    height: 3;
+    margin-top: 1;
+}
+
+#settings-device-row,
+#settings-strategy-row {
+    layout: grid;
+    grid-size: 3 1;
+    grid-gutter: 1 0;
+    height: 3;
+    margin-top: 0;
+}
+
+#settings-number-row,
+#settings-worker-row {
+    layout: grid;
+    grid-size: 3 1;
+    grid-gutter: 1 0;
+    height: 4;
+    margin-top: 0;
+}
+
+#settings-worker-row {
+    grid-size: 2 1;
+}
+
+#settings-commit-row {
+    layout: grid;
+    grid-size: 4 1;
+    grid-gutter: 1 0;
+    height: 3;
+    margin-top: 0;
+}
+
+#settings-action-row {
+    layout: grid;
+    grid-size: 2 1;
+    grid-gutter: 1 0;
     height: 3;
     margin-top: 1;
 }
@@ -387,7 +428,8 @@ Screen.compact #main-panel {
 
 Screen.compact #ask-hero,
 Screen.compact #notes-hero,
-Screen.compact #benchmark-hero {
+Screen.compact #benchmark-hero,
+Screen.compact #settings-hero {
     height: 1;
     margin-bottom: 0;
 }
@@ -398,7 +440,8 @@ Screen.compact .hero-subtitle {
 
 Screen.compact #ask-form-card,
 Screen.compact #notes-form-card,
-Screen.compact #benchmark-form-card {
+Screen.compact #benchmark-form-card,
+Screen.compact #settings-form-card {
     min-height: 14;
     margin-bottom: 0;
     padding: 1;
@@ -417,7 +460,8 @@ Screen.compact Input:focus {
 
 Screen.compact #ask-form-card .card-title,
 Screen.compact #notes-form-card .card-title,
-Screen.compact #benchmark-form-card .card-title {
+Screen.compact #benchmark-form-card .card-title,
+Screen.compact #settings-form-card .card-title {
     display: none;
 }
 
@@ -461,4 +505,32 @@ Screen.compact #notes-action-row {
     grid-size: 3 2;
     grid-gutter: 0;
     height: 6;
+}
+
+Screen.compact #settings-device-row,
+Screen.compact #settings-strategy-row,
+Screen.compact #settings-number-row,
+Screen.compact #settings-worker-row,
+Screen.compact #settings-action-row {
+    grid-gutter: 0;
+    height: 1;
+}
+
+Screen.compact #settings-number-row,
+Screen.compact #settings-worker-row {
+    height: 1;
+}
+
+Screen.compact #settings-commit-row {
+    grid-size: 2 2;
+    grid-gutter: 0;
+    height: 2;
+}
+
+Screen.compact #settings-device-row .strategy-button,
+Screen.compact #settings-strategy-row .strategy-button,
+Screen.compact #settings-commit-row .strategy-button,
+Screen.compact #settings-action-row .strategy-button,
+Screen.compact #settings-action-row .primary-action {
+    height: 1;
 }

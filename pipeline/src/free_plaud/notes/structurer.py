@@ -1,4 +1,5 @@
 from hashlib import sha256
+from pathlib import Path
 import re
 import unicodedata
 
@@ -442,7 +443,7 @@ def _extract_summary(lines: list[str], title_index: int, title: str) -> str:
     return _choose_best_summary(_collect_candidate_paragraphs(lines, 0), title)
 
 
-def structure_document(document: IngestedDocument) -> Note:
+def structure_document(document: IngestedDocument, *, source_root: Path | None = None) -> Note:
     """Transforma um documento bruto em uma nota estruturada mínima.
 
     Este comportamento é determinístico e serve como placeholder para a futura
@@ -454,7 +455,7 @@ def structure_document(document: IngestedDocument) -> Note:
     title_index, title = _choose_title(lines, fallback_title, document.source_type)
     summary = repair_ocr_summary_text(_extract_summary(lines, title_index, title))
     note = Note(
-        note_id=build_note_id(document.source_path),
+        note_id=build_note_id(document.source_path, root_path=source_root),
         source_type=document.source_type,
         source_path=document.source_path,
         source_name=document.source_path.name,

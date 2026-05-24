@@ -37,12 +37,15 @@ from free_plaud.retrieval.indexer import index_note
 from free_plaud.retrieval.models import Chunk
 from free_plaud.storage.sqlite import (
     count_chunks,
+    count_fts_chunks,
     count_notes,
+    delete_note_and_chunks,
     delete_corpus_notes_and_chunks,
     get_note_content_hash,
     init_sqlite,
     list_chunk_ids,
     list_chunk_ids_for_note,
+    list_note_ids_by_source_path,
     note_chunks_match_config,
     replace_chunks_for_note,
     upsert_note,
@@ -271,6 +274,28 @@ def _count_pending_chunks(items: list[_PendingCorpusIndex]) -> int:
     return sum(len(item.chunks) for item in items)
 
 
+def _duplicate_note_ids(items: list[_PendingCorpusIndex]) -> set[str]:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for item in items:
+        if item.note.note_id in seen:
+            duplicates.add(item.note.note_id)
+        seen.add(item.note.note_id)
+    return duplicates
+
+
+def _delete_superseded_source_notes(
+    connection: sqlite3.Connection,
+    vector_store: LocalVectorStore,
+    note: Note,
+) -> None:
+    for existing_note_id in list_note_ids_by_source_path(connection, note.source_path):
+        if existing_note_id == note.note_id:
+            continue
+        vector_store.delete_by_note_id(existing_note_id)
+        delete_note_and_chunks(connection, existing_note_id)
+
+
 def _resolve_initial_commit_mode(
     requested: CorpusCommitMode,
     *,
@@ -386,6 +411,21 @@ def _commit_pending_items(
     if not pending_items:
         return _CommitOutcome([], 0, 0, 0, 0)
 
+    duplicates = _duplicate_note_ids(pending_items)
+    if duplicates:
+        duplicate_list = ', '.join(sorted(duplicates))
+        failures = [
+            _failure_result(
+                item.source_path,
+                error_code='DUPLICATE_NOTE_ID',
+                message=f'Note_id duplicado no lote: {duplicate_list}. Nada foi gravado.',
+                vector_store=vector_store,
+                embedding_model=embedder.model_name,
+            )
+            for item in pending_items
+        ]
+        return _CommitOutcome(failures, 0, len(failures), 0, 0)
+
     chunk_pairs = [(item, chunk) for item in pending_items for chunk in item.chunks]
     embeddings_by_chunk_id: dict[str, list[float]] = {}
     embedding_ms = 0
@@ -455,6 +495,7 @@ def _commit_pending_items(
     )
     writing_started_at = perf_counter()
     for item in pending_items:
+        _delete_superseded_source_notes(connection, vector_store, item.note)
         vector_store.delete_by_note_id(item.note.note_id)
     all_chunks = [chunk for item in pending_items for chunk in item.chunks]
     for chunk_batch in _batched(all_chunks, settings.corpus_upsert_batch_size):
@@ -502,6 +543,18 @@ def get_corpus_status(
 
     try:
         sqlite_chunk_ids = list_chunk_ids(resolved_connection)
+        sqlite_chunks_count = count_chunks(resolved_connection)
+        try:
+            fts_chunks_count = count_fts_chunks(resolved_connection)
+            if sqlite_chunks_count == fts_chunks_count:
+                fts_status = 'ready'
+            elif fts_chunks_count == 0:
+                fts_status = 'missing'
+            else:
+                fts_status = 'stale'
+        except sqlite3.OperationalError:
+            fts_chunks_count = 0
+            fts_status = 'unavailable'
         vector_records = resolved_vector_store.list_records()
         vector_chunk_ids = {chunk_id for chunk_id, _ in vector_records}
 
@@ -530,7 +583,9 @@ def get_corpus_status(
             vector_store_dir=str(resolved_settings.vector_store_dir),
             vector_collection_name=resolved_vector_store.collection_name,
             notes_count=count_notes(resolved_connection),
-            sqlite_chunks_count=count_chunks(resolved_connection),
+            sqlite_chunks_count=sqlite_chunks_count,
+            fts_chunks_count=fts_chunks_count,
+            fts_status=fts_status,  # type: ignore[arg-type]
             vector_chunks_count=len(vector_chunk_ids),
             stale_vector_chunks_count=len(stale_chunk_ids),
             missing_vector_chunks_count=len(missing_chunk_ids),
@@ -1025,12 +1080,18 @@ def rebuild_corpus(
             resolved_connection.close()
 
 
-def _load_structure_chunk_corpus_file(path: Path, *, chunk_size: int, overlap: int) -> _PendingCorpusIndex | _PreparationFailure:
+def _load_structure_chunk_corpus_file(
+    path: Path,
+    *,
+    chunk_size: int,
+    overlap: int,
+    source_root: Path | None = None,
+) -> _PendingCorpusIndex | _PreparationFailure:
     try:
         document = load_document(path)
         if not document.raw_text.strip():
             raise ValueError('EMPTY_CONTENT')
-        note = structure_document(document)
+        note = structure_document(document, source_root=source_root)
         return _PendingCorpusIndex(
             source_path=document.source_path,
             note=note,
@@ -1089,8 +1150,14 @@ def _prepare_corpus_file(
     embedder: Embedder,
     chunk_size: int,
     overlap: int,
+    source_root: Path | None = None,
 ) -> _PendingCorpusIndex | CorpusIndexResult:
-    prepared = _load_structure_chunk_corpus_file(path, chunk_size=chunk_size, overlap=overlap)
+    prepared = _load_structure_chunk_corpus_file(
+        path,
+        chunk_size=chunk_size,
+        overlap=overlap,
+        source_root=source_root,
+    )
     return _resolve_prepared_corpus_file(
         prepared,
         connection=connection,
@@ -1161,6 +1228,7 @@ def index_corpus_file(
         if len(embeddings) != len(chunks):
             raise ValueError('A quantidade de embeddings precisa bater com a quantidade de chunks.')
 
+        _delete_superseded_source_notes(resolved_connection, resolved_vector_store, note)
         resolved_vector_store.delete_by_note_id(note.note_id)
         resolved_vector_store.upsert_chunks(chunks, embeddings, embedding_model=resolved_embedder.model_name)
         upsert_note(resolved_connection, note)
@@ -1565,6 +1633,7 @@ def index_corpus_path(
                         file_path,
                         chunk_size=resolved_chunk_size,
                         overlap=resolved_overlap,
+                        source_root=source_path,
                     ): (index, file_path)
                     for index, file_path in enumerate(discovery.files)
                 }
@@ -1742,6 +1811,7 @@ def index_corpus_path(
                     embedder=resolved_embedder,
                     chunk_size=resolved_chunk_size,
                     overlap=resolved_overlap,
+                    source_root=source_path,
                 )
                 accept_prepared(prepared, file_path)
                 if _is_cancelled(cancel_token):

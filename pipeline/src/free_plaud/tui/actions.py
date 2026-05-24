@@ -19,6 +19,7 @@ from free_plaud.corpus.models import (
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.corpus.service import get_corpus_status, index_corpus_path, rebuild_corpus, reset_corpus
 from free_plaud.notes.schemas import Note
+from free_plaud.providers.answer import get_answer_provider
 from free_plaud.providers.embed import get_embedder
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.storage.sqlite import get_all_notes, init_sqlite
@@ -65,6 +66,14 @@ def ask_corpus(
             embedder=embedder,
             strategy=strategy,
             top_k=resolved_settings.retrieval_top_k,
+            answer_provider=get_answer_provider(
+                resolved_settings.answer_provider,
+                model=resolved_settings.answer_model,
+                base_url=resolved_settings.answer_base_url,
+                api_key=resolved_settings.answer_api_key,
+                temperature=resolved_settings.answer_temperature,
+                timeout_seconds=resolved_settings.answer_timeout_seconds,
+            ),
         )
     finally:
         connection.close()
@@ -97,9 +106,10 @@ def _resolve_folder_path(folder_path: Path | str) -> Path:
     return target
 
 
-def preflight_corpus_folder(folder_path: Path | str) -> CorpusDiscoveryResult:
+def preflight_corpus_folder(folder_path: Path | str, *, recursive: bool | None = None) -> CorpusDiscoveryResult:
     target = _resolve_folder_path(folder_path)
-    return discover_corpus_files(target, recursive=True)
+    settings = get_settings()
+    return discover_corpus_files(target, recursive=settings.corpus_recursive_default if recursive is None else recursive)
 
 
 def _failed_batch(path: Path, message: str) -> CorpusIndexBatchResult:
@@ -121,6 +131,7 @@ def index_corpus_folder(
     folder_path: Path | str,
     *,
     rebuild: bool = False,
+    recursive: bool | None = None,
     settings: Settings | None = None,
     runtime: CorpusRuntime | None = None,
     progress: ProgressCallback | None = None,
@@ -128,6 +139,7 @@ def index_corpus_folder(
 ) -> CorpusIndexBatchResult:
     target = _resolve_folder_path(folder_path)
     resolved_settings = settings or get_settings()
+    resolved_recursive = resolved_settings.corpus_recursive_default if recursive is None else recursive
     ensure_runtime_dirs(resolved_settings)
     vector_store = runtime.get_vector_store() if runtime is not None else None
     embedder = None
@@ -158,7 +170,7 @@ def index_corpus_folder(
             settings=resolved_settings,
             vector_store=vector_store,
             embedder=embedder,
-            recursive=True,
+            recursive=resolved_recursive,
             dry_run=False,
             progress=progress,
             cancel_token=cancel_token,
@@ -172,7 +184,7 @@ def index_corpus_folder(
         settings=resolved_settings,
         vector_store=vector_store,
         embedder=embedder,
-        recursive=True,
+        recursive=resolved_recursive,
         progress=progress,
         cancel_token=cancel_token,
     )

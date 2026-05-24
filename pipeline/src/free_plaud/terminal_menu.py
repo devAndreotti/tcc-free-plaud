@@ -1,10 +1,12 @@
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
+from free_plaud.app.config import editable_settings_payload, get_settings, reset_user_settings, save_user_settings, user_settings_path_for
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.tui.actions import (
     ask_corpus,
@@ -41,6 +43,7 @@ def _print_options() -> None:
     console.print(f'[{TEXT_DIM}][4][/{TEXT_DIM}] Rebuild por pasta recursiva')
     console.print(f'[{TEXT_DIM}][5][/{TEXT_DIM}] Limpar banco do corpus')
     console.print(f'[{TEXT_DIM}][6][/{TEXT_DIM}] Rodar benchmark compare')
+    console.print(f'[{TEXT_DIM}][7][/{TEXT_DIM}] Configuracoes')
     console.print(f'[{TEXT_DIM}][0][/{TEXT_DIM}] Sair')
     console.print()
 
@@ -55,6 +58,8 @@ def _show_status() -> None:
         ('status', status.status),
         ('notes', str(status.notes_count)),
         ('sqlite_chunks', str(status.sqlite_chunks_count)),
+        ('fts_chunks', str(status.fts_chunks_count)),
+        ('fts_status', status.fts_status),
         ('vector_chunks', str(status.vector_chunks_count)),
         ('stale_vectors', str(status.stale_vector_chunks_count)),
         ('missing_vectors', str(status.missing_vector_chunks_count)),
@@ -125,6 +130,72 @@ def _benchmark(runtime: CorpusRuntime) -> None:
     console.print(table)
 
 
+def _show_settings_table() -> None:
+    settings = get_settings()
+    table = Table(title=f'Configuracoes ({user_settings_path_for(settings)})', border_style=PURPLE_DIM)
+    table.add_column('campo')
+    table.add_column('valor')
+    for key, value in editable_settings_payload(settings).items():
+        table.add_row(key, str(value))
+    console.print(table)
+
+
+def _parse_setting_value(raw: str) -> Any:
+    cleaned = raw.strip()
+    lowered = cleaned.lower()
+    if lowered in {'true', 'false', 'sim', 'nao', 'não'}:
+        return lowered in {'true', 'sim'}
+    if lowered in {'none', 'null', ''}:
+        return None
+    try:
+        return int(cleaned)
+    except ValueError:
+        return cleaned
+
+
+def _settings_menu(runtime: CorpusRuntime) -> None:
+    fields = {
+        '1': 'embedding_model',
+        '2': 'embedding_device',
+        '3': 'retrieval_top_k',
+        '4': 'default_ask_strategy',
+        '5': 'default_chunk_size',
+        '6': 'default_chunk_overlap',
+        '7': 'corpus_commit_mode',
+        '8': 'default_corpus_path',
+        '9': 'corpus_recursive_default',
+        '10': 'corpus_embedding_batch_size',
+        '11': 'corpus_index_workers',
+        '12': 'answer_provider',
+        '13': 'answer_model',
+        '14': 'answer_base_url',
+        '15': 'answer_temperature',
+        '16': 'answer_timeout_seconds',
+    }
+    _show_settings_table()
+    console.print()
+    for number, field in fields.items():
+        console.print(f'[{TEXT_DIM}][{number}][/{TEXT_DIM}] {field}')
+    console.print(f'[{TEXT_DIM}][R][/{TEXT_DIM}] Resetar user_settings.json')
+    console.print()
+    choice = Prompt.ask('Setting', default='0')
+    if choice == '0':
+        return
+    if choice.lower() == 'r':
+        reset_user_settings()
+        runtime.clear()
+        console.print('[green]Configuracoes resetadas.[/green]')
+        return
+    field = fields.get(choice)
+    if field is None:
+        console.print('[yellow]Opcao invalida.[/yellow]')
+        return
+    value = Prompt.ask(field)
+    save_user_settings({field: _parse_setting_value(value)})
+    runtime.clear()
+    console.print(f'[green]{field} salvo.[/green]')
+
+
 def run_terminal_menu() -> None:
     """Menu simples para operar corpus sem abrir TUI Textual."""
     runtime = CorpusRuntime()
@@ -148,6 +219,8 @@ def run_terminal_menu() -> None:
                 _reset(runtime)
             elif choice == '6':
                 _benchmark(runtime)
+            elif choice == '7':
+                _settings_menu(runtime)
             else:
                 console.print('[yellow]Opcao invalida.[/yellow]')
         except Exception as exc:  # noqa: BLE001 - menu precisa sobreviver a erro operacional.

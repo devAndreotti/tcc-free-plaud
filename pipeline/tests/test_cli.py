@@ -3,7 +3,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from free_plaud.app.config import Settings
+from free_plaud.app.config import Settings, get_settings
 from free_plaud.cli import app
 from free_plaud.storage.sqlite import count_chunks, count_notes, init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
@@ -58,6 +58,33 @@ def test_terminal_menu_can_open_and_exit() -> None:
     assert 'ACOES:\n\n' in result.stdout
     assert '[0] Sair\n\n' in result.stdout
     assert 'Sair' in result.stdout
+
+
+def test_config_cli_saves_user_settings(monkeypatch, tmp_path: Path) -> None:
+    results_dir = tmp_path / 'data' / 'results'
+    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    get_settings.cache_clear()
+
+    result = runner.invoke(app, ['config', 'set', 'embedding_device', 'cuda'])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['embedding_device'] == 'cuda'
+    assert (results_dir / 'user_settings.json').exists()
+    get_settings.cache_clear()
+
+
+def test_terminal_menu_can_update_embedding_device(monkeypatch, tmp_path: Path) -> None:
+    results_dir = tmp_path / 'data' / 'results'
+    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    get_settings.cache_clear()
+
+    result = runner.invoke(app, ['menu'], input='7\n2\ncuda\n0\n')
+
+    assert result.exit_code == 0
+    payload = json.loads((results_dir / 'user_settings.json').read_text(encoding='utf-8'))
+    assert payload['embedding_device'] == 'cuda'
+    get_settings.cache_clear()
 
 
 def test_doctor_creates_runtime_directories(monkeypatch, tmp_path: Path) -> None:

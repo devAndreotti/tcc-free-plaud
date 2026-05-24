@@ -3,6 +3,7 @@ from pathlib import Path
 from free_plaud.app.config import Settings
 from free_plaud.corpus.ask import answer_corpus_with_citations
 from free_plaud.corpus.service import index_corpus_path
+from free_plaud.notes.metadata import build_note_id
 from free_plaud.retrieval.models import Chunk, SearchHit
 from free_plaud.storage.sqlite import init_sqlite, list_chunks
 from free_plaud.storage.vector import LocalVectorStore
@@ -28,6 +29,24 @@ class StubVectorStore:
 
     def query(self, query_embedding: list[float], *, top_k: int = 5, note_id: str | None = None) -> list[SearchHit]:
         return self.hits[:top_k]
+
+
+class FakeAnswerProvider:
+    provider_name = 'fake'
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, list[str]]] = []
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        self.calls.append((question, contexts))
+        return 'Resposta final gerada com IA a partir das evidencias.'
+
+
+class FailingAnswerProvider:
+    provider_name = 'failing'
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        raise RuntimeError('provider fora do ar')
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -112,11 +131,103 @@ def test_answer_corpus_with_citations_stitches_multiple_files(tmp_path: Path) ->
     assert '15 dias corridos' not in response.answer
     assert 'filas e reprocessamento' not in response.answer
     assert {source.doc_id for source in response.used_sources} >= {
-        '01-contexto-base',
-        '02-detalhe-operacional',
-        '03-restricao-arquitetural',
+        build_note_id(root / '01_contexto_base.md', root_path=root),
+        build_note_id(root / '02_detalhe_operacional.md', root_path=root),
+        build_note_id(root / '03_restricao_arquitetural.md', root_path=root),
     }
     assert len({citation.note_id for citation in response.citations}) >= 3
+
+
+def test_answer_corpus_lexical_uses_fts_candidates(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+    calls = {'count': 0}
+
+    from free_plaud.corpus import ask as ask_module
+
+    original_search = ask_module.search_chunks_fts
+
+    def spy_search_chunks_fts(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        calls['count'] += 1
+        return original_search(*args, **kwargs)
+
+    monkeypatch.setattr(ask_module, 'search_chunks_fts', spy_search_chunks_fts)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+    )
+
+    assert calls['count'] >= 1
+    assert response.status == 'answer'
+    assert 'RabbitMQ' in (response.answer or '')
+
+
+def test_answer_corpus_calls_answer_provider_only_after_citations(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+    provider = FakeAnswerProvider()
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+    )
+
+    assert response.status == 'answer'
+    assert response.answer == 'Resposta final gerada com IA a partir das evidencias.'
+    assert response.citations
+    assert len(provider.calls) == 1
+    question, contexts = provider.calls[0]
+    assert question == 'Qual message broker foi adotado?'
+    assert any('RabbitMQ foi adotado' in context for context in contexts)
+
+
+def test_answer_corpus_does_not_call_answer_provider_without_hits(tmp_path: Path) -> None:
+    connection = init_sqlite(tmp_path / 'empty.sqlite3')
+    provider = FakeAnswerProvider()
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+    )
+
+    assert response.status == 'no_answer'
+    assert response.reason_for_no_answer == 'empty_corpus'
+    assert provider.calls == []
+
+
+def test_answer_corpus_falls_back_to_extractive_answer_when_provider_fails(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=FailingAnswerProvider(),
+    )
+
+    assert response.status == 'answer'
+    assert 'RabbitMQ' in (response.answer or '')
+    assert any('provider de resposta falhou' in limitation.lower() for limitation in response.limitations)
 
 
 def test_answer_corpus_with_citations_returns_no_answer_for_irrelevant_question(tmp_path: Path) -> None:
@@ -173,7 +284,8 @@ def test_answer_corpus_uses_valid_vector_hit_after_dropping_stale_hit(tmp_path: 
     _build_distributed_corpus(root)
     connection = init_sqlite(settings.sqlite_path)
     index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
-    valid_chunk = next(chunk for chunk in list_chunks(connection) if chunk.note_id == '01-contexto-base')
+    context_note_id = build_note_id(root / '01_contexto_base.md', root_path=root)
+    valid_chunk = next(chunk for chunk in list_chunks(connection) if chunk.note_id == context_note_id)
     stale = _chunk('stale-broker-1', 'stale-broker', 'RabbitMQ foi adotado como message broker em outro corpus.')
     vector_store = StubVectorStore(
         [
@@ -193,5 +305,5 @@ def test_answer_corpus_uses_valid_vector_hit_after_dropping_stale_hit(tmp_path: 
 
     assert response.status == 'answer'
     assert 'RabbitMQ' in (response.answer or '')
-    assert {citation.note_id for citation in response.citations} == {'01-contexto-base'}
+    assert {citation.note_id for citation in response.citations} == {context_note_id}
     assert all(citation.note_id != 'stale-broker' for citation in response.citations)

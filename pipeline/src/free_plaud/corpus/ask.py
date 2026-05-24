@@ -4,8 +4,9 @@ from time import perf_counter
 from typing import Literal
 
 from free_plaud.notes.schemas import Note
+from free_plaud.providers.answer import AnswerProvider
 from free_plaud.providers.embed import Embedder
-from free_plaud.retrieval.models import AnswerClaim, AskResponse, Chunk, Citation, SearchHit, UsedSource
+from free_plaud.retrieval.models import AnswerClaim, AskResponse, Citation, SearchHit, UsedSource
 from free_plaud.retrieval.rag import (
     _build_no_answer,
     _dedupe_hits,
@@ -19,13 +20,20 @@ from free_plaud.retrieval.rag import (
 )
 from free_plaud.retrieval.search import (
     extract_named_query_terms,
-    hybrid_search,
+    fuse_hits_by_rank,
     lexical_search_hits,
     match_terms_in_text,
     normalize_query_terms,
     open_semantic_search,
 )
-from free_plaud.storage.sqlite import get_notes_by_id, list_chunks
+from free_plaud.storage.sqlite import (
+    count_chunks,
+    ensure_chunks_fts_current,
+    get_notes_by_id,
+    list_chunk_ids,
+    list_chunks,
+    search_chunks_fts,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 RetrievalStrategy = Literal['lexical', 'vector', 'hybrid']
@@ -74,6 +82,15 @@ def _hits_for_citations(hits: list[SearchHit], citations: list[Citation]) -> lis
     return [hit for hit in hits if hit.chunk.chunk_id in cited_chunk_ids]
 
 
+def _contexts_for_answer_provider(claims: list[AnswerClaim]) -> list[str]:
+    contexts: list[str] = []
+    for index, claim in enumerate(claims, start=1):
+        citation_refs = ', '.join(citation.chunk_id for citation in claim.citations)
+        snippets = ' '.join(citation.snippet for citation in claim.citations)
+        contexts.append(f'[{index}] chunks={citation_refs}\nClaim: {claim.text}\nTrecho: {snippets}')
+    return contexts
+
+
 def _filter_hits_to_persisted_chunks(hits: list[SearchHit], valid_chunk_ids: set[str]) -> tuple[list[SearchHit], int]:
     filtered: list[SearchHit] = []
     stale_chunk_ids: set[str] = set()
@@ -83,6 +100,61 @@ def _filter_hits_to_persisted_chunks(hits: list[SearchHit], valid_chunk_ids: set
         else:
             stale_chunk_ids.add(hit.chunk.chunk_id)
     return filtered, len(stale_chunk_ids)
+
+
+def _build_fts_match_query(query_terms: list[str]) -> str:
+    escaped_terms = [term.replace('"', '""') for term in query_terms if term.strip()]
+    return ' OR '.join(f'"{term}"' for term in escaped_terms)
+
+
+def fts_lexical_search_hits(
+    connection: sqlite3.Connection,
+    query: str,
+    *,
+    top_k: int = 5,
+    candidate_limit: int | None = None,
+) -> list[SearchHit]:
+    """Busca lexical do corpus via FTS5/BM25, com fallback Python se FTS falhar."""
+    if top_k <= 0:
+        return []
+
+    query_terms = normalize_query_terms(query)
+    if not query_terms:
+        return []
+
+    match_query = _build_fts_match_query(query_terms)
+    if not match_query:
+        return []
+
+    try:
+        ensure_chunks_fts_current(connection)
+        candidate_rows = search_chunks_fts(
+            connection,
+            match_query,
+            limit=candidate_limit or max(top_k * 4, 40),
+        )
+    except sqlite3.OperationalError:
+        return lexical_search_hits(query, list_chunks(connection), top_k=top_k)
+
+    scored: list[SearchHit] = []
+    for rank, (chunk, bm25_score) in enumerate(candidate_rows, start=1):
+        matched_terms, term_coverage = match_terms_in_text(query_terms, chunk.chunk_text)
+        if not matched_terms:
+            continue
+        scored.append(
+            SearchHit(
+                chunk=chunk,
+                score=float(len(matched_terms)) + (1.0 / rank),
+                matched_terms=matched_terms,
+                term_coverage=term_coverage,
+                strategy='lexical',
+                distance=abs(bm25_score),
+            )
+        )
+
+    if scored:
+        return scored[:top_k]
+    return lexical_search_hits(query, list_chunks(connection), top_k=top_k)
 
 
 def _trim_claim_preserving_query_terms(question: str, query_terms: list[str], claim_text: str) -> str:
@@ -188,33 +260,41 @@ def _build_corpus_claims(
 
 def _retrieve_corpus_hits(
     question: str,
-    chunks: list[Chunk],
     *,
+    connection: sqlite3.Connection,
+    valid_chunk_ids: set[str],
     top_k: int,
     strategy: RetrievalStrategy,
     vector_store: LocalVectorStore | None,
     embedder: Embedder | None,
-) -> list[SearchHit]:
+) -> tuple[list[SearchHit], int]:
     if strategy == 'lexical':
-        return lexical_search_hits(question, chunks, top_k=top_k)
+        return fts_lexical_search_hits(connection, question, top_k=top_k), 0
 
     if vector_store is None or embedder is None:
         raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector e strategy=hybrid.')
 
     candidate_pool_size = max(top_k * 8, 24)
     if strategy == 'vector':
-        return open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size)[:top_k]
+        vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size)
+        filtered_hits, stale_count = _filter_hits_to_persisted_chunks(vector_hits, valid_chunk_ids)
+        return filtered_hits[:top_k], stale_count
 
     if strategy == 'hybrid':
-        return hybrid_search(
+        lexical_hits = fts_lexical_search_hits(
+            connection,
             question,
-            chunks,
-            vector_store,
-            embedder,
-            top_k=top_k,
-            note_id=None,
-            lexical_pool_size=max(top_k * 3, top_k),
-            vector_pool_size=candidate_pool_size,
+            top_k=max(top_k * 3, top_k),
+        )
+        vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size)
+        filtered_vector_hits, stale_count = _filter_hits_to_persisted_chunks(vector_hits, valid_chunk_ids)
+        return (
+            fuse_hits_by_rank(
+                lexical_hits,
+                filtered_vector_hits,
+                top_k=top_k,
+            ),
+            stale_count,
         )
 
     raise ValueError("strategy deve ser 'lexical', 'vector' ou 'hybrid'.")
@@ -233,6 +313,7 @@ def answer_corpus_with_citations(
     min_vector_term_coverage: float = 0.2,
     min_hybrid_term_coverage: float = 0.2,
     max_claims: int = 3,
+    answer_provider: AnswerProvider | None = None,
 ) -> AskResponse:
     """Responde usando todo o corpus persistido, mantendo citacoes por chunk."""
     started_at = perf_counter()
@@ -247,8 +328,7 @@ def answer_corpus_with_citations(
             latency_ms=int((perf_counter() - started_at) * 1000),
         )
 
-    chunks = list_chunks(connection)
-    if not chunks:
+    if count_chunks(connection) == 0:
         return _build_no_answer(
             question=question,
             reason='empty_corpus',
@@ -257,19 +337,17 @@ def answer_corpus_with_citations(
             latency_ms=int((perf_counter() - started_at) * 1000),
         )
 
-    raw_hits = _retrieve_corpus_hits(
+    valid_chunk_ids = list_chunk_ids(connection)
+    raw_hits, stale_vector_hits_count = _retrieve_corpus_hits(
         question,
-        chunks,
+        connection=connection,
+        valid_chunk_ids=valid_chunk_ids,
         top_k=top_k,
         strategy=strategy,
         vector_store=vector_store,
         embedder=embedder,
     )
-    filtered_hits, stale_vector_hits_count = _filter_hits_to_persisted_chunks(
-        raw_hits,
-        {chunk.chunk_id for chunk in chunks},
-    )
-    hits = _dedupe_hits(filtered_hits)
+    hits = _dedupe_hits(raw_hits)
     stale_limitations = (
         [f'{stale_vector_hits_count} hit(s) vetoriais stale foram descartados por nao existirem no SQLite.']
         if stale_vector_hits_count
@@ -415,6 +493,12 @@ def answer_corpus_with_citations(
         limitations.append('A resposta se apoia em um unico chunk recuperado.')
     if len(cited_sources) > 1:
         limitations.append('A resposta combina evidencia de multiplos arquivos do corpus.')
+
+    if answer_provider is not None:
+        try:
+            answer = answer_provider.answer(question, _contexts_for_answer_provider(claims))
+        except Exception as exc:  # noqa: BLE001 - RAG deve sobreviver a provider externo indisponivel.
+            limitations.append(f'Provider de resposta falhou; usando resposta extrativa. Erro: {exc}')
 
     return AskResponse(
         query=question,
