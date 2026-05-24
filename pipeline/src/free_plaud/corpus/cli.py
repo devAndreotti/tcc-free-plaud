@@ -11,6 +11,7 @@ from free_plaud.corpus.service import (
     get_corpus_status,
     index_corpus_file,
     index_corpus_path,
+    perf_benchmark_corpus,
     rebuild_corpus,
     reset_corpus,
 )
@@ -54,6 +55,7 @@ def rebuild(
     chunk_size: int | None = typer.Option(None, '--chunk-size', min=1),
     overlap: int | None = typer.Option(None, '--overlap', min=0),
     recursive: bool = typer.Option(False, '--recursive', help='Indexa subpastas recursivamente quando PATH for diretorio.'),
+    commit_mode: Literal['auto', 'atomic', 'microbatch'] = typer.Option('auto', '--commit-mode'),
     dry_run: bool = typer.Option(False, '--dry-run', help='Simula rebuild sem apagar ou indexar.'),
     yes: bool = typer.Option(False, '--yes', help='Executa reset e indexacao do corpus.'),
 ) -> None:
@@ -66,6 +68,7 @@ def rebuild(
         chunk_size=chunk_size,
         overlap=overlap,
         recursive=recursive,
+        commit_mode=commit_mode,
         dry_run=(dry_run or not yes),
     )
     typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
@@ -79,6 +82,7 @@ def index_benchmark(
     repeat: int = typer.Option(2, '--repeat', min=1, help='Quantidade de rodadas sobre o mesmo corpus temporario.'),
     chunk_size: int | None = typer.Option(None, '--chunk-size', min=1),
     overlap: int | None = typer.Option(None, '--overlap', min=0),
+    commit_mode: Literal['auto', 'atomic', 'microbatch'] = typer.Option('auto', '--commit-mode'),
 ) -> None:
     """Mede indexacao de corpus em workspace temporario nao destrutivo."""
     settings = get_settings()
@@ -88,6 +92,34 @@ def index_benchmark(
         settings=settings,
         chunk_size=chunk_size,
         overlap=overlap,
+        commit_mode=commit_mode,
+    )
+    typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
+    if result.status == 'failed':
+        raise typer.Exit(code=1)
+
+
+@app.command('perf-benchmark')
+def perf_benchmark(
+    files: int = typer.Option(100, '--files', min=1, help='Quantidade de arquivos suportados sinteticos.'),
+    repeat: int = typer.Option(1, '--repeat', min=1, help='Quantidade de rodadas de indexacao.'),
+    ask_repeat: int = typer.Option(10, '--ask-repeat', min=0, help='Quantidade de perguntas apos indexar.'),
+    commit_mode: Literal['auto', 'atomic', 'microbatch'] = typer.Option('auto', '--commit-mode'),
+    chunk_size: int | None = typer.Option(None, '--chunk-size', min=1),
+    overlap: int | None = typer.Option(None, '--overlap', min=0),
+    include_cold_start: bool = typer.Option(False, '--include-cold-start', help='Mede init e primeiro embed do provider.'),
+) -> None:
+    """Mede performance de indexacao + ask e salva JSON em data/results/corpus_perf."""
+    settings = get_settings()
+    result = perf_benchmark_corpus(
+        files=files,
+        repeat=repeat,
+        ask_repeat=ask_repeat,
+        settings=settings,
+        chunk_size=chunk_size,
+        overlap=overlap,
+        commit_mode=commit_mode,
+        include_cold_start=include_cold_start,
     )
     typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
     if result.status == 'failed':
@@ -100,6 +132,7 @@ def index(
     chunk_size: int | None = typer.Option(None, '--chunk-size', min=1),
     overlap: int | None = typer.Option(None, '--overlap', min=0),
     recursive: bool = typer.Option(False, '--recursive', help='Indexa subpastas recursivamente quando PATH for diretorio.'),
+    commit_mode: Literal['auto', 'atomic', 'microbatch'] = typer.Option('auto', '--commit-mode'),
 ) -> None:
     """Indexa um arquivo ou pasta suportada no corpus local."""
     settings = get_settings()
@@ -111,6 +144,7 @@ def index(
             chunk_size=chunk_size,
             overlap=overlap,
             recursive=recursive,
+            commit_mode=commit_mode,
         )
     else:
         result = index_corpus_file(

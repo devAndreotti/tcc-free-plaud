@@ -86,6 +86,31 @@ def test_get_embedder_auto_uses_cuda_when_available(monkeypatch) -> None:
     assert captured['device'] == 'cuda'
 
 
+def test_get_embedder_wraps_sentence_transformer_initialization_errors(monkeypatch) -> None:
+    class BrokenSentenceTransformerEmbeddingFunction:
+        def __init__(self, *, model_name: str, device: str, normalize_embeddings: bool) -> None:
+            _ = (model_name, device, normalize_embeddings)
+            raise TypeError("'NoneType' object is not subscriptable")
+
+    monkeypatch.setattr('free_plaud.providers.embed._cuda_available', lambda: True)
+    monkeypatch.setattr(
+        embedding_functions,
+        'SentenceTransformerEmbeddingFunction',
+        BrokenSentenceTransformerEmbeddingFunction,
+    )
+
+    try:
+        get_embedder('sentence-transformer:modelo-local', device='cuda')
+    except RuntimeError as exc:
+        message = str(exc)
+        assert 'Falha ao inicializar embedding sentence-transformer' in message
+        assert 'modelo-local' in message
+        assert 'cuda' in message
+        assert "'NoneType' object is not subscriptable" in message
+    else:
+        raise AssertionError('Era esperado RuntimeError com diagnostico de inicializacao do sentence-transformer.')
+
+
 def test_get_embedder_rejects_unknown_model() -> None:
     try:
         get_embedder('embeddings-que-nao-existem')

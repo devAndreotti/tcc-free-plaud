@@ -151,6 +151,10 @@ Button.nav-planned {
     margin-bottom: 1;
 }
 
+#ask-form-card {
+    min-height: 12;
+}
+
 #ask-result-card,
 #notes-result-card,
 #benchmark-result-card {
@@ -198,6 +202,26 @@ Input:focus {
 #strategy-row {
     layout: grid;
     grid-size: 3 1;
+    grid-gutter: 1 0;
+    height: 3;
+    margin-top: 0;
+}
+
+#ask-input-row {
+    layout: grid;
+    grid-size: 2 1;
+    grid-gutter: 1 0;
+    height: 4;
+    margin-top: 0;
+}
+
+.ask-field {
+    height: 4;
+}
+
+#ask-control-row {
+    layout: grid;
+    grid-size: 5 1;
     grid-gutter: 1 0;
     height: 3;
     margin-top: 0;
@@ -399,8 +423,24 @@ Screen.compact #benchmark-form-card .card-title {
 
 Screen.compact #strategy-label,
 Screen.compact #mode-label,
-Screen.compact #file-label {
+Screen.compact #file-label,
+Screen.compact #question-label {
     display: none;
+}
+
+Screen.compact #ask-input-row {
+    height: 3;
+    grid-gutter: 0;
+}
+
+Screen.compact .ask-field {
+    height: 3;
+}
+
+Screen.compact #ask-control-row {
+    grid-size: 5 1;
+    grid-gutter: 0;
+    height: 3;
 }
 
 Screen.compact #strategy-row {

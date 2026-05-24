@@ -5,7 +5,7 @@ from typer.testing import CliRunner
 
 from free_plaud.app.config import Settings
 from free_plaud.cli import app
-from free_plaud.corpus.service import benchmark_corpus_indexing
+from free_plaud.corpus.service import benchmark_corpus_indexing, perf_benchmark_corpus
 
 runner = CliRunner()
 
@@ -86,3 +86,26 @@ def test_corpus_index_benchmark_cli_outputs_json(monkeypatch, tmp_path: Path) ->
     assert payload['ignored_files'] == 3
     assert payload['runs'][0]['indexed_count'] == 4
     assert payload['runs'][1]['unchanged_count'] == 4
+
+
+def test_perf_benchmark_corpus_saves_comparable_json(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+
+    result = perf_benchmark_corpus(
+        files=4,
+        repeat=2,
+        ask_repeat=2,
+        settings=settings,
+        embedder=FakeEmbedder(),
+        commit_mode='microbatch',
+    )
+    payload = json.loads(Path(result.output_path).read_text(encoding='utf-8'))
+
+    assert result.status == 'success'
+    assert result.commit_mode_requested == 'microbatch'
+    assert result.commit_mode_resolved == 'microbatch'
+    assert result.first_committed_ms >= 0
+    assert result.ask_avg_ms >= 0
+    assert payload['dataset_shape']['files_requested'] == 4
+    assert payload['dataset_shape']['repeat'] == 2
+    assert payload['settings']['corpus_embedding_batch_size'] == settings.corpus_embedding_batch_size

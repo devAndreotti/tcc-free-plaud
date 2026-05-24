@@ -49,6 +49,11 @@ def _settings(tmp_path: Path) -> Settings:
         embedding_model='recording',
         default_chunk_size=600,
         default_chunk_overlap=40,
+        corpus_commit_mode='auto',
+        corpus_micro_batch_chunks=4,
+        corpus_micro_batch_files=2,
+        corpus_atomic_max_files=32,
+        corpus_atomic_max_chunks=64,
         corpus_embedding_batch_size=2,
         corpus_upsert_batch_size=2,
     )
@@ -140,3 +145,76 @@ def test_index_corpus_path_handles_batch_embedding_size_mismatch(tmp_path: Path)
     assert vector_store.upsert_sizes == []
     assert count_notes(connection) == 0
     assert count_chunks(connection) == 0
+
+
+def test_index_corpus_path_microbatch_commits_visible_batches(tmp_path: Path) -> None:
+    settings = _settings(tmp_path).model_copy(
+        update={
+            'corpus_atomic_max_files': 1,
+            'corpus_micro_batch_files': 2,
+            'corpus_micro_batch_chunks': 20,
+        }
+    )
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    for index in range(4):
+        (root / f'doc-{index}.md').write_text(
+            f'# Doc {index}\n\nConteudo curto do documento {index} para um chunk.\n',
+            encoding='utf-8',
+        )
+    embedder = RecordingEmbedder()
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = RecordingVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+    committed_counts: list[int] = []
+
+    def record_progress(event):  # noqa: ANN001
+        if event.phase == 'committed':
+            committed_counts.append(count_notes(connection))
+
+    result = index_corpus_path(
+        root,
+        settings=settings,
+        connection=connection,
+        vector_store=vector_store,
+        embedder=embedder,
+        recursive=True,
+        progress=record_progress,
+    )
+
+    assert result.status == 'success'
+    assert result.commit_mode_requested == 'auto'
+    assert result.commit_mode_resolved == 'microbatch'
+    assert committed_counts == [2, 4]
+    assert count_notes(connection) == 4
+    assert count_chunks(connection) == 4
+
+
+def test_index_corpus_path_atomic_override_keeps_single_commit(tmp_path: Path) -> None:
+    settings = _settings(tmp_path).model_copy(
+        update={
+            'corpus_atomic_max_files': 1,
+            'corpus_micro_batch_files': 2,
+        }
+    )
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    for index in range(4):
+        (root / f'doc-{index}.md').write_text(
+            f'# Doc {index}\n\nConteudo curto do documento {index}.\n',
+            encoding='utf-8',
+        )
+    events = []
+
+    result = index_corpus_path(
+        root,
+        settings=settings,
+        embedder=RecordingEmbedder(),
+        recursive=True,
+        commit_mode='atomic',
+        progress=events.append,
+    )
+
+    assert result.status == 'success'
+    assert result.commit_mode_requested == 'atomic'
+    assert result.commit_mode_resolved == 'atomic'
+    assert [event.phase for event in events].count('committed') == 1

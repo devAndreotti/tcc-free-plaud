@@ -3,6 +3,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+CorpusCommitMode = Literal['auto', 'atomic', 'microbatch']
+ResolvedCorpusCommitMode = Literal['atomic', 'microbatch']
+
 
 class CorpusSkippedPath(BaseModel):
     """Path ignorado durante descoberta de corpus."""
@@ -45,6 +48,8 @@ class CorpusIndexBatchResult(BaseModel):
     failed_count: int
     skipped_count: int
     unchanged_count: int = 0
+    commit_mode_requested: CorpusCommitMode = 'auto'
+    commit_mode_resolved: ResolvedCorpusCommitMode = 'atomic'
     results: list[CorpusIndexResult] = Field(default_factory=list)
     skipped: list[CorpusSkippedPath] = Field(default_factory=list)
 
@@ -52,7 +57,18 @@ class CorpusIndexBatchResult(BaseModel):
 class CorpusIndexProgress(BaseModel):
     """Evento de progresso da indexacao de corpus."""
 
-    phase: Literal['discovering', 'loading', 'structuring', 'embedding', 'writing', 'finished', 'failed', 'cancelled']
+    phase: Literal[
+        'warmup',
+        'discovering',
+        'loading',
+        'structuring',
+        'embedding',
+        'writing',
+        'committed',
+        'finished',
+        'failed',
+        'cancelled',
+    ]
     current_path: str | None = None
     total_found: int = 0
     processed_count: int = 0
@@ -61,6 +77,14 @@ class CorpusIndexProgress(BaseModel):
     failed_count: int = 0
     skipped_count: int = 0
     elapsed_ms: int = 0
+    warmup_ms: int = 0
+    embedding_ms: int = 0
+    writing_ms: int = 0
+    committed_count: int = 0
+    commit_mode_requested: CorpusCommitMode = 'auto'
+    commit_mode_resolved: ResolvedCorpusCommitMode = 'atomic'
+    batch_index: int = 0
+    batch_total: int = 0
     message: str | None = None
 
 
@@ -124,6 +148,7 @@ class CorpusIndexBenchmarkRunResult(BaseModel):
     skipped_count: int
     chunks_indexed: int
     embedding_calls: int
+    commit_mode_resolved: ResolvedCorpusCommitMode = 'atomic'
 
 
 class CorpusIndexBenchmarkResult(BaseModel):
@@ -135,6 +160,8 @@ class CorpusIndexBenchmarkResult(BaseModel):
     ignored_files: int
     repeat: int
     embedding_model: str
+    commit_mode_requested: CorpusCommitMode = 'auto'
+    commit_mode_resolved: ResolvedCorpusCommitMode = 'atomic'
     chunk_size: int
     overlap: int
     total_elapsed_ms: int
@@ -147,3 +174,38 @@ class CorpusIndexBenchmarkResult(BaseModel):
     chunks_indexed: int
     embedding_calls: int
     runs: list[CorpusIndexBenchmarkRunResult] = Field(default_factory=list)
+
+
+class CorpusPerfBenchmarkResult(BaseModel):
+    """Benchmark operacional persistivel de indexacao e ask."""
+
+    status: Literal['success', 'partial', 'failed', 'cancelled']
+    output_path: str
+    timestamp: str
+    git_commit: str | None = None
+    cold_start_ms: int = 0
+    python_import_ms: int = 0
+    embedder_init_ms: int = 0
+    first_embed_ms: int = 0
+    warm_embed_ms: int = 0
+    first_progress_ms: int = 0
+    first_committed_ms: int = 0
+    first_askable_ms: int = 0
+    total_index_ms: int = 0
+    files_per_second: float = 0.0
+    chunks_per_second: float = 0.0
+    embedding_calls: int = 0
+    ask_avg_ms: float = 0.0
+    ask_p50_ms: float = 0.0
+    ask_p95_ms: float = 0.0
+    commit_mode_requested: CorpusCommitMode = 'auto'
+    commit_mode_resolved: ResolvedCorpusCommitMode = 'atomic'
+    device: str = 'cpu'
+    embedding_model: str
+    torch_version: str | None = None
+    cuda_available: bool | None = None
+    gpu_name: str | None = None
+    peak_vram_mb: int | None = None
+    dataset_shape: dict[str, int] = Field(default_factory=dict)
+    settings: dict[str, object] = Field(default_factory=dict)
+    environment: dict[str, object] = Field(default_factory=dict)

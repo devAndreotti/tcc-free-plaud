@@ -16,6 +16,7 @@ from free_plaud.corpus.models import (
     CorpusResetResult,
     CorpusStatusResult,
 )
+from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.corpus.service import get_corpus_status, index_corpus_path, rebuild_corpus, reset_corpus
 from free_plaud.notes.schemas import Note
 from free_plaud.providers.embed import get_embedder
@@ -32,6 +33,7 @@ def ask_corpus(
     strategy: AskStrategy,
     *,
     settings: Settings | None = None,
+    runtime: CorpusRuntime | None = None,
 ) -> AskResponse:
     cleaned_question = question.strip()
     if not cleaned_question:
@@ -45,11 +47,15 @@ def ask_corpus(
     vector_store = None
     embedder = None
     if strategy in {'vector', 'hybrid'}:
-        vector_store = LocalVectorStore(
-            resolved_settings.vector_store_dir,
-            collection_name=resolved_settings.vector_collection_name,
-        )
-        embedder = get_embedder(resolved_settings.embedding_model, device=resolved_settings.embedding_device)
+        if runtime is not None:
+            vector_store = runtime.get_vector_store()
+            embedder = runtime.get_embedder()
+        else:
+            vector_store = LocalVectorStore(
+                resolved_settings.vector_store_dir,
+                collection_name=resolved_settings.vector_collection_name,
+            )
+            embedder = get_embedder(resolved_settings.embedding_model, device=resolved_settings.embedding_device)
 
     try:
         return answer_corpus_with_citations(
@@ -116,17 +122,42 @@ def index_corpus_folder(
     *,
     rebuild: bool = False,
     settings: Settings | None = None,
+    runtime: CorpusRuntime | None = None,
     progress: ProgressCallback | None = None,
     cancel_token: CancellationToken | None = None,
 ) -> CorpusIndexBatchResult:
     target = _resolve_folder_path(folder_path)
     resolved_settings = settings or get_settings()
     ensure_runtime_dirs(resolved_settings)
+    vector_store = runtime.get_vector_store() if runtime is not None else None
+    embedder = None
+    if runtime is not None:
+        progress and progress(
+            CorpusIndexProgress(
+                phase='warmup',
+                current_path=str(target),
+                commit_mode_requested=resolved_settings.corpus_commit_mode,
+                message=f'Aquecendo embeddings: {resolved_settings.embedding_model} device={resolved_settings.embedding_device}.',
+            )
+        )
+        warmup = runtime.warmup_embedder()
+        embedder = runtime.get_embedder()
+        progress and progress(
+            CorpusIndexProgress(
+                phase='warmup',
+                current_path=str(target),
+                warmup_ms=warmup.elapsed_ms,
+                commit_mode_requested=resolved_settings.corpus_commit_mode,
+                message=f'Embeddings prontos em {warmup.elapsed_ms} ms.',
+            )
+        )
 
     if rebuild:
         result = rebuild_corpus(
             target,
             settings=resolved_settings,
+            vector_store=vector_store,
+            embedder=embedder,
             recursive=True,
             dry_run=False,
             progress=progress,
@@ -139,22 +170,33 @@ def index_corpus_folder(
     return index_corpus_path(
         target,
         settings=resolved_settings,
+        vector_store=vector_store,
+        embedder=embedder,
         recursive=True,
         progress=progress,
         cancel_token=cancel_token,
     )
 
 
-def reset_corpus_from_tui(confirm: str, *, settings: Settings | None = None) -> CorpusResetResult:
+def reset_corpus_from_tui(
+    confirm: str,
+    *,
+    settings: Settings | None = None,
+    runtime: CorpusRuntime | None = None,
+) -> CorpusResetResult:
     if confirm.strip() != 'LIMPAR':
         raise ValueError('Digite LIMPAR para confirmar reset do corpus.')
-    return reset_corpus(settings=settings or get_settings(), dry_run=False)
+    result = reset_corpus(settings=settings or get_settings(), dry_run=False)
+    if runtime is not None:
+        runtime.clear_vector_store()
+    return result
 
 
 def compare_suite_from_tui(
     suite_path: Path | str,
     *,
     settings: Settings | None = None,
+    runtime: CorpusRuntime | None = None,
 ) -> BenchmarkComparisonResult:
     resolved_settings = settings or get_settings()
     ensure_runtime_dirs(resolved_settings)
@@ -168,7 +210,10 @@ def compare_suite_from_tui(
         resolved_settings.results_dir / 'benchmark_compare' / suite.suite_name,
         collection_name=f'{suite.suite_name}_compare',
     )
-    embedder = get_embedder(resolved_settings.embedding_model, device=resolved_settings.embedding_device)
+    embedder = runtime.get_embedder() if runtime is not None else get_embedder(
+        resolved_settings.embedding_model,
+        device=resolved_settings.embedding_device,
+    )
     try:
         return compare_benchmark_suite(
             suite,

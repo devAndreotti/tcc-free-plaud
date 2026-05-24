@@ -25,6 +25,7 @@ from free_plaud.tui.app import (
     AskPane,
     FreePlaudApp,
     _bullet_help,
+    _progress_rate_and_eta,
     ask_file,
 )
 
@@ -93,6 +94,36 @@ def test_tui_help_text_uses_spaced_bullets() -> None:
     assert _bullet_help('Ask item.', 'Notes item.', 'Benchmark item.') == (
         '- Ask item.\n\n- Notes item.\n\n- Benchmark item.'
     )
+
+
+def test_progress_rate_and_eta_are_renderable() -> None:
+    progress = CorpusIndexProgress(
+        phase='loading',
+        total_found=6,
+        processed_count=3,
+        elapsed_ms=3000,
+    )
+
+    assert _progress_rate_and_eta(progress) == ('1.00/s', '00:03')
+
+
+def test_ask_layout_keeps_inputs_and_actions_in_compact_rows() -> None:
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 36)):
+            input_row = app.query_one('#ask-input-row')
+            control_row = app.query_one('#ask-control-row')
+
+            assert [child.id for child in input_row.children] == ['ask-file-field', 'ask-question-field']
+            assert [child.id for child in control_row.children] == [
+                'strategy-lexical',
+                'strategy-vector',
+                'strategy-hybrid',
+                'ask-submit',
+                'ask-clear',
+            ]
+
+    asyncio.run(run_app())
 
 
 def test_ask_file_lexical_uses_file_pipeline_without_vector_dependencies(monkeypatch, tmp_path: Path) -> None:
@@ -176,7 +207,7 @@ def test_ask_file_rejects_invalid_inputs(tmp_path: Path) -> None:
 def test_tui_ask_button_runs_corpus_by_default(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
-    def fake_ask_corpus(question: str, strategy: str) -> AskResponse:
+    def fake_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:  # noqa: ANN003
         captured.update(question=question, strategy=strategy)
         return _answer(question)
 
@@ -202,7 +233,7 @@ def test_tui_ask_button_runs_file_mode_when_selected(monkeypatch, tmp_path: Path
     sample.write_text('# Sample\n\nTexto.\n', encoding='utf-8')
     captured: dict[str, object] = {}
 
-    def fake_ask_file(file_path: Path, question: str, strategy: str) -> AskResponse:
+    def fake_ask_file(file_path: Path, question: str, strategy: str, **kwargs) -> AskResponse:  # noqa: ANN003
         captured.update(file_path=file_path, question=question, strategy=strategy)
         return _answer(question)
 
@@ -257,7 +288,7 @@ def test_tui_ask_button_ignores_double_click_while_running(monkeypatch, tmp_path
     started = threading.Event()
     release = threading.Event()
 
-    def fake_ask_corpus(question: str, strategy: str) -> AskResponse:
+    def fake_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:  # noqa: ANN003
         calls.append(strategy)
         started.set()
         release.wait(timeout=2)
@@ -286,7 +317,7 @@ def test_tui_ask_button_restores_state_after_worker_error(monkeypatch, tmp_path:
     sample = tmp_path / 'sample.md'
     sample.write_text('# Sample\n\nTexto.\n', encoding='utf-8')
 
-    def fail_ask_corpus(question: str, strategy: str) -> AskResponse:
+    def fail_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:  # noqa: ANN003
         raise FileNotFoundError('arquivo quebrado')
 
     monkeypatch.setattr('free_plaud.tui.app.ask_corpus', fail_ask_corpus)
@@ -308,7 +339,7 @@ def test_tui_ask_button_restores_state_after_worker_error(monkeypatch, tmp_path:
 def test_tui_clear_button_resets_ask_response(monkeypatch) -> None:
     calls = 0
 
-    def fake_ask_corpus(question: str, strategy: str) -> AskResponse:
+    def fake_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:  # noqa: ANN003
         nonlocal calls
         calls += 1
         return _answer(question)
@@ -374,14 +405,14 @@ def test_tui_layout_reflows_when_terminal_resizes() -> None:
             await pilot.pause()
             assert not app.screen.has_class('compact')
             assert app.size.width >= COMPACT_WIDTH
-            assert app.query_one('#strategy-row').region.height == 3
+            assert app.query_one('#ask-control-row').region.height == 3
             assert app.query_one('#strategy-lexical').region.y == app.query_one('#strategy-hybrid').region.y
 
             await pilot.resize_terminal(80, 24)
             await pilot.pause(0.3)
             assert app.screen.has_class('compact')
             assert app.size.width < COMPACT_WIDTH
-            assert app.query_one('#strategy-row').region.height == 3
+            assert app.query_one('#ask-control-row').region.height == 3
             assert app.query_one('#strategy-lexical').region.y == app.query_one('#strategy-hybrid').region.y
             for selector in (
                 '#nav-panel',
@@ -400,7 +431,7 @@ def test_tui_layout_reflows_when_terminal_resizes() -> None:
             await pilot.resize_terminal(120, 36)
             await pilot.pause(0.3)
             assert not app.screen.has_class('compact')
-            assert app.query_one('#strategy-row').region.height == 3
+            assert app.query_one('#ask-control-row').region.height == 3
 
     asyncio.run(run_app())
 
@@ -456,6 +487,7 @@ def test_tui_notes_can_index_folder_and_reset_with_confirmation(monkeypatch, tmp
         path: Path,
         *,
         rebuild: bool,
+        runtime=None,
         progress=None,
         cancel_token=None,
     ) -> CorpusIndexBatchResult:
@@ -472,7 +504,7 @@ def test_tui_notes_can_index_folder_and_reset_with_confirmation(monkeypatch, tmp
             results=[],
         )
 
-    def fake_reset(confirm: str) -> CorpusResetResult:
+    def fake_reset(confirm: str, **kwargs) -> CorpusResetResult:  # noqa: ANN003
         captured['reset_confirm'] = confirm
         return CorpusResetResult(
             dry_run=False,
@@ -529,6 +561,7 @@ def test_tui_notes_rejects_empty_folder_before_index(monkeypatch) -> None:
         path: Path,
         *,
         rebuild: bool,
+        runtime=None,
         progress=None,
         cancel_token=None,
     ) -> CorpusIndexBatchResult:
@@ -568,6 +601,7 @@ def test_tui_notes_runs_preflight_before_index(monkeypatch, tmp_path: Path) -> N
         path: Path,
         *,
         rebuild: bool,
+        runtime=None,
         progress=None,
         cancel_token=None,
     ) -> CorpusIndexBatchResult:
@@ -625,6 +659,7 @@ def test_tui_notes_passes_progress_callback_to_indexer(monkeypatch, tmp_path: Pa
         path: Path,
         *,
         rebuild: bool,
+        runtime=None,
         progress=None,
         cancel_token=None,
     ) -> CorpusIndexBatchResult:
@@ -695,6 +730,7 @@ def test_tui_notes_cancel_button_cancels_running_index(monkeypatch, tmp_path: Pa
         path: Path,
         *,
         rebuild: bool,
+        runtime=None,
         progress=None,  # noqa: ANN001
         cancel_token: CancellationToken | None = None,
     ) -> CorpusIndexBatchResult:
@@ -751,7 +787,7 @@ def test_tui_notes_cancel_button_cancels_running_index(monkeypatch, tmp_path: Pa
 def test_tui_reset_requires_literal_confirmation(monkeypatch) -> None:
     calls = 0
 
-    def fake_reset(confirm: str) -> CorpusResetResult:
+    def fake_reset(confirm: str, **kwargs) -> CorpusResetResult:  # noqa: ANN003
         nonlocal calls
         calls += 1
         return CorpusResetResult(dry_run=False, would_delete_notes=0, would_delete_chunks=0, would_delete_vectors=0)
@@ -793,7 +829,7 @@ def test_tui_benchmark_runs_suite_comparison(monkeypatch, tmp_path: Path) -> Non
             'hybrid': Summary('hybrid'),
         }
 
-    def fake_compare(path: Path):
+    def fake_compare(path: Path, **kwargs):  # noqa: ANN003, ANN202
         captured['suite_path'] = path
         return Result()
 

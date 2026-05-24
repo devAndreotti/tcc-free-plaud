@@ -33,6 +33,7 @@ uv run pytest
 uv run free-plaud corpus rebuild "D:\caminho\pasta" --recursive --yes
 uv run free-plaud corpus ask --question "Pergunta" --strategy hybrid --top-k 6
 uv run free-plaud corpus index-benchmark --files 100 --repeat 2
+uv run free-plaud corpus perf-benchmark --files 100 --repeat 1 --ask-repeat 10 --commit-mode auto
 uv run free-plaud corpus embedding-info
 uv run free-plaud-tui
 ```
@@ -43,8 +44,28 @@ O modo `Arquivo` continua disponível para consulta isolada.
 Para pastas grandes, a indexação de corpus usa batches configuráveis:
 
 ```bash
+FREE_PLAUD_CORPUS_COMMIT_MODE=auto
+FREE_PLAUD_CORPUS_MICRO_BATCH_CHUNKS=64
+FREE_PLAUD_CORPUS_MICRO_BATCH_FILES=32
+FREE_PLAUD_CORPUS_ATOMIC_MAX_FILES=32
+FREE_PLAUD_CORPUS_ATOMIC_MAX_CHUNKS=64
 FREE_PLAUD_CORPUS_EMBEDDING_BATCH_SIZE=64
 FREE_PLAUD_CORPUS_UPSERT_BATCH_SIZE=128
 FREE_PLAUD_CORPUS_INDEX_WORKERS=1
 FREE_PLAUD_EMBEDDING_DEVICE=cpu
 ```
+
+`auto` usa modo atômico em corpus pequeno e micro-lotes em corpus grande. Em micro-lotes, SQLite/Chroma recebem dados durante a indexação, então `corpus status` e `corpus ask` passam a enxergar lotes já commitados antes do fim.
+
+## CUDA opcional
+
+CPU continua sendo o padrão. Para usar PyTorch CUDA 12.8 com `uv` sem voltar para build CPU no próximo `uv run`:
+
+```bash
+uv sync --extra gpu-cu128
+FREE_PLAUD_EMBEDDING_MODEL=sentence-transformer:sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+FREE_PLAUD_EMBEDDING_DEVICE=cuda
+uv run free-plaud corpus embedding-info
+```
+
+Se CUDA não estiver disponível, `embedding-info` mostra o erro de configuração antes de iniciar indexação pesada.

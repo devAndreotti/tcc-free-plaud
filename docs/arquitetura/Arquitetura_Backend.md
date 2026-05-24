@@ -357,6 +357,14 @@ chunks e a collection vetorial ativa mediante `--yes`, e reconstroem o acervo a 
 ou pasta controlada. O `corpus ask` filtra hits vetoriais cujo `chunk_id` não exista no SQLite antes
 de montar `citations`, `used_sources` e `claims`, evitando resposta baseada em vetor obsoleto.
 
+Na evolução de performance do corpus, a indexação de pastas passa a escolher entre commit
+`atomic` e `microbatch`. O modo `auto` mantém operação atômica para corpus pequeno e usa
+micro-lotes para pastas maiores, gravando Chroma e SQLite por grupos de arquivos/chunks. Isso
+torna `corpus status` e `corpus ask` úteis antes do fim da indexação, com o tradeoff explícito
+de corpus parcial quando uma indexação ou rebuild grande é interrompido. O TUI e o menu terminal
+também passam a reaproveitar embedder e vector store no processo, evitando pagar o cold-start de
+SentenceTransformer em cada pergunta.
+
 Na evolução atual, `hybrid` combina:
 
 - ranking lexical

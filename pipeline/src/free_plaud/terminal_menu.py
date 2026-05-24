@@ -5,6 +5,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
+from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.tui.actions import (
     ask_corpus,
     compare_suite_from_tui,
@@ -64,10 +65,10 @@ def _show_status() -> None:
         console.print(f'[{TEXT_DIM}]Notas: {", ".join(note.note_id for note in notes[:8])}[/{TEXT_DIM}]')
 
 
-def _ask() -> None:
+def _ask(runtime: CorpusRuntime) -> None:
     question = Prompt.ask('Pergunta').strip()
     strategy = Prompt.ask('Strategy', choices=['lexical', 'vector', 'hybrid'], default='hybrid')
-    response = ask_corpus(question, strategy)  # type: ignore[arg-type]
+    response = ask_corpus(question, strategy, runtime=runtime)  # type: ignore[arg-type]
     if response.no_answer:
         console.print(Panel(response.reason_for_no_answer or 'no_answer', title='no_answer', border_style='yellow'))
     else:
@@ -76,9 +77,9 @@ def _ask() -> None:
         console.print(f'[{TEXT_DIM}]Citacoes: {len(response.citations)} | Fontes: {len(response.used_sources)}[/{TEXT_DIM}]')
 
 
-def _index(*, rebuild: bool) -> None:
+def _index(runtime: CorpusRuntime, *, rebuild: bool) -> None:
     folder = Path(Prompt.ask('Pasta')).expanduser()
-    result = index_corpus_folder(folder, rebuild=rebuild)
+    result = index_corpus_folder(folder, rebuild=rebuild, runtime=runtime)
     console.print(
         Panel(
             f'status={result.status}\n'
@@ -92,10 +93,10 @@ def _index(*, rebuild: bool) -> None:
     )
 
 
-def _reset() -> None:
+def _reset(runtime: CorpusRuntime) -> None:
     console.print('[bold red]Isto apaga notes/chunks SQLite e vetores Chroma do corpus ativo.[/bold red]')
     confirm = Prompt.ask('Digite LIMPAR para confirmar')
-    result = reset_corpus_from_tui(confirm)
+    result = reset_corpus_from_tui(confirm, runtime=runtime)
     console.print(
         Panel(
             f'notas={result.deleted_notes}\nchunks={result.deleted_chunks}\nvetores={result.deleted_vectors}',
@@ -105,9 +106,9 @@ def _reset() -> None:
     )
 
 
-def _benchmark() -> None:
+def _benchmark(runtime: CorpusRuntime) -> None:
     suite = Path(Prompt.ask('Suite JSON')).expanduser()
-    result = compare_suite_from_tui(suite)
+    result = compare_suite_from_tui(suite, runtime=runtime)
     table = Table(title=result.comparison_id, border_style=PURPLE_DIM)
     table.add_column('strategy')
     table.add_column('MRR', justify='right')
@@ -126,6 +127,7 @@ def _benchmark() -> None:
 
 def run_terminal_menu() -> None:
     """Menu simples para operar corpus sem abrir TUI Textual."""
+    runtime = CorpusRuntime()
     while True:
         _print_header()
         _print_options()
@@ -137,15 +139,15 @@ def run_terminal_menu() -> None:
             if choice == '1':
                 _show_status()
             elif choice == '2':
-                _ask()
+                _ask(runtime)
             elif choice == '3':
-                _index(rebuild=False)
+                _index(runtime, rebuild=False)
             elif choice == '4':
-                _index(rebuild=True)
+                _index(runtime, rebuild=True)
             elif choice == '5':
-                _reset()
+                _reset(runtime)
             elif choice == '6':
-                _benchmark()
+                _benchmark(runtime)
             else:
                 console.print('[yellow]Opcao invalida.[/yellow]')
         except Exception as exc:  # noqa: BLE001 - menu precisa sobreviver a erro operacional.

@@ -15,6 +15,7 @@ from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Stati
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.models import CorpusDiscoveryResult, CorpusIndexProgress
+from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import get_embedder
@@ -48,6 +49,7 @@ def ask_file(
     strategy: AskStrategy,
     *,
     settings: Settings | None = None,
+    runtime: CorpusRuntime | None = None,
 ) -> AskResponse:
     """Executa o fluxo Ask sobre um arquivo local, sem persistir nota em SQLite."""
     cleaned_question = question.strip()
@@ -72,11 +74,15 @@ def ask_file(
             strategy=strategy,
         )
 
-    vector_store = LocalVectorStore(
-        resolved_settings.vector_store_dir,
-        collection_name=resolved_settings.vector_collection_name,
-    )
-    embedder = get_embedder(resolved_settings.embedding_model, device=resolved_settings.embedding_device)
+    if runtime is not None:
+        vector_store = runtime.get_vector_store()
+        embedder = runtime.get_embedder()
+    else:
+        vector_store = LocalVectorStore(
+            resolved_settings.vector_store_dir,
+            collection_name=resolved_settings.vector_collection_name,
+        )
+        embedder = get_embedder(resolved_settings.embedding_model, device=resolved_settings.embedding_device)
     return answer_with_citations(
         note,
         cleaned_question,
@@ -91,6 +97,19 @@ def _short_path(path: str | None, max_length: int = 56) -> str:
     if not path or len(path) <= max_length:
         return path or ''
     return '...' + path[-(max_length - 3) :]
+
+
+def _progress_rate_and_eta(progress: CorpusIndexProgress) -> tuple[str, str]:
+    if progress.processed_count <= 0 or progress.elapsed_ms <= 0:
+        return '-', '-'
+    elapsed_seconds = progress.elapsed_ms / 1000
+    rate = progress.processed_count / elapsed_seconds
+    rate_text = f'{rate:.2f}/s'
+    if progress.total_found <= progress.processed_count or rate <= 0:
+        return rate_text, '-'
+    eta_seconds = int((progress.total_found - progress.processed_count) / rate)
+    minutes, seconds = divmod(max(eta_seconds, 0), 60)
+    return rate_text, f'{minutes:02d}:{seconds:02d}'
 
 
 class ActionCell(Static, can_focus=True):
@@ -153,16 +172,18 @@ class AskPane(Vertical):
             with Container(id='mode-row'):
                 yield ActionCell('Corpus', id='mode-corpus', classes='strategy-button strategy-active')
                 yield ActionCell('Arquivo', id='mode-file', classes='strategy-button')
-            yield Label('Arquivo', id='file-label')
-            yield Input(placeholder=r'D:\caminho\arquivo.md', id='ask-file-path')
-            yield Label('Pergunta')
-            yield Input(placeholder='O que este documento diz?', id='ask-question')
+            with Container(id='ask-input-row'):
+                with Container(id='ask-file-field', classes='ask-field'):
+                    yield Label('Arquivo', id='file-label')
+                    yield Input(placeholder=r'D:\caminho\arquivo.md', id='ask-file-path')
+                with Container(id='ask-question-field', classes='ask-field'):
+                    yield Label('Pergunta', id='question-label')
+                    yield Input(placeholder='O que este documento diz?', id='ask-question')
             yield Label('Estrategia', id='strategy-label')
-            with Container(id='strategy-row'):
+            with Container(id='ask-control-row'):
                 yield ActionCell('Lexical', id='strategy-lexical', classes='strategy-button')
                 yield ActionCell('Vector', id='strategy-vector', classes='strategy-button')
                 yield ActionCell('Hybrid', id='strategy-hybrid', classes='strategy-button strategy-active')
-            with Container(id='ask-action-row'):
                 yield ActionCell('Perguntar', id='ask-submit', classes='primary-action')
                 yield ActionCell('Limpar', id='ask-clear', classes='strategy-button')
 
@@ -207,7 +228,10 @@ class AskPane(Vertical):
 
         self._set_running(True)
         output.clear()
-        output.write(Panel('Recuperando evidencias...', title='Executando', border_style='#7c3aed'))
+        message = 'Recuperando evidencias...'
+        if self.selected_mode == 'corpus' and self.app.corpus_indexing_partial:
+            message += '\n\nCorpus em indexacao micro-lote. Resposta pode usar somente parte ja commitada.'
+        output.write(Panel(message, title='Executando', border_style='#7c3aed'))
         if self.selected_mode == 'corpus':
             self._run_corpus_ask(question_input.value, self.selected_strategy)
         else:
@@ -251,7 +275,7 @@ class AskPane(Vertical):
     @work(thread=True)
     def _run_file_ask(self, file_path: Path, question: str, strategy: AskStrategy) -> None:
         try:
-            response = ask_file(file_path, question, strategy)
+            response = ask_file(file_path, question, strategy, runtime=self.app.corpus_runtime)
         except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
             self.app.call_from_thread(self._render_error, exc)
             return
@@ -260,7 +284,7 @@ class AskPane(Vertical):
     @work(thread=True)
     def _run_corpus_ask(self, question: str, strategy: AskStrategy) -> None:
         try:
-            response = ask_corpus(question, strategy)
+            response = ask_corpus(question, strategy, runtime=self.app.corpus_runtime)
         except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
             self.app.call_from_thread(self._render_error, exc)
             return
@@ -432,6 +456,7 @@ class NotesPane(Vertical):
             result = index_corpus_folder(
                 folder_path,
                 rebuild=rebuild,
+                runtime=self.app.corpus_runtime,
                 progress=report_progress,
                 cancel_token=cancel_token,
             )
@@ -445,7 +470,7 @@ class NotesPane(Vertical):
     @work(thread=True)
     def _run_reset(self, confirm: str) -> None:
         try:
-            result = reset_corpus_from_tui(confirm)
+            result = reset_corpus_from_tui(confirm, runtime=self.app.corpus_runtime)
             status = corpus_status_from_tui()
             notes = list_corpus_notes()
         except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
@@ -462,6 +487,7 @@ class NotesPane(Vertical):
         output = self.query_one('#notes-output', RichLog)
         output.clear()
         output.write(Panel(str(exc), title='Erro', border_style='#fb7185'))
+        self.app.corpus_indexing_partial = False
         self._cancel_token = None
         self._set_running(False)
 
@@ -482,19 +508,34 @@ class NotesPane(Vertical):
 
     def _render_index_progress(self, progress: CorpusIndexProgress) -> None:
         output = self.query_one('#notes-output', RichLog)
+        self.app.corpus_indexing_partial = progress.commit_mode_resolved == 'microbatch' and progress.phase not in {
+            'finished',
+            'failed',
+            'cancelled',
+        }
         if progress.message:
             self._progress_messages.append(progress.message)
             self._progress_messages = self._progress_messages[-10:]
         last_messages = '\n'.join(f'- {message}' for message in self._progress_messages)
         current_path = _short_path(progress.current_path, 72)
+        rate_text, eta_text = _progress_rate_and_eta(progress)
         body = (
             f'fase={progress.phase}\n'
+            f'modo={progress.commit_mode_requested}->{progress.commit_mode_resolved}\n'
+            f'lote={progress.batch_index}/{progress.batch_total}\n'
             f'processados={progress.processed_count}/{progress.total_found}\n'
             f'indexados={progress.indexed_count}\n'
+            f'commitados={progress.committed_count}\n'
+            f'ask_parcial={"sim" if progress.commit_mode_resolved == "microbatch" and progress.phase != "finished" else "nao"}\n'
             f'inalterados={progress.unchanged_count}\n'
             f'falhas={progress.failed_count}\n'
             f'ignorados={progress.skipped_count}\n'
-            f'tempo_ms={progress.elapsed_ms}'
+            f'warmup_ms={progress.warmup_ms}\n'
+            f'embedding_ms={progress.embedding_ms}\n'
+            f'writing_ms={progress.writing_ms}\n'
+            f'tempo_ms={progress.elapsed_ms}\n'
+            f'taxa={rate_text}\n'
+            f'eta={eta_text}'
         )
         if current_path:
             body += f'\natual={current_path}'
@@ -536,6 +577,7 @@ class NotesPane(Vertical):
 
     def _render_index_result(self, result, status, notes) -> None:  # noqa: ANN001
         output = self.query_one('#notes-output', RichLog)
+        self.app.corpus_indexing_partial = False
         output.clear()
         output.write(
             Panel(
@@ -553,6 +595,7 @@ class NotesPane(Vertical):
 
     def _render_reset_result(self, result, status, notes) -> None:  # noqa: ANN001
         output = self.query_one('#notes-output', RichLog)
+        self.app.corpus_indexing_partial = False
         output.clear()
         output.write(
             Panel(
@@ -626,7 +669,7 @@ class BenchmarkPane(Vertical):
     @work(thread=True)
     def _run_benchmark(self, suite_path: Path) -> None:
         try:
-            result = compare_suite_from_tui(suite_path)
+            result = compare_suite_from_tui(suite_path, runtime=self.app.corpus_runtime)
         except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
             self.app.call_from_thread(self._render_error, exc)
             return
@@ -678,6 +721,11 @@ class FreePlaudApp(App[None]):
     TITLE = 'free-plaud'
     SUB_TITLE = 'RAG local'
     BINDINGS = [('q', 'quit', 'Sair')]
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self.corpus_runtime = CorpusRuntime()
+        self.corpus_indexing_partial = False
 
     def on_mount(self) -> None:
         self._sync_responsive_classes(self.size)

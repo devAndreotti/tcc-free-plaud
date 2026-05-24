@@ -40,17 +40,34 @@ class SentenceTransformerEmbedder:
 
     def __init__(self, model_name: str, *, device: str = 'cpu', normalize_embeddings: bool = False) -> None:
         self.model_name = model_name
-        self._embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=model_name,
-            device=device,
-            normalize_embeddings=normalize_embeddings,
-        )
+        self.device = device
+        try:
+            self._embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name=model_name,
+                device=device,
+                normalize_embeddings=normalize_embeddings,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "Falha ao inicializar embedding sentence-transformer "
+                f"'{model_name}' no device '{device}'. "
+                "Verifique a instalacao de sentence-transformers, torch e numpy. "
+                "Se acabou de trocar para CUDA, feche TUI/processos Python e reinstale numpy/torch. "
+                f"Causa original: {type(exc).__name__}: {exc}"
+            ) from exc
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        embeddings = self._embedding_function(texts)
-        return [list(map(float, embedding)) for embedding in embeddings]
+        try:
+            embeddings = self._embedding_function(texts)
+            return [list(map(float, embedding)) for embedding in embeddings]
+        except Exception as exc:
+            raise RuntimeError(
+                "Falha ao gerar embeddings sentence-transformer "
+                f"'{self.model_name}' no device '{self.device}'. "
+                f"Causa original: {type(exc).__name__}: {exc}"
+            ) from exc
 
 
 def _cuda_available() -> bool:
