@@ -10,7 +10,10 @@ Fluxo de execução:
   3. A janela carrega o build do React (dist/index.html)
   4. O JavaScript acessa funções Python via window.pywebview.api
 
-Para integrar o backend no futuro, implemente os métodos da classe Api.
+Integração atual:
+  - chat chama o RAG real do corpus já indexado
+  - vault selecionado pode ser indexado no corpus local
+  - chave de API é salva em pipeline/.env, fora do Git
 ─────────────────────────────────────────────────────────────────
 """
 
@@ -20,7 +23,24 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-import webview
+
+try:
+    import webview
+except ImportError:  # Permite importar este módulo em testes sem PyWebView instalado.
+    webview = None
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+PIPELINE_SRC = REPO_ROOT / 'pipeline' / 'src'
+if PIPELINE_SRC.exists() and str(PIPELINE_SRC) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_SRC))
+
+from free_plaud.app.config import get_settings
+from free_plaud.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
+from free_plaud.corpus.runtime import CorpusRuntime
+from free_plaud.retrieval.models import AskResponse
+from free_plaud.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
+
+load_local_env()
 
 # Caminho do arquivo de configuração persistido em appdata
 CONFIG_PATH = Path(os.environ.get('APPDATA', Path.home())) / 'Brainiac' / 'config.json'
@@ -32,9 +52,35 @@ class Api:
 
     Cada método público desta classe fica disponível no frontend
     como: window.pywebview.api.nomeDoMetodo(args)
-
-    TODO: Integrar com o backend de IA quando estiver pronto.
     """
+
+    def __init__(self) -> None:
+        self.runtime = CorpusRuntime()
+
+    def _format_ask_response(self, response: AskResponse) -> str:
+        if response.no_answer:
+            lines = ['Não encontrei resposta no corpus indexado.']
+            if response.reason_for_no_answer:
+                lines.extend(['', f'motivo: {response.reason_for_no_answer}'])
+            if response.limitations:
+                lines.append('')
+                lines.extend(f'- {item}' for item in response.limitations)
+            lines.append('')
+            lines.append(f'latencia_ms: {response.latency_ms}')
+            return '\n'.join(lines)
+
+        lines = [response.answer or '']
+        if response.citations:
+            lines.extend(['', 'Fontes:'])
+            for citation in response.citations[:5]:
+                source = citation.source_path or citation.note_id
+                snippet = citation.snippet.replace('\n', ' ').strip()
+                lines.append(f'- {source} | {citation.chunk_id} | {snippet}')
+        if response.limitations:
+            lines.extend(['', 'Limitações:'])
+            lines.extend(f'- {item}' for item in response.limitations)
+        lines.extend(['', f'latencia_ms: {response.latency_ms}'])
+        return '\n'.join(lines)
 
     def sendMessage(self, message: str, attachment: str = None) -> str:
         """
@@ -47,13 +93,51 @@ class Api:
         Returns:
             Texto da resposta a ser exibida no chat.
         """
-        # TODO: Substituir por chamada real ao backend de IA
         print(f"[Backend] Mensagem recebida: {message!r}")
         if attachment:
-            print(f"[Backend] Arquivo anexado: {attachment!r}")
+            print(f"[Backend] Arquivo anexado ignorado no V1: {attachment!r}")
 
-        # Resposta placeholder até o backend ser implementado
-        return "Backend Python conectado! A integração com a IA será implementada em breve."
+        settings = get_settings()
+        response = ask_corpus(message, settings.default_ask_strategy, runtime=self.runtime)
+        return self._format_ask_response(response)
+
+    def indexVault(self, folder_path: str) -> dict:
+        """
+        Indexa recursivamente a pasta selecionada no corpus local.
+        """
+        result = index_corpus_folder(Path(folder_path).expanduser(), runtime=self.runtime)
+        return {
+            'ok': result.status in {'success', 'partial'},
+            'status': result.status,
+            'total_found': result.total_found,
+            'indexed_count': result.indexed_count,
+            'unchanged_count': result.unchanged_count,
+            'failed_count': result.failed_count,
+            'skipped_count': result.skipped_count,
+        }
+
+    def getBackendSettings(self) -> dict:
+        settings = get_settings()
+        status = corpus_status_from_tui(settings=settings)
+        return {
+            'answer_provider': settings.answer_provider,
+            'answer_model': settings.answer_model,
+            'answer_base_url': settings.answer_base_url,
+            'answer_api_key_configured': answer_api_key_is_configured(settings=settings),
+            'local_env_path': str(local_env_path_for(settings)),
+            'default_ask_strategy': settings.default_ask_strategy,
+            'notes_count': status.notes_count,
+            'sqlite_chunks_count': status.sqlite_chunks_count,
+            'vector_chunks_count': status.vector_chunks_count,
+        }
+
+    def saveApiKey(self, api_key: str) -> dict:
+        path = save_answer_api_key(api_key)
+        return {
+            'ok': True,
+            'configured': bool(api_key.strip()),
+            'local_env_path': str(path),
+        }
 
     def selectFolder(self) -> str:
         """
@@ -180,6 +264,10 @@ def get_html_path() -> str:
 
 
 if __name__ == '__main__':
+    if webview is None:
+        print('ERRO: pywebview nao instalado. Execute: pip install -r UI/requirements.txt')
+        sys.exit(1)
+
     api = Api()
 
     try:

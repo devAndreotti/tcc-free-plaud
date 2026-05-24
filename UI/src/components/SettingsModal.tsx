@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { XIcon } from './Icons';
-import { useVaultContext } from '../contexts/VaultContext';
+import { useVaultContext } from '../hooks/useVaultContext';
+import { bridge, type BackendSettings } from '../services/bridge';
 
 // Props do modal de configurações
 interface SettingsModalProps {
@@ -11,6 +12,11 @@ interface SettingsModalProps {
 
 const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
+  const [apiKey, setApiKey] = useState('');
+  const [backendSettings, setBackendSettings] = useState<BackendSettings | null>(null);
+  const [isSavingApiKey, setIsSavingApiKey] = useState(false);
+  const [isIndexingVault, setIsIndexingVault] = useState(false);
+  const [operationStatus, setOperationStatus] = useState('');
 
   // Consome o contexto global do vault
   const { vaultPath, selectVault, isScanning } = useVaultContext();
@@ -30,9 +36,54 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     if (isOpen) modalRef.current?.focus();
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    bridge.getBackendSettings()
+      .then(setBackendSettings)
+      .catch((error) => {
+        console.error('[SettingsModal] Erro ao carregar settings do backend:', error);
+      });
+  }, [isOpen]);
+
   // Chama o contexto para abrir o seletor e escanear automaticamente
   const handleSelectVault = async () => {
     await selectVault();
+  };
+
+  const handleIndexVault = async () => {
+    if (!vaultPath || isIndexingVault) return;
+    setIsIndexingVault(true);
+    setOperationStatus('Indexando corpus...');
+    try {
+      const result = await bridge.indexVault(vaultPath);
+      setOperationStatus(
+        `Indexação: ${result.status} | encontrados=${result.total_found} | indexados=${result.indexed_count} | inalterados=${result.unchanged_count} | falhas=${result.failed_count}`
+      );
+      const settings = await bridge.getBackendSettings();
+      setBackendSettings(settings);
+    } catch (error) {
+      console.error('[SettingsModal] Erro ao indexar vault:', error);
+      setOperationStatus('Erro ao indexar corpus.');
+    } finally {
+      setIsIndexingVault(false);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (isSavingApiKey) return;
+    setIsSavingApiKey(true);
+    try {
+      const result = await bridge.saveApiKey(apiKey);
+      setApiKey('');
+      setOperationStatus(result.configured ? `API key salva em ${result.local_env_path}` : `API key removida de ${result.local_env_path}`);
+      const settings = await bridge.getBackendSettings();
+      setBackendSettings(settings);
+    } catch (error) {
+      console.error('[SettingsModal] Erro ao salvar API key:', error);
+      setOperationStatus('Erro ao salvar API key.');
+    } finally {
+      setIsSavingApiKey(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -108,9 +159,73 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                 >
                   {isSelectingVault ? 'Selecionando…' : 'Selecionar'}
                 </button>
+                <button
+                  id="btn-index-vault"
+                  type="button"
+                  className="vault-picker__btn"
+                  onClick={handleIndexVault}
+                  disabled={!vaultPath || isIndexingVault}
+                  aria-label="Indexar corpus"
+                >
+                  {isIndexingVault ? 'Indexando…' : 'Indexar'}
+                </button>
               </div>
             </div>
           </section>
+
+          <div className="settings-divider" aria-hidden="true" />
+
+          {/* Seção: IA */}
+          <section className="settings-section" aria-labelledby="settings-ai">
+            <h3 id="settings-ai" className="settings-section__title">
+              IA
+            </h3>
+
+            <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+              <div className="settings-item__info">
+                <span className="settings-item__label">API key</span>
+                <span className="settings-item__description">
+                  {backendSettings?.answer_api_key_configured ? 'Configurada' : 'Ausente'} · {backendSettings?.answer_provider ?? 'extractive'} · {backendSettings?.answer_model ?? 'modelo local'}
+                </span>
+              </div>
+
+              <div className="vault-picker" role="group" aria-label="Salvar API key local">
+                <input
+                  id="input-api-key"
+                  type="password"
+                  className="vault-picker__input"
+                  value={apiKey}
+                  placeholder="FREE_PLAUD_ANSWER_API_KEY"
+                  aria-label="API key"
+                  onChange={(event) => setApiKey(event.target.value)}
+                />
+                <button
+                  id="btn-save-api-key"
+                  type="button"
+                  className="vault-picker__btn"
+                  onClick={handleSaveApiKey}
+                  disabled={isSavingApiKey}
+                  aria-label="Salvar API key"
+                >
+                  {isSavingApiKey ? 'Salvando…' : 'Salvar'}
+                </button>
+              </div>
+              {backendSettings && (
+                <span className="settings-inline-status">
+                  corpus: {backendSettings.notes_count} notas · {backendSettings.sqlite_chunks_count} chunks
+                </span>
+              )}
+            </div>
+          </section>
+
+          {operationStatus && (
+            <>
+              <div className="settings-divider" aria-hidden="true" />
+              <p className="settings-inline-status" role="status">
+                {operationStatus}
+              </p>
+            </>
+          )}
 
           <div className="settings-divider" aria-hidden="true" />
 

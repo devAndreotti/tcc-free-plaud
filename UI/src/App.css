@@ -504,6 +504,8 @@
   font-size: var(--font-size-base);
   line-height: 1.7;
   max-width: calc(100% - 48px);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .message__bubble--ai {
@@ -1296,6 +1298,11 @@
   transition: border-color var(--transition-fast);
 }
 
+.vault-picker__input:not([readonly]) {
+  cursor: text;
+  color: var(--text-primary);
+}
+
 .vault-picker__input:focus {
   border-color: var(--accent-blue);
 }
@@ -1324,6 +1331,18 @@
   background: var(--border-color);
   color: var(--text-primary);
   border-color: var(--text-muted);
+}
+
+.vault-picker__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.settings-inline-status {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  margin: 0;
 }
 
 /* ============================================================

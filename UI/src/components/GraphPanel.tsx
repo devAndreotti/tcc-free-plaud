@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import ForceGraph from './ForceGraph';
-import { useVaultContext } from '../contexts/VaultContext';
+import { useVaultContext } from '../hooks/useVaultContext';
 
 // Props do painel lateral de grafos
 interface GraphPanelProps {
@@ -38,6 +38,7 @@ const DEFAULT_WIDTH = 320;
 // Painel lateral direito para visualização de grafos
 const GraphPanel = ({ isOpen, onToggle }: GraphPanelProps) => {
   const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [isResizingActive, setIsResizingActive] = useState(false);
   const isResizing = useRef(false);
 
   // Consome os nós do Vault para alimentar o grafo
@@ -47,6 +48,7 @@ const GraphPanel = ({ isOpen, onToggle }: GraphPanelProps) => {
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isResizing.current = true;
+    setIsResizingActive(true);
     const startX = e.clientX;
     const startWidth = width;
 
@@ -63,6 +65,7 @@ const GraphPanel = ({ isOpen, onToggle }: GraphPanelProps) => {
 
     const onMouseUp = () => {
       isResizing.current = false;
+      setIsResizingActive(false);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       window.removeEventListener('mousemove', onMouseMove);
@@ -78,7 +81,7 @@ const GraphPanel = ({ isOpen, onToggle }: GraphPanelProps) => {
     ? {
         width: `${width}px`,
         minWidth: `${width}px`,
-        transition: isResizing.current
+        transition: isResizingActive
           ? 'border-left-width 260ms cubic-bezier(0.4, 0, 0.2, 1)'
           : undefined,
       }

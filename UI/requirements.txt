@@ -3,3 +3,7 @@
 # PyWebView: abre janela nativa do Windows com renderizador Edge WebView2
 # Documentação: https://pywebview.flowrl.com/
 pywebview>=5.0
+
+# Para a integração real com o backend, prefira rodar pelo ambiente do pipeline:
+# cd ..\pipeline
+# uv run --extra desktop python ..\UI\main.py

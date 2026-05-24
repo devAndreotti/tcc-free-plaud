@@ -44,7 +44,7 @@ const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
   };
 
   // Lógica de envio da mensagem
-  const handleSend = useCallback(() => {
+  const handleSend = () => {
     const trimmed = text.trim();
     if (!trimmed && !attachment) return;
     if (isLoading) return;
@@ -57,7 +57,7 @@ const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [text, attachment, isLoading, onSendMessage]);
+  };
 
   // Abre diálogo de seleção de arquivo
   const handleAttachClick = () => {

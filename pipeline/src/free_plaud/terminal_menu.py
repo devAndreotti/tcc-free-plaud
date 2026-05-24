@@ -7,6 +7,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from free_plaud.app.config import editable_settings_payload, get_settings, reset_user_settings, save_user_settings, user_settings_path_for
+from free_plaud.app.local_env import answer_api_key_is_configured, local_env_path_for, save_answer_api_key
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.tui.actions import (
     ask_corpus,
@@ -137,6 +138,8 @@ def _show_settings_table() -> None:
     table.add_column('valor')
     for key, value in editable_settings_payload(settings).items():
         table.add_row(key, str(value))
+    table.add_row('answer_api_key (.env)', 'configurada' if answer_api_key_is_configured(settings=settings) else 'ausente')
+    table.add_row('local_env', str(local_env_path_for(settings)))
     console.print(table)
 
 
@@ -171,6 +174,7 @@ def _settings_menu(runtime: CorpusRuntime) -> None:
         '14': 'answer_base_url',
         '15': 'answer_temperature',
         '16': 'answer_timeout_seconds',
+        '17': 'answer_api_key (.env local)',
     }
     _show_settings_table()
     console.print()
@@ -189,6 +193,12 @@ def _settings_menu(runtime: CorpusRuntime) -> None:
     field = fields.get(choice)
     if field is None:
         console.print('[yellow]Opcao invalida.[/yellow]')
+        return
+    if field == 'answer_api_key (.env local)':
+        value = Prompt.ask('FREE_PLAUD_ANSWER_API_KEY (vazio remove)', password=console.is_terminal, default='')
+        path = save_answer_api_key(value)
+        runtime.clear()
+        console.print(f'[green]answer_api_key salva em {path}.[/green]' if value.strip() else f'[green]answer_api_key removida de {path}.[/green]')
         return
     value = Prompt.ask(field)
     save_user_settings({field: _parse_setting_value(value)})

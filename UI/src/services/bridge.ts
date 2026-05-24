@@ -10,9 +10,6 @@
  * Em desenvolvimento (npm run dev no navegador):
  *   - window.pywebview NÃO existe
  *   - As funções retornam respostas simuladas (mock)
- *
- * Para integrar o backend no futuro, edite apenas main.py (Python).
- * Este arquivo não precisará ser alterado.
  * ─────────────────────────────────────────────────────────────
  */
 
@@ -28,6 +25,34 @@ export interface MarkdownNodeRaw {
   path: string;
   size: number;
   modified: string;
+}
+
+export interface IndexVaultResult {
+  ok: boolean;
+  status: string;
+  total_found: number;
+  indexed_count: number;
+  unchanged_count: number;
+  failed_count: number;
+  skipped_count: number;
+}
+
+export interface BackendSettings {
+  answer_provider: string;
+  answer_model: string;
+  answer_base_url: string | null;
+  answer_api_key_configured: boolean;
+  local_env_path: string;
+  default_ask_strategy: string;
+  notes_count: number;
+  sqlite_chunks_count: number;
+  vector_chunks_count: number;
+}
+
+export interface SaveApiKeyResult {
+  ok: boolean;
+  configured: boolean;
+  local_env_path: string;
 }
 
 interface PythonApi {
@@ -64,6 +89,15 @@ interface PythonApi {
    * @returns Caminho salvo, ou string vazia se nunca foi configurado
    */
   loadVaultPath: () => Promise<string>;
+
+  /** Indexa a pasta selecionada no corpus local do backend. */
+  indexVault?: (folderPath: string) => Promise<IndexVaultResult>;
+
+  /** Retorna resumo das configurações/backend para o modal. */
+  getBackendSettings?: () => Promise<BackendSettings>;
+
+  /** Salva ou remove FREE_PLAUD_ANSWER_API_KEY em pipeline/.env. */
+  saveApiKey?: (apiKey: string) => Promise<SaveApiKeyResult>;
 }
 
 declare global {
@@ -76,10 +110,10 @@ declare global {
 
 // ─── Mock de desenvolvimento (substitui o backend em dev mode) ───────────────
 const MOCK_RESPONSES = [
-  'Olá! Estou em modo de desenvolvimento. O backend Python será integrado futuramente.',
-  'Recebi sua mensagem! Quando conectado ao backend, a IA processará sua solicitação aqui.',
+  'Modo desenvolvimento no navegador. Para resposta real, rode o app via PyWebView.',
+  'Recebi sua mensagem em mock. O backend real responde ao abrir UI/main.py.',
   'Modo mock ativo. Para ver as respostas reais, execute o programa via main.py com PyWebView.',
-  'Esta é uma resposta simulada. O backend Python será responsável pelo processamento real.',
+  'Esta é uma resposta simulada. A integração real usa corpus ask no backend Python.',
 ];
 
 let mockIndex = 0;
@@ -171,6 +205,51 @@ export const bridge = {
     }
     // Mock: sem persistência em dev
     return '';
+  },
+
+  indexVault: async (folderPath: string): Promise<IndexVaultResult> => {
+    if (isDesktopApp && window.pywebview?.api.indexVault) {
+      return window.pywebview.api.indexVault(folderPath);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    return {
+      ok: true,
+      status: 'mock',
+      total_found: 5,
+      indexed_count: 5,
+      unchanged_count: 0,
+      failed_count: 0,
+      skipped_count: 0,
+    };
+  },
+
+  getBackendSettings: async (): Promise<BackendSettings> => {
+    if (isDesktopApp && window.pywebview?.api.getBackendSettings) {
+      return window.pywebview.api.getBackendSettings();
+    }
+    return {
+      answer_provider: 'extractive',
+      answer_model: 'llama3.1:8b',
+      answer_base_url: null,
+      answer_api_key_configured: false,
+      local_env_path: 'pipeline\\.env',
+      default_ask_strategy: 'hybrid',
+      notes_count: 0,
+      sqlite_chunks_count: 0,
+      vector_chunks_count: 0,
+    };
+  },
+
+  saveApiKey: async (apiKey: string): Promise<SaveApiKeyResult> => {
+    if (isDesktopApp && window.pywebview?.api.saveApiKey) {
+      return window.pywebview.api.saveApiKey(apiKey);
+    }
+    console.debug('[Bridge Mock] saveApiKey:', apiKey ? '<redacted>' : '<empty>');
+    return {
+      ok: true,
+      configured: apiKey.trim().length > 0,
+      local_env_path: 'pipeline\\.env',
+    };
   },
 
   /** Indica se o app está rodando dentro do PyWebView (desktop) */

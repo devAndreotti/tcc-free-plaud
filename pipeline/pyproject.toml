@@ -16,6 +16,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+desktop = [
+  "pywebview>=5.0",
+]
 gpu-cu128 = [
   "torch>=2.11.0",
   "torchvision>=0.26.0",

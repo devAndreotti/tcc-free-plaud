@@ -87,6 +87,22 @@ def test_terminal_menu_can_update_embedding_device(monkeypatch, tmp_path: Path) 
     get_settings.cache_clear()
 
 
+def test_terminal_menu_can_update_answer_api_key(monkeypatch, tmp_path: Path) -> None:
+    results_dir = tmp_path / 'data' / 'results'
+    monkeypatch.setenv('FREE_PLAUD_WORKSPACE_DIR', str(tmp_path))
+    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    monkeypatch.delenv('FREE_PLAUD_ANSWER_API_KEY', raising=False)
+    get_settings.cache_clear()
+
+    result = runner.invoke(app, ['menu'], input='7\n17\nsk-menu-test\n0\n')
+
+    assert result.exit_code == 0
+    local_env = tmp_path / 'pipeline' / '.env'
+    assert 'FREE_PLAUD_ANSWER_API_KEY=sk-menu-test' in local_env.read_text(encoding='utf-8')
+    assert not (results_dir / 'user_settings.json').exists()
+    get_settings.cache_clear()
+
+
 def test_doctor_creates_runtime_directories(monkeypatch, tmp_path: Path) -> None:
     settings = Settings(
         workspace_dir=tmp_path,

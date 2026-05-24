@@ -42,6 +42,37 @@ O projeto foi deliberadamente quebrado em fases para reduzir risco:
 
 Essa ordem prioriza a parte científica do TCC antes da parte cosmética do produto.
 
+## Operação local atual
+
+O backend experimental já roda por CLI, TUI Textual e menu terminal:
+
+```powershell
+cd D:\Dev\Repos\Own\tcc-free-plaud\pipeline
+uv run free-plaud-tui
+uv run free-plaud menu
+```
+
+A interface React/PyWebView pode chamar o RAG real do corpus indexado:
+
+```powershell
+cd D:\Dev\Repos\Own\tcc-free-plaud\UI
+npm.cmd run build
+cd ..\pipeline
+uv run --extra desktop python ..\UI\main.py
+```
+
+Segredos locais ficam em `.env` e não entram no Git. A chave de resposta generativa deve usar:
+
+```env
+FREE_PLAUD_ANSWER_API_KEY=sua-chave
+```
+
+No TUI, no menu terminal e na UI desktop há opção para salvar essa chave em `pipeline/.env`.
+
+Modelo LLM local não é selecionado por pasta no free-plaud. O app aponta para um servidor local
+compatível com OpenAI, como Ollama ou LM Studio. A pasta selecionada na UI é o corpus/vault a ser
+indexado, não o diretório do modelo.
+
 ## Stack sugerida para começar
 
 - `Python 3.12`

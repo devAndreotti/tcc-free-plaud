@@ -336,6 +336,30 @@ def test_tui_settings_pane_saves_device_and_clears_runtime(monkeypatch, tmp_path
     assert cleared is True
 
 
+def test_tui_settings_pane_saves_answer_api_key_to_local_env(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    saved_key: list[str] = []
+
+    def fake_save_answer_api_key(api_key: str, *, settings=None):  # noqa: ANN001, ANN202
+        saved_key.append(api_key)
+        return tmp_path / 'pipeline' / '.env'
+
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.tui.app.save_answer_api_key', fake_save_answer_api_key)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 38)) as pilot:
+            await pilot.click('#nav-settings')
+            app.query_one('#settings-answer-api-key', Input).value = 'sk-tui-test'
+            await pilot.click('#settings-save')
+            await pilot.pause(0.2)
+
+    asyncio.run(run_app())
+
+    assert saved_key == ['sk-tui-test']
+
+
 def test_tui_notes_uses_saved_default_corpus_path(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     settings.default_corpus_path = tmp_path / 'vault'
@@ -366,6 +390,7 @@ def test_tui_settings_layout_keeps_actions_visible() -> None:
                 await pilot.pause(0.1)
                 for selector in (
                     '#settings-device-auto',
+                    '#settings-answer-api-key',
                     '#settings-strategy-hybrid',
                     '#settings-commit-microbatch',
                     '#settings-save',

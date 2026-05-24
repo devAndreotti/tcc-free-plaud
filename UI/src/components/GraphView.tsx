@@ -13,7 +13,7 @@
  */
 
 import { useState, useMemo } from 'react';
-import { useVaultContext } from '../contexts/VaultContext';
+import { useVaultContext } from '../hooks/useVaultContext';
 import type { MarkdownNode } from '../hooks/useVault';
 
 // ─── Ícone de arquivo Markdown (SVG inline) ─────────────────────────────────

@@ -1,6 +1,6 @@
 # Assistente IA — Interface Desktop
 
-Interface visual de chat com IA, construída em **React + TypeScript** e empacotada como aplicação desktop Windows via **PyWebView**. Projetada para ser integrada a um backend Python no futuro.
+Interface visual de chat com IA, construída em **React + TypeScript** e empacotada como aplicação desktop Windows via **PyWebView**. No modo desktop, o chat chama o backend Python real do corpus; no navegador de desenvolvimento, mantém mock local.
 
 ---
 

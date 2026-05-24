@@ -13,6 +13,7 @@ from textual.message import Message
 from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Static
 
 from free_plaud.app.config import Settings, get_settings, reset_user_settings, save_user_settings, user_settings_path_for
+from free_plaud.app.local_env import answer_api_key_is_configured, local_env_path_for, save_answer_api_key
 from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.models import CorpusDiscoveryResult, CorpusIndexProgress
 from free_plaud.corpus.runtime import CorpusRuntime
@@ -751,7 +752,13 @@ class SettingsPane(Vertical):
                 yield ActionCell('Atomic', id='settings-commit-atomic', classes='strategy-button')
                 yield ActionCell('Microbatch', id='settings-commit-microbatch', classes='strategy-button')
                 yield ActionCell('Recursivo', id='settings-recursive', classes='strategy-button')
-            yield Input(value=str(settings.default_corpus_path or ''), placeholder=r'D:\caminho\pasta padrao', id='settings-corpus-path')
+            with Container(id='settings-path-row'):
+                yield Input(value=str(settings.default_corpus_path or ''), placeholder=r'D:\caminho\pasta padrao', id='settings-corpus-path')
+                yield Input(
+                    placeholder='FREE_PLAUD_ANSWER_API_KEY (.env local; vazio nao altera)',
+                    id='settings-answer-api-key',
+                    password=True,
+                )
             with Container(id='settings-worker-row'):
                 yield Input(
                     value=str(settings.corpus_embedding_batch_size),
@@ -768,7 +775,12 @@ class SettingsPane(Vertical):
 
     def on_mount(self) -> None:
         self._sync_controls()
-        self._render_message(f'user_settings={user_settings_path_for(get_settings())}')
+        settings = get_settings()
+        self._render_message(
+            f'user_settings={user_settings_path_for(settings)}\n'
+            f'local_env={local_env_path_for(settings)}\n'
+            f'answer_api_key={"configurada" if answer_api_key_is_configured(settings=settings) else "ausente"}'
+        )
 
     def on_action_cell_pressed(self, event: ActionCell.Pressed) -> None:
         control_id = event.cell.id or ''
@@ -817,6 +829,7 @@ class SettingsPane(Vertical):
         self.query_one('#settings-corpus-path', Input).value = str(settings.default_corpus_path or '')
         self.query_one('#settings-embedding-batch', Input).value = str(settings.corpus_embedding_batch_size)
         self.query_one('#settings-workers', Input).value = str(settings.corpus_index_workers)
+        self.query_one('#settings-answer-api-key', Input).value = ''
 
     def _sync_controls(self) -> None:
         for device in ('auto', 'cpu', 'cuda'):
@@ -848,12 +861,20 @@ class SettingsPane(Vertical):
                 'corpus_index_workers': int(self.query_one('#settings-workers', Input).value),
             }
             updated = save_user_settings(values)
+            api_key = self.query_one('#settings-answer-api-key', Input).value.strip()
+            api_key_path = None
+            if api_key:
+                api_key_path = save_answer_api_key(api_key, settings=updated)
         except Exception as exc:  # noqa: BLE001 - UI precisa exibir validacao.
             self._render_error(exc)
             return
         self.app.corpus_runtime.clear()
         self.app.refresh_settings_nav(updated)
-        self._render_message('Configuracoes salvas. Runtime limpo.')
+        self.query_one('#settings-answer-api-key', Input).value = ''
+        message = 'Configuracoes salvas. Runtime limpo.'
+        if api_key_path is not None:
+            message += f'\nanswer_api_key salva em {api_key_path}.'
+        self._render_message(message)
 
     def _render_message(self, message: str) -> None:
         output = self.query_one('#settings-output', RichLog)

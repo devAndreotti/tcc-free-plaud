@@ -12,10 +12,9 @@
  * ──────────────────────────────────────────────────────────────
  */
 
-import { createContext, useContext, type ReactNode } from 'react';
-import { useVault, type VaultState } from '../hooks/useVault';
-
-const VaultContext = createContext<VaultState | null>(null);
+import { type ReactNode } from 'react';
+import { useVault } from '../hooks/useVault';
+import { VaultContext } from './VaultContextObject';
 
 /** Provedor: envolve a aplicação inteira em App.tsx */
 export function VaultProvider({ children }: { children: ReactNode }) {
@@ -25,13 +24,4 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       {children}
     </VaultContext.Provider>
   );
-}
-
-/** Hook consumidor: lança erro se usado fora do VaultProvider */
-export function useVaultContext(): VaultState {
-  const ctx = useContext(VaultContext);
-  if (!ctx) {
-    throw new Error('useVaultContext deve ser usado dentro de <VaultProvider>');
-  }
-  return ctx;
 }
