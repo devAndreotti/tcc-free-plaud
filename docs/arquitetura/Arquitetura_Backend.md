@@ -385,6 +385,13 @@ modo de commit do corpus, pasta padrão, recursividade, batch de embedding e nú
 Ao alterar modelo ou device pelo app, o `CorpusRuntime` limpa cache de embedder/vector store para
 evitar reutilizar runtime antigo.
 
+Na evolução atual das configurações, `free_plaud.app.settings_catalog` vira o catálogo canônico
+para UI real, TUI Textual e menu terminal. Ele define rótulo humano, descrição, grupo, tipo,
+opções, recomendação, storage (`user_settings.json` ou `.env`) e warnings operacionais. Assim,
+`retrieval_top_k=4`, `default_chunk_size=800` e `default_chunk_overlap=120` aparecem de forma
+consistente como "Chunks por pergunta", "Tamanho do chunk" e "Sobreposição" em todas as
+superfícies. Segredos continuam fora de `user_settings.json`.
+
 Na evolução generativa do RAG, `corpus ask` mantém recuperação e validação de citações como gate
 obrigatório antes de qualquer chamada de IA. Se o corpus estiver vazio, se não houver hits, ou se
 os hits não gerarem claims citáveis, o fluxo retorna `no_answer` sem chamar provider generativo.

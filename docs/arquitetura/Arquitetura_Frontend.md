@@ -186,6 +186,9 @@ Na evolução atual, a UI React dentro do PyWebView deixa de responder apenas mo
 - o modal de configurações salva `FREE_PLAUD_ANSWER_API_KEY` em `pipeline/.env`
 - a pasta selecionada no modal pode ser indexada no corpus local
 - respostas exibem texto, fontes e `latencia_ms` preservando quebras de linha
+- settings de frontend, TUI e menu terminal passam a consumir o catálogo canônico de
+  `free_plaud.app.settings_catalog`, evitando rótulos divergentes para `top_k`,
+  `chunk_size`, `overlap`, provider, device e segredo local
 
 O modo `npm run dev` continua mockado porque não há IPC PyWebView no navegador comum. Para validar
 a integração real, é necessário gerar o build e abrir `UI/main.py` pelo ambiente do pipeline com

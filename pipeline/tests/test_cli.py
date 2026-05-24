@@ -87,6 +87,21 @@ def test_terminal_menu_can_update_embedding_device(monkeypatch, tmp_path: Path) 
     get_settings.cache_clear()
 
 
+def test_terminal_settings_menu_uses_human_catalog(monkeypatch, tmp_path: Path) -> None:
+    results_dir = tmp_path / 'data' / 'results'
+    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    get_settings.cache_clear()
+
+    result = runner.invoke(app, ['menu'], input='7\n0\n0\n')
+
+    assert result.exit_code == 0
+    assert 'Chunks por pergunta' in result.stdout
+    assert 'Tamanho do chunk' in result.stdout
+    assert 'Sobreposição' in result.stdout
+    assert 'answer_api_key' in result.stdout
+    get_settings.cache_clear()
+
+
 def test_terminal_menu_can_update_answer_api_key(monkeypatch, tmp_path: Path) -> None:
     results_dir = tmp_path / 'data' / 'results'
     monkeypatch.setenv('FREE_PLAUD_WORKSPACE_DIR', str(tmp_path))

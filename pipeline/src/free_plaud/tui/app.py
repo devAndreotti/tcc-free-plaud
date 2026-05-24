@@ -14,6 +14,7 @@ from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Stati
 
 from free_plaud.app.config import Settings, get_settings, reset_user_settings, save_user_settings, user_settings_path_for
 from free_plaud.app.local_env import answer_api_key_is_configured, local_env_path_for, save_answer_api_key
+from free_plaud.app.settings_catalog import settings_catalog_payload
 from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.models import CorpusDiscoveryResult, CorpusIndexProgress
 from free_plaud.corpus.runtime import CorpusRuntime
@@ -111,6 +112,17 @@ def _progress_rate_and_eta(progress: CorpusIndexProgress) -> tuple[str, str]:
     eta_seconds = int((progress.total_found - progress.processed_count) / rate)
     minutes, seconds = divmod(max(eta_seconds, 0), 60)
     return rate_text, f'{minutes:02d}:{seconds:02d}'
+
+
+def _settings_summary(settings: Settings) -> str:
+    rows = settings_catalog_payload(settings)
+    core_keys = {'retrieval_top_k', 'default_chunk_size', 'default_chunk_overlap', 'embedding_model'}
+    lines = [f'{row["label"]}: {row["display_value"]}' for row in rows if row['key'] in core_keys]
+    warnings = [row['warning'] for row in rows if row['warning']]
+    if warnings:
+        lines.append('')
+        lines.extend(f'- {warning}' for warning in warnings if warning)
+    return '\n'.join(lines)
 
 
 class ActionCell(Static, can_focus=True):
@@ -779,7 +791,8 @@ class SettingsPane(Vertical):
         self._render_message(
             f'user_settings={user_settings_path_for(settings)}\n'
             f'local_env={local_env_path_for(settings)}\n'
-            f'answer_api_key={"configurada" if answer_api_key_is_configured(settings=settings) else "ausente"}'
+            f'answer_api_key={"configurada" if answer_api_key_is_configured(settings=settings) else "ausente"}\n\n'
+            f'{_settings_summary(settings)}'
         )
 
     def on_action_cell_pressed(self, event: ActionCell.Pressed) -> None:

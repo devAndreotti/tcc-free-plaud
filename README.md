@@ -68,6 +68,8 @@ FREE_PLAUD_ANSWER_API_KEY=sua-chave
 ```
 
 No TUI, no menu terminal e na UI desktop há opção para salvar essa chave em `pipeline/.env`.
+As configurações operacionais usam um catálogo único no backend, então TUI, menu terminal e UI
+desktop mostram os mesmos campos, descrições e valores.
 
 Modelo LLM local não é selecionado por pasta no free-plaud. O app aponta para um servidor local
 compatível com OpenAI, como Ollama ou LM Studio. A pasta selecionada na UI é o corpus/vault a ser

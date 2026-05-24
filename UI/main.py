@@ -36,6 +36,7 @@ if PIPELINE_SRC.exists() and str(PIPELINE_SRC) not in sys.path:
 
 from free_plaud.app.config import get_settings
 from free_plaud.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
+from free_plaud.app.settings_catalog import save_catalog_setting, settings_catalog_payload
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
@@ -129,6 +130,7 @@ class Api:
             'notes_count': status.notes_count,
             'sqlite_chunks_count': status.sqlite_chunks_count,
             'vector_chunks_count': status.vector_chunks_count,
+            'settings_catalog': settings_catalog_payload(settings),
         }
 
     def saveApiKey(self, api_key: str) -> dict:
@@ -138,6 +140,11 @@ class Api:
             'configured': bool(api_key.strip()),
             'local_env_path': str(path),
         }
+
+    def saveBackendSetting(self, key: str, value) -> dict:
+        save_catalog_setting(key, value)
+        self.runtime.clear()
+        return {'ok': True}
 
     def selectFolder(self) -> str:
         """

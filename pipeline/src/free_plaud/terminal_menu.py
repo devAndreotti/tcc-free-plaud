@@ -1,13 +1,12 @@
 from pathlib import Path
-from typing import Any
-
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
-from free_plaud.app.config import editable_settings_payload, get_settings, reset_user_settings, save_user_settings, user_settings_path_for
-from free_plaud.app.local_env import answer_api_key_is_configured, local_env_path_for, save_answer_api_key
+from free_plaud.app.config import get_settings, reset_user_settings, user_settings_path_for
+from free_plaud.app.local_env import local_env_path_for, save_answer_api_key
+from free_plaud.app.settings_catalog import get_setting_spec, save_catalog_setting, settings_catalog_payload
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.tui.actions import (
     ask_corpus,
@@ -33,6 +32,16 @@ def _print_header() -> None:
             border_style=PURPLE,
         )
     )
+
+
+def _clear_screen() -> None:
+    if console.is_terminal:
+        console.clear()
+
+
+def _pause_after_command() -> None:
+    if console.is_terminal:
+        Prompt.ask('Enter para voltar ao menu', default='')
 
 
 def _print_options() -> None:
@@ -134,52 +143,34 @@ def _benchmark(runtime: CorpusRuntime) -> None:
 def _show_settings_table() -> None:
     settings = get_settings()
     table = Table(title=f'Configuracoes ({user_settings_path_for(settings)})', border_style=PURPLE_DIM)
+    table.add_column('#', justify='right')
+    table.add_column('grupo')
     table.add_column('campo')
     table.add_column('valor')
-    for key, value in editable_settings_payload(settings).items():
-        table.add_row(key, str(value))
-    table.add_row('answer_api_key (.env)', 'configurada' if answer_api_key_is_configured(settings=settings) else 'ausente')
-    table.add_row('local_env', str(local_env_path_for(settings)))
+    table.add_column('descricao')
+    for row in settings_catalog_payload(settings):
+        value = row['display_value']
+        if row['warning']:
+            value = f'{value} [yellow](!)[/yellow]'
+        table.add_row(str(row['index']), row['group'], row['label'], str(value), row['description'])
     console.print(table)
+    console.print(f'[{TEXT_DIM}]local_env: {local_env_path_for(settings)}[/{TEXT_DIM}]')
 
 
-def _parse_setting_value(raw: str) -> Any:
-    cleaned = raw.strip()
-    lowered = cleaned.lower()
-    if lowered in {'true', 'false', 'sim', 'nao', 'não'}:
-        return lowered in {'true', 'sim'}
-    if lowered in {'none', 'null', ''}:
-        return None
-    try:
-        return int(cleaned)
-    except ValueError:
-        return cleaned
+def _print_catalog_warnings() -> None:
+    warnings = [row for row in settings_catalog_payload() if row['warning']]
+    for row in warnings:
+        console.print(f'[yellow]{row["label"]}: {row["warning"]}[/yellow]')
 
 
 def _settings_menu(runtime: CorpusRuntime) -> None:
-    fields = {
-        '1': 'embedding_model',
-        '2': 'embedding_device',
-        '3': 'retrieval_top_k',
-        '4': 'default_ask_strategy',
-        '5': 'default_chunk_size',
-        '6': 'default_chunk_overlap',
-        '7': 'corpus_commit_mode',
-        '8': 'default_corpus_path',
-        '9': 'corpus_recursive_default',
-        '10': 'corpus_embedding_batch_size',
-        '11': 'corpus_index_workers',
-        '12': 'answer_provider',
-        '13': 'answer_model',
-        '14': 'answer_base_url',
-        '15': 'answer_temperature',
-        '16': 'answer_timeout_seconds',
-        '17': 'answer_api_key (.env local)',
-    }
+    _clear_screen()
+    _print_header()
     _show_settings_table()
+    _print_catalog_warnings()
     console.print()
-    for number, field in fields.items():
-        console.print(f'[{TEXT_DIM}][{number}][/{TEXT_DIM}] {field}')
+    for row in settings_catalog_payload():
+        console.print(f'[{TEXT_DIM}][{row["index"]}][/{TEXT_DIM}] {row["label"]} ({row["key"]})')
     console.print(f'[{TEXT_DIM}][R][/{TEXT_DIM}] Resetar user_settings.json')
     console.print()
     choice = Prompt.ask('Setting', default='0')
@@ -190,26 +181,31 @@ def _settings_menu(runtime: CorpusRuntime) -> None:
         runtime.clear()
         console.print('[green]Configuracoes resetadas.[/green]')
         return
-    field = fields.get(choice)
-    if field is None:
+    rows = settings_catalog_payload()
+    selected = next((row for row in rows if str(row['index']) == choice), None)
+    if selected is None:
         console.print('[yellow]Opcao invalida.[/yellow]')
         return
-    if field == 'answer_api_key (.env local)':
+    spec = get_setting_spec(selected['key'])
+    if selected['key'] == 'answer_api_key':
         value = Prompt.ask('FREE_PLAUD_ANSWER_API_KEY (vazio remove)', password=console.is_terminal, default='')
         path = save_answer_api_key(value)
         runtime.clear()
         console.print(f'[green]answer_api_key salva em {path}.[/green]' if value.strip() else f'[green]answer_api_key removida de {path}.[/green]')
         return
-    value = Prompt.ask(field)
-    save_user_settings({field: _parse_setting_value(value)})
+    choices = [option.value for option in spec.options] or None
+    current = selected['value']
+    value = Prompt.ask(spec.label, choices=choices, default='' if current is None else str(current))
+    save_catalog_setting(spec.key, value)
     runtime.clear()
-    console.print(f'[green]{field} salvo.[/green]')
+    console.print(f'[green]{spec.label} salvo.[/green]')
 
 
 def run_terminal_menu() -> None:
     """Menu simples para operar corpus sem abrir TUI Textual."""
     runtime = CorpusRuntime()
     while True:
+        _clear_screen()
         _print_header()
         _print_options()
         choice = Prompt.ask('Escolha', default='0')
@@ -233,5 +229,7 @@ def run_terminal_menu() -> None:
                 _settings_menu(runtime)
             else:
                 console.print('[yellow]Opcao invalida.[/yellow]')
+            _pause_after_command()
         except Exception as exc:  # noqa: BLE001 - menu precisa sobreviver a erro operacional.
             console.print(Panel(str(exc), title='Erro', border_style='red'))
+            _pause_after_command()

@@ -1197,6 +1197,11 @@
   padding: var(--spacing-sm) 0;
 }
 
+.settings-item--stacked {
+  align-items: stretch;
+  flex-direction: column;
+}
+
 .settings-item__info {
   display: flex;
   flex-direction: column;
@@ -1218,6 +1223,17 @@
 
 .settings-item__control {
   flex-shrink: 0;
+}
+
+.settings-control-wide,
+.settings-save-wide {
+  width: 100%;
+}
+
+.settings-warning {
+  color: #fbbf24;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
 }
 
 /* Select estilizado */

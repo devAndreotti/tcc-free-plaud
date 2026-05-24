@@ -47,12 +47,36 @@ export interface BackendSettings {
   notes_count: number;
   sqlite_chunks_count: number;
   vector_chunks_count: number;
+  settings_catalog: SettingRow[];
 }
 
 export interface SaveApiKeyResult {
   ok: boolean;
   configured: boolean;
   local_env_path: string;
+}
+
+export interface SettingOption {
+  value: string;
+  label: string;
+}
+
+export interface SettingRow {
+  index: number;
+  key: string;
+  label: string;
+  description: string;
+  group: string;
+  value_type: 'string' | 'int' | 'float' | 'bool' | 'path' | 'enum' | 'secret';
+  storage: 'user_settings' | 'local_env';
+  value: string | number | boolean | null;
+  display_value: string;
+  options: SettingOption[];
+  recommended: string | number | boolean | null;
+  secret: boolean;
+  placeholder: string | null;
+  warning: string | null;
+  local_env_path: string | null;
 }
 
 interface PythonApi {
@@ -98,6 +122,9 @@ interface PythonApi {
 
   /** Salva ou remove FREE_PLAUD_ANSWER_API_KEY em pipeline/.env. */
   saveApiKey?: (apiKey: string) => Promise<SaveApiKeyResult>;
+
+  /** Salva uma setting do catálogo canônico do backend. */
+  saveBackendSetting?: (key: string, value: string | number | boolean | null) => Promise<{ ok: boolean }>;
 }
 
 declare global {
@@ -237,6 +264,25 @@ export const bridge = {
       notes_count: 0,
       sqlite_chunks_count: 0,
       vector_chunks_count: 0,
+      settings_catalog: [
+        {
+          index: 1,
+          key: 'retrieval_top_k',
+          label: 'Chunks por pergunta',
+          description: 'Quantos chunks o Ask recupera para montar evidencias e resposta.',
+          group: 'Retrieval',
+          value_type: 'int',
+          storage: 'user_settings',
+          value: 4,
+          display_value: '4',
+          options: [],
+          recommended: 4,
+          secret: false,
+          placeholder: null,
+          warning: null,
+          local_env_path: null,
+        },
+      ],
     };
   },
 
@@ -250,6 +296,17 @@ export const bridge = {
       configured: apiKey.trim().length > 0,
       local_env_path: 'pipeline\\.env',
     };
+  },
+
+  saveBackendSetting: async (
+    key: string,
+    value: string | number | boolean | null
+  ): Promise<{ ok: boolean }> => {
+    if (isDesktopApp && window.pywebview?.api.saveBackendSetting) {
+      return window.pywebview.api.saveBackendSetting(key, value);
+    }
+    console.debug(`[Bridge Mock] saveBackendSetting: ${key}=${String(value)}`);
+    return { ok: true };
   },
 
   /** Indica se o app está rodando dentro do PyWebView (desktop) */

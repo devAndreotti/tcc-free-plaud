@@ -102,3 +102,27 @@ def test_desktop_api_index_vault_returns_batch_summary(monkeypatch, tmp_path: Pa
         'failed_count': 0,
         'skipped_count': 0,
     }
+
+
+def test_desktop_api_exposes_settings_catalog(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+
+    result = module.Api().getBackendSettings()
+
+    keys = {row['key'] for row in result['settings_catalog']}
+    assert {'retrieval_top_k', 'default_chunk_size', 'default_chunk_overlap', 'answer_api_key'} <= keys
+
+
+def test_desktop_api_saves_backend_setting(monkeypatch, tmp_path: Path) -> None:
+    module = _load_ui_main(monkeypatch)
+    calls: list[tuple[str, object]] = []
+
+    def fake_save_catalog_setting(key: str, value: object):  # noqa: ANN001
+        calls.append((key, value))
+
+    monkeypatch.setattr(module, 'save_catalog_setting', fake_save_catalog_setting)
+
+    result = module.Api().saveBackendSetting('retrieval_top_k', '9')
+
+    assert result == {'ok': True}
+    assert calls == [('retrieval_top_k', '9')]
