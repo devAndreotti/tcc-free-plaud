@@ -1,0 +1,128 @@
+import { useState, useRef, useCallback } from 'react';
+import ForceGraph from './ForceGraph';
+import { useVaultContext } from '../contexts/VaultContext';
+
+// Props do painel lateral de grafos
+interface GraphPanelProps {
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
+// Ícone de grafo/rede (mesma definição do Header para não criar dependência circular)
+const GraphIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={14}
+    height={14}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="18" cy="5" r="3" />
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="19" r="3" />
+    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+  </svg>
+);
+
+// Largura mínima e máxima permitidas ao redimensionar
+const MIN_WIDTH = 220;
+const MAX_WIDTH = 700;
+const DEFAULT_WIDTH = 320;
+
+// Painel lateral direito para visualização de grafos
+const GraphPanel = ({ isOpen, onToggle }: GraphPanelProps) => {
+  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const isResizing = useRef(false);
+
+  // Consome os nós do Vault para alimentar o grafo
+  const { nodes } = useVaultContext();
+
+  // Inicia o arrasto da alça de redimensionamento
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    const startX = e.clientX;
+    const startWidth = width;
+
+    // Adiciona cursor global durante o arrasto para evitar flickering
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return;
+      // Arrastar para a esquerda = painel mais largo
+      const delta = startX - ev.clientX;
+      setWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + delta)));
+    };
+
+    const onMouseUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [width]);
+
+  // Estilo inline controla a largura quando aberto; transição desativada durante resize
+  const panelStyle = isOpen
+    ? {
+        width: `${width}px`,
+        minWidth: `${width}px`,
+        transition: isResizing.current
+          ? 'border-left-width 260ms cubic-bezier(0.4, 0, 0.2, 1)'
+          : undefined,
+      }
+    : {};
+
+  return (
+    <aside
+      className={`graph-panel${isOpen ? ' graph-panel--open' : ''}`}
+      style={panelStyle}
+      aria-label="Painel de grafos"
+      aria-hidden={!isOpen}
+      id="graph-panel"
+    >
+      {/* Alça de redimensionamento — borda esquerda arrastável */}
+      {isOpen && (
+        <div
+          className="graph-panel__resize-handle"
+          onMouseDown={handleResizeStart}
+          title="Arrastar para redimensionar"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Cabeçalho do painel — contém o botão de toggle (alinhado à tab bar) */}
+      <div className="graph-panel__header">
+        <button
+          type="button"
+          className="graph-panel__toggle-btn"
+          onClick={onToggle}
+          aria-label="Fechar painel de grafos"
+          aria-expanded={isOpen}
+          aria-controls="graph-panel"
+        >
+          <GraphIcon />
+          <span>Grafos</span>
+        </button>
+      </div>
+
+      {/* Corpo do painel — grafo de força interativo */}
+      <div className="graph-panel__body">
+        <ForceGraph vaultNodes={nodes} />
+      </div>
+    </aside>
+  );
+};
+
+export default GraphPanel;

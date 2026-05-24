@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { XIcon } from './Icons';
+import { useVaultContext } from '../contexts/VaultContext';
 
 // Props do modal de configurações
 interface SettingsModalProps {
@@ -10,6 +11,10 @@ interface SettingsModalProps {
 
 const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // Consome o contexto global do vault
+  const { vaultPath, selectVault, isScanning } = useVaultContext();
+  const isSelectingVault = isScanning;
 
   // Fecha o modal ao pressionar Escape
   useEffect(() => {
@@ -25,13 +30,16 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     if (isOpen) modalRef.current?.focus();
   }, [isOpen]);
 
+  // Chama o contexto para abrir o seletor e escanear automaticamente
+  const handleSelectVault = async () => {
+    await selectVault();
+  };
+
   if (!isOpen) return null;
 
   // Renderiza diretamente no document.body via Portal.
-  // O overlay usa display:flex para centralizar o modal de forma confiável,
-  // sem depender de position:fixed + transform no próprio modal.
+  // O overlay usa display:flex para centralizar o modal de forma confiável.
   return createPortal(
-    // Overlay como contêiner flex que centraliza o modal
     <div
       className="modal-overlay"
       onClick={onClose}
@@ -45,7 +53,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
         aria-modal="true"
         aria-labelledby="settings-title"
         tabIndex={-1}
-        onClick={(e) => e.stopPropagation()} // Impede que clique no modal feche o overlay
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Cabeçalho do modal */}
         <div className="modal__header">
@@ -63,6 +71,49 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
         {/* Corpo do modal */}
         <div className="modal__body">
+
+          {/* Seção: Vault */}
+          <section className="settings-section" aria-labelledby="settings-vault">
+            <h3 id="settings-vault" className="settings-section__title">
+              Vault
+            </h3>
+
+            <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+              <div className="settings-item__info">
+                <span className="settings-item__label">Pasta de destino</span>
+                <span className="settings-item__description">
+                  Diretório onde os arquivos gerados serão salvos
+                </span>
+              </div>
+
+              {/* Campo de caminho + botão de seleção */}
+              <div className="vault-picker" role="group" aria-label="Selecionar pasta de destino">
+                <input
+                  id="input-vault-path"
+                  type="text"
+                  className="vault-picker__input"
+                  value={vaultPath}
+                  placeholder="Nenhuma pasta selecionada"
+                  readOnly
+                  aria-label="Caminho da pasta de destino"
+                  title={vaultPath || 'Nenhuma pasta selecionada'}
+                />
+                <button
+                  id="btn-select-vault"
+                  type="button"
+                  className="vault-picker__btn"
+                  onClick={handleSelectVault}
+                  disabled={isSelectingVault}
+                  aria-label="Selecionar pasta de destino"
+                >
+                  {isSelectingVault ? 'Selecionando…' : 'Selecionar'}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <div className="settings-divider" aria-hidden="true" />
+
           {/* Seção: Aparência */}
           <section className="settings-section" aria-labelledby="settings-appearance">
             <h3 id="settings-appearance" className="settings-section__title">

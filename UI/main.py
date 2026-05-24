@@ -16,7 +16,14 @@ Para integrar o backend no futuro, implemente os métodos da classe Api.
 
 import os
 import sys
+import json
+import uuid
+from datetime import datetime
+from pathlib import Path
 import webview
+
+# Caminho do arquivo de configuração persistido em appdata
+CONFIG_PATH = Path(os.environ.get('APPDATA', Path.home())) / 'Brainiac' / 'config.json'
 
 
 class Api:
@@ -47,6 +54,104 @@ class Api:
 
         # Resposta placeholder até o backend ser implementado
         return "Backend Python conectado! A integração com a IA será implementada em breve."
+
+    def selectFolder(self) -> str:
+        """
+        Abre o seletor nativo de pasta do Windows.
+
+        Returns:
+            Caminho absoluto da pasta selecionada, ou '' se o usuário cancelar.
+        """
+        import tkinter as tk
+        from tkinter import filedialog
+
+        # Janela raiz oculta (necessária para o filedialog funcionar)
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes('-topmost', True)  # Garante que o diálogo aparece na frente
+
+        folder = filedialog.askdirectory(title="Selecionar pasta de destino (Vault)")
+        root.destroy()
+
+        print(f"[Backend] Vault selecionado: {folder!r}")
+        return folder or ''
+
+    def scanVault(self, folder_path: str) -> list:
+        """
+        Varre a pasta do vault recursivamente em busca de arquivos .md.
+
+        Args:
+            folder_path: Caminho absoluto da pasta do vault.
+
+        Returns:
+            Lista de dicionários com id, name, path, size e modified de cada .md.
+        """
+        vault = Path(folder_path)
+        if not vault.is_dir():
+            print(f"[Backend] Vault inválido: {folder_path!r}")
+            return []
+
+        nodes = []
+        for md_file in vault.rglob('*.md'):
+            try:
+                stat = md_file.stat()
+                # Caminho relativo ao vault (usa barras normais para consistência)
+                relative = md_file.relative_to(vault).as_posix()
+                nodes.append({
+                    'id': str(uuid.uuid4()),
+                    'name': md_file.stem,                           # nome sem .md
+                    'path': relative,                              # caminho relativo
+                    'size': stat.st_size,                          # bytes
+                    'modified': datetime.fromtimestamp(
+                        stat.st_mtime
+                    ).isoformat(timespec='seconds'),               # ISO 8601
+                })
+            except (OSError, PermissionError) as exc:
+                print(f"[Backend] Ignorando {md_file}: {exc}")
+
+        print(f"[Backend] Vault escaneado: {len(nodes)} arquivo(s) .md encontrado(s)")
+        return nodes
+
+    def saveVaultPath(self, path: str) -> bool:
+        """
+        Persiste o caminho do vault em config.json.
+
+        Args:
+            path: Caminho absoluto do vault (string vazia para limpar).
+
+        Returns:
+            True em caso de sucesso, False em caso de erro.
+        """
+        try:
+            CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            data = {}
+            if CONFIG_PATH.exists():
+                data = json.loads(CONFIG_PATH.read_text(encoding='utf-8'))
+            data['vault_path'] = path
+            CONFIG_PATH.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding='utf-8'
+            )
+            print(f"[Backend] Vault path salvo: {path!r}")
+            return True
+        except Exception as exc:
+            print(f"[Backend] Erro ao salvar vault path: {exc}")
+            return False
+
+    def loadVaultPath(self) -> str:
+        """
+        Carrega o caminho do vault salvo na sessão anterior.
+
+        Returns:
+            Caminho absoluto do vault, ou '' se nunca foi configurado.
+        """
+        try:
+            if CONFIG_PATH.exists():
+                data = json.loads(CONFIG_PATH.read_text(encoding='utf-8'))
+                return data.get('vault_path', '')
+        except Exception as exc:
+            print(f"[Backend] Erro ao carregar vault path: {exc}")
+        return ''
 
 
 def get_html_path() -> str:
@@ -85,7 +190,7 @@ if __name__ == '__main__':
 
     # Cria a janela nativa do desktop
     window = webview.create_window(
-        title='Assistente IA',
+        title='Evil Plaud',
         url=html_path,
         js_api=api,          # Expõe a classe Api ao JavaScript
         width=1100,

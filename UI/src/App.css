@@ -1,100 +1,351 @@
 /* Estilos principais do layout da aplicação */
 
-/* Layout raiz da aplicação */
+/* Layout raiz da aplicação — flex-row para acomodar sidebar */
 .app {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100vh;
   background-color: var(--bg-primary);
   position: relative;
   overflow: hidden;
 }
 
+/* Coluna de conteúdo principal (header + views) */
+.app__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+
 /* ============================================================
-   HEADER / TOPBAR
+   HEADER / TAB BAR
    ============================================================ */
+/* Header: flex-row para conter a fila de abas */
 .header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--spacing-lg);
-  height: 56px;
+  flex-direction: row;
+  align-items: stretch;
+  height: 40px;
   background-color: var(--bg-primary);
   border-bottom: 1px solid var(--border-color-subtle);
   flex-shrink: 0;
   z-index: 10;
+  overflow: hidden;
 }
 
-.header__brand {
+/* Contêiner das abas — scroll horizontal se necessário */
+.tab-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox */
+  flex: 1;
+  min-width: 0;
+}
+
+.tab-bar::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+/* Espaço após as abas para clique na área vazia */
+.tab-bar__spacer {
+  flex: 1;
+  min-width: 20px;
+  cursor: default;
+  -webkit-app-region: drag; /* Tauri: drag window */
+}
+
+/* Botão de ação fixo no lado direito do header (ex.: Grafos) */
+.header-action-btn {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  text-decoration: none;
-}
-
-.header__logo {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  background: var(--accent-gradient);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
-  flex-shrink: 0;
-  transition: box-shadow var(--transition-base);
-}
-
-.header__logo:hover {
-  box-shadow: 0 0 20px rgba(37, 99, 235, 0.6);
-}
-
-.header__logo svg {
-  width: 18px;
-  height: 18px;
-  color: white;
-}
-
-.header__title {
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-}
-
-.header__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-/* Botão "Grafo" no header */
-.btn-graph {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  padding: 6px var(--spacing-md);
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-color);
+  gap: 5px;
+  height: 100%;
+  padding: 0 14px;
+  border: none;
+  border-left: 1px solid var(--border-color-subtle);
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: var(--font-size-sm);
   font-family: var(--font-family);
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  letter-spacing: 0.01em;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  -webkit-app-region: no-drag;
 }
 
-.btn-graph:hover {
+.header-action-btn:hover {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
+.header-action-btn:active {
+  background: rgba(124, 58, 237, 0.08);
+  color: var(--accent-blue-light);
+}
+
+/* Estado ativo — painel aberto */
+.header-action-btn--active {
+  background: rgba(124, 58, 237, 0.1);
+  color: var(--accent-blue-light);
+  border-left-color: var(--border-color);
+}
+
+.header-action-btn--active:hover {
+  background: rgba(124, 58, 237, 0.15);
+  color: var(--accent-blue-light);
+}
+
+/* ============================================================
+   PAINEL LATERAL DE GRAFOS
+   ============================================================ */
+/* Painel deslizante à direita — largura controlada por inline style quando aberto */
+.graph-panel {
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  background-color: var(--bg-primary);
+  border-left: 0 solid var(--border-color-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+  transition:
+    width 260ms cubic-bezier(0.4, 0, 0.2, 1),
+    min-width 260ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-left-width 260ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Painel expandido — largura vem do inline style; aqui só ativa a borda */
+.graph-panel--open {
+  border-left-width: 1px;
+}
+
+/* Alça de redimensionamento — borda esquerda arrastável */
+.graph-panel__resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.graph-panel__resize-handle:hover {
+  background: rgba(124, 58, 237, 0.25);
+}
+
+/* Cabeçalho do painel — alinhado com a tab bar (40px) */
+.graph-panel__header {
+  display: flex;
+  align-items: stretch;
+  height: 40px;
+  border-bottom: 1px solid var(--border-color-subtle);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+/* Botão de toggle dentro do painel — ocupa todo o header */
+.graph-panel__toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  height: 100%;
+  padding: 0 14px;
+  border: none;
+  background: rgba(124, 58, 237, 0.08);
+  color: var(--accent-blue-light);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.graph-panel__toggle-btn:hover {
+  background: rgba(124, 58, 237, 0.14);
+  color: var(--accent-blue-light);
+}
+
+/* Corpo do painel — ocupa todo o espaço restante para o canvas */
+.graph-panel__body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  padding: 0;
+}
+
+/* ============================================================
+   FORCE GRAPH (canvas interativo de notas)
+   ============================================================ */
+
+/* Contêiner do grafo — ocupa 100% do corpo do painel */
+.force-graph {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+}
+
+/* Canvas ocupa o espaço total */
+.force-graph__canvas {
+  flex: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.force-graph__canvas:active {
+  cursor: grabbing;
+}
+
+/* Estado vazio */
+.force-graph--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.force-graph__empty-msg {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Tooltip com o nome do nó hovered */
+.force-graph__tooltip {
+  position: absolute;
+  transform: translate(-50%, -200%);
+  background: rgba(20, 20, 28, 0.92);
+  border: 1px solid var(--border-color-subtle);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: var(--font-family);
+  padding: 3px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  z-index: 20;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+
+/* ── Aba individual ──────────────────────────────────────── */
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 12px;
+  min-width: 120px;
+  max-width: 200px;
+  height: 100%;
+  background: transparent;
+  border-right: 1px solid var(--border-color-subtle);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.tab:hover {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
+/* Aba ativa */
+.tab--active {
   background: var(--bg-surface);
   color: var(--text-primary);
-  border-color: var(--text-muted);
+  border-bottom: 2px solid var(--accent-blue);
 }
 
-.btn-graph svg {
-  width: 14px;
-  height: 14px;
+.tab--active:hover {
+  background: var(--bg-surface);
+}
+
+/* Linha indicadora roxa na base da aba ativa */
+.tab--active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-gradient);
+  border-radius: var(--radius-full) var(--radius-full) 0 0;
+}
+
+/* Ícone da aba */
+.tab__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.tab--active .tab__icon {
+  opacity: 1;
+  color: var(--accent-blue-light);
+}
+
+/* Label da aba — trunca com ellipsis */
+.tab__label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Botão de fechar a aba */
+.tab__close {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: all var(--transition-fast);
+  padding: 0;
+}
+
+/* Mostra o × apenas quando a aba está hovered ou ativa */
+.tab:hover .tab__close,
+.tab--active .tab__close {
+  opacity: 1;
+}
+
+.tab__close:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
 }
 
 /* ============================================================
@@ -107,6 +358,28 @@
   overflow: hidden;
   position: relative;
 }
+
+/* Variante sem aba ativa */
+.main--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+/* Estado vazio: nenhuma aba aberta */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.empty-state__text {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+
 
 /* Área de mensagens com scroll */
 .messages-area {
@@ -134,22 +407,33 @@
 }
 
 .welcome-screen__icon {
-  width: 64px;
-  height: 64px;
+  width: 80px;
+  height: 80px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(145deg, #1a2a4a 0%, #1e3a6e 40%, #1d4ed8 100%);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: var(--spacing-lg);
-  box-shadow: 0 4px 24px rgba(37, 99, 235, 0.3);
-  animation: pulse-glow 3s ease-in-out infinite;
 }
 
 .welcome-screen__icon svg {
-  width: 32px;
-  height: 32px;
-  color: #60a5fa;
+  width: 48px;
+  height: 48px;
+  color: #a78bfa;
+}
+
+/* Imagem da logo na tela de boas-vindas — animação de pulsação em roxo */
+.welcome-screen__logo-img {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  animation: pulse-glow-filter 3s ease-in-out infinite;
+}
+
+@keyframes pulse-glow-filter {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(124, 58, 237, 0.5)); }
+  50%       { filter: drop-shadow(0 0 22px rgba(167, 139, 250, 0.85)); }
 }
 
 .welcome-screen__heading {
@@ -199,7 +483,7 @@
 
 .message__avatar--ai {
   background: var(--accent-gradient);
-  box-shadow: 0 0 8px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
 }
 
 .message__avatar--user {
@@ -284,7 +568,7 @@
 
 .input-container:focus-within {
   border-color: var(--accent-blue);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
 }
 
 /* Botão de anexar arquivo */
@@ -389,12 +673,12 @@
   justify-content: center;
   cursor: pointer;
   transition: all var(--transition-fast);
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
 }
 
 .btn-send:hover:not(:disabled) {
   transform: scale(1.05);
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.5);
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.5);
 }
 
 .btn-send:disabled {
@@ -435,7 +719,7 @@
 .attachment-preview__icon {
   width: 28px;
   height: 28px;
-  background: rgba(37, 99, 235, 0.15);
+  background: rgba(124, 58, 237, 0.15);
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -503,14 +787,191 @@
   }
 }
 
-/* ============================================================
-   HEADER — LADO ESQUERDO (hambúrguer + logo)
-   ============================================================ */
+/* Estilos legados mantidos por compatibilidade */
 .header__left {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
 }
+
+/* ============================================================
+   SIDEBAR (BARRA LATERAL)
+   ============================================================ */
+.sidebar {
+  width: 68px;
+  height: 100vh;
+  background-color: var(--bg-primary);
+  border-right: 1px solid var(--border-color-subtle);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--spacing-sm) 0;
+  flex-shrink: 0;
+  z-index: 20;
+  gap: 0;
+}
+
+/* Logo na sidebar */
+.sidebar__logo {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--spacing-xs);
+  flex-shrink: 0;
+  /* Reset de botão */
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--radius-full);
+}
+
+.sidebar__logo-img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  border-radius: var(--radius-full);
+  transition: filter var(--transition-base);
+  animation: pulse-glow-filter 4s ease-in-out infinite;
+}
+
+/* Glow intensificado ao pressionar a logo */
+.sidebar__logo:hover .sidebar__logo-img {
+  filter: drop-shadow(0 0 12px rgba(124, 58, 237, 1));
+}
+
+/* Linha divisória horizontal */
+.sidebar__divider {
+  width: 36px;
+  height: 1px;
+  background: var(--border-color-subtle);
+  margin: var(--spacing-xs) 0 var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+/* Área de navegação */
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  width: 100%;
+  padding: 0 var(--spacing-xs);
+}
+
+/* Botão de navegação da sidebar */
+.sidebar__nav-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.sidebar__nav-btn:hover {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
+/* Estado ativo do botão de navegação */
+.sidebar__nav-btn--active {
+  background: rgba(124, 58, 237, 0.12);
+  color: var(--accent-blue-light);
+}
+
+.sidebar__nav-btn--active:hover {
+  background: rgba(124, 58, 237, 0.18);
+  color: var(--accent-blue-light);
+}
+
+/* Indicador de ativo (barra esquerda) */
+.sidebar__nav-btn--active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: var(--accent-gradient);
+  border-radius: 0 var(--radius-full) var(--radius-full) 0;
+}
+
+.sidebar__nav-btn svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* Label textual abaixo do ícone */
+.sidebar__nav-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: inherit;
+  user-select: none;
+}
+
+/* Empurra o hambúrguer para a base */
+.sidebar__spacer {
+  flex: 1;
+}
+
+/* Wrapper do hambúrguer na base */
+.sidebar__hamburger-wrapper {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--spacing-xs) var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+/* Botão hambúrguer na sidebar */
+.sidebar__hamburger {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sidebar__hamburger:hover {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
+.sidebar__hamburger.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.sidebar__hamburger svg {
+  width: 20px;
+  height: 20px;
+}
+
 
 /* ============================================================
    BOTÃO HAMBÚRGUER
@@ -553,9 +1014,10 @@
 /* ============================================================
    MENU DROPDOWN DO HAMBÚRGUER
    ============================================================ */
+/* Abre para cima quando está dentro da sidebar (base da tela) */
 .hamburger-menu {
   position: absolute;
-  top: calc(100% + 6px);
+  bottom: calc(100% + 6px);
   left: 0;
   min-width: 200px;
   background: var(--bg-surface);
@@ -798,11 +1260,470 @@
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-fast);
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
 }
 
 .btn-modal-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
 }
 
+/* ============================================================
+   VAULT — SELETOR DE PASTA
+   ============================================================ */
+.vault-picker {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+  width: 100%;
+  margin-top: var(--spacing-xs);
+}
+
+.vault-picker__input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  padding: 7px var(--spacing-sm);
+  outline: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+  transition: border-color var(--transition-fast);
+}
+
+.vault-picker__input:focus {
+  border-color: var(--accent-blue);
+}
+
+.vault-picker__input::placeholder {
+  color: var(--text-placeholder);
+  font-style: italic;
+}
+
+.vault-picker__btn {
+  flex-shrink: 0;
+  padding: 7px var(--spacing-md);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.vault-picker__btn:hover {
+  background: var(--border-color);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+/* ============================================================
+   BOTÃO GRAFO — ESTADO ATIVO
+   ============================================================ */
+.btn-graph--active {
+  background: rgba(124, 58, 237, 0.15);
+  color: var(--accent-blue-light);
+  border-color: rgba(124, 58, 237, 0.4);
+}
+
+.btn-graph--active:hover {
+  background: rgba(124, 58, 237, 0.22);
+  color: var(--accent-blue-light);
+  border-color: rgba(124, 58, 237, 0.6);
+}
+
+/* ============================================================
+   TELA DE GRAFOS (GraphView)
+   ============================================================ */
+.graph-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--spacing-lg);
+  gap: var(--spacing-md);
+  animation: slideUp 0.3s ease forwards;
+}
+
+/* ── Barra de ferramentas ──────────────────────────────────── */
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.graph-toolbar__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.graph-toolbar__vault-path {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 420px;
+}
+
+.graph-toolbar__scan-time {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.graph-toolbar__scanning {
+  font-size: var(--font-size-xs);
+  color: var(--accent-blue-light);
+  animation: blink 1.4s ease-in-out infinite;
+}
+
+.graph-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+/* Botão de reescanear */
+.graph-toolbar__rescan {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 6px var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.graph-toolbar__rescan:hover:not(:disabled) {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.graph-toolbar__rescan:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.graph-toolbar__rescan svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ── Campo de busca ────────────────────────────────────────── */
+.graph-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.graph-search__icon {
+  position: absolute;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.graph-search__icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.graph-search__input {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  padding: 6px var(--spacing-sm) 6px 32px;
+  width: 200px;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.graph-search__input:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+
+.graph-search__input::placeholder {
+  color: var(--text-placeholder);
+}
+
+/* Remove o ícone nativo de clear do tipo search */
+.graph-search__input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+/* ── Contador de resultados ────────────────────────────────── */
+.graph-count {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin: 0;
+}
+
+/* ── Grade de nós ──────────────────────────────────────────── */
+.graph-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--spacing-md);
+  overflow-y: auto;
+  flex: 1;
+  padding-bottom: var(--spacing-md);
+}
+
+/* ── Card de nó individual ─────────────────────────────────── */
+.graph-node-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-md);
+  cursor: default;
+  transition: all var(--transition-fast);
+  animation: fadeIn var(--transition-base) forwards;
+}
+
+.graph-node-card:hover {
+  border-color: rgba(124, 58, 237, 0.35);
+  background: var(--bg-surface-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.graph-node-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: rgba(124, 58, 237, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--accent-blue-light);
+  transition: background var(--transition-fast);
+}
+
+.graph-node-card:hover .graph-node-card__icon {
+  background: rgba(124, 58, 237, 0.22);
+}
+
+.graph-node-card__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.graph-node-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.graph-node-card__name {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.graph-node-card__path {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.graph-node-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.graph-node-card__meta-sep {
+  opacity: 0.5;
+}
+
+/* ── Skeleton de carregamento ──────────────────────────────── */
+.graph-node-card--skeleton {
+  pointer-events: none;
+}
+
+.skeleton-box {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 25%,
+    var(--bg-surface-hover) 50%,
+    var(--bg-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  width: 36px;
+  height: 36px;
+}
+
+.skeleton-box--name {
+  width: 80%;
+  height: 12px;
+}
+
+.skeleton-box--path {
+  width: 60%;
+  height: 10px;
+}
+
+.skeleton-box--meta {
+  width: 50%;
+  height: 10px;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Estado vazio e sem vault ──────────────────────────────── */
+.graph-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xl);
+  animation: slideUp 0.4s ease forwards;
+}
+
+.graph-empty-state__icon {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.graph-empty-state__icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.graph-empty-state__title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.graph-empty-state__description {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  max-width: 340px;
+  line-height: 1.7;
+}
+
+.graph-empty-state__description code {
+  font-family: monospace;
+  background: var(--bg-surface);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.graph-empty-state__action {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 9px var(--spacing-lg);
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--accent-gradient);
+  color: white;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.3);
+}
+
+.graph-empty-state__action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.45);
+}
+
+.graph-empty-state__action svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Mensagem de nenhum resultado na busca */
+.graph-no-results {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* ── Responsividade ────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .graph-view {
+    padding: var(--spacing-md);
+  }
+
+  .graph-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .graph-search__input {
+    width: 160px;
+  }
+
+  .graph-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+}

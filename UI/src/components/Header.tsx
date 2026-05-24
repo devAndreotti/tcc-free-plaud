@@ -1,67 +1,142 @@
-import { useState } from 'react';
-import { GraphIcon, HamburgerIcon, SparkleIcon } from './Icons';
-import HamburgerMenu from './HamburgerMenu';
+import { XIcon } from './Icons';
 import SettingsModal from './SettingsModal';
 
-// Componente do cabeçalho superior da aplicação
-const Header = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+// Dados de uma aba aberta
+export interface Tab {
+  id: string;
+  label: string;
+  type: 'chat' | 'graph';
+}
 
+// Props do componente de cabeçalho/barra de abas
+interface HeaderProps {
+  tabs: Tab[];
+  activeTabId: string | null;
+  onSelectTab: (id: string) => void;
+  onCloseTab: (id: string) => void;
+  isSettingsOpen: boolean;
+  onCloseSettings: () => void;
+  isGraphPanelOpen: boolean;
+  onToggleGraphPanel: () => void;
+}
+
+// Ícone de mensagem de chat para a aba
+const ChatTabIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={13}
+    height={13}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+);
+
+// Ícone de grafo/rede para o botão fixo
+const GraphIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={14}
+    height={14}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="18" cy="5" r="3" />
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="19" r="3" />
+    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+  </svg>
+);
+
+// Cabeçalho da aplicação — barra de abas ao estilo editor/browser
+const Header = ({
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onCloseTab,
+  isSettingsOpen,
+  onCloseSettings,
+  isGraphPanelOpen,
+  onToggleGraphPanel,
+}: HeaderProps) => {
   return (
     <>
-      <header className="header" role="banner">
-        {/* Lado esquerdo: botão hambúrguer + logo */}
-        <div className="header__left">
-          {/* Botão hambúrguer — abre o menu lateral */}
-          <div className="hamburger-wrapper">
-            <button
-              id="btn-hamburger"
-              type="button"
-              className={`btn-hamburger ${isMenuOpen ? 'active' : ''}`}
-              aria-label={isMenuOpen ? 'Fechar menu' : 'Abrir menu'}
-              aria-expanded={isMenuOpen}
-              aria-haspopup="menu"
-              onClick={() => setIsMenuOpen((prev) => !prev)}
-            >
-              <HamburgerIcon size={20} />
-            </button>
+      <header className="header" role="banner" aria-label="Barra de abas">
+        {/* Lista de abas abertas */}
+        <div className="tab-bar" role="tablist" aria-label="Abas abertas">
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            return (
+              <div
+                key={tab.id}
+                id={`tab-${tab.id}`}
+                className={`tab ${isActive ? 'tab--active' : ''}`}
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={`tabpanel-${tab.id}`}
+                onClick={() => onSelectTab(tab.id)}
+              >
+                {/* Ícone da aba conforme o tipo */}
+                <span className="tab__icon" aria-hidden="true">
+                  <ChatTabIcon />
+                </span>
 
-            {/* Menu dropdown */}
-            <HamburgerMenu
-              isOpen={isMenuOpen}
-              onClose={() => setIsMenuOpen(false)}
-              onOpenSettings={() => setIsSettingsOpen(true)}
-            />
-          </div>
+                {/* Label da aba */}
+                <span className="tab__label">{tab.label}</span>
 
-          {/* Logo e nome */}
-          <div className="header__brand">
-            <div className="header__logo" aria-label="Assistente IA logo">
-              <SparkleIcon size={18} />
-            </div>
-            <span className="header__title">Assistente IA</span>
-          </div>
+                {/* Botão de fechar */}
+                <button
+                  type="button"
+                  className="tab__close"
+                  aria-label={`Fechar aba ${tab.label}`}
+                  onClick={(e) => {
+                    e.stopPropagation(); // evita selecionar ao fechar
+                    onCloseTab(tab.id);
+                  }}
+                >
+                  <XIcon size={10} />
+                </button>
+              </div>
+            );
+          })}
         </div>
 
-        {/* Lado direito: botão Grafo */}
-        <div className="header__actions">
+        {/* Área vazia após as abas — droppable / espaço livre */}
+        <div className="tab-bar__spacer" aria-hidden="true" />
+
+        {/* Botão fixo de Grafos — visível apenas com o painel fechado */}
+        {!isGraphPanelOpen && (
           <button
-            id="btn-graph"
-            className="btn-graph"
             type="button"
-            aria-label="Visualizar grafo de conhecimento"
+            id="btn-grafos"
+            className="header-action-btn"
+            aria-label="Abrir painel de grafos"
+            aria-expanded={false}
+            aria-controls="graph-panel"
+            onClick={onToggleGraphPanel}
           >
-            <GraphIcon size={14} />
-            Grafo
+            <GraphIcon />
+            <span>Grafos</span>
           </button>
-        </div>
+        )}
       </header>
 
-      {/* Modal de configurações (montado fora do header para z-index correto) */}
+      {/* Modal de configurações (fora do header para z-index correto) */}
       <SettingsModal
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={onCloseSettings}
       />
     </>
   );

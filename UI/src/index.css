@@ -17,11 +17,11 @@
   --bg-input: #1e1e1e;
   --bg-input-border: #2a2a2a;
 
-  /* Cores de acento */
-  --accent-blue: #2563eb;
-  --accent-blue-hover: #1d4ed8;
-  --accent-blue-light: #3b82f6;
-  --accent-gradient: linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #3b82f6 100%);
+  /* Cores de acento — roxo como cor principal */
+  --accent-blue: #7c3aed;
+  --accent-blue-hover: #6d28d9;
+  --accent-blue-light: #a78bfa;
+  --accent-gradient: linear-gradient(135deg, #5b21b6 0%, #7c3aed 50%, #a78bfa 100%);
 
   /* Cores de texto */
   --text-primary: #ffffff;
@@ -37,7 +37,7 @@
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 20px rgba(37, 99, 235, 0.15);
+  --shadow-glow: 0 0 20px rgba(124, 58, 237, 0.2);
 
   /* Espaçamentos */
   --spacing-xs: 4px;
@@ -119,8 +119,8 @@ html, body {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(37, 99, 235, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(37, 99, 235, 0.6); }
+  0%, 100% { box-shadow: 0 0 8px rgba(124, 58, 237, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(124, 58, 237, 0.6); }
 }
 
 @keyframes blink {
