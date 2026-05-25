@@ -48,6 +48,7 @@ export interface BackendSettings {
   sqlite_chunks_count: number;
   vector_chunks_count: number;
   settings_catalog: SettingRow[];
+  settings_presets: SettingPreset[];
   doctor?: DoctorReport;
 }
 
@@ -98,6 +99,25 @@ export interface DoctorReport {
   error_count: number;
 }
 
+export interface SettingPreset {
+  key: string;
+  label: string;
+  description: string;
+  values: Record<string, string | number | boolean | null>;
+}
+
+export interface SettingPresetChange {
+  before: string | number | boolean | null;
+  after: string | number | boolean | null;
+}
+
+export interface SettingPresetResult {
+  ok?: boolean;
+  preset: SettingPreset;
+  values: Record<string, string | number | boolean | null>;
+  changes: Record<string, SettingPresetChange>;
+}
+
 interface PythonApi {
   /**
    * Envia mensagem do usuário para o backend Python.
@@ -141,6 +161,15 @@ interface PythonApi {
 
   /** Retorna diagnostico estruturado do backend. */
   getDoctor?: () => Promise<DoctorReport>;
+
+  /** Lista presets transacionais de settings. */
+  listSettingsPresets?: () => Promise<SettingPreset[]>;
+
+  /** Previsualiza preset sem gravar user_settings.json. */
+  previewSettingsPreset?: (name: string) => Promise<SettingPresetResult>;
+
+  /** Aplica preset em uma escrita transacional e limpa runtime. */
+  applySettingsPreset?: (name: string) => Promise<SettingPresetResult>;
 
   /** Salva ou remove FREE_PLAUD_ANSWER_API_KEY em pipeline/.env. */
   saveApiKey?: (apiKey: string) => Promise<SaveApiKeyResult>;
@@ -286,6 +315,18 @@ export const bridge = {
       notes_count: 0,
       sqlite_chunks_count: 0,
       vector_chunks_count: 0,
+      settings_presets: [
+        {
+          key: 'cpu_rapido',
+          label: 'CPU rapido',
+          description: 'Notebook sem GPU dedicada; usa embeddings Chroma e busca hybrid.',
+          values: {
+            embedding_model: 'chroma-default',
+            embedding_device: 'cpu',
+            retrieval_top_k: 4,
+          },
+        },
+      ],
       doctor: {
         status: 'warning',
         checks: [
@@ -346,6 +387,48 @@ export const bridge = {
       warning_count: 1,
       error_count: 0,
     };
+  },
+
+  listSettingsPresets: async (): Promise<SettingPreset[]> => {
+    if (isDesktopApp && window.pywebview?.api.listSettingsPresets) {
+      return window.pywebview.api.listSettingsPresets();
+    }
+    return [
+      {
+        key: 'cpu_rapido',
+        label: 'CPU rapido',
+        description: 'Notebook sem GPU dedicada; usa embeddings Chroma e busca hybrid.',
+        values: {
+          embedding_model: 'chroma-default',
+          embedding_device: 'cpu',
+          retrieval_top_k: 4,
+        },
+      },
+    ];
+  },
+
+  previewSettingsPreset: async (name: string): Promise<SettingPresetResult> => {
+    if (isDesktopApp && window.pywebview?.api.previewSettingsPreset) {
+      return window.pywebview.api.previewSettingsPreset(name);
+    }
+    const preset = (await bridge.listSettingsPresets()).find((item) => item.key === name);
+    if (!preset) throw new Error(`Preset desconhecido: ${name}`);
+    return {
+      preset,
+      values: preset.values,
+      changes: Object.fromEntries(
+        Object.entries(preset.values).map(([key, after]) => [key, { before: null, after }])
+      ),
+    };
+  },
+
+  applySettingsPreset: async (name: string): Promise<SettingPresetResult> => {
+    if (isDesktopApp && window.pywebview?.api.applySettingsPreset) {
+      return window.pywebview.api.applySettingsPreset(name);
+    }
+    const preview = await bridge.previewSettingsPreset(name);
+    console.debug(`[Bridge Mock] applySettingsPreset: ${name}`);
+    return { ...preview, ok: true };
   },
 
   saveApiKey: async (apiKey: string): Promise<SaveApiKeyResult> => {

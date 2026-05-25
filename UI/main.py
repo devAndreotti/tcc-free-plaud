@@ -38,6 +38,7 @@ from free_plaud.app.config import get_settings
 from free_plaud.app.doctor import run_doctor
 from free_plaud.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
 from free_plaud.app.settings_catalog import save_catalog_setting, settings_catalog_payload
+from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
@@ -133,11 +134,33 @@ class Api:
             'sqlite_chunks_count': status.sqlite_chunks_count,
             'vector_chunks_count': status.vector_chunks_count,
             'settings_catalog': settings_catalog_payload(settings),
+            'settings_presets': [preset.model_dump(mode='json') for preset in list_settings_presets()],
             'doctor': doctor.model_dump(mode='json'),
         }
 
     def getDoctor(self) -> dict:
         return run_doctor().model_dump(mode='json')
+
+    def listSettingsPresets(self) -> list[dict]:
+        return [preset.model_dump(mode='json') for preset in list_settings_presets()]
+
+    def previewSettingsPreset(self, name: str) -> dict:
+        preview = preview_settings_preset(name)
+        return {
+            'preset': preview.preset.model_dump(mode='json'),
+            'values': preview.values,
+            'changes': {key: change.model_dump(mode='json') for key, change in preview.changes.items()},
+        }
+
+    def applySettingsPreset(self, name: str) -> dict:
+        result = apply_settings_preset(name)
+        self.runtime.clear()
+        return {
+            'ok': True,
+            'preset': result.preset.model_dump(mode='json'),
+            'values': result.values,
+            'changes': {key: change.model_dump(mode='json') for key, change in result.changes.items()},
+        }
 
     def saveApiKey(self, api_key: str) -> dict:
         path = save_answer_api_key(api_key)

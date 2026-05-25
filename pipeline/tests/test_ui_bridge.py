@@ -136,6 +136,57 @@ def test_desktop_api_exposes_doctor_report(monkeypatch) -> None:
     assert result['checks'][0]['message'] == 'Corpus vazio.'
 
 
+def test_desktop_api_exposes_settings_presets(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+
+    result = module.Api().listSettingsPresets()
+
+    keys = {preset['key'] for preset in result}
+    assert {'cpu_rapido', 'gpu_qualidade', 'vault_grande', 'tcc_reprodutivel'} <= keys
+    assert all('answer_api_key' not in preset['values'] for preset in result)
+
+
+def test_desktop_api_applies_settings_preset_and_clears_runtime(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    calls: list[str] = []
+
+    class FakeResult:
+        preset = SimpleNamespace(
+            key='cpu_rapido',
+            model_dump=lambda mode='json': {
+                'key': 'cpu_rapido',
+                'label': 'CPU rapido',
+                'description': 'Teste',
+                'values': {'embedding_model': 'chroma-default', 'embedding_device': 'cpu'},
+            },
+        )
+        settings = SimpleNamespace(embedding_model='chroma-default', embedding_device='cpu')
+        values = {'embedding_model': 'chroma-default', 'embedding_device': 'cpu'}
+        changes = {}
+
+    def fake_apply_settings_preset(name: str):  # noqa: ANN202
+        calls.append(name)
+        return FakeResult()
+
+    monkeypatch.setattr(module, 'apply_settings_preset', fake_apply_settings_preset)
+    api = module.Api()
+    cleared = False
+
+    def clear_runtime() -> None:
+        nonlocal cleared
+        cleared = True
+
+    api.runtime.clear = clear_runtime
+
+    result = api.applySettingsPreset('cpu_rapido')
+
+    assert calls == ['cpu_rapido']
+    assert cleared is True
+    assert result['ok'] is True
+    assert result['preset']['key'] == 'cpu_rapido'
+    assert result['values']['embedding_model'] == 'chroma-default'
+
+
 def test_desktop_api_saves_backend_setting(monkeypatch, tmp_path: Path) -> None:
     module = _load_ui_main(monkeypatch)
     calls: list[tuple[str, object]] = []

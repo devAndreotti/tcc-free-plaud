@@ -17,6 +17,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [settingDrafts, setSettingDrafts] = useState<Record<string, string>>({});
   const [isSavingApiKey, setIsSavingApiKey] = useState(false);
   const [isSavingBackendSettings, setIsSavingBackendSettings] = useState(false);
+  const [applyingPreset, setApplyingPreset] = useState('');
   const [isIndexingVault, setIsIndexingVault] = useState(false);
   const [operationStatus, setOperationStatus] = useState('');
 
@@ -132,6 +133,33 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     }
   };
 
+  const refreshBackendSettings = async () => {
+    const settings = await bridge.getBackendSettings();
+    setBackendSettings(settings);
+    setSettingDrafts(
+      Object.fromEntries(
+        settings.settings_catalog
+          .filter((row) => !row.secret)
+          .map((row) => [row.key, row.value === null ? '' : String(row.value)])
+      )
+    );
+  };
+
+  const handleApplyPreset = async (presetKey: string) => {
+    if (applyingPreset) return;
+    setApplyingPreset(presetKey);
+    try {
+      const result = await bridge.applySettingsPreset(presetKey);
+      await refreshBackendSettings();
+      setOperationStatus(`Preset ${result.preset.key} aplicado.`);
+    } catch (error) {
+      console.error('[SettingsModal] Erro ao aplicar preset:', error);
+      setOperationStatus('Erro ao aplicar preset.');
+    } finally {
+      setApplyingPreset('');
+    }
+  };
+
   if (!isOpen) return null;
 
   // Renderiza diretamente no document.body via Portal.
@@ -243,6 +271,34 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                 </span>
               ))}
             </div>
+          </section>
+
+          <div className="settings-divider" aria-hidden="true" />
+
+          <section className="settings-section" aria-labelledby="settings-presets">
+            <h3 id="settings-presets" className="settings-section__title">
+              Presets
+            </h3>
+            {backendSettings?.settings_presets.map((preset) => (
+              <div key={preset.key} className="settings-item settings-item--stacked">
+                <div className="settings-item__info">
+                  <span className="settings-item__label">{preset.label}</span>
+                  <span className="settings-item__description">{preset.description}</span>
+                  <span className="settings-inline-status">
+                    {Object.entries(preset.values).map(([key, value]) => `${key}=${String(value)}`).join(' · ')}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="vault-picker__btn settings-save-wide"
+                  onClick={() => handleApplyPreset(preset.key)}
+                  disabled={Boolean(applyingPreset)}
+                  aria-label={`Aplicar preset ${preset.label}`}
+                >
+                  {applyingPreset === preset.key ? 'Aplicando…' : 'Aplicar'}
+                </button>
+              </div>
+            ))}
           </section>
 
           <div className="settings-divider" aria-hidden="true" />

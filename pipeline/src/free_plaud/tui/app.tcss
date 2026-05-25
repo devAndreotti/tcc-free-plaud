@@ -262,13 +262,25 @@ Input:focus {
     margin-top: 0;
 }
 
+#settings-preset-row {
+    layout: grid;
+    grid-size: 4 1;
+    grid-gutter: 1 0;
+    height: 1;
+    margin-top: 0;
+}
+
+#settings-preset-row .strategy-button {
+    height: 1;
+}
+
 #settings-number-row,
 #settings-path-row,
 #settings-worker-row {
     layout: grid;
     grid-size: 3 1;
     grid-gutter: 1 0;
-    height: 4;
+    height: 3;
     margin-top: 0;
 }
 
@@ -289,8 +301,13 @@ Input:focus {
     layout: grid;
     grid-size: 2 1;
     grid-gutter: 1 0;
-    height: 3;
+    height: 1;
     margin-top: 1;
+}
+
+#settings-action-row .strategy-button,
+#settings-action-row .primary-action {
+    height: 1;
 }
 
 .strategy-button {
@@ -510,6 +527,7 @@ Screen.compact #notes-action-row {
 }
 
 Screen.compact #settings-device-row,
+Screen.compact #settings-preset-row,
 Screen.compact #settings-strategy-row,
 Screen.compact #settings-number-row,
 Screen.compact #settings-path-row,
@@ -531,7 +549,13 @@ Screen.compact #settings-commit-row {
     height: 2;
 }
 
+Screen.compact #settings-preset-row {
+    grid-size: 2 2;
+    height: 2;
+}
+
 Screen.compact #settings-device-row .strategy-button,
+Screen.compact #settings-preset-row .strategy-button,
 Screen.compact #settings-strategy-row .strategy-button,
 Screen.compact #settings-commit-row .strategy-button,
 Screen.compact #settings-action-row .strategy-button,

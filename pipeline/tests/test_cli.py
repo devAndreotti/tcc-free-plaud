@@ -104,6 +104,56 @@ def test_terminal_settings_menu_uses_human_catalog(monkeypatch, tmp_path: Path) 
     get_settings.cache_clear()
 
 
+def test_config_preset_preview_does_not_save(monkeypatch, tmp_path: Path) -> None:
+    results_dir = tmp_path / 'data' / 'results'
+    monkeypatch.setenv('FREE_PLAUD_WORKSPACE_DIR', str(tmp_path))
+    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    get_settings.cache_clear()
+
+    result = runner.invoke(app, ['config', 'preset', 'preview', 'cpu_rapido'])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['preset']['key'] == 'cpu_rapido'
+    assert payload['values']['retrieval_top_k'] == 4
+    assert not (results_dir / 'user_settings.json').exists()
+    get_settings.cache_clear()
+
+
+def test_config_preset_apply_saves_transactional_payload(monkeypatch, tmp_path: Path) -> None:
+    results_dir = tmp_path / 'data' / 'results'
+    monkeypatch.setenv('FREE_PLAUD_WORKSPACE_DIR', str(tmp_path))
+    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    get_settings.cache_clear()
+
+    result = runner.invoke(app, ['config', 'preset', 'apply', 'vault_grande'])
+
+    assert result.exit_code == 0
+    payload = json.loads((results_dir / 'user_settings.json').read_text(encoding='utf-8'))
+    assert payload['corpus_commit_mode'] == 'microbatch'
+    assert payload['corpus_embedding_batch_size'] == 64
+    assert payload['corpus_index_workers'] == 2
+    assert payload['corpus_recursive_default'] is True
+    assert 'answer_api_key' not in payload
+    get_settings.cache_clear()
+
+
+def test_terminal_settings_menu_can_apply_preset(monkeypatch, tmp_path: Path) -> None:
+    results_dir = tmp_path / 'data' / 'results'
+    monkeypatch.setenv('FREE_PLAUD_WORKSPACE_DIR', str(tmp_path))
+    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    get_settings.cache_clear()
+
+    result = runner.invoke(app, ['menu'], input='7\nP\ncpu_rapido\napply\n0\n')
+
+    assert result.exit_code == 0
+    assert 'Presets' in result.stdout
+    payload = json.loads((results_dir / 'user_settings.json').read_text(encoding='utf-8'))
+    assert payload['embedding_model'] == 'chroma-default'
+    assert payload['embedding_device'] == 'cpu'
+    get_settings.cache_clear()
+
+
 def test_terminal_menu_can_update_answer_api_key(monkeypatch, tmp_path: Path) -> None:
     results_dir = tmp_path / 'data' / 'results'
     monkeypatch.setenv('FREE_PLAUD_WORKSPACE_DIR', str(tmp_path))
