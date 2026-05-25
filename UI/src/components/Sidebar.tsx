@@ -20,6 +20,11 @@ const Sidebar = ({ onOpenSettings, onNewTab, onOpenNotes, activeView }: SidebarP
     setActiveItem((prev) => (prev === item ? null : item));
   };
 
+  const handleNotesClick = () => {
+    setActiveItem(null);
+    onOpenNotes();
+  };
+
   return (
     <aside className="sidebar" role="complementary" aria-label="Barra de navegação">
       {/* Logo no topo — clique abre nova conversa */}
@@ -47,7 +52,7 @@ const Sidebar = ({ onOpenSettings, onNewTab, onOpenNotes, activeView }: SidebarP
           aria-label="Notes"
           aria-pressed={activeView === 'notes'}
           title="Notes"
-          onClick={onOpenNotes}
+          onClick={handleNotesClick}
         >
           <FolderIcon size={20} />
           <span className="sidebar__nav-label">Notes</span>

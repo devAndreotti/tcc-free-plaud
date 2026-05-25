@@ -15,7 +15,7 @@ from free_plaud.storage.sqlite import (
     get_all_notes,
     get_notes_by_id,
     init_sqlite,
-    list_chunks,
+    list_chunks_for_note,
 )
 from free_plaud.storage.vector import LocalVectorStore
 
@@ -135,7 +135,7 @@ def get_note_detail(
         note = get_notes_by_id(resolved_connection, [note_id]).get(note_id)
         if note is None:
             raise KeyError(f'Nota nao encontrada: {note_id}')
-        chunks = [chunk for chunk in list_chunks(resolved_connection) if chunk.note_id == note_id]
+        chunks = list_chunks_for_note(resolved_connection, note_id)
         summary = _summary_from_note(note, chunk_count=len(chunks))
         return NoteDetail(
             **summary.model_dump(),

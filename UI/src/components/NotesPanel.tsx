@@ -148,15 +148,13 @@ const NotesPanel = () => {
           aria-label="Filtrar notas"
         />
 
-        <div className="notes-panel__items" role="listbox" aria-label="Notas">
+        <div className="notes-panel__items" aria-label="Notas">
           {filteredNotes.map((note) => (
             <button
               key={note.note_id}
               type="button"
               className={`notes-panel__item ${selectedId === note.note_id ? 'notes-panel__item--active' : ''}`}
               onClick={() => setSelectedId(note.note_id)}
-              role="option"
-              aria-selected={selectedId === note.note_id}
             >
               <span className="notes-panel__item-icon">
                 <FileIcon size={15} />
