@@ -48,6 +48,11 @@ def test_preview_settings_preset_does_not_write_user_settings(tmp_path: Path) ->
     assert not user_settings_path_for(settings).exists()
 
 
+def test_unknown_settings_preset_raises_value_error(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match='Preset desconhecido'):
+        preview_settings_preset('nao_existe', settings=_settings(tmp_path))
+
+
 def test_apply_cpu_rapido_persists_one_validated_payload(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
 

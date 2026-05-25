@@ -85,7 +85,7 @@ def get_settings_preset(key: str) -> SettingPreset:
     for preset in SETTING_PRESETS:
         if preset.key == key:
             return preset
-    raise KeyError(f'Preset desconhecido: {key}')
+    raise ValueError(f'Preset desconhecido: {key}')
 
 
 def _json_value(value: Any) -> Any:
