@@ -1,6 +1,7 @@
 import asyncio
 import threading
 from pathlib import Path
+from time import perf_counter, sleep
 
 import pytest
 from textual.widgets import Button, Input
@@ -394,6 +395,40 @@ def test_tui_settings_pane_renders_doctor_error_without_crash(monkeypatch, tmp_p
             text = '\n'.join(getattr(line, 'plain', str(line)) for line in output.lines)
             assert 'settings.embedding_model' in text
             assert 'fake-hash e modelo de teste.' in text
+
+    asyncio.run(run_app())
+
+
+def test_tui_settings_pane_runs_doctor_in_background(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+
+    def slow_doctor(*, settings):  # noqa: ANN001, ANN202
+        sleep(0.4)
+        return DoctorReport(
+            status='ok',
+            checks=[DoctorCheck(code='corpus', status='ok', message='Corpus consistente.', latency_ms=1)],
+            latency_ms=1,
+            ok_count=1,
+            warning_count=0,
+            error_count=0,
+        )
+
+    monkeypatch.setattr('free_plaud.tui.app.run_doctor', slow_doctor)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 38)) as pilot:
+            settings_pane = app.query_one(SettingsPane)
+            started_at = perf_counter()
+            app._show_pane('settings')  # noqa: SLF001 - mede fronteira síncrona do evento de navegação.
+            elapsed = perf_counter() - started_at
+            assert elapsed < 0.25
+            assert settings_pane._doctor_running is True  # noqa: SLF001 - garante worker em background.
+            await pilot.pause(0.6)
+            output = app.query_one('#settings-output')
+            text = '\n'.join(getattr(line, 'plain', str(line)) for line in output.lines)
+            assert 'Corpus consistente.' in text
 
     asyncio.run(run_app())
 
