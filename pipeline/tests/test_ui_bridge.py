@@ -223,3 +223,64 @@ def test_desktop_api_saves_backend_setting(monkeypatch, tmp_path: Path) -> None:
 
     assert result == {'ok': True}
     assert calls == [('retrieval_top_k', '9')]
+
+
+def test_desktop_api_exposes_notes_methods(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+
+    monkeypatch.setattr(
+        module,
+        'list_notes',
+        lambda settings=None: [  # noqa: ARG005
+            SimpleNamespace(
+                model_dump=lambda mode='json': {
+                    'note_id': 'nota-1',
+                    'title': 'Nota 1',
+                    'source_type': 'md',
+                    'source_path': 'vault/nota-1.md',
+                    'created_at': '2026-05-25T10:00:00+00:00',
+                    'tags': ['md'],
+                    'chunk_count': 2,
+                }
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        module,
+        'get_note_detail',
+        lambda note_id, settings=None: SimpleNamespace(  # noqa: ARG005
+            model_dump=lambda mode='json': {
+                'note_id': note_id,
+                'title': 'Nota 1',
+                'source_type': 'md',
+                'source_path': 'vault/nota-1.md',
+                'created_at': '2026-05-25T10:00:00+00:00',
+                'tags': ['md'],
+                'chunk_count': 2,
+                'structured_markdown': '# Nota 1',
+                'chunks': [],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        'delete_note',
+        lambda note_id, settings=None, vector_store=None: SimpleNamespace(  # noqa: ARG005
+            model_dump=lambda mode='json': {'ok': True, 'note_id': note_id, 'deleted_vectors': 2}
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        'reindex_note',
+        lambda note_id, runtime=None: SimpleNamespace(  # noqa: ARG005
+            model_dump=lambda mode='json': {'ok': True, 'note_id': note_id, 'status': 'success', 'chunks_indexed': 2}
+        ),
+    )
+
+    api = module.Api()
+
+    assert api.listNotes()[0]['note_id'] == 'nota-1'
+    assert api.getNoteDetail('nota-1')['structured_markdown'] == '# Nota 1'
+    assert api.deleteNote('nota-1', 'APAGAR')['ok'] is True
+    assert api.deleteNote('nota-1', '')['status'] == 'confirmation_required'
+    assert api.reindexNote('nota-1')['chunks_indexed'] == 2
