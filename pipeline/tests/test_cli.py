@@ -349,3 +349,25 @@ def test_corpus_ask_cli_answers_against_indexed_directory(monkeypatch, tmp_path:
     assert 'RabbitMQ' in payload['answer']
     assert 'SRE' in payload['answer']
     assert len({citation['note_id'] for citation in payload['citations']}) >= 2
+    assert 'debug' not in payload
+
+    debug_result = runner.invoke(
+        app,
+        [
+            'corpus',
+            'ask',
+            '--question',
+            'Qual message broker foi adotado e qual equipe ficou responsavel pelo runbook?',
+            '--strategy',
+            'hybrid',
+            '--top-k',
+            '4',
+            '--debug',
+        ],
+    )
+
+    assert debug_result.exit_code == 0
+    debug_payload = json.loads(debug_result.stdout)
+    assert debug_payload['debug']['strategy'] == 'hybrid'
+    assert debug_payload['debug']['hits']
+    assert debug_payload['debug']['hits'][0]['score'] > 0

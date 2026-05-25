@@ -802,6 +802,26 @@ def test_retrieval_ask_cli_renders_structured_json_response(tmp_path: Path) -> N
     assert payload['status'] == 'answer'
     assert payload['no_answer'] is False
     assert payload['citations']
+    assert 'debug' not in payload
+
+    debug_result = runner.invoke(
+        app,
+        [
+            'retrieval',
+            'ask',
+            str(sample_file),
+            '--question',
+            'O que o benchmark mede?',
+            '--top-k',
+            '3',
+            '--debug',
+        ],
+    )
+
+    assert debug_result.exit_code == 0
+    debug_payload = json.loads(debug_result.stdout)
+    assert debug_payload['debug']['strategy'] == 'lexical'
+    assert debug_payload['debug']['hits']
 
 
 def test_retrieval_ask_cli_keeps_json_parseable_with_unicode_source_paths(tmp_path: Path) -> None:
