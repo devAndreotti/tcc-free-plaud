@@ -11,6 +11,7 @@ from free_plaud.app.local_env import local_env_path_for, save_answer_api_key
 from free_plaud.app.settings_catalog import get_setting_spec, save_catalog_setting, settings_catalog_payload
 from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.corpus.runtime import CorpusRuntime
+from free_plaud.providers.answer import test_answer_provider
 from free_plaud.tui.actions import (
     ask_corpus,
     compare_suite_from_tui,
@@ -27,7 +28,6 @@ PINK = '#e84fe6'
 TEXT = '#f8f0ff'
 TEXT_DIM = '#c4b5fd'
 
-
 def _print_header() -> None:
     console.print(
         Panel(
@@ -36,16 +36,13 @@ def _print_header() -> None:
         )
     )
 
-
 def _clear_screen() -> None:
     if console.is_terminal:
         console.clear()
 
-
 def _pause_after_command() -> None:
     if console.is_terminal:
         Prompt.ask('Enter para voltar ao menu', default='')
-
 
 def _print_options() -> None:
     console.print(f'[bold {PINK}]ACOES:[/bold {PINK}]')
@@ -58,6 +55,7 @@ def _print_options() -> None:
     console.print(f'[{TEXT_DIM}][6][/{TEXT_DIM}] Rodar benchmark compare')
     console.print(f'[{TEXT_DIM}][7][/{TEXT_DIM}] Configuracoes')
     console.print(f'[{TEXT_DIM}][8][/{TEXT_DIM}] Diagnostico')
+    console.print(f'[{TEXT_DIM}][9][/{TEXT_DIM}] Testar provider')
     console.print(f'[{TEXT_DIM}][0][/{TEXT_DIM}] Sair')
     console.print()
 
@@ -167,6 +165,22 @@ def _show_doctor() -> None:
     console.print(Panel(doctor_report_text(report), title='Diagnostico', border_style=border))
 
 
+def _test_provider() -> None:
+    result = test_answer_provider()
+    border = 'green' if result.status == 'ok' else 'yellow' if result.status == 'not_applicable' else 'red'
+    body = '\n'.join(
+        (
+            f'provider={result.provider}',
+            f'model={result.model}',
+            f'base_url={result.base_url}',
+            f'status={result.status}',
+            f'latencia_ms={result.latency_ms}',
+            f'erro={result.error or "-"}',
+        )
+    )
+    console.print(Panel(body, title='Testar provider', border_style=border))
+
+
 def _preset_changes_text(changes) -> str:  # noqa: ANN001
     if not changes:
         return 'Sem mudancas em relacao a configuracao atual.'
@@ -274,6 +288,8 @@ def run_terminal_menu() -> None:
                 _settings_menu(runtime)
             elif choice == '8':
                 _show_doctor()
+            elif choice == '9':
+                _test_provider()
             else:
                 console.print('[yellow]Opcao invalida.[/yellow]')
             _pause_after_command()

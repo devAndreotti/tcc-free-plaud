@@ -23,6 +23,7 @@ from free_plaud.corpus.models import CorpusDiscoveryResult, CorpusIndexProgress
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
+from free_plaud.providers.answer import test_answer_provider
 from free_plaud.providers.embed import get_embedder
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.retrieval.rag import answer_with_citations
@@ -135,6 +136,17 @@ def _settings_status_message(settings: Settings, doctor_text: str) -> str:
         f'answer_api_key={"configurada" if answer_api_key_is_configured(settings=settings) else "ausente"}\n\n'
         f'{_settings_summary(settings)}\n\n'
         f'Doctor\n{doctor_text}'
+    )
+
+
+def _provider_test_message(result) -> str:  # noqa: ANN001
+    return (
+        f'provider={result.provider}\n'
+        f'model={result.model}\n'
+        f'base_url={result.base_url}\n'
+        f'status={result.status}\n'
+        f'latencia_ms={result.latency_ms}\n'
+        f'erro={result.error or "-"}'
     )
 
 
@@ -800,6 +812,7 @@ class SettingsPane(Vertical):
                 yield Input(value=str(settings.corpus_index_workers), placeholder='workers', id='settings-workers')
             with Container(id='settings-action-row'):
                 yield ActionCell('Salvar', id='settings-save', classes='primary-action')
+                yield ActionCell('Testar provider', id='settings-test-provider', classes='strategy-button')
                 yield ActionCell('Resetar', id='settings-reset', classes='strategy-button')
         with Container(id='settings-result-card'):
             yield Static('Estado', classes='card-title')
@@ -849,6 +862,11 @@ class SettingsPane(Vertical):
         if control_id == 'settings-save':
             event.stop()
             self._save()
+            return
+        if control_id == 'settings-test-provider':
+            event.stop()
+            self._render_message('Testando provider...')
+            self._run_provider_test()
             return
         if control_id == 'settings-reset':
             event.stop()
@@ -937,6 +955,18 @@ class SettingsPane(Vertical):
         output = self.query_one('#settings-output', RichLog)
         output.clear()
         output.write(Panel(message, title='Settings', border_style='#7c3aed'))
+
+    @work(thread=True)
+    def _run_provider_test(self) -> None:
+        try:
+            result = test_answer_provider()
+        except Exception as exc:  # noqa: BLE001 - UI precisa exibir erro operacional.
+            self.app.call_from_thread(self._render_error, exc)
+            return
+        self.app.call_from_thread(self._render_provider_test, result)
+
+    def _render_provider_test(self, result) -> None:  # noqa: ANN001
+        self._render_message(_provider_test_message(result))
 
     @work(thread=True)
     def _run_doctor(self, settings: Settings, request_id: int) -> None:

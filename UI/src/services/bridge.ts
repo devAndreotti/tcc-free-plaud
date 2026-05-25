@@ -118,6 +118,15 @@ export interface SettingPresetResult {
   changes: Record<string, SettingPresetChange>;
 }
 
+export interface AnswerProviderTestResult {
+  provider: string;
+  model: string;
+  base_url: string | null;
+  status: 'ok' | 'error' | 'not_applicable';
+  latency_ms: number;
+  error: string | null;
+}
+
 interface PythonApi {
   /**
    * Envia mensagem do usuário para o backend Python.
@@ -170,6 +179,9 @@ interface PythonApi {
 
   /** Aplica preset em uma escrita transacional e limpa runtime. */
   applySettingsPreset?: (name: string) => Promise<SettingPresetResult>;
+
+  /** Testa provider LLM com prompt sintetico, sem usar corpus. */
+  testAnswerProvider?: () => Promise<AnswerProviderTestResult>;
 
   /** Salva ou remove FREE_PLAUD_ANSWER_API_KEY em pipeline/.env. */
   saveApiKey?: (apiKey: string) => Promise<SaveApiKeyResult>;
@@ -429,6 +441,21 @@ export const bridge = {
     const preview = await bridge.previewSettingsPreset(name);
     console.debug(`[Bridge Mock] applySettingsPreset: ${name}`);
     return { ...preview, ok: true };
+  },
+
+  testAnswerProvider: async (): Promise<AnswerProviderTestResult> => {
+    if (isDesktopApp && window.pywebview?.api.testAnswerProvider) {
+      return window.pywebview.api.testAnswerProvider();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return {
+      provider: 'extractive',
+      model: 'llama3.1:8b',
+      base_url: null,
+      status: 'not_applicable',
+      latency_ms: 0,
+      error: null,
+    };
   },
 
   saveApiKey: async (apiKey: string): Promise<SaveApiKeyResult> => {
