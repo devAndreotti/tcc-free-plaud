@@ -270,19 +270,21 @@ function buildSnapshot(options) {
     : null;
 
   let checks = [];
-  try {
-    checks = queryGhOrApi({
-      ghJson,
-      githubApi,
-      args: ['pr', 'checks', String(prNumber), '--json', 'name,state,link,startedAt,completedAt'],
-      fallback: (api) => (headSha ? mapCheckRunsApi(api(`/repos/${repo}/commits/${headSha}/check-runs`)) : []),
-    }) || [];
-  } catch {
-    checks = [];
-  }
-  if (checks.length === 0 && latestRun?.id) {
+  if (latestRun?.id) {
     try {
       checks = mapRunJobs(ghJson(['run', 'view', String(latestRun.id), '--json', 'jobs'])) || [];
+    } catch {
+      checks = [];
+    }
+  }
+  if (checks.length === 0) {
+    try {
+      checks = queryGhOrApi({
+        ghJson,
+        githubApi,
+        args: ['pr', 'checks', String(prNumber), '--json', 'name,state,link,startedAt,completedAt'],
+        fallback: (api) => (headSha ? mapCheckRunsApi(api(`/repos/${repo}/commits/${headSha}/check-runs`)) : []),
+      }) || [];
     } catch {
       checks = [];
     }
@@ -290,13 +292,12 @@ function buildSnapshot(options) {
 
   let artifacts = [];
   if (latestRun?.id) {
-    const artifactsResult = queryGhOrApi({
-      ghJson,
-      githubApi,
-      args: ['run', 'view', String(latestRun.id), '--json', 'artifacts'],
-      fallback: (api) => api(`/repos/${repo}/actions/runs/${latestRun.id}/artifacts`),
-    });
-    artifacts = artifactsResult?.artifacts || [];
+    try {
+      const artifactsResult = githubApi(`/repos/${repo}/actions/runs/${latestRun.id}/artifacts`);
+      artifacts = artifactsResult?.artifacts || [];
+    } catch {
+      artifacts = [];
+    }
   }
 
   const snapshot = {

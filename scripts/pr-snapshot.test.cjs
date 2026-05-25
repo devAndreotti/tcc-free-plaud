@@ -76,12 +76,7 @@ test('buildSnapshot collects PR metadata, checks, comments, blockers, and latest
         isDraft: false,
       };
     }
-    if (key === 'pr checks 42 --json name,state,link,startedAt,completedAt') {
-      return [
-        { name: 'Lint', state: 'FAIL' },
-        { name: 'Tests & ratchet', state: 'PASS' },
-      ];
-    }
+    if (key === 'pr checks 42 --json name,state,link,startedAt,completedAt') throw new Error('checks unavailable');
     if (key === 'api repos/owner/repo/pulls/42/comments') {
       return [
         {
@@ -104,8 +99,13 @@ test('buildSnapshot collects PR metadata, checks, comments, blockers, and latest
     if (key === 'run list --branch feature/auth --limit 1 --json databaseId,status,conclusion,workflowName,displayTitle,headBranch') {
       return [{ databaseId: 123, status: 'completed', conclusion: 'failure', workflowName: 'Quality Gate' }];
     }
-    if (key === 'run view 123 --json artifacts') {
-      return { artifacts: [{ name: 'coverage-report', sizeInBytes: 1000 }] };
+    if (key === 'run view 123 --json jobs') {
+      return {
+        jobs: [
+          { name: 'Lint', status: 'completed', conclusion: 'failure' },
+          { name: 'Tests & ratchet', status: 'completed', conclusion: 'success' },
+        ],
+      };
     }
     throw new Error(`unexpected gh call: ${key}`);
   };
@@ -114,6 +114,12 @@ test('buildSnapshot collects PR metadata, checks, comments, blockers, and latest
     pr: 42,
     repo: 'owner/repo',
     ghJson,
+    githubApi: (apiPath) => {
+      if (apiPath === '/repos/owner/repo/actions/runs/123/artifacts') {
+        return { artifacts: [{ name: 'coverage-report', sizeInBytes: 1000 }] };
+      }
+      throw new Error(`unexpected api path: ${apiPath}`);
+    },
     now: '2026-05-24T00:00:00.000Z',
   });
 
@@ -159,13 +165,18 @@ test('buildSnapshot falls back to workflow jobs when checks are inaccessible', (
         ],
       };
     }
-    if (key === 'run view 456 --json artifacts') {
-      return { artifacts: [] };
-    }
     throw new Error(`unexpected gh call: ${key}`);
   };
 
-  const snapshot = buildSnapshot({ pr: 42, repo: 'owner/repo', ghJson });
+  const snapshot = buildSnapshot({
+    pr: 42,
+    repo: 'owner/repo',
+    ghJson,
+    githubApi: (apiPath) => {
+      if (apiPath === '/repos/owner/repo/actions/runs/456/artifacts') return { artifacts: [] };
+      throw new Error(`unexpected api path: ${apiPath}`);
+    },
+  });
 
   assert.equal(snapshot.ci.overall, 'success');
   assert.equal(snapshot.ci.jobs.lint.conclusion, 'success');

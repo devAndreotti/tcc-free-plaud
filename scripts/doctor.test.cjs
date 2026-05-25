@@ -5,7 +5,6 @@ const test = require('node:test');
 
 const {
   findMissingRequiredContexts,
-  parseSetupRequiredContexts,
   parseWorkflowJobNames,
 } = require('./doctor.cjs');
 
@@ -19,12 +18,13 @@ const root = path.resolve(__dirname, '..');
 test('branch protection contexts match workflow job names', () => {
   const workflow = fs.readFileSync(path.join(root, '.github/workflows/quality-gate.yml'), 'utf8');
   const setup = fs.readFileSync(path.join(root, 'scripts/setup.js'), 'utf8');
+  const policy = loadPolicy(root);
 
   const workflowJobNames = parseWorkflowJobNames(workflow);
-  const requiredContexts = parseSetupRequiredContexts(setup);
 
+  assert.match(setup, /policy\.ci\.requiredChecks/);
   assert.deepEqual(
-    findMissingRequiredContexts(requiredContexts, workflowJobNames),
+    findMissingRequiredContexts(policy.ci.requiredChecks, workflowJobNames),
     [],
   );
 });
@@ -96,12 +96,11 @@ test('v1 release metadata exists', () => {
   assert.match(fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8'), /## 1\.0\.0/);
 });
 
-test('release mode fails while Sonar placeholders or template baseline remain', () => {
+test('release mode passes when target repo has real baseline and configured policy', () => {
   const { analyzeQualityGate } = require('./doctor.cjs');
   const result = analyzeQualityGate({ root, release: true });
   const releaseGate = result.checks.find((check) => check.name === 'Release readiness');
 
-  assert.equal(releaseGate.level, 'fail');
-  assert.match(releaseGate.detail, /SonarCloud configurado/);
-  assert.match(releaseGate.detail, /baseline\.json real/);
+  assert.equal(releaseGate.level, 'ok');
+  assert.match(releaseGate.detail, /sem blockers de release/);
 });
