@@ -18,6 +18,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [isSavingApiKey, setIsSavingApiKey] = useState(false);
   const [isSavingBackendSettings, setIsSavingBackendSettings] = useState(false);
   const [applyingPreset, setApplyingPreset] = useState('');
+  const [isTestingProvider, setIsTestingProvider] = useState(false);
   const [isIndexingVault, setIsIndexingVault] = useState(false);
   const [operationStatus, setOperationStatus] = useState('');
 
@@ -157,6 +158,22 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
       setOperationStatus('Erro ao aplicar preset.');
     } finally {
       setApplyingPreset('');
+    }
+  };
+
+  const handleTestProvider = async () => {
+    if (isTestingProvider) return;
+    setIsTestingProvider(true);
+    try {
+      const result = await bridge.testAnswerProvider();
+      setOperationStatus(
+        `Provider: ${result.provider} | status=${result.status} | latencia_ms=${result.latency_ms}${result.error ? ` | erro=${result.error}` : ''}`
+      );
+    } catch (error) {
+      console.error('[SettingsModal] Erro ao testar provider:', error);
+      setOperationStatus('Erro ao testar provider.');
+    } finally {
+      setIsTestingProvider(false);
     }
   };
 
@@ -413,6 +430,16 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                   aria-label="Salvar API key"
                 >
                   {isSavingApiKey ? 'Salvando…' : 'Salvar'}
+                </button>
+                <button
+                  id="btn-test-provider"
+                  type="button"
+                  className="vault-picker__btn"
+                  onClick={handleTestProvider}
+                  disabled={isTestingProvider}
+                  aria-label="Testar provider"
+                >
+                  {isTestingProvider ? 'Testando…' : 'Testar'}
                 </button>
               </div>
               {backendSettings && (

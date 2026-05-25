@@ -1,10 +1,18 @@
 import json
 from io import BytesIO
+from pathlib import Path
 from urllib.error import HTTPError
 
 import pytest
 
-from free_plaud.providers.answer import AnswerProviderError, OpenAICompatibleAnswerProvider, get_answer_provider
+from free_plaud.app.config import Settings
+from free_plaud.providers.answer import (
+    AnswerProviderError,
+    AnswerProviderTestResult,
+    OpenAICompatibleAnswerProvider,
+    get_answer_provider,
+    test_answer_provider as run_answer_provider_test,
+)
 
 
 class FakeHTTPResponse:
@@ -80,3 +88,86 @@ def test_get_answer_provider_uses_local_defaults_and_keeps_extract_empty() -> No
     assert ollama.base_url == 'http://localhost:11434/v1'
     assert isinstance(lmstudio, OpenAICompatibleAnswerProvider)
     assert lmstudio.base_url == 'http://localhost:1234/v1'
+
+
+def _settings(tmp_path: Path, **overrides) -> Settings:  # noqa: ANN003
+    data = {
+        'workspace_dir': tmp_path,
+        'data_dir': tmp_path / 'data',
+        'notes_dir': tmp_path / 'data' / 'corpus' / 'notes',
+        'datasets_dir': tmp_path / 'data' / 'datasets',
+        'results_dir': tmp_path / 'data' / 'results',
+        'sqlite_path': tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        'vector_store_dir': tmp_path / 'data' / 'results' / 'vector_store',
+        'answer_provider': 'ollama',
+        'answer_model': 'llama3.1:8b',
+        'answer_base_url': 'http://localhost:11434/v1',
+        'answer_timeout_seconds': 12,
+    }
+    data.update(overrides)
+    return Settings(**data)
+
+
+def test_provider_test_posts_synthetic_prompt_and_returns_ok(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+        captured['url'] = request.full_url
+        captured['timeout'] = timeout
+        captured['headers'] = dict(request.header_items())
+        captured['body'] = json.loads(request.data.decode('utf-8'))
+        return FakeHTTPResponse({'choices': [{'message': {'content': 'ok'}}]})
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+
+    result = run_answer_provider_test(_settings(tmp_path))
+
+    assert isinstance(result, AnswerProviderTestResult)
+    assert result.status == 'ok'
+    assert result.provider == 'ollama'
+    assert result.model == 'llama3.1:8b'
+    assert result.base_url == 'http://localhost:11434/v1'
+    assert result.error is None
+    assert captured['url'] == 'http://localhost:11434/v1/chat/completions'
+    assert captured['timeout'] == 12
+    body = captured['body']
+    assert body['messages'] == [{'role': 'user', 'content': 'Responda somente: ok'}]  # type: ignore[index]
+
+
+def test_provider_test_http_401_returns_controlled_error_without_secret(monkeypatch, tmp_path: Path) -> None:
+    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+        raise HTTPError(
+            url=request.full_url,
+            code=401,
+            msg='Unauthorized',
+            hdrs=None,
+            fp=BytesIO(b'{"error":"bad key sk-secret"}'),
+        )
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+
+    result = run_answer_provider_test(_settings(tmp_path, answer_api_key='sk-secret'))
+
+    assert result.status == 'error'
+    assert result.error == 'HTTP 401: Unauthorized'
+    assert 'sk-secret' not in result.model_dump_json()
+
+
+def test_provider_test_timeout_returns_controlled_error(monkeypatch, tmp_path: Path) -> None:
+    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+        raise TimeoutError
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+
+    result = run_answer_provider_test(_settings(tmp_path))
+
+    assert result.status == 'error'
+    assert result.error == 'Provider excedeu timeout.'
+
+
+def test_provider_test_extractive_is_not_applicable(tmp_path: Path) -> None:
+    result = run_answer_provider_test(_settings(tmp_path, answer_provider='extractive'))
+
+    assert result.status == 'not_applicable'
+    assert result.provider == 'extractive'
+    assert result.error is None

@@ -299,7 +299,7 @@ Input:focus {
 
 #settings-action-row {
     layout: grid;
-    grid-size: 2 1;
+    grid-size: 3 1;
     grid-gutter: 1 0;
     height: 1;
     margin-top: 1;

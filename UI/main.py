@@ -40,6 +40,7 @@ from free_plaud.app.local_env import answer_api_key_is_configured, load_local_en
 from free_plaud.app.settings_catalog import save_catalog_setting, settings_catalog_payload
 from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.corpus.runtime import CorpusRuntime
+from free_plaud.providers.answer import test_answer_provider
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
 
@@ -161,6 +162,9 @@ class Api:
             'values': result.values,
             'changes': {key: change.model_dump(mode='json') for key, change in result.changes.items()},
         }
+
+    def testAnswerProvider(self) -> dict:
+        return test_answer_provider().model_dump(mode='json')
 
     def saveApiKey(self, api_key: str) -> dict:
         path = save_answer_api_key(api_key)

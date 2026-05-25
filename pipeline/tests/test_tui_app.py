@@ -19,6 +19,7 @@ from free_plaud.corpus.models import (
     CorpusStatusResult,
 )
 from free_plaud.notes.schemas import Note
+from free_plaud.providers.answer import AnswerProviderTestResult
 from free_plaud.retrieval.models import AskResponse, Citation, UsedSource
 from free_plaud.tui.app import (
     ASK_MODES,
@@ -410,6 +411,35 @@ def test_tui_settings_pane_applies_preset_and_clears_runtime(monkeypatch, tmp_pa
 
     assert captured == ['cpu_rapido']
     assert cleared is True
+
+
+def test_tui_settings_pane_tests_answer_provider(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr(
+        'free_plaud.tui.app.test_answer_provider',
+        lambda: AnswerProviderTestResult(
+            provider='ollama',
+            model='llama3.1:8b',
+            base_url='http://localhost:11434/v1',
+            status='ok',
+            latency_ms=7,
+            error=None,
+        ),
+    )
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 38)) as pilot:
+            await pilot.click('#nav-settings')
+            await pilot.click('#settings-test-provider')
+            await pilot.pause(0.3)
+            output = app.query_one('#settings-output')
+            text = '\n'.join(getattr(line, 'plain', str(line)) for line in output.lines)
+            assert 'provider=ollama' in text
+            assert 'status=ok' in text
+
+    asyncio.run(run_app())
 
 
 def test_tui_settings_pane_renders_doctor_error_without_crash(monkeypatch, tmp_path: Path) -> None:

@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
+from free_plaud.providers.answer import AnswerProviderTestResult
 from free_plaud.retrieval.models import AskResponse, Citation, UsedSource
 
 
@@ -185,6 +186,28 @@ def test_desktop_api_applies_settings_preset_and_clears_runtime(monkeypatch) -> 
     assert result['ok'] is True
     assert result['preset']['key'] == 'cpu_rapido'
     assert result['values']['embedding_model'] == 'chroma-default'
+
+
+def test_desktop_api_tests_answer_provider(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    monkeypatch.setattr(
+        module,
+        'test_answer_provider',
+        lambda: AnswerProviderTestResult(
+            provider='ollama',
+            model='llama3.1:8b',
+            base_url='http://localhost:11434/v1',
+            status='ok',
+            latency_ms=7,
+            error=None,
+        ),
+    )
+
+    result = module.Api().testAnswerProvider()
+
+    assert result['status'] == 'ok'
+    assert result['provider'] == 'ollama'
+    assert result['latency_ms'] == 7
 
 
 def test_desktop_api_saves_backend_setting(monkeypatch, tmp_path: Path) -> None:

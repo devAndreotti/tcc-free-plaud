@@ -12,6 +12,7 @@ from free_plaud.config_cli import app as config_app
 from free_plaud.corpus.cli import app as corpus_app
 from free_plaud.ingest.cli import app as ingest_app
 from free_plaud.notes.cli import app as notes_app
+from free_plaud.providers.cli import app as provider_app
 from free_plaud.retrieval.cli import app as retrieval_app
 from free_plaud.storage.cli import app as storage_app
 from free_plaud.terminal_menu import run_terminal_menu
@@ -30,6 +31,7 @@ app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(storage_app, name="storage")
 app.add_typer(corpus_app, name="corpus")
 app.add_typer(config_app, name="config")
+app.add_typer(provider_app, name="provider")
 
 
 @app.command("doctor")
