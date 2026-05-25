@@ -1,0 +1,139 @@
+name: Quality Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+concurrency:
+  group: quality-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    name: Security audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --dev
+      - name: Dependency audit
+        run: uvx pip-audit --path .venv
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --dev
+      - name: Ruff
+        run: |
+          mkdir -p ../coverage
+          uvx ruff check src tests --output-format=json > ../coverage/ruff.json
+      - name: Upload Ruff report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ruff-report
+          path: coverage/ruff.json
+          retention-days: 7
+
+  test:
+    name: Tests & ratchet
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: uv sync --dev
+      - name: Pytest coverage
+        run: |
+          mkdir -p ../coverage
+          uv run pytest --basetemp .pytest-tmp-qg --cov=src --cov-report=json:../coverage/coverage.json --cov-report=xml:../coverage/coverage.xml --cov-report=term-missing
+      - name: Ratchet
+        working-directory: .
+        run: node scripts/quality-gate.js check
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+
+  docker:
+    name: Docker image gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Docker Image Doctor gate
+        run: node scripts/docker-gate.cjs --project . --json
+      - name: Upload Docker gate report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: docker-gate-report
+          path: .quality-gate/reports/docker-image-doctor.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  report:
+    name: PR report
+    runs-on: ubuntu-latest
+    needs: [security, lint, test, docker]
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+        continue-on-error: true
+      - name: Postar sticky comment no PR
+        run: node scripts/pr-comment.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          REQUIRED_CHECKS: 'Security audit,Lint,Tests & ratchet,Docker image gate'
+          DOCKER_RESULT: ${{ needs.docker.result }}

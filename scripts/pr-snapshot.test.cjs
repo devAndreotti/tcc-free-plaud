@@ -1,0 +1,304 @@
+const assert = require('node:assert/strict');
+const test = require('node:test');
+
+const {
+  buildSnapshot,
+  deriveActions,
+  normalizeChecks,
+  parseArgs,
+} = require('./pr-snapshot.cjs');
+
+test('parseArgs supports pr, repo, json, and output', () => {
+  const args = parseArgs(['--pr', '42', '--repo', 'owner/repo', '--json', '--output', 'snapshot.json']);
+
+  assert.equal(args.pr, 42);
+  assert.equal(args.repo, 'owner/repo');
+  assert.equal(args.json, true);
+  assert.equal(args.output, 'snapshot.json');
+});
+
+test('normalizeChecks summarizes check state and keeps job details', () => {
+  const normalized = normalizeChecks([
+    { name: 'Lint', state: 'FAIL', link: 'https://ci/lint' },
+    { name: 'Tests & ratchet', state: 'PASS' },
+    { name: 'SonarCloud', state: 'IN_PROGRESS' },
+  ]);
+
+  assert.equal(normalized.overall, 'failure');
+  assert.equal(normalized.jobs.lint.conclusion, 'failure');
+  assert.equal(normalized.jobs.test.conclusion, 'success');
+  assert.equal(normalized.jobs.sonar.status, 'in_progress');
+  assert.equal(normalized.jobs.lint.detailsUrl, 'https://ci/lint');
+});
+
+test('deriveActions maps failed checks and blockers to deterministic actions', () => {
+  const actions = deriveActions({
+    pr: { mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED' },
+    ci: {
+      overall: 'failure',
+      jobs: {
+        security: { conclusion: 'success' },
+        lint: { conclusion: 'failure' },
+        test: { conclusion: 'failure' },
+        sonar: { conclusion: 'failure' },
+        docker: { conclusion: 'failure' },
+      },
+    },
+    copilotBlockers: ['src/auth.ts:42 - Bloqueador: tratar erro'],
+    humanBlockers: ['reviewer pediu mudança'],
+  });
+
+  assert.deepEqual(actions, [
+    'fix_lint',
+    'fix_ratchet',
+    'diagnose_sonar',
+    'diagnose_docker',
+    'process_copilot',
+    'process_human',
+  ]);
+});
+
+test('deriveActions waits when latest workflow run is still pending without check details', () => {
+  const actions = deriveActions({
+    pr: { mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED' },
+    ci: {
+      overall: 'unknown',
+      jobs: {},
+    },
+    latestRun: {
+      status: 'pending',
+      conclusion: '',
+    },
+    copilotBlockers: [],
+    humanBlockers: [],
+  });
+
+  assert.deepEqual(actions, ['wait_ci']);
+});
+
+test('buildSnapshot collects PR metadata, checks, comments, blockers, and latest run', () => {
+  const calls = [];
+  const ghJson = (args) => {
+    calls.push(args.join(' '));
+    const key = args.join(' ');
+    if (key.startsWith('pr view 42 --json number,title,state,mergeable,mergeStateStatus')) {
+      return {
+        number: 42,
+        title: 'Add auth',
+        state: 'OPEN',
+        mergeable: 'MERGEABLE',
+        mergeStateStatus: 'BLOCKED',
+        headRefName: 'feature/auth',
+        baseRefName: 'main',
+        url: 'https://github.com/owner/repo/pull/42',
+        isDraft: false,
+      };
+    }
+    if (key === 'pr checks 42 --json name,state,link,startedAt,completedAt') throw new Error('checks unavailable');
+    if (key === 'api repos/owner/repo/pulls/42/comments') {
+      return [
+        {
+          user: { login: 'Copilot' },
+          path: 'src/auth.ts',
+          line: 42,
+          body: 'Bloqueador: falta tratar erro',
+        },
+      ];
+    }
+    if (key === 'api repos/owner/repo/pulls/42/reviews') {
+      return [
+        {
+          user: { login: 'human' },
+          state: 'CHANGES_REQUESTED',
+          body: 'Ajuste contrato público',
+        },
+      ];
+    }
+    if (key === 'run list --branch feature/auth --limit 1 --json databaseId,status,conclusion,workflowName,displayTitle,headBranch') {
+      return [{ databaseId: 123, status: 'completed', conclusion: 'failure', workflowName: 'Quality Gate' }];
+    }
+    if (key === 'run view 123 --json jobs') {
+      return {
+        jobs: [
+          { name: 'Lint', status: 'completed', conclusion: 'failure' },
+          { name: 'Tests & ratchet', status: 'completed', conclusion: 'success' },
+        ],
+      };
+    }
+    throw new Error(`unexpected gh call: ${key}`);
+  };
+
+  const snapshot = buildSnapshot({
+    pr: 42,
+    repo: 'owner/repo',
+    ghJson,
+    githubApi: (apiPath) => {
+      if (apiPath === '/repos/owner/repo/actions/runs/123/artifacts') {
+        return { artifacts: [{ name: 'coverage-report', sizeInBytes: 1000 }] };
+      }
+      throw new Error(`unexpected api path: ${apiPath}`);
+    },
+    now: '2026-05-24T00:00:00.000Z',
+  });
+
+  assert.equal(snapshot.pr.number, 42);
+  assert.equal(snapshot.ci.overall, 'failure');
+  assert.equal(snapshot.copilotBlockers.length, 1);
+  assert.equal(snapshot.humanBlockers.length, 1);
+  assert.deepEqual(snapshot.actions, ['fix_lint', 'process_copilot', 'process_human']);
+  assert.equal(snapshot.latestRun.id, 123);
+  assert.equal(snapshot.artifacts[0].name, 'coverage-report');
+  assert.ok(calls.length >= 5);
+});
+
+test('buildSnapshot falls back to workflow jobs when checks are inaccessible', () => {
+  const ghJson = (args) => {
+    const key = args.join(' ');
+    if (key.startsWith('pr view 42 --json number,title,state,mergeable,mergeStateStatus')) {
+      return {
+        number: 42,
+        title: 'Setup gate',
+        state: 'OPEN',
+        mergeable: 'MERGEABLE',
+        mergeStateStatus: 'BLOCKED',
+        headRefName: 'codex/qg-setup',
+        baseRefName: 'main',
+        url: 'https://github.com/owner/repo/pull/42',
+        isDraft: false,
+      };
+    }
+    if (key === 'pr checks 42 --json name,state,link,startedAt,completedAt') {
+      throw new Error('checks inaccessible');
+    }
+    if (key === 'api repos/owner/repo/pulls/42/comments') return [];
+    if (key === 'api repos/owner/repo/pulls/42/reviews') return [];
+    if (key === 'run list --branch codex/qg-setup --limit 1 --json databaseId,status,conclusion,workflowName,displayTitle,headBranch') {
+      return [{ databaseId: 456, status: 'completed', conclusion: 'success', workflowName: 'Quality Gate' }];
+    }
+    if (key === 'run view 456 --json jobs') {
+      return {
+        jobs: [
+          { name: 'Lint', status: 'completed', conclusion: 'success', url: 'https://ci/lint' },
+          { name: 'Tests & ratchet', status: 'completed', conclusion: 'success' },
+        ],
+      };
+    }
+    throw new Error(`unexpected gh call: ${key}`);
+  };
+
+  const snapshot = buildSnapshot({
+    pr: 42,
+    repo: 'owner/repo',
+    ghJson,
+    githubApi: (apiPath) => {
+      if (apiPath === '/repos/owner/repo/actions/runs/456/artifacts') return { artifacts: [] };
+      throw new Error(`unexpected api path: ${apiPath}`);
+    },
+  });
+
+  assert.equal(snapshot.ci.overall, 'success');
+  assert.equal(snapshot.ci.jobs.lint.conclusion, 'success');
+  assert.deepEqual(snapshot.actions, ['ready']);
+});
+
+test('buildSnapshot does not treat Copilot advisory comments as blockers', () => {
+  const ghJson = (args) => {
+    const key = args.join(' ');
+    if (key.startsWith('pr view 42 --json number,title,state,mergeable,mergeStateStatus')) {
+      return {
+        number: 42,
+        title: 'Setup gate',
+        state: 'OPEN',
+        mergeable: 'MERGEABLE',
+        mergeStateStatus: 'CLEAN',
+        headRefName: 'codex/qg-setup',
+        baseRefName: 'main',
+        url: 'https://github.com/owner/repo/pull/42',
+        isDraft: false,
+      };
+    }
+    if (key === 'pr checks 42 --json name,state,link,startedAt,completedAt') {
+      return [{ name: 'Lint', status: 'completed', conclusion: 'success' }];
+    }
+    if (key === 'api repos/owner/repo/pulls/42/comments') {
+      return [
+        {
+          user: { login: 'Copilot' },
+          path: 'scripts/doctor.test.cjs',
+          line: 30,
+          body: 'Sugestão: validar policy.ci.requiredChecks contra os job names.',
+        },
+      ];
+    }
+    if (key === 'api repos/owner/repo/pulls/42/reviews') return [];
+    if (key === 'run list --branch codex/qg-setup --limit 1 --json databaseId,status,conclusion,workflowName,displayTitle,headBranch') {
+      return [{ databaseId: 456, status: 'completed', conclusion: 'success', workflowName: 'Quality Gate' }];
+    }
+    if (key === 'run view 456 --json jobs') return { jobs: [{ name: 'Lint', status: 'completed', conclusion: 'success' }] };
+    throw new Error(`unexpected gh call: ${key}`);
+  };
+
+  const snapshot = buildSnapshot({
+    pr: 42,
+    repo: 'owner/repo',
+    ghJson,
+    githubApi: (apiPath) => {
+      if (apiPath === '/repos/owner/repo/actions/runs/456/artifacts') return { artifacts: [] };
+      throw new Error(`unexpected api path: ${apiPath}`);
+    },
+  });
+
+  assert.deepEqual(snapshot.copilotBlockers, []);
+  assert.deepEqual(snapshot.actions, ['ready']);
+});
+
+test('buildSnapshot falls back to GitHub API when gh is unavailable', () => {
+  const githubApi = (apiPath) => {
+    if (apiPath === '/repos/owner/repo/pulls/42') {
+      return {
+        number: 42,
+        title: 'Fallback PR',
+        state: 'open',
+        mergeable: true,
+        mergeable_state: 'blocked',
+        draft: false,
+        html_url: 'https://github.com/owner/repo/pull/42',
+        head: { ref: 'feature/fallback', sha: 'abc123' },
+        base: { ref: 'main' },
+      };
+    }
+    if (apiPath === '/repos/owner/repo/commits/abc123/check-runs') {
+      return {
+        check_runs: [
+          { name: 'Lint', status: 'completed', conclusion: 'success', html_url: 'https://ci/lint' },
+        ],
+      };
+    }
+    if (apiPath === '/repos/owner/repo/pulls/42/comments') return [];
+    if (apiPath === '/repos/owner/repo/pulls/42/reviews') return [];
+    if (apiPath === '/repos/owner/repo/actions/runs?branch=feature%2Ffallback&per_page=1') {
+      return {
+        workflow_runs: [
+          { id: 321, status: 'completed', conclusion: 'success', name: 'Quality Gate', display_title: 'Fallback' },
+        ],
+      };
+    }
+    if (apiPath === '/repos/owner/repo/actions/runs/321/artifacts') {
+      return { artifacts: [] };
+    }
+    throw new Error(`unexpected api path: ${apiPath}`);
+  };
+
+  const snapshot = buildSnapshot({
+    pr: 42,
+    repo: 'owner/repo',
+    ghJson: () => { throw new Error('gh unavailable'); },
+    githubApi,
+  });
+
+  assert.equal(snapshot.pr.title, 'Fallback PR');
+  assert.equal(snapshot.pr.mergeable, 'MERGEABLE');
+  assert.equal(snapshot.ci.overall, 'success');
+  assert.deepEqual(snapshot.actions, ['ready']);
+  assert.equal(snapshot.latestRun.id, 321);
+});
