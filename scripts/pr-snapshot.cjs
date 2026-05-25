@@ -69,6 +69,23 @@ function normalizeValue(value) {
   return String(value || '').toLowerCase();
 }
 
+function mapStateToConclusion(state) {
+  const normalized = normalizeValue(state);
+  if (['success', 'pass', 'passed', 'completed'].includes(normalized)) return 'success';
+  if (['failure', 'fail', 'failed', 'error', 'cancelled', 'timed_out', 'action_required'].includes(normalized)) return 'failure';
+  return null;
+}
+
+function mapStateToStatus(state) {
+  const normalized = normalizeValue(state);
+  if (['success', 'pass', 'passed', 'failure', 'fail', 'failed', 'error', 'cancelled', 'timed_out', 'action_required', 'completed'].includes(normalized)) {
+    return 'completed';
+  }
+  if (['pending', 'queued', 'waiting', 'requested'].includes(normalized)) return 'queued';
+  if (['in_progress', 'progress', 'running'].includes(normalized)) return 'in_progress';
+  return normalized;
+}
+
 function checkKey(name) {
   const normalized = normalizeValue(name);
   if (normalized.includes('security') || normalized.includes('audit')) return 'security';
@@ -86,14 +103,14 @@ function normalizeChecks(checks = []) {
   let hasPending = false;
 
   for (const check of checks) {
-    const status = normalizeValue(check.status);
-    const conclusion = normalizeValue(check.conclusion);
+    const status = normalizeValue(check.status) || mapStateToStatus(check.state);
+    const conclusion = normalizeValue(check.conclusion) || mapStateToConclusion(check.state);
     const key = checkKey(check.name);
     const normalized = {
       name: check.name,
       status,
       conclusion: conclusion || null,
-      detailsUrl: check.detailsUrl || null,
+      detailsUrl: check.detailsUrl || check.link || check.url || null,
       startedAt: check.startedAt || null,
       completedAt: check.completedAt || null,
     };
@@ -188,6 +205,17 @@ function mapRunsApi(result, branch) {
   }));
 }
 
+function mapRunJobs(result) {
+  return (result?.jobs || []).map((job) => ({
+    name: job.name,
+    status: job.status,
+    conclusion: job.conclusion,
+    detailsUrl: job.url,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+  }));
+}
+
 function queryGhOrApi({ ghJson, githubApi, args, fallback }) {
   try {
     return ghJson(args);
@@ -212,12 +240,6 @@ function buildSnapshot(options) {
     fallback: (api) => mapPullApi(api(`/repos/${repo}/pulls/${prNumber}`)),
   });
   const headSha = pr.headRefOid || pr.headSha || null;
-  const checks = queryGhOrApi({
-    ghJson,
-    githubApi,
-    args: ['pr', 'checks', String(prNumber), '--json', 'name,status,conclusion,detailsUrl,startedAt,completedAt'],
-    fallback: (api) => (headSha ? mapCheckRunsApi(api(`/repos/${repo}/commits/${headSha}/check-runs`)) : []),
-  });
   const inlineComments = queryGhOrApi({
     ghJson,
     githubApi,
@@ -246,6 +268,26 @@ function buildSnapshot(options) {
       headBranch: runList[0].headBranch || pr.headRefName,
     }
     : null;
+
+  let checks = [];
+  try {
+    checks = queryGhOrApi({
+      ghJson,
+      githubApi,
+      args: ['pr', 'checks', String(prNumber), '--json', 'name,state,link,startedAt,completedAt'],
+      fallback: (api) => (headSha ? mapCheckRunsApi(api(`/repos/${repo}/commits/${headSha}/check-runs`)) : []),
+    }) || [];
+  } catch {
+    checks = [];
+  }
+  if (checks.length === 0 && latestRun?.id) {
+    try {
+      checks = mapRunJobs(ghJson(['run', 'view', String(latestRun.id), '--json', 'jobs'])) || [];
+    } catch {
+      checks = [];
+    }
+  }
+
   let artifacts = [];
   if (latestRun?.id) {
     const artifactsResult = queryGhOrApi({

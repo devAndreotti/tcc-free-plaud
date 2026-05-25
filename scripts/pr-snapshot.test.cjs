@@ -19,15 +19,16 @@ test('parseArgs supports pr, repo, json, and output', () => {
 
 test('normalizeChecks summarizes check state and keeps job details', () => {
   const normalized = normalizeChecks([
-    { name: 'Lint', status: 'COMPLETED', conclusion: 'FAILURE', detailsUrl: 'https://ci/lint' },
-    { name: 'Tests & ratchet', status: 'COMPLETED', conclusion: 'SUCCESS' },
-    { name: 'SonarCloud', status: 'IN_PROGRESS', conclusion: null },
+    { name: 'Lint', state: 'FAIL', link: 'https://ci/lint' },
+    { name: 'Tests & ratchet', state: 'PASS' },
+    { name: 'SonarCloud', state: 'IN_PROGRESS' },
   ]);
 
   assert.equal(normalized.overall, 'failure');
   assert.equal(normalized.jobs.lint.conclusion, 'failure');
   assert.equal(normalized.jobs.test.conclusion, 'success');
   assert.equal(normalized.jobs.sonar.status, 'in_progress');
+  assert.equal(normalized.jobs.lint.detailsUrl, 'https://ci/lint');
 });
 
 test('deriveActions maps failed checks and blockers to deterministic actions', () => {
@@ -75,10 +76,10 @@ test('buildSnapshot collects PR metadata, checks, comments, blockers, and latest
         isDraft: false,
       };
     }
-    if (key === 'pr checks 42 --json name,status,conclusion,detailsUrl,startedAt,completedAt') {
+    if (key === 'pr checks 42 --json name,state,link,startedAt,completedAt') {
       return [
-        { name: 'Lint', status: 'COMPLETED', conclusion: 'FAILURE' },
-        { name: 'Tests & ratchet', status: 'COMPLETED', conclusion: 'SUCCESS' },
+        { name: 'Lint', state: 'FAIL' },
+        { name: 'Tests & ratchet', state: 'PASS' },
       ];
     }
     if (key === 'api repos/owner/repo/pulls/42/comments') {
@@ -124,6 +125,51 @@ test('buildSnapshot collects PR metadata, checks, comments, blockers, and latest
   assert.equal(snapshot.latestRun.id, 123);
   assert.equal(snapshot.artifacts[0].name, 'coverage-report');
   assert.ok(calls.length >= 5);
+});
+
+test('buildSnapshot falls back to workflow jobs when checks are inaccessible', () => {
+  const ghJson = (args) => {
+    const key = args.join(' ');
+    if (key.startsWith('pr view 42 --json number,title,state,mergeable,mergeStateStatus')) {
+      return {
+        number: 42,
+        title: 'Setup gate',
+        state: 'OPEN',
+        mergeable: 'MERGEABLE',
+        mergeStateStatus: 'BLOCKED',
+        headRefName: 'codex/qg-setup',
+        baseRefName: 'main',
+        url: 'https://github.com/owner/repo/pull/42',
+        isDraft: false,
+      };
+    }
+    if (key === 'pr checks 42 --json name,state,link,startedAt,completedAt') {
+      throw new Error('checks inaccessible');
+    }
+    if (key === 'api repos/owner/repo/pulls/42/comments') return [];
+    if (key === 'api repos/owner/repo/pulls/42/reviews') return [];
+    if (key === 'run list --branch codex/qg-setup --limit 1 --json databaseId,status,conclusion,workflowName,displayTitle,headBranch') {
+      return [{ databaseId: 456, status: 'completed', conclusion: 'success', workflowName: 'Quality Gate' }];
+    }
+    if (key === 'run view 456 --json jobs') {
+      return {
+        jobs: [
+          { name: 'Lint', status: 'completed', conclusion: 'success', url: 'https://ci/lint' },
+          { name: 'Tests & ratchet', status: 'completed', conclusion: 'success' },
+        ],
+      };
+    }
+    if (key === 'run view 456 --json artifacts') {
+      return { artifacts: [] };
+    }
+    throw new Error(`unexpected gh call: ${key}`);
+  };
+
+  const snapshot = buildSnapshot({ pr: 42, repo: 'owner/repo', ghJson });
+
+  assert.equal(snapshot.ci.overall, 'success');
+  assert.equal(snapshot.ci.jobs.lint.conclusion, 'success');
+  assert.deepEqual(snapshot.actions, ['ready']);
 });
 
 test('buildSnapshot falls back to GitHub API when gh is unavailable', () => {
