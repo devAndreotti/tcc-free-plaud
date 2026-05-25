@@ -6,7 +6,8 @@ from typing import Literal
 from free_plaud.notes.schemas import Note
 from free_plaud.providers.embed import Embedder
 from free_plaud.retrieval.indexer import index_note, index_note_in_vector_store
-from free_plaud.retrieval.models import AnswerClaim, AskResponse, Citation, SearchHit, UsedSource
+from free_plaud.retrieval.debug import build_ask_debug
+from free_plaud.retrieval.models import AnswerClaim, AskDebug, AskResponse, Citation, SearchHit, UsedSource
 from free_plaud.retrieval.search import (
     LOW_SIGNAL_QUERY_TERMS,
     extract_named_query_terms,
@@ -671,6 +672,7 @@ def _build_no_answer(
     limitations: list[str],
     used_sources: list[UsedSource],
     latency_ms: int,
+    debug: AskDebug | None = None,
 ) -> AskResponse:
     return AskResponse(
         query=question,
@@ -683,6 +685,7 @@ def _build_no_answer(
         reason_for_no_answer=reason,
         used_sources=used_sources,
         latency_ms=latency_ms,
+        debug=debug,
     )
 
 
@@ -747,19 +750,43 @@ def answer_with_citations(
     min_vector_term_coverage: float = 0.2,
     min_hybrid_term_coverage: float = 0.2,
     max_claims: int = 2,
+    include_debug: bool = False,
 ) -> AskResponse:
     """Responde apenas quando há evidência recuperada suficiente e citável."""
     started_at = perf_counter()
     query_terms = normalize_query_terms(question)
     named_query_terms = extract_named_query_terms(question)
-    if not query_terms:
+
+    def _debug_payload(
+        *,
+        reason: str | None = None,
+        hits: list[SearchHit] | None = None,
+        rejected_hits: list[SearchHit] | None = None,
+    ) -> AskDebug | None:
+        if not include_debug:
+            return None
+        return build_ask_debug(
+            strategy=strategy,
+            query_terms=query_terms,
+            named_query_terms=named_query_terms,
+            hits=hits or [],
+            rejected_hits=rejected_hits or [],
+            note_lookup={note.note_id: note},
+            no_answer_reason=reason,
+        )
+
+    def _no_answer(reason: str, limitations: list[str], used_sources: list[UsedSource], rejected_hits: list[SearchHit] | None = None) -> AskResponse:
         return _build_no_answer(
             question=question,
-            reason='query_without_content',
-            limitations=['A pergunta não contém termos informativos suficientes para recuperação.'],
-            used_sources=[],
+            reason=reason,
+            limitations=limitations,
+            used_sources=used_sources,
             latency_ms=int((perf_counter() - started_at) * 1000),
+            debug=_debug_payload(reason=reason, hits=rejected_hits, rejected_hits=rejected_hits),
         )
+
+    if not query_terms:
+        return _no_answer('query_without_content', ['A pergunta não contém termos informativos suficientes para recuperação.'], [])
 
     hits = _retrieve_hits(
         note,
@@ -773,43 +800,34 @@ def answer_with_citations(
     used_sources = _summarize_sources(note, hits)
 
     if not hits:
-        return _build_no_answer(
-            question=question,
-            reason='no_retrieval_hits',
-            limitations=['Nenhum chunk recuperado contém termos informativos suficientes da pergunta.'],
-            used_sources=used_sources,
-            latency_ms=int((perf_counter() - started_at) * 1000),
-        )
+        return _no_answer('no_retrieval_hits', ['Nenhum chunk recuperado contém termos informativos suficientes da pergunta.'], used_sources)
 
     if strategy == 'lexical' and hits[0].term_coverage < min_term_coverage:
-        return _build_no_answer(
-            question=question,
-            reason='insufficient_term_coverage',
-            limitations=['Os trechos recuperados compartilham poucos termos informativos com a pergunta.'],
-            used_sources=used_sources,
-            latency_ms=int((perf_counter() - started_at) * 1000),
+        return _no_answer(
+            'insufficient_term_coverage',
+            ['Os trechos recuperados compartilham poucos termos informativos com a pergunta.'],
+            used_sources,
+            rejected_hits=hits,
         )
 
     if strategy == 'vector':
         top_hit = hits[0]
         if top_hit.score < min_vector_score or top_hit.term_coverage < min_vector_term_coverage:
-            return _build_no_answer(
-                question=question,
-                reason='insufficient_vector_evidence',
-                limitations=['Os hits vetoriais recuperados nao apresentam evidencia lexical ou score suficiente para responder.'],
-                used_sources=used_sources,
-                latency_ms=int((perf_counter() - started_at) * 1000),
+            return _no_answer(
+                'insufficient_vector_evidence',
+                ['Os hits vetoriais recuperados nao apresentam evidencia lexical ou score suficiente para responder.'],
+                used_sources,
+                rejected_hits=hits,
             )
 
     if strategy == 'hybrid':
         top_hit = hits[0]
         if top_hit.term_coverage < min_hybrid_term_coverage and len(top_hit.matched_terms) < 1:
-            return _build_no_answer(
-                question=question,
-                reason='insufficient_hybrid_evidence',
-                limitations=['Os hits hibridos recuperados nao apresentam evidencia lexical suficiente para responder com seguranca.'],
-                used_sources=used_sources,
-                latency_ms=int((perf_counter() - started_at) * 1000),
+            return _no_answer(
+                'insufficient_hybrid_evidence',
+                ['Os hits hibridos recuperados nao apresentam evidencia lexical suficiente para responder com seguranca.'],
+                used_sources,
+                rejected_hits=hits,
             )
 
     effective_max_claims = max(1, min(max_claims, top_k))
@@ -822,40 +840,37 @@ def answer_with_citations(
     grounded_matches, grounded_coverage = match_terms_in_text(query_terms, grounded_text)
 
     if not claims or any(not claim.citations for claim in claims):
-        return _build_no_answer(
-            question=question,
-            reason='citation_validation_failed',
-            limitations=['A evidência foi recuperada, mas não gerou claims citáveis de forma consistente.'],
-            used_sources=used_sources,
-            latency_ms=int((perf_counter() - started_at) * 1000),
+        return _no_answer(
+            'citation_validation_failed',
+            ['A evidência foi recuperada, mas não gerou claims citáveis de forma consistente.'],
+            used_sources,
+            rejected_hits=hits,
         )
 
     if strategy in {'vector', 'hybrid'} and grounded_coverage < min_vector_term_coverage:
         if len(grounded_matches) <= 1:
-            return _build_no_answer(
-                question=question,
-                reason='insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity',
-                limitations=['Os claims gerados nao trouxeram especificidade textual suficiente para responder com seguranca.'],
-                used_sources=used_sources,
-                latency_ms=int((perf_counter() - started_at) * 1000),
+            reason = 'insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity'
+            return _no_answer(
+                reason,
+                ['Os claims gerados nao trouxeram especificidade textual suficiente para responder com seguranca.'],
+                used_sources,
+                rejected_hits=hits,
             )
-        return _build_no_answer(
-            question=question,
-            reason='insufficient_grounded_claims',
-            limitations=['Os claims gerados nao mantiveram ancoragem textual suficiente com a pergunta.'],
-            used_sources=used_sources,
-            latency_ms=int((perf_counter() - started_at) * 1000),
+        return _no_answer(
+            'insufficient_grounded_claims',
+            ['Os claims gerados nao mantiveram ancoragem textual suficiente com a pergunta.'],
+            used_sources,
+            rejected_hits=hits,
         )
 
     if strategy in {'vector', 'hybrid'} and named_query_terms:
         _, named_coverage = match_terms_in_text(named_query_terms, grounded_text)
         if named_coverage < 1.0:
-            return _build_no_answer(
-                question=question,
-                reason='missing_named_anchor',
-                limitations=['A resposta nao sustentou os anchors nomeados presentes na pergunta.'],
-                used_sources=used_sources,
-                latency_ms=int((perf_counter() - started_at) * 1000),
+            return _no_answer(
+                'missing_named_anchor',
+                ['A resposta nao sustentou os anchors nomeados presentes na pergunta.'],
+                used_sources,
+                rejected_hits=hits,
             )
 
     answer = ' '.join(dict.fromkeys(claim.text for claim in claims))
@@ -867,16 +882,16 @@ def answer_with_citations(
             and len(answer) < 80
             and all(claim.support_level == 'partial' for claim in claims)
         ):
-            return _build_no_answer(
-                question=question,
-                reason='insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity',
-                limitations=[
+            reason = 'insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity'
+            return _no_answer(
+                reason,
+                [
                     'A resposta vetorial recuperada ficou curta e pouco especifica para os termos da pergunta.'
                     if strategy == 'vector'
                     else 'A resposta hibrida recuperada ficou curta e pouco especifica para os termos da pergunta.'
                 ],
                 used_sources=used_sources,
-                latency_ms=int((perf_counter() - started_at) * 1000),
+                rejected_hits=hits,
             )
 
     limitations: list[str] = []
@@ -905,4 +920,5 @@ def answer_with_citations(
         reason_for_no_answer=None,
         used_sources=used_sources,
         latency_ms=int((perf_counter() - started_at) * 1000),
+        debug=_debug_payload(hits=hits),
     )

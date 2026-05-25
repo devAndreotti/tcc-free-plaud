@@ -168,6 +168,75 @@ def test_answer_corpus_lexical_uses_fts_candidates(monkeypatch, tmp_path: Path) 
     assert 'RabbitMQ' in (response.answer or '')
 
 
+def test_answer_corpus_debug_is_disabled_by_default(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+    )
+
+    assert response.status == 'answer'
+    assert response.debug is None
+
+
+def test_answer_corpus_debug_includes_hits_and_scores(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        include_debug=True,
+    )
+
+    assert response.status == 'answer'
+    assert response.debug is not None
+    assert response.debug.strategy == 'lexical'
+    assert response.debug.no_answer_reason is None
+    assert response.debug.query_terms
+    assert response.debug.hits
+    assert response.debug.hits[0].chunk_id
+    assert response.debug.hits[0].note_id
+    assert response.debug.hits[0].score > 0
+    assert response.debug.hits[0].strategy == 'lexical'
+    assert 'message' in response.debug.hits[0].matched_terms
+    assert response.debug.hits[0].source_path
+
+
+def test_answer_corpus_debug_no_answer_includes_reason_and_rejected_hits(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual tecnologia mobile usa RabbitMQ?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        min_term_coverage=0.99,
+        include_debug=True,
+    )
+
+    assert response.status == 'no_answer'
+    assert response.debug is not None
+    assert response.debug.no_answer_reason == response.reason_for_no_answer
+    assert response.debug.rejected_hits
+
+
 def test_answer_corpus_calls_answer_provider_only_after_citations(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     root = tmp_path / 'corpus'

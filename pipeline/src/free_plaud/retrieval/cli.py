@@ -49,6 +49,7 @@ def ask(
     question: str = typer.Option(..., "--question", "-q", help="Pergunta em linguagem natural."),
     top_k: int = 3,
     strategy: str = typer.Option('lexical', '--strategy', '-s', help="Estrategia de retrieval: lexical, vector ou hybrid."),
+    debug: bool = typer.Option(False, '--debug', help='Inclui sinais de retrieval para tuning do Ask.'),
 ) -> None:
     """Executa uma pergunta mínima com resposta estruturada e citação obrigatória."""
     if strategy not in {'lexical', 'vector', 'hybrid'}:
@@ -74,8 +75,10 @@ def ask(
         strategy=strategy,
         vector_store=vector_store,
         embedder=embedder,
+        include_debug=debug,
     )
-    typer.echo(json.dumps(response.model_dump(mode='json'), ensure_ascii=True, indent=2))
+    payload = response.model_dump(mode='json') if debug else response.model_dump(mode='json', exclude={'debug'})
+    typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
 
 
 @app.command("index")

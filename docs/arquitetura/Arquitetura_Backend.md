@@ -337,6 +337,8 @@ de forma repetível, gerando um resumo agregado por estratégia sem depender da 
 - `reason_for_no_answer`
 - `used_sources`
 - `latency_ms`
+- `debug` opcional, apenas quando pedido, com hits recuperados, scores, termos, distancia,
+  fonte e motivo de abstencao
 
 Na implementação atual da Sprint 5, a resposta `ask` nasce como um baseline local-first sobre
 busca lexical com matching por token inteiro, não por substring. A partir da Sprint 06.2,

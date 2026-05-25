@@ -169,6 +169,7 @@ def ask(
         '-s',
         help='Estrategia de retrieval: lexical, vector ou hybrid.',
     ),
+    debug: bool = typer.Option(False, '--debug', help='Inclui sinais de retrieval para tuning do Ask.'),
 ) -> None:
     """Pergunta contra todos os chunks persistidos no corpus local."""
     settings = get_settings()
@@ -187,6 +188,7 @@ def ask(
             embedder=embedder,
             strategy=strategy,
             top_k=top_k,
+            include_debug=debug,
             answer_provider=get_answer_provider(
                 settings.answer_provider,
                 model=settings.answer_model,
@@ -196,6 +198,7 @@ def ask(
                 timeout_seconds=settings.answer_timeout_seconds,
             ),
         )
-        typer.echo(json.dumps(response.model_dump(mode='json'), ensure_ascii=True, indent=2))
+        payload = response.model_dump(mode='json') if debug else response.model_dump(mode='json', exclude={'debug'})
+        typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
     finally:
         connection.close()

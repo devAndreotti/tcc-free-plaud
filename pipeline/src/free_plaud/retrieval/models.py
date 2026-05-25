@@ -33,6 +33,33 @@ class SearchHit(BaseModel):
     distance: float | None = None
 
 
+class AskDebugHit(BaseModel):
+    """Sinais de recuperacao usados para explicar uma resposta ask."""
+
+    chunk_id: str
+    note_id: str
+    note_version: int
+    source_path: str | None = None
+    score: float
+    strategy: str
+    matched_terms: list[str] = Field(default_factory=list)
+    term_coverage: float = 0.0
+    distance: float | None = None
+    snippet: str
+
+
+class AskDebug(BaseModel):
+    """Debug opcional para tuning de retrieval sem poluir respostas normais."""
+
+    strategy: str
+    query_terms: list[str] = Field(default_factory=list)
+    named_query_terms: list[str] = Field(default_factory=list)
+    hits: list[AskDebugHit] = Field(default_factory=list)
+    rejected_hits: list[AskDebugHit] = Field(default_factory=list)
+    no_answer_reason: str | None = None
+    stale_vector_hits_count: int = 0
+
+
 class Citation(BaseModel):
     """Representa uma citação rastreável até um chunk persistível."""
 
@@ -75,3 +102,4 @@ class AskResponse(BaseModel):
     reason_for_no_answer: str | None = None
     used_sources: list[UsedSource] = Field(default_factory=list)
     latency_ms: int
+    debug: AskDebug | None = None
