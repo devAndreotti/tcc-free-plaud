@@ -6,16 +6,23 @@ import HamburgerMenu from './HamburgerMenu';
 interface SidebarProps {
   onOpenSettings: () => void;
   onNewTab: () => void;
+  onOpenNotes: () => void;
+  activeView: 'chat' | 'notes';
 }
 
 // Componente da barra lateral esquerda da aplicação
-const Sidebar = ({ onOpenSettings, onNewTab }: SidebarProps) => {
+const Sidebar = ({ onOpenSettings, onNewTab, onOpenNotes, activeView }: SidebarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<string | null>(null);
 
   // Navega para a seção selecionada
   const handleNavClick = (item: string) => {
     setActiveItem((prev) => (prev === item ? null : item));
+  };
+
+  const handleNotesClick = () => {
+    setActiveItem(null);
+    onOpenNotes();
   };
 
   return (
@@ -37,18 +44,18 @@ const Sidebar = ({ onOpenSettings, onNewTab }: SidebarProps) => {
 
       {/* Navegação principal */}
       <nav className="sidebar__nav" aria-label="Navegação principal">
-        {/* Botão Pastas */}
+        {/* Botão Notes */}
         <button
-          id="btn-sidebar-pastas"
+          id="btn-sidebar-notes"
           type="button"
-          className={`sidebar__nav-btn ${activeItem === 'pastas' ? 'sidebar__nav-btn--active' : ''}`}
-          aria-label="Pastas"
-          aria-pressed={activeItem === 'pastas'}
-          title="Pastas"
-          onClick={() => handleNavClick('pastas')}
+          className={`sidebar__nav-btn ${activeView === 'notes' ? 'sidebar__nav-btn--active' : ''}`}
+          aria-label="Notes"
+          aria-pressed={activeView === 'notes'}
+          title="Notes"
+          onClick={handleNotesClick}
         >
           <FolderIcon size={20} />
-          <span className="sidebar__nav-label">Pastas</span>
+          <span className="sidebar__nav-label">Notes</span>
         </button>
 
         {/* Botão Skills */}

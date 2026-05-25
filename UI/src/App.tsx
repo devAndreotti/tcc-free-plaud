@@ -10,6 +10,7 @@ import MessageBubble, {
 } from './components/MessageBubble';
 import ChatInput from './components/ChatInput';
 import GraphPanel from './components/GraphPanel';
+import NotesPanel from './components/NotesPanel';
 import { bridge } from './services/bridge';
 import { VaultProvider } from './contexts/VaultContext';
 
@@ -26,6 +27,7 @@ const INITIAL_TAB: Tab = {
 
 // Estado de conversa vazia para reutilização
 const EMPTY_MESSAGES: MessageData[] = [];
+type WorkspaceView = 'chat' | 'notes';
 
 function App() {
   // Gerenciamento de abas
@@ -40,6 +42,7 @@ function App() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('chat');
 
   // Alterna a visibilidade do painel lateral de grafos
   const handleToggleGraphPanel = useCallback(() => {
@@ -63,6 +66,7 @@ function App() {
   // Seleciona uma aba pelo id
   const handleSelectTab = useCallback((id: string) => {
     setActiveTabId(id);
+    setWorkspaceView('chat');
   }, []);
 
   // Fecha uma aba; limpa seu estado e ativa a vizinha
@@ -109,6 +113,7 @@ function App() {
     setTabMessages((prev) => ({ ...prev, [newTab.id]: [] }));
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newTab.id);
+    setWorkspaceView('chat');
   }, []);
 
   // Envia mensagem na conversa da aba ativa
@@ -176,6 +181,8 @@ function App() {
         <Sidebar
           onOpenSettings={() => setIsSettingsOpen(true)}
           onNewTab={handleNewTab}
+          onOpenNotes={() => setWorkspaceView('notes')}
+          activeView={workspaceView}
         />
 
         {/* Coluna de conteúdo principal (tab bar + view) */}
@@ -193,7 +200,9 @@ function App() {
           />
 
           {/* View ativa conforme a aba selecionada */}
-          {activeTab?.type === 'chat' && (
+          {workspaceView === 'notes' && <NotesPanel />}
+
+          {workspaceView === 'chat' && activeTab?.type === 'chat' && (
             <main
               className="main"
               id={`tabpanel-${activeTab.id}`}
@@ -225,7 +234,7 @@ function App() {
           )}
 
           {/* Estado vazio: nenhuma aba aberta */}
-          {!activeTab && (
+          {workspaceView === 'chat' && !activeTab && (
             <main className="main main--empty" id="main-content">
               <div className="empty-state">
                 <p className="empty-state__text">Nenhuma aba aberta.</p>
@@ -234,7 +243,7 @@ function App() {
           )}
 
           {/* Input de mensagem (visível apenas com aba de chat ativa) */}
-          {activeTab?.type === 'chat' && (
+          {workspaceView === 'chat' && activeTab?.type === 'chat' && (
             <ChatInput onSendMessage={handleSendMessage} isLoading={isTyping} />
           )}
         </div>

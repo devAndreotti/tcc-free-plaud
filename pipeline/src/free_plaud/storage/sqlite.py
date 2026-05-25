@@ -244,6 +244,23 @@ def list_chunks(connection: sqlite3.Connection) -> list[Chunk]:
     return [_chunk_from_row(row) for row in rows]
 
 
+def list_chunks_for_note(connection: sqlite3.Connection, note_id: str) -> list[Chunk]:
+    """Lista apenas chunks de uma nota, em ordem estavel para detalhe operacional."""
+    rows = connection.execute(
+        """
+        SELECT
+            chunk_id, note_id, note_version, chunk_index, char_start, char_end, chunk_size,
+            overlap, chunk_text, token_count, strategy, normalized_text_sha256,
+            text_sha256, pipeline_version
+        FROM chunks
+        WHERE note_id = ?
+        ORDER BY note_version, chunk_index
+        """,
+        (note_id,),
+    ).fetchall()
+    return [_chunk_from_row(row) for row in rows]
+
+
 def count_notes(connection: sqlite3.Connection) -> int:
     row = connection.execute('SELECT COUNT(*) AS total FROM notes').fetchone()
     return int(row['total'])

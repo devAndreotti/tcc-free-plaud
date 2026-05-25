@@ -128,6 +128,46 @@ export interface AnswerProviderTestResult {
   error: string | null;
 }
 
+export interface NoteSummary {
+  note_id: string;
+  title: string;
+  source_type: string;
+  source_path: string;
+  created_at: string;
+  tags: string[];
+  chunk_count: number;
+}
+
+export interface NoteChunkSummary {
+  chunk_id: string;
+  chunk_index: number;
+  char_start: number;
+  char_end: number;
+  token_count: number;
+  snippet: string;
+}
+
+export interface NoteDetail extends NoteSummary {
+  structured_markdown: string;
+  chunks: NoteChunkSummary[];
+}
+
+export interface NoteDeleteResult {
+  ok: boolean;
+  note_id?: string;
+  deleted_vectors?: number;
+  status?: string;
+  message?: string;
+}
+
+export interface NoteReindexResult {
+  ok: boolean;
+  note_id: string;
+  status: string;
+  chunks_indexed: number;
+  message: string | null;
+}
+
 interface PythonApi {
   /**
    * Envia mensagem do usuário para o backend Python.
@@ -189,6 +229,18 @@ interface PythonApi {
 
   /** Salva uma setting do catálogo canônico do backend. */
   saveBackendSetting?: (key: string, value: string | number | boolean | null) => Promise<{ ok: boolean }>;
+
+  /** Lista notas indexadas no corpus. */
+  listNotes?: () => Promise<NoteSummary[]>;
+
+  /** Retorna detalhe operacional de uma nota indexada. */
+  getNoteDetail?: (noteId: string) => Promise<NoteDetail>;
+
+  /** Remove uma nota do corpus, exigindo confirmação textual. */
+  deleteNote?: (noteId: string, confirmation: string) => Promise<NoteDeleteResult>;
+
+  /** Reindexa uma nota a partir do source_path salvo no banco. */
+  reindexNote?: (noteId: string) => Promise<NoteReindexResult>;
 }
 
 declare global {
@@ -235,6 +287,38 @@ const mockSettingRow = (row: MockSettingRow): SettingRow => ({
   local_env_path: null,
   ...row,
 });
+
+const MOCK_NOTES: NoteDetail[] = [
+  {
+    note_id: 'plataforma-local',
+    title: 'Plataforma local',
+    source_type: 'md',
+    source_path: 'vault/plataforma-local.md',
+    created_at: new Date().toISOString(),
+    tags: ['md'],
+    chunk_count: 2,
+    structured_markdown:
+      '# Plataforma local\n\nA nota documenta o corpus local, SQLite, Chroma e fluxo RAG com citação.',
+    chunks: [
+      {
+        chunk_id: 'plataforma-local::v1::0000',
+        chunk_index: 0,
+        char_start: 0,
+        char_end: 96,
+        token_count: 18,
+        snippet: 'A nota documenta o corpus local, SQLite, Chroma e fluxo RAG com citação.',
+      },
+      {
+        chunk_id: 'plataforma-local::v1::0001',
+        chunk_index: 1,
+        char_start: 84,
+        char_end: 148,
+        token_count: 12,
+        snippet: 'O detalhe operacional aparece aqui para validar a tela Notes.',
+      },
+    ],
+  },
+];
 
 // ─── Serviço de bridge exportado ─────────────────────────────────────────────
 export const bridge = {
@@ -538,6 +622,57 @@ export const bridge = {
     }
     console.debug(`[Bridge Mock] saveBackendSetting: ${key}=${String(value)}`);
     return { ok: true };
+  },
+
+  listNotes: async (): Promise<NoteSummary[]> => {
+    if (isDesktopApp && window.pywebview?.api.listNotes) {
+      return window.pywebview.api.listNotes();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return MOCK_NOTES.map((note) => ({
+      note_id: note.note_id,
+      title: note.title,
+      source_type: note.source_type,
+      source_path: note.source_path,
+      created_at: note.created_at,
+      tags: note.tags,
+      chunk_count: note.chunk_count,
+    }));
+  },
+
+  getNoteDetail: async (noteId: string): Promise<NoteDetail> => {
+    if (isDesktopApp && window.pywebview?.api.getNoteDetail) {
+      return window.pywebview.api.getNoteDetail(noteId);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    const note = MOCK_NOTES.find((item) => item.note_id === noteId);
+    if (!note) throw new Error(`Nota nao encontrada: ${noteId}`);
+    return note;
+  },
+
+  deleteNote: async (noteId: string, confirmation: string): Promise<NoteDeleteResult> => {
+    if (isDesktopApp && window.pywebview?.api.deleteNote) {
+      return window.pywebview.api.deleteNote(noteId, confirmation);
+    }
+    if (confirmation !== 'APAGAR') {
+      return { ok: false, status: 'confirmation_required', message: 'Digite APAGAR para confirmar.' };
+    }
+    console.debug(`[Bridge Mock] deleteNote: ${noteId}`);
+    return { ok: true, note_id: noteId, deleted_vectors: 2 };
+  },
+
+  reindexNote: async (noteId: string): Promise<NoteReindexResult> => {
+    if (isDesktopApp && window.pywebview?.api.reindexNote) {
+      return window.pywebview.api.reindexNote(noteId);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    return {
+      ok: true,
+      note_id: noteId,
+      status: 'success',
+      chunks_indexed: 2,
+      message: 'Mock reindexed.',
+    };
   },
 
   /** Indica se o app está rodando dentro do PyWebView (desktop) */

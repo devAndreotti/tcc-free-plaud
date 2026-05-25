@@ -96,10 +96,41 @@ Ele deve tratá-los como codigos de estado, deixando a apresentacao da mensagem 
 type NoteSummary = {
   note_id: string
   title: string
-  source_type: 'txt' | 'md' | 'pdf' | 'audio' | 'image'
+  source_type: string
   source_path: string
   created_at: string
   tags: string[]
+  chunk_count: number
+}
+
+type NoteChunkSummary = {
+  chunk_id: string
+  chunk_index: number
+  char_start: number
+  char_end: number
+  token_count: number
+  snippet: string
+}
+
+type NoteDetail = NoteSummary & {
+  structured_markdown: string
+  chunks: NoteChunkSummary[]
+}
+
+type NoteDeleteResult = {
+  ok: boolean
+  note_id?: string
+  deleted_vectors?: number
+  status?: string
+  message?: string
+}
+
+type NoteReindexResult = {
+  ok: boolean
+  note_id: string
+  status: 'success' | 'failed' | 'cancelled' | 'unchanged'
+  chunks_indexed: number
+  message: string | null
 }
 ```
 
@@ -146,6 +177,9 @@ Enquanto a integracao real nao existir, a UI pode mockar estes metodos:
 interface BackendBridge {
   ask(query: string): Promise<AskResponse>
   listNotes(): Promise<NoteSummary[]>
+  getNoteDetail(noteId: string): Promise<NoteDetail>
+  deleteNote(noteId: string, confirmation: string): Promise<NoteDeleteResult>
+  reindexNote(noteId: string): Promise<NoteReindexResult>
   listQueue(): Promise<QueueItem[]>
   listExperiments(): Promise<ExperimentRunSummary[]>
 }

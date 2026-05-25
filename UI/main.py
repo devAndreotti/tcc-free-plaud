@@ -40,6 +40,7 @@ from free_plaud.app.local_env import answer_api_key_is_configured, load_local_en
 from free_plaud.app.settings_catalog import save_catalog_setting, settings_catalog_payload
 from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.corpus.runtime import CorpusRuntime
+from free_plaud.notes.service import delete_note, get_note_detail, list_notes, reindex_note
 from free_plaud.providers.answer import test_answer_provider
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
@@ -178,6 +179,26 @@ class Api:
         save_catalog_setting(key, value)
         self.runtime.clear()
         return {'ok': True}
+
+    def listNotes(self) -> list[dict]:
+        return [note.model_dump(mode='json') for note in list_notes()]
+
+    def getNoteDetail(self, note_id: str) -> dict:
+        return get_note_detail(note_id).model_dump(mode='json')
+
+    def deleteNote(self, note_id: str, confirmation: str = '') -> dict:
+        if confirmation != 'APAGAR':
+            return {
+                'ok': False,
+                'status': 'confirmation_required',
+                'message': 'Digite APAGAR para confirmar.',
+            }
+        result = delete_note(note_id, vector_store=self.runtime.get_vector_store())
+        return result.model_dump(mode='json')
+
+    def reindexNote(self, note_id: str) -> dict:
+        result = reindex_note(note_id, runtime=self.runtime)
+        return result.model_dump(mode='json')
 
     def selectFolder(self) -> str:
         """
