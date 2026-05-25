@@ -3,7 +3,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from free_plaud.app.config import Settings, get_settings
+from free_plaud.app.config import get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.benchmark.cli import app as benchmark_app
 from free_plaud.config_cli import app as config_app

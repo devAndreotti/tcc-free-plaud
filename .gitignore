@@ -24,3 +24,8 @@ book/
 .pytest-tmp*/
 .codex-temp-video-frames/
 .codex-temp-video-thumbs/
+
+# Quality Gate
+coverage/
+.quality-gate/state.json
+.quality-gate/reports/

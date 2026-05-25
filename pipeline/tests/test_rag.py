@@ -7,7 +7,6 @@ from typer.testing import CliRunner
 from free_plaud.cli import app
 from free_plaud.app.config import Settings
 from free_plaud.notes.schemas import Note
-from free_plaud.retrieval.indexer import index_note_in_vector_store
 from free_plaud.retrieval.indexer import index_note
 from free_plaud.retrieval.rag import _rank_claim_candidates
 from free_plaud.retrieval.rag import _claim_variant_score
