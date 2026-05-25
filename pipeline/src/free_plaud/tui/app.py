@@ -13,6 +13,8 @@ from textual.message import Message
 from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Static
 
 from free_plaud.app.config import Settings, get_settings, reset_user_settings, save_user_settings, user_settings_path_for
+from free_plaud.app.doctor import run_doctor
+from free_plaud.app.doctor_format import doctor_report_text
 from free_plaud.app.local_env import answer_api_key_is_configured, local_env_path_for, save_answer_api_key
 from free_plaud.app.settings_catalog import settings_catalog_payload
 from free_plaud.corpus.cancellation import CancellationToken
@@ -123,6 +125,16 @@ def _settings_summary(settings: Settings) -> str:
         lines.append('')
         lines.extend(f'- {warning}' for warning in warnings if warning)
     return '\n'.join(lines)
+
+
+def _settings_status_message(settings: Settings, doctor_text: str) -> str:
+    return (
+        f'user_settings={user_settings_path_for(settings)}\n'
+        f'local_env={local_env_path_for(settings)}\n'
+        f'answer_api_key={"configurada" if answer_api_key_is_configured(settings=settings) else "ausente"}\n\n'
+        f'{_settings_summary(settings)}\n\n'
+        f'Doctor\n{doctor_text}'
+    )
 
 
 class ActionCell(Static, can_focus=True):
@@ -730,6 +742,7 @@ class SettingsPane(Vertical):
     selected_strategy: str
     selected_commit_mode: str
     recursive_default: bool
+    _doctor_running: bool
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
@@ -738,6 +751,7 @@ class SettingsPane(Vertical):
         self.selected_strategy = settings.default_ask_strategy
         self.selected_commit_mode = settings.corpus_commit_mode
         self.recursive_default = settings.corpus_recursive_default
+        self._doctor_running = False
 
     def compose(self) -> ComposeResult:
         settings = get_settings()
@@ -788,12 +802,15 @@ class SettingsPane(Vertical):
     def on_mount(self) -> None:
         self._sync_controls()
         settings = get_settings()
-        self._render_message(
-            f'user_settings={user_settings_path_for(settings)}\n'
-            f'local_env={local_env_path_for(settings)}\n'
-            f'answer_api_key={"configurada" if answer_api_key_is_configured(settings=settings) else "ausente"}\n\n'
-            f'{_settings_summary(settings)}'
-        )
+        self._render_message(_settings_status_message(settings, 'aguardando abertura da aba Settings.'))
+
+    def refresh_doctor(self) -> None:
+        if self._doctor_running:
+            return
+        settings = get_settings()
+        self._doctor_running = True
+        self._render_message(_settings_status_message(settings, 'carregando...'))
+        self._run_doctor(settings)
 
     def on_action_cell_pressed(self, event: ActionCell.Pressed) -> None:
         control_id = event.cell.id or ''
@@ -894,6 +911,23 @@ class SettingsPane(Vertical):
         output.clear()
         output.write(Panel(message, title='Settings', border_style='#7c3aed'))
 
+    @work(thread=True)
+    def _run_doctor(self, settings: Settings) -> None:
+        try:
+            report = run_doctor(settings=settings)
+        except Exception as exc:  # noqa: BLE001 - UI precisa exibir diagnostico quebrado.
+            self.app.call_from_thread(self._render_doctor_error, settings, exc)
+            return
+        self.app.call_from_thread(self._render_doctor, settings, report)
+
+    def _render_doctor(self, settings: Settings, report) -> None:  # noqa: ANN001
+        self._doctor_running = False
+        self._render_message(_settings_status_message(settings, doctor_report_text(report)))
+
+    def _render_doctor_error(self, settings: Settings, exc: Exception) -> None:
+        self._doctor_running = False
+        self._render_message(_settings_status_message(settings, f'erro: {exc}'))
+
     def _render_error(self, exc: Exception) -> None:
         output = self.query_one('#settings-output', RichLog)
         output.clear()
@@ -968,6 +1002,8 @@ class FreePlaudApp(App[None]):
         for pane_id in ('ask', 'notes', 'benchmark', 'settings'):
             self.query_one(f'#{pane_id}-pane').set_class(pane_id != pane, 'hidden')
             self.query_one(f'#nav-{pane_id}', Button).set_class(pane_id == pane, 'nav-active')
+        if pane == 'settings':
+            self.query_one(SettingsPane).refresh_doctor()
 
     def refresh_settings_nav(self, settings: Settings) -> None:
         self.query_one('#nav-meta-model', Static).update(settings.embedding_model)

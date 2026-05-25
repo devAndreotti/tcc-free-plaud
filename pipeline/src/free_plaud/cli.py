@@ -4,6 +4,8 @@ import typer
 from rich.console import Console
 
 from free_plaud.app.config import get_settings
+from free_plaud.app.doctor import run_doctor
+from free_plaud.app.doctor_format import doctor_report_lines
 from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.benchmark.cli import app as benchmark_app
 from free_plaud.config_cli import app as config_app
@@ -32,30 +34,12 @@ app.add_typer(config_app, name="config")
 
 @app.command("doctor")
 def doctor() -> None:
-    """Exibe um resumo do ambiente local configurado para o backend."""
+    """Exibe diagnostico estruturado do ambiente local."""
     settings = get_settings()
     ensure_runtime_dirs(settings)
-    rows = {
-        "environment": settings.environment,
-        "workspace_dir": str(settings.workspace_dir),
-        "data_dir": str(settings.data_dir),
-        "notes_dir": str(settings.notes_dir),
-        "datasets_dir": str(settings.datasets_dir),
-        "results_dir": str(settings.results_dir),
-        "vector_store_dir": str(settings.vector_store_dir),
-        "vector_collection_name": settings.vector_collection_name,
-        "embedding_model": settings.embedding_model,
-        "embedding_device": settings.embedding_device,
-        "answer_provider": settings.answer_provider,
-        "answer_model": settings.answer_model,
-        "answer_base_url": settings.answer_base_url or "",
-        "default_ask_strategy": settings.default_ask_strategy,
-        "sqlite_path": str(settings.sqlite_path),
-        "default_chunk_size": str(settings.default_chunk_size),
-        "default_chunk_overlap": str(settings.default_chunk_overlap),
-    }
-    for key, value in rows.items():
-        console.print(f"[bold]{key}[/bold]: {value}")
+    report = run_doctor(settings=settings)
+    for line in doctor_report_lines(report):
+        console.print(line)
 
 
 @app.command("tree")

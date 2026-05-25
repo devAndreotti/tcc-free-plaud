@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
 from free_plaud.retrieval.models import AskResponse, Citation, UsedSource
 
 
@@ -111,6 +112,28 @@ def test_desktop_api_exposes_settings_catalog(monkeypatch) -> None:
 
     keys = {row['key'] for row in result['settings_catalog']}
     assert {'retrieval_top_k', 'default_chunk_size', 'default_chunk_overlap', 'answer_api_key'} <= keys
+
+
+def test_desktop_api_exposes_doctor_report(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    monkeypatch.setattr(
+        module,
+        'run_doctor',
+        lambda: DoctorReport(
+            status='warning',
+            checks=[DoctorCheck(code='corpus', status='warning', message='Corpus vazio.', latency_ms=2)],
+            latency_ms=2,
+            ok_count=0,
+            warning_count=1,
+            error_count=0,
+        ),
+    )
+
+    result = module.Api().getDoctor()
+
+    assert result['status'] == 'warning'
+    assert result['checks'][0]['code'] == 'corpus'
+    assert result['checks'][0]['message'] == 'Corpus vazio.'
 
 
 def test_desktop_api_saves_backend_setting(monkeypatch, tmp_path: Path) -> None:

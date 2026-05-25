@@ -4,6 +4,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from free_plaud.app.config import Settings, get_settings
+from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
 from free_plaud.cli import app
 from free_plaud.storage.sqlite import count_chunks, count_notes, init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
@@ -56,6 +57,7 @@ def test_terminal_menu_can_open_and_exit() -> None:
     assert result.exit_code == 0
     assert 'free-plaud terminal' in result.stdout
     assert 'ACOES:\n\n' in result.stdout
+    assert '[8] Diagnostico' in result.stdout
     assert '[0] Sair\n\n' in result.stdout
     assert 'Sair' in result.stdout
 
@@ -118,7 +120,7 @@ def test_terminal_menu_can_update_answer_api_key(monkeypatch, tmp_path: Path) ->
     get_settings.cache_clear()
 
 
-def test_doctor_creates_runtime_directories(monkeypatch, tmp_path: Path) -> None:
+def test_doctor_cli_renders_structured_report(monkeypatch, tmp_path: Path) -> None:
     settings = Settings(
         workspace_dir=tmp_path,
         data_dir=tmp_path / 'data',
@@ -130,15 +132,60 @@ def test_doctor_creates_runtime_directories(monkeypatch, tmp_path: Path) -> None
     )
 
     monkeypatch.setattr('free_plaud.cli.get_settings', lambda: settings)
+    monkeypatch.setattr(
+        'free_plaud.cli.run_doctor',
+        lambda *, settings: DoctorReport(
+            status='warning',
+            checks=[
+                DoctorCheck(
+                    code='settings.embedding_model',
+                    status='error',
+                    message='fake-hash e modelo de teste.',
+                    action='Use chroma-default.',
+                    latency_ms=1,
+                ),
+                DoctorCheck(code='corpus', status='ok', message='Corpus consistente.', latency_ms=2),
+            ],
+            latency_ms=3,
+            ok_count=1,
+            warning_count=0,
+            error_count=1,
+        ),
+    )
 
     result = runner.invoke(app, ['doctor'])
 
     assert result.exit_code == 0
+    assert 'status: warning' in result.stdout
+    assert '- settings.embedding_model: error - fake-hash e modelo de teste.' in result.stdout
+    assert 'acao: Use chroma-default.' in result.stdout
+    assert '- corpus: ok - Corpus consistente.' in result.stdout
     assert settings.data_dir.exists()
     assert settings.notes_dir.exists()
     assert settings.datasets_dir.exists()
     assert settings.results_dir.exists()
     assert settings.vector_store_dir.exists()
+
+
+def test_terminal_menu_can_show_doctor(monkeypatch) -> None:
+    monkeypatch.setattr(
+        'free_plaud.terminal_menu.run_doctor',
+        lambda: DoctorReport(
+            status='ok',
+            checks=[DoctorCheck(code='corpus', status='ok', message='Corpus consistente.', latency_ms=1)],
+            latency_ms=1,
+            ok_count=1,
+            warning_count=0,
+            error_count=0,
+        ),
+    )
+
+    result = runner.invoke(app, ['menu'], input='8\n\n0\n')
+
+    assert result.exit_code == 0
+    assert 'Diagnostico' in result.stdout
+    assert 'corpus' in result.stdout
+    assert 'Corpus consistente.' in result.stdout
 
 
 def test_corpus_index_cli_persists_file(monkeypatch, tmp_path: Path) -> None:
