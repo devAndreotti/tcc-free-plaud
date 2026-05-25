@@ -104,6 +104,8 @@ class OpenAICompatibleAnswerProvider:
             raise AnswerProviderError(f'Provider indisponivel: {exc.reason}') from exc
         except TimeoutError as exc:
             raise AnswerProviderError('Provider excedeu timeout.') from exc
+        except ValueError as exc:
+            raise AnswerProviderError(INVALID_BASE_URL_ERROR) from exc
 
         try:
             decoded = json.loads(body.decode('utf-8'))
@@ -208,6 +210,8 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
         return result('error', f'Provider indisponivel: {exc.reason}')
     except TimeoutError:
         return result('error', 'Provider excedeu timeout.')
+    except ValueError:
+        return result('error', INVALID_BASE_URL_ERROR)
 
     try:
         decoded = json.loads(body.decode('utf-8'))
