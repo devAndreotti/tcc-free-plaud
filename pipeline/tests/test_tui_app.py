@@ -2,6 +2,7 @@ import asyncio
 import threading
 from pathlib import Path
 from time import perf_counter, sleep
+from types import SimpleNamespace
 
 import pytest
 from textual.widgets import Button, Input
@@ -360,6 +361,55 @@ def test_tui_settings_pane_saves_answer_api_key_to_local_env(monkeypatch, tmp_pa
     asyncio.run(run_app())
 
     assert saved_key == ['sk-tui-test']
+
+
+def test_tui_settings_pane_applies_preset_and_clears_runtime(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    updated = _settings(tmp_path)
+    updated.embedding_model = 'chroma-default'
+    updated.embedding_device = 'cpu'
+    updated.default_ask_strategy = 'hybrid'
+    captured: list[str] = []
+    cleared = False
+
+    def fake_apply_settings_preset(name: str):  # noqa: ANN202
+        captured.append(name)
+        return SimpleNamespace(preset=SimpleNamespace(key=name), settings=updated)
+
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.tui.app.apply_settings_preset', fake_apply_settings_preset)
+    monkeypatch.setattr(
+        'free_plaud.tui.app.run_doctor',
+        lambda *, settings: DoctorReport(
+            status='ok',
+            checks=[DoctorCheck(code='corpus', status='ok', message='Corpus consistente.', latency_ms=1)],
+            latency_ms=1,
+            ok_count=1,
+            warning_count=0,
+            error_count=0,
+        ),
+    )
+
+    async def run_app() -> None:
+        nonlocal cleared
+        app = FreePlaudApp()
+
+        def clear_runtime() -> None:
+            nonlocal cleared
+            cleared = True
+
+        app.corpus_runtime.clear = clear_runtime  # type: ignore[method-assign]
+        async with app.run_test(size=(120, 38)) as pilot:
+            await pilot.click('#nav-settings')
+            await pilot.click('#settings-preset-cpu_rapido')
+            await pilot.pause(0.2)
+            pane = app.query_one(SettingsPane)
+            assert pane.selected_device == 'cpu'
+
+    asyncio.run(run_app())
+
+    assert captured == ['cpu_rapido']
+    assert cleared is True
 
 
 def test_tui_settings_pane_renders_doctor_error_without_crash(monkeypatch, tmp_path: Path) -> None:

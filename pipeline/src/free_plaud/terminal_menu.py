@@ -9,6 +9,7 @@ from free_plaud.app.doctor import run_doctor
 from free_plaud.app.doctor_format import doctor_report_text
 from free_plaud.app.local_env import local_env_path_for, save_answer_api_key
 from free_plaud.app.settings_catalog import get_setting_spec, save_catalog_setting, settings_catalog_payload
+from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.tui.actions import (
     ask_corpus,
@@ -166,6 +167,37 @@ def _show_doctor() -> None:
     console.print(Panel(doctor_report_text(report), title='Diagnostico', border_style=border))
 
 
+def _preset_changes_text(changes) -> str:  # noqa: ANN001
+    if not changes:
+        return 'Sem mudancas em relacao a configuracao atual.'
+    return '\n'.join(f'- {key}: {change.before} -> {change.after}' for key, change in changes.items())
+
+
+def _show_presets_table() -> None:
+    table = Table(title='Presets', border_style=PURPLE_DIM)
+    table.add_column('preset')
+    table.add_column('uso')
+    table.add_column('valores')
+    for preset in list_settings_presets():
+        values = ', '.join(f'{key}={value}' for key, value in preset.values.items())
+        table.add_row(preset.key, preset.description, values)
+    console.print(table)
+
+
+def _presets_menu(runtime: CorpusRuntime) -> None:
+    _show_presets_table()
+    keys = [preset.key for preset in list_settings_presets()]
+    preset_key = Prompt.ask('Preset', choices=keys, default='cpu_rapido')
+    action = Prompt.ask('Acao', choices=['preview', 'apply'], default='preview')
+    if action == 'preview':
+        preview = preview_settings_preset(preset_key)
+        console.print(Panel(_preset_changes_text(preview.changes), title=f'Preview {preset_key}', border_style=PURPLE_DIM))
+        return
+    result = apply_settings_preset(preset_key)
+    runtime.clear()
+    console.print(Panel(_preset_changes_text(result.changes), title=f'Preset aplicado: {preset_key}', border_style='green'))
+
+
 def _print_catalog_warnings() -> None:
     warnings = [row for row in settings_catalog_payload() if row['warning']]
     for row in warnings:
@@ -180,10 +212,14 @@ def _settings_menu(runtime: CorpusRuntime) -> None:
     console.print()
     for row in settings_catalog_payload():
         console.print(f'[{TEXT_DIM}][{row["index"]}][/{TEXT_DIM}] {row["label"]} ({row["key"]})')
+    console.print(f'[{TEXT_DIM}][P][/{TEXT_DIM}] Presets')
     console.print(f'[{TEXT_DIM}][R][/{TEXT_DIM}] Resetar user_settings.json')
     console.print()
     choice = Prompt.ask('Setting', default='0')
     if choice == '0':
+        return
+    if choice.lower() == 'p':
+        _presets_menu(runtime)
         return
     if choice.lower() == 'r':
         reset_user_settings()
