@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal, Protocol
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ from free_plaud.app.config import Settings, get_settings
 AnswerProviderName = Literal['extractive', 'openai-compatible', 'ollama', 'lmstudio']
 ProviderTestStatus = Literal['ok', 'error', 'not_applicable']
 TEST_ANSWER_PROMPT = 'Responda somente: ok'
+INVALID_BASE_URL_ERROR = 'Provider base_url invalida. Use http:// ou https://.'
 
 
 class AnswerProviderError(RuntimeError):
@@ -34,6 +36,14 @@ class AnswerProvider(Protocol):
         """Gera resposta a partir de contextos citaveis ja recuperados."""
 
 
+def _is_http_base_url(value: str) -> bool:
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return False
+    return parsed.scheme in {'http', 'https'} and bool(parsed.netloc)
+
+
 @dataclass
 class OpenAICompatibleAnswerProvider:
     base_url: str
@@ -46,6 +56,8 @@ class OpenAICompatibleAnswerProvider:
     def answer(self, question: str, contexts: list[str]) -> str:
         if not contexts:
             raise ValueError('Provider de resposta exige pelo menos um contexto citavel.')
+        if not _is_http_base_url(self.base_url):
+            raise AnswerProviderError(INVALID_BASE_URL_ERROR)
 
         endpoint = f'{self.base_url.rstrip("/")}/chat/completions'
         messages = [
@@ -150,6 +162,15 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
         )
 
     base_url = _default_base_url(resolved.answer_provider, resolved.answer_base_url)
+    if not _is_http_base_url(base_url):
+        return AnswerProviderTestResult(
+            provider=resolved.answer_provider,
+            model=resolved.answer_model,
+            base_url=base_url,
+            status='error',
+            latency_ms=0,
+            error=INVALID_BASE_URL_ERROR,
+        )
     endpoint = f'{base_url.rstrip("/")}/chat/completions'
     payload = {
         'model': resolved.answer_model,
@@ -196,4 +217,6 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
 
     if not content:
         return result('error', 'Provider retornou resposta vazia.')
+    if content.casefold() != 'ok':
+        return result('error', 'Provider respondeu diferente de ok.')
     return result('ok')

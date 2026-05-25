@@ -165,6 +165,25 @@ def test_provider_test_timeout_returns_controlled_error(monkeypatch, tmp_path: P
     assert result.error == 'Provider excedeu timeout.'
 
 
+def test_provider_test_invalid_base_url_returns_controlled_error(tmp_path: Path) -> None:
+    result = run_answer_provider_test(_settings(tmp_path, answer_base_url='localhost:11434/v1'))
+
+    assert result.status == 'error'
+    assert result.error == 'Provider base_url invalida. Use http:// ou https://.'
+
+
+def test_provider_test_unexpected_content_returns_error(monkeypatch, tmp_path: Path) -> None:
+    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+        return FakeHTTPResponse({'choices': [{'message': {'content': 'servico pronto'}}]})
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+
+    result = run_answer_provider_test(_settings(tmp_path))
+
+    assert result.status == 'error'
+    assert result.error == 'Provider respondeu diferente de ok.'
+
+
 def test_provider_test_extractive_is_not_applicable(tmp_path: Path) -> None:
     result = run_answer_provider_test(_settings(tmp_path, answer_provider='extractive'))
 
