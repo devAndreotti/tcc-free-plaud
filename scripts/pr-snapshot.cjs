@@ -155,9 +155,13 @@ function formatInlineComment(comment) {
   return `${location}${location ? ' - ' : ''}${String(comment.body || '').split(/\r?\n/)[0]}`;
 }
 
+function isCopilotReviewer(login) {
+  return /^(copilot|copilot\[bot\]|copilot-pull-request-reviewer\[bot\])$/i.test(String(login || ''));
+}
+
 function collectCopilotBlockers(inlineComments) {
   return (inlineComments || [])
-    .filter((comment) => comment?.user?.login === 'copilot[bot]')
+    .filter((comment) => isCopilotReviewer(comment?.user?.login))
     .filter((comment) => /bloqueador|blocker|required/i.test(comment.body || ''))
     .map(formatInlineComment);
 }

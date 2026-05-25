@@ -80,7 +80,7 @@ test('buildSnapshot collects PR metadata, checks, comments, blockers, and latest
     if (key === 'api repos/owner/repo/pulls/42/comments') {
       return [
         {
-          user: { login: 'copilot[bot]' },
+          user: { login: 'Copilot' },
           path: 'src/auth.ts',
           line: 42,
           body: 'Bloqueador: falta tratar erro',
