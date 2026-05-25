@@ -58,6 +58,24 @@ test('deriveActions maps failed checks and blockers to deterministic actions', (
   ]);
 });
 
+test('deriveActions waits when latest workflow run is still pending without check details', () => {
+  const actions = deriveActions({
+    pr: { mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED' },
+    ci: {
+      overall: 'unknown',
+      jobs: {},
+    },
+    latestRun: {
+      status: 'pending',
+      conclusion: '',
+    },
+    copilotBlockers: [],
+    humanBlockers: [],
+  });
+
+  assert.deepEqual(actions, ['wait_ci']);
+});
+
 test('buildSnapshot collects PR metadata, checks, comments, blockers, and latest run', () => {
   const calls = [];
   const ghJson = (args) => {

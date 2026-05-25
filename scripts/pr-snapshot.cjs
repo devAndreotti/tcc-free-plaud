@@ -143,6 +143,9 @@ function deriveActions(snapshot) {
   if (Object.values(jobs).some((job) => !job.conclusion || ['queued', 'in_progress', 'pending'].includes(job.status))) {
     add('wait_ci');
   }
+  if (!Object.keys(jobs).length && ['queued', 'in_progress', 'pending'].includes(snapshot.latestRun?.status)) {
+    add('wait_ci');
+  }
   if ((snapshot.copilotBlockers || []).length > 0) add('process_copilot');
   if ((snapshot.humanBlockers || []).length > 0) add('process_human');
   if (actions.length === 0 && snapshot.ci?.overall === 'success') add('ready');
