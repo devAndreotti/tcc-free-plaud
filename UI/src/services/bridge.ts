@@ -48,6 +48,7 @@ export interface BackendSettings {
   sqlite_chunks_count: number;
   vector_chunks_count: number;
   settings_catalog: SettingRow[];
+  doctor?: DoctorReport;
 }
 
 export interface SaveApiKeyResult {
@@ -77,6 +78,24 @@ export interface SettingRow {
   placeholder: string | null;
   warning: string | null;
   local_env_path: string | null;
+}
+
+export interface DoctorCheck {
+  code: string;
+  status: 'ok' | 'warning' | 'error';
+  message: string;
+  action: string | null;
+  latency_ms: number | null;
+  details: Record<string, unknown>;
+}
+
+export interface DoctorReport {
+  status: 'ok' | 'warning' | 'error';
+  checks: DoctorCheck[];
+  latency_ms: number;
+  ok_count: number;
+  warning_count: number;
+  error_count: number;
 }
 
 interface PythonApi {
@@ -119,6 +138,9 @@ interface PythonApi {
 
   /** Retorna resumo das configurações/backend para o modal. */
   getBackendSettings?: () => Promise<BackendSettings>;
+
+  /** Retorna diagnostico estruturado do backend. */
+  getDoctor?: () => Promise<DoctorReport>;
 
   /** Salva ou remove FREE_PLAUD_ANSWER_API_KEY em pipeline/.env. */
   saveApiKey?: (apiKey: string) => Promise<SaveApiKeyResult>;
@@ -264,6 +286,23 @@ export const bridge = {
       notes_count: 0,
       sqlite_chunks_count: 0,
       vector_chunks_count: 0,
+      doctor: {
+        status: 'warning',
+        checks: [
+          {
+            code: 'mock',
+            status: 'warning',
+            message: 'Doctor mock; abra via PyWebView para diagnostico real.',
+            action: null,
+            latency_ms: 0,
+            details: {},
+          },
+        ],
+        latency_ms: 0,
+        ok_count: 0,
+        warning_count: 1,
+        error_count: 0,
+      },
       settings_catalog: [
         {
           index: 1,
@@ -283,6 +322,29 @@ export const bridge = {
           local_env_path: null,
         },
       ],
+    };
+  },
+
+  getDoctor: async (): Promise<DoctorReport> => {
+    if (isDesktopApp && window.pywebview?.api.getDoctor) {
+      return window.pywebview.api.getDoctor();
+    }
+    return {
+      status: 'warning',
+      checks: [
+        {
+          code: 'mock',
+          status: 'warning',
+          message: 'Doctor mock; abra via PyWebView para diagnostico real.',
+          action: null,
+          latency_ms: 0,
+          details: {},
+        },
+      ],
+      latency_ms: 0,
+      ok_count: 0,
+      warning_count: 1,
+      error_count: 0,
     };
   },
 

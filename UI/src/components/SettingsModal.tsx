@@ -221,6 +221,32 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
           <div className="settings-divider" aria-hidden="true" />
 
+          <section className="settings-section" aria-labelledby="settings-doctor">
+            <h3 id="settings-doctor" className="settings-section__title">
+              Doctor
+            </h3>
+            <div className="settings-item settings-item--stacked">
+              <div className="settings-item__info">
+                <span className="settings-item__label">
+                  status: {backendSettings?.doctor?.status ?? 'indisponível'}
+                </span>
+                <span className="settings-item__description">
+                  checks: {backendSettings?.doctor?.ok_count ?? 0} ok · {backendSettings?.doctor?.warning_count ?? 0} warning · {backendSettings?.doctor?.error_count ?? 0} error · {backendSettings?.doctor?.latency_ms ?? 0} ms
+                </span>
+              </div>
+              {backendSettings?.doctor?.checks.slice(0, 6).map((check) => (
+                <span
+                  key={check.code}
+                  className={check.status === 'ok' ? 'settings-inline-status' : 'settings-warning'}
+                >
+                  {check.code}: {check.status} - {check.message}
+                </span>
+              ))}
+            </div>
+          </section>
+
+          <div className="settings-divider" aria-hidden="true" />
+
           {/* Seção: Backend */}
           <section className="settings-section" aria-labelledby="settings-backend">
             <h3 id="settings-backend" className="settings-section__title">

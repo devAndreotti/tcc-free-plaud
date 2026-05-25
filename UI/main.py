@@ -35,6 +35,7 @@ if PIPELINE_SRC.exists() and str(PIPELINE_SRC) not in sys.path:
     sys.path.insert(0, str(PIPELINE_SRC))
 
 from free_plaud.app.config import get_settings
+from free_plaud.app.doctor import run_doctor
 from free_plaud.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
 from free_plaud.app.settings_catalog import save_catalog_setting, settings_catalog_payload
 from free_plaud.corpus.runtime import CorpusRuntime
@@ -120,6 +121,7 @@ class Api:
     def getBackendSettings(self) -> dict:
         settings = get_settings()
         status = corpus_status_from_tui(settings=settings)
+        doctor = run_doctor(settings=settings)
         return {
             'answer_provider': settings.answer_provider,
             'answer_model': settings.answer_model,
@@ -131,7 +133,11 @@ class Api:
             'sqlite_chunks_count': status.sqlite_chunks_count,
             'vector_chunks_count': status.vector_chunks_count,
             'settings_catalog': settings_catalog_payload(settings),
+            'doctor': doctor.model_dump(mode='json'),
         }
+
+    def getDoctor(self) -> dict:
+        return run_doctor().model_dump(mode='json')
 
     def saveApiKey(self, api_key: str) -> dict:
         path = save_answer_api_key(api_key)

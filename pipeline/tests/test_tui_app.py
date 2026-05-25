@@ -6,6 +6,7 @@ import pytest
 from textual.widgets import Button, Input
 
 from free_plaud.app.config import Settings
+from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
 from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.models import (
     CorpusDiscoveryResult,
@@ -358,6 +359,43 @@ def test_tui_settings_pane_saves_answer_api_key_to_local_env(monkeypatch, tmp_pa
     asyncio.run(run_app())
 
     assert saved_key == ['sk-tui-test']
+
+
+def test_tui_settings_pane_renders_doctor_error_without_crash(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    settings.embedding_model = 'fake-hash'
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr(
+        'free_plaud.tui.app.run_doctor',
+        lambda *, settings: DoctorReport(
+            status='error',
+            checks=[
+                DoctorCheck(
+                    code='settings.embedding_model',
+                    status='error',
+                    message='fake-hash e modelo de teste.',
+                    action='Use chroma-default.',
+                    latency_ms=1,
+                )
+            ],
+            latency_ms=1,
+            ok_count=0,
+            warning_count=0,
+            error_count=1,
+        ),
+    )
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 38)) as pilot:
+            await pilot.click('#nav-settings')
+            await pilot.pause(0.2)
+            output = app.query_one('#settings-output')
+            text = '\n'.join(getattr(line, 'plain', str(line)) for line in output.lines)
+            assert 'settings.embedding_model' in text
+            assert 'fake-hash e modelo de teste.' in text
+
+    asyncio.run(run_app())
 
 
 def test_tui_notes_uses_saved_default_corpus_path(monkeypatch, tmp_path: Path) -> None:

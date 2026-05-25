@@ -13,6 +13,8 @@ from textual.message import Message
 from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Static
 
 from free_plaud.app.config import Settings, get_settings, reset_user_settings, save_user_settings, user_settings_path_for
+from free_plaud.app.doctor import run_doctor
+from free_plaud.app.doctor_format import doctor_report_text
 from free_plaud.app.local_env import answer_api_key_is_configured, local_env_path_for, save_answer_api_key
 from free_plaud.app.settings_catalog import settings_catalog_payload
 from free_plaud.corpus.cancellation import CancellationToken
@@ -123,6 +125,10 @@ def _settings_summary(settings: Settings) -> str:
         lines.append('')
         lines.extend(f'- {warning}' for warning in warnings if warning)
     return '\n'.join(lines)
+
+
+def _doctor_summary(settings: Settings) -> str:
+    return doctor_report_text(run_doctor(settings=settings))
 
 
 class ActionCell(Static, can_focus=True):
@@ -792,7 +798,8 @@ class SettingsPane(Vertical):
             f'user_settings={user_settings_path_for(settings)}\n'
             f'local_env={local_env_path_for(settings)}\n'
             f'answer_api_key={"configurada" if answer_api_key_is_configured(settings=settings) else "ausente"}\n\n'
-            f'{_settings_summary(settings)}'
+            f'{_settings_summary(settings)}\n\n'
+            f'Doctor\n{_doctor_summary(settings)}'
         )
 
     def on_action_cell_pressed(self, event: ActionCell.Pressed) -> None:
