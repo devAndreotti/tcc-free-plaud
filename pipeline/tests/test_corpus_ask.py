@@ -234,6 +234,7 @@ def test_answer_corpus_debug_no_answer_includes_reason_and_rejected_hits(tmp_pat
     assert response.status == 'no_answer'
     assert response.debug is not None
     assert response.debug.no_answer_reason == response.reason_for_no_answer
+    assert response.debug.hits == []
     assert response.debug.rejected_hits
 
 

@@ -355,7 +355,7 @@ def answer_corpus_with_citations(
             limitations=limitations,
             used_sources=used_sources,
             latency_ms=int((perf_counter() - started_at) * 1000),
-            debug=_debug_payload(reason=reason, hits=rejected_hits, rejected_hits=rejected_hits),
+            debug=_debug_payload(reason=reason, rejected_hits=rejected_hits),
         )
 
     if not query_terms:
