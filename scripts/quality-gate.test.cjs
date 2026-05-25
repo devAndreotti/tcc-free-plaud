@@ -91,6 +91,19 @@ test('init creates baseline when coverage exists', () => {
   assert.equal(baseline.updatedAt, '2026-05-24T00:00:00.000Z');
 });
 
+test('check tolerates tiny coverage drift between platforms', () => {
+  const project = tempProject();
+  fs.mkdirSync(path.join(project, 'scripts'), { recursive: true });
+  fs.writeFileSync(path.join(project, 'scripts/baseline.json'), JSON.stringify({
+    coverage: { lines: 87.88, statements: 87.88, functions: 87.88, branches: 87.88 },
+  }, null, 2));
+  writeCoverage(project, 87.84);
+
+  const result = runQualityGate({ root: project, command: 'check' });
+
+  assert.equal(result.status, 'passed');
+});
+
 test('init creates baseline from Python coverage JSON', () => {
   const project = tempProject();
   fs.mkdirSync(path.join(project, 'scripts'), { recursive: true });

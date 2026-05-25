@@ -6,6 +6,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+const COVERAGE_EPSILON = 0.1;
+
 function parseArgs(argv) {
   return {
     command: argv.find((arg) => !arg.startsWith('--')) || 'check',
@@ -37,10 +39,10 @@ function count(value) {
   return typeof value === 'number' ? String(value) : 'n/a';
 }
 
-function delta(current, baseline, higherIsBetter = true) {
+function delta(current, baseline, higherIsBetter = true, epsilon = 0.01) {
   if (baseline == null || current == null) return '-';
   const diff = current - baseline;
-  if (Math.abs(diff) < 0.01) return 'igual';
+  if (Math.abs(diff) < epsilon) return 'igual';
   if (higherIsBetter) return diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
   return diff < 0 ? `-${Math.abs(diff).toFixed(1)}` : `+${diff.toFixed(1)}`;
 }
@@ -125,9 +127,9 @@ function compareMetrics(current, baseline) {
   for (const key of ['lines', 'statements', 'functions', 'branches']) {
     const cur = current.coverage?.[key] ?? null;
     const base = baseline.coverage?.[key] ?? null;
-    const passed = base == null || cur == null || cur >= base - 0.01;
+    const passed = base == null || cur == null || cur >= base - COVERAGE_EPSILON;
     if (!passed) failures.push({ group: 'coverage', metric: key, baseline: base, current: cur });
-    rows.push({ group: 'Coverage', metric: key, baseline: pct(base), current: pct(cur), delta: delta(cur, base), passed });
+    rows.push({ group: 'Coverage', metric: key, baseline: pct(base), current: pct(cur), delta: delta(cur, base, true, COVERAGE_EPSILON), passed });
   }
 
   if (current.lintErrors != null) {
