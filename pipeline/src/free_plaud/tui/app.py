@@ -762,6 +762,7 @@ class SettingsPane(Vertical):
         super().__init__(**kwargs)
         settings = get_settings()
         self.selected_device = settings.embedding_device
+        self.selected_answer_provider = settings.answer_provider
         self.selected_strategy = settings.default_ask_strategy
         self.selected_commit_mode = settings.corpus_commit_mode
         self.recursive_default = settings.corpus_recursive_default
@@ -775,7 +776,7 @@ class SettingsPane(Vertical):
             yield Static('Settings', classes='hero-title')
             yield Static('Preferencias do app salvas em user_settings.json.', classes='hero-subtitle')
         with Container(id='settings-form-card'):
-            yield Static('Simple', classes='card-title')
+            yield Static('Simples', classes='card-title')
             with Container(id='settings-preset-row'):
                 for preset in list_settings_presets():
                     yield ActionCell(preset.label, id=f'settings-preset-{preset.key}', classes='strategy-button')
@@ -783,8 +784,12 @@ class SettingsPane(Vertical):
                 yield ActionCell('Auto', id='settings-device-auto', classes='strategy-button')
                 yield ActionCell('CPU', id='settings-device-cpu', classes='strategy-button')
                 yield ActionCell('CUDA', id='settings-device-cuda', classes='strategy-button')
+            with Container(id='settings-provider-row'):
+                yield ActionCell('Extractive', id='settings-provider-extractive', classes='strategy-button')
+                yield ActionCell('Ollama', id='settings-provider-ollama', classes='strategy-button')
+                yield ActionCell('LM Studio', id='settings-provider-lmstudio', classes='strategy-button')
+                yield ActionCell('OpenAI', id='settings-provider-openai-compatible', classes='strategy-button')
             with Container(id='settings-answer-row'):
-                yield Input(value=settings.answer_provider, placeholder='answer_provider', id='settings-answer-provider')
                 yield Input(value=settings.answer_model, placeholder='answer_model', id='settings-answer-model')
             with Container(id='settings-strategy-row'):
                 yield ActionCell('Lexical', id='settings-strategy-lexical', classes='strategy-button')
@@ -804,7 +809,7 @@ class SettingsPane(Vertical):
                 yield ActionCell('Resetar', id='settings-reset', classes='strategy-button')
                 yield ActionCell('Avancado', id='settings-advanced-toggle', classes='strategy-button')
             with Container(id='settings-advanced-fields', classes='hidden'):
-                yield Static('Advanced', classes='card-title')
+                yield Static('Avancado', classes='card-title')
                 yield Input(value=settings.embedding_model, placeholder='embedding_model', id='settings-model')
                 with Container(id='settings-number-row'):
                     yield Input(value=str(settings.retrieval_top_k), placeholder='top_k', id='settings-top-k')
@@ -853,6 +858,11 @@ class SettingsPane(Vertical):
         if control_id.startswith('settings-device-'):
             event.stop()
             self.selected_device = control_id.removeprefix('settings-device-')
+            self._sync_controls()
+            return
+        if control_id.startswith('settings-provider-'):
+            event.stop()
+            self.selected_answer_provider = control_id.removeprefix('settings-provider-')
             self._sync_controls()
             return
         if control_id.startswith('settings-strategy-'):
@@ -910,11 +920,11 @@ class SettingsPane(Vertical):
 
     def _load_from_settings(self, settings: Settings) -> None:
         self.selected_device = settings.embedding_device
+        self.selected_answer_provider = settings.answer_provider
         self.selected_strategy = settings.default_ask_strategy
         self.selected_commit_mode = settings.corpus_commit_mode
         self.recursive_default = settings.corpus_recursive_default
         self.query_one('#settings-model', Input).value = settings.embedding_model
-        self.query_one('#settings-answer-provider', Input).value = settings.answer_provider
         self.query_one('#settings-answer-model', Input).value = settings.answer_model
         self.query_one('#settings-answer-base-url', Input).value = str(settings.answer_base_url or '')
         self.query_one('#settings-answer-temperature', Input).value = str(settings.answer_temperature)
@@ -930,6 +940,11 @@ class SettingsPane(Vertical):
     def _sync_controls(self) -> None:
         for device in ('auto', 'cpu', 'cuda'):
             self.query_one(f'#settings-device-{device}', ActionCell).set_class(device == self.selected_device, 'strategy-active')
+        for provider in ('extractive', 'ollama', 'lmstudio', 'openai-compatible'):
+            self.query_one(f'#settings-provider-{provider}', ActionCell).set_class(
+                provider == self.selected_answer_provider,
+                'strategy-active',
+            )
         for strategy in ASK_STRATEGIES:
             self.query_one(f'#settings-strategy-{strategy}', ActionCell).set_class(
                 strategy == self.selected_strategy,
@@ -951,7 +966,7 @@ class SettingsPane(Vertical):
             values = {
                 'embedding_device': self.selected_device,
                 'embedding_model': self.query_one('#settings-model', Input).value,
-                'answer_provider': self.query_one('#settings-answer-provider', Input).value.strip(),
+                'answer_provider': self.selected_answer_provider,
                 'answer_model': self.query_one('#settings-answer-model', Input).value.strip(),
                 'answer_base_url': self.query_one('#settings-answer-base-url', Input).value.strip() or None,
                 'answer_temperature': float(self.query_one('#settings-answer-temperature', Input).value),

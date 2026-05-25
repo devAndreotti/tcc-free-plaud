@@ -157,6 +157,10 @@ Button.nav-planned {
     min-height: 12;
 }
 
+#settings-form-card {
+    padding: 0 2;
+}
+
 #ask-result-card,
 #notes-result-card,
 #benchmark-result-card,
@@ -267,6 +271,18 @@ Input:focus {
     grid-gutter: 1 0;
     height: 3;
     margin-top: 0;
+}
+
+#settings-provider-row {
+    layout: grid;
+    grid-size: 4 1;
+    grid-gutter: 1 0;
+    height: 1;
+    margin-top: 0;
+}
+
+#settings-provider-row .strategy-button {
+    height: 1;
 }
 
 #settings-preset-row {
@@ -537,6 +553,7 @@ Screen.compact #notes-action-row {
 }
 
 Screen.compact #settings-device-row,
+Screen.compact #settings-provider-row,
 Screen.compact #settings-preset-row,
 Screen.compact #settings-strategy-row,
 Screen.compact #settings-answer-row,
@@ -569,6 +586,7 @@ Screen.compact #settings-preset-row {
 }
 
 Screen.compact #settings-device-row .strategy-button,
+Screen.compact #settings-provider-row .strategy-button,
 Screen.compact #settings-preset-row .strategy-button,
 Screen.compact #settings-strategy-row .strategy-button,
 Screen.compact #settings-commit-row .strategy-button,
