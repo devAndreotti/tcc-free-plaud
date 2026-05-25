@@ -220,6 +220,22 @@ const mockSendMessage = async (message: string): Promise<string> => {
   return response;
 };
 
+type MockSettingRow = Omit<
+  SettingRow,
+  'storage' | 'options' | 'secret' | 'placeholder' | 'warning' | 'local_env_path'
+> &
+  Partial<Pick<SettingRow, 'storage' | 'options' | 'placeholder' | 'warning' | 'local_env_path'>>;
+
+const mockSettingRow = (row: MockSettingRow): SettingRow => ({
+  storage: 'user_settings',
+  options: [],
+  secret: false,
+  placeholder: null,
+  warning: null,
+  local_env_path: null,
+  ...row,
+});
+
 // ─── Serviço de bridge exportado ─────────────────────────────────────────────
 export const bridge = {
   /**
@@ -358,7 +374,7 @@ export const bridge = {
         error_count: 0,
       },
       settings_catalog: [
-        {
+        mockSettingRow({
           index: 1,
           key: 'embedding_device',
           label: 'Device de embedding',
@@ -366,7 +382,6 @@ export const bridge = {
           group: 'Embeddings',
           value_type: 'enum',
           layer: 'simple',
-          storage: 'user_settings',
           value: 'cpu',
           display_value: 'cpu',
           options: [
@@ -375,12 +390,8 @@ export const bridge = {
             { value: 'cuda', label: 'CUDA' },
           ],
           recommended: 'auto',
-          secret: false,
-          placeholder: null,
-          warning: null,
-          local_env_path: null,
-        },
-        {
+        }),
+        mockSettingRow({
           index: 2,
           key: 'answer_provider',
           label: 'Provedor de resposta',
@@ -388,7 +399,6 @@ export const bridge = {
           group: 'LLM',
           value_type: 'enum',
           layer: 'simple',
-          storage: 'user_settings',
           value: 'extractive',
           display_value: 'extractive',
           options: [
@@ -398,12 +408,8 @@ export const bridge = {
             { value: 'openai-compatible', label: 'OpenAI-compatible' },
           ],
           recommended: 'extractive',
-          secret: false,
-          placeholder: null,
-          warning: null,
-          local_env_path: null,
-        },
-        {
+        }),
+        mockSettingRow({
           index: 3,
           key: 'answer_model',
           label: 'Modelo de resposta',
@@ -411,17 +417,11 @@ export const bridge = {
           group: 'LLM',
           value_type: 'string',
           layer: 'simple',
-          storage: 'user_settings',
           value: 'llama3.1:8b',
           display_value: 'llama3.1:8b',
-          options: [],
           recommended: 'llama3.1:8b',
-          secret: false,
-          placeholder: null,
-          warning: null,
-          local_env_path: null,
-        },
-        {
+        }),
+        mockSettingRow({
           index: 4,
           key: 'retrieval_top_k',
           label: 'Chunks por pergunta',
@@ -429,16 +429,10 @@ export const bridge = {
           group: 'Retrieval',
           value_type: 'int',
           layer: 'advanced',
-          storage: 'user_settings',
           value: 4,
           display_value: '4',
-          options: [],
           recommended: 4,
-          secret: false,
-          placeholder: null,
-          warning: null,
-          local_env_path: null,
-        },
+        }),
       ],
     };
   },
