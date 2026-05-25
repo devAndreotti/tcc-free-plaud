@@ -1182,6 +1182,13 @@
   margin-bottom: var(--spacing-xs);
 }
 
+.settings-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
 /* Divisor entre seções */
 .settings-divider {
   height: 1px;

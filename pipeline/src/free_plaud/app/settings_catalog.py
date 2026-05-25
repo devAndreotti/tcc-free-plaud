@@ -8,6 +8,7 @@ from free_plaud.app.local_env import answer_api_key_is_configured, local_env_pat
 
 SettingValueType = Literal['string', 'int', 'float', 'bool', 'path', 'enum', 'secret']
 SettingStorage = Literal['user_settings', 'local_env']
+SettingLayer = Literal['simple', 'advanced']
 
 
 class SettingOption(BaseModel):
@@ -21,6 +22,7 @@ class SettingSpec(BaseModel):
     description: str
     group: str
     value_type: SettingValueType
+    layer: SettingLayer = 'advanced'
     storage: SettingStorage = 'user_settings'
     options: list[SettingOption] = Field(default_factory=list)
     recommended: str | int | float | bool | None = None
@@ -44,11 +46,8 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         description='Onde roda o modelo de embedding quando ele suporta device.',
         group='Embeddings',
         value_type='enum',
-        options=[
-            SettingOption(value='auto', label='Auto'),
-            SettingOption(value='cpu', label='CPU'),
-            SettingOption(value='cuda', label='CUDA'),
-        ],
+        layer='simple',
+        options=[SettingOption(value='auto', label='Auto'), SettingOption(value='cpu', label='CPU'), SettingOption(value='cuda', label='CUDA')],
         recommended='auto',
     ),
     SettingSpec(
@@ -57,11 +56,8 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         description='Busca usada por padrao ao perguntar ao corpus.',
         group='Retrieval',
         value_type='enum',
-        options=[
-            SettingOption(value='lexical', label='Lexical'),
-            SettingOption(value='vector', label='Vector'),
-            SettingOption(value='hybrid', label='Hybrid'),
-        ],
+        layer='simple',
+        options=[SettingOption(value='lexical', label='Lexical'), SettingOption(value='vector', label='Vector'), SettingOption(value='hybrid', label='Hybrid')],
         recommended='hybrid',
     ),
     SettingSpec(
@@ -94,11 +90,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         description='Quando a indexacao grava SQLite e Chroma.',
         group='Corpus',
         value_type='enum',
-        options=[
-            SettingOption(value='auto', label='Auto'),
-            SettingOption(value='atomic', label='Atomic'),
-            SettingOption(value='microbatch', label='Microbatch'),
-        ],
+        options=[SettingOption(value='auto', label='Auto'), SettingOption(value='atomic', label='Atomic'), SettingOption(value='microbatch', label='Microbatch')],
         recommended='auto',
     ),
     SettingSpec(
@@ -107,6 +99,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         description='Pasta usada como default para indexar e reconstruir corpus.',
         group='Corpus',
         value_type='path',
+        layer='simple',
         placeholder=r'D:\caminho\vault',
     ),
     SettingSpec(
@@ -115,6 +108,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         description='Inclui arquivos dentro de subpastas ao indexar corpus.',
         group='Corpus',
         value_type='bool',
+        layer='simple',
         recommended=True,
     ),
     SettingSpec(
@@ -139,12 +133,8 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         description='Quem transforma evidencias recuperadas em resposta final.',
         group='LLM',
         value_type='enum',
-        options=[
-            SettingOption(value='extractive', label='Extractive'),
-            SettingOption(value='ollama', label='Ollama'),
-            SettingOption(value='lmstudio', label='LM Studio'),
-            SettingOption(value='openai-compatible', label='OpenAI-compatible'),
-        ],
+        layer='simple',
+        options=[SettingOption(value='extractive', label='Extractive'), SettingOption(value='ollama', label='Ollama'), SettingOption(value='lmstudio', label='LM Studio'), SettingOption(value='openai-compatible', label='OpenAI-compatible')],
         recommended='extractive',
     ),
     SettingSpec(
@@ -153,6 +143,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         description='Modelo LLM usado pelo provider generativo.',
         group='LLM',
         value_type='string',
+        layer='simple',
         recommended='llama3.1:8b',
     ),
     SettingSpec(
@@ -185,6 +176,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         description='Segredo local para provider remoto; salvo apenas em pipeline/.env.',
         group='LLM',
         value_type='secret',
+        layer='simple',
         storage='local_env',
         secret=True,
         placeholder='FREE_PLAUD_ANSWER_API_KEY',
@@ -239,6 +231,7 @@ def settings_catalog_payload(settings: Settings | None = None) -> list[dict[str,
                 'description': spec.description,
                 'group': spec.group,
                 'value_type': spec.value_type,
+                'layer': spec.layer,
                 'storage': spec.storage,
                 'value': _setting_value(resolved, spec),
                 'display_value': _display_value(resolved, spec),

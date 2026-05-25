@@ -544,10 +544,21 @@ def test_tui_settings_layout_keeps_actions_visible() -> None:
                 for selector in (
                     '#settings-device-auto',
                     '#settings-answer-api-key',
-                    '#settings-strategy-hybrid',
-                    '#settings-commit-microbatch',
+                    '#settings-answer-provider',
+                    '#settings-answer-model',
+                    '#settings-advanced-toggle',
                     '#settings-save',
                     '#settings-reset',
+                ):
+                    assert_visible(app, selector)
+                await pilot.click('#settings-advanced-toggle')
+                await pilot.pause(0.1)
+                for selector in (
+                    '#settings-model',
+                    '#settings-strategy-hybrid',
+                    '#settings-commit-microbatch',
+                    '#settings-answer-timeout',
+                    '#settings-save',
                 ):
                     assert_visible(app, selector)
 

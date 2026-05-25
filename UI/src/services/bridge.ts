@@ -70,6 +70,7 @@ export interface SettingRow {
   description: string;
   group: string;
   value_type: 'string' | 'int' | 'float' | 'bool' | 'path' | 'enum' | 'secret';
+  layer: 'simple' | 'advanced';
   storage: 'user_settings' | 'local_env';
   value: string | number | boolean | null;
   display_value: string;
@@ -359,11 +360,75 @@ export const bridge = {
       settings_catalog: [
         {
           index: 1,
+          key: 'embedding_device',
+          label: 'Device de embedding',
+          description: 'Onde roda o modelo de embedding quando ele suporta device.',
+          group: 'Embeddings',
+          value_type: 'enum',
+          layer: 'simple',
+          storage: 'user_settings',
+          value: 'cpu',
+          display_value: 'cpu',
+          options: [
+            { value: 'auto', label: 'Auto' },
+            { value: 'cpu', label: 'CPU' },
+            { value: 'cuda', label: 'CUDA' },
+          ],
+          recommended: 'auto',
+          secret: false,
+          placeholder: null,
+          warning: null,
+          local_env_path: null,
+        },
+        {
+          index: 2,
+          key: 'answer_provider',
+          label: 'Provedor de resposta',
+          description: 'Quem transforma evidencias recuperadas em resposta final.',
+          group: 'LLM',
+          value_type: 'enum',
+          layer: 'simple',
+          storage: 'user_settings',
+          value: 'extractive',
+          display_value: 'extractive',
+          options: [
+            { value: 'extractive', label: 'Extractive' },
+            { value: 'ollama', label: 'Ollama' },
+            { value: 'lmstudio', label: 'LM Studio' },
+            { value: 'openai-compatible', label: 'OpenAI-compatible' },
+          ],
+          recommended: 'extractive',
+          secret: false,
+          placeholder: null,
+          warning: null,
+          local_env_path: null,
+        },
+        {
+          index: 3,
+          key: 'answer_model',
+          label: 'Modelo de resposta',
+          description: 'Modelo LLM usado pelo provider generativo.',
+          group: 'LLM',
+          value_type: 'string',
+          layer: 'simple',
+          storage: 'user_settings',
+          value: 'llama3.1:8b',
+          display_value: 'llama3.1:8b',
+          options: [],
+          recommended: 'llama3.1:8b',
+          secret: false,
+          placeholder: null,
+          warning: null,
+          local_env_path: null,
+        },
+        {
+          index: 4,
           key: 'retrieval_top_k',
           label: 'Chunks por pergunta',
           description: 'Quantos chunks o Ask recupera para montar evidencias e resposta.',
           group: 'Retrieval',
           value_type: 'int',
+          layer: 'advanced',
           storage: 'user_settings',
           value: 4,
           display_value: '4',

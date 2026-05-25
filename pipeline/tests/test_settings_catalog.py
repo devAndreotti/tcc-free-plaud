@@ -38,6 +38,28 @@ def test_settings_catalog_explains_core_numbers_and_groups(tmp_path: Path) -> No
     assert by_key['answer_api_key']['secret'] is True
 
 
+def test_settings_catalog_marks_simple_and_advanced_layers(tmp_path: Path) -> None:
+    rows = settings_catalog_payload(_settings(tmp_path))
+    by_key = {row['key']: row for row in rows}
+
+    assert by_key['default_corpus_path']['layer'] == 'simple'
+    assert by_key['corpus_recursive_default']['layer'] == 'simple'
+    assert by_key['embedding_device']['layer'] == 'simple'
+    assert by_key['default_ask_strategy']['layer'] == 'simple'
+    assert by_key['answer_provider']['layer'] == 'simple'
+    assert by_key['answer_model']['layer'] == 'simple'
+    assert by_key['answer_api_key']['layer'] == 'simple'
+    assert by_key['retrieval_top_k']['layer'] == 'advanced'
+    assert by_key['default_chunk_size']['layer'] == 'advanced'
+    assert by_key['default_chunk_overlap']['layer'] == 'advanced'
+    assert by_key['corpus_commit_mode']['layer'] == 'advanced'
+    assert by_key['corpus_embedding_batch_size']['layer'] == 'advanced'
+    assert by_key['corpus_index_workers']['layer'] == 'advanced'
+    assert by_key['answer_base_url']['layer'] == 'advanced'
+    assert by_key['answer_temperature']['layer'] == 'advanced'
+    assert by_key['answer_timeout_seconds']['layer'] == 'advanced'
+
+
 def test_settings_catalog_warns_when_embedding_model_is_fake_hash(tmp_path: Path) -> None:
     rows = settings_catalog_payload(_settings(tmp_path))
     embedding = next(row for row in rows if row['key'] == 'embedding_model')

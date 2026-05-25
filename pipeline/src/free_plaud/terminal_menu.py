@@ -4,14 +4,11 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
-from free_plaud.app.config import get_settings, reset_user_settings, user_settings_path_for
 from free_plaud.app.doctor import run_doctor
 from free_plaud.app.doctor_format import doctor_report_text
-from free_plaud.app.local_env import local_env_path_for, save_answer_api_key
-from free_plaud.app.settings_catalog import get_setting_spec, save_catalog_setting, settings_catalog_payload
-from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.providers.answer import test_answer_provider
+from free_plaud.terminal_settings import settings_menu
 from free_plaud.tui.actions import (
     ask_corpus,
     compare_suite_from_tui,
@@ -142,23 +139,6 @@ def _benchmark(runtime: CorpusRuntime) -> None:
     console.print(table)
 
 
-def _show_settings_table() -> None:
-    settings = get_settings()
-    table = Table(title=f'Configuracoes ({user_settings_path_for(settings)})', border_style=PURPLE_DIM)
-    table.add_column('#', justify='right')
-    table.add_column('grupo')
-    table.add_column('campo')
-    table.add_column('valor')
-    table.add_column('descricao')
-    for row in settings_catalog_payload(settings):
-        value = row['display_value']
-        if row['warning']:
-            value = f'{value} [yellow](!)[/yellow]'
-        table.add_row(str(row['index']), row['group'], row['label'], str(value), row['description'])
-    console.print(table)
-    console.print(f'[{TEXT_DIM}]local_env: {local_env_path_for(settings)}[/{TEXT_DIM}]')
-
-
 def _show_doctor() -> None:
     report = run_doctor()
     border = 'red' if report.status == 'error' else 'yellow' if report.status == 'warning' else 'green'
@@ -179,85 +159,6 @@ def _test_provider() -> None:
         )
     )
     console.print(Panel(body, title='Testar provider', border_style=border))
-
-
-def _preset_changes_text(changes) -> str:  # noqa: ANN001
-    if not changes:
-        return 'Sem mudancas em relacao a configuracao atual.'
-    return '\n'.join(f'- {key}: {change.before} -> {change.after}' for key, change in changes.items())
-
-
-def _show_presets_table() -> None:
-    table = Table(title='Presets', border_style=PURPLE_DIM)
-    table.add_column('preset')
-    table.add_column('uso')
-    table.add_column('valores')
-    for preset in list_settings_presets():
-        values = ', '.join(f'{key}={value}' for key, value in preset.values.items())
-        table.add_row(preset.key, preset.description, values)
-    console.print(table)
-
-
-def _presets_menu(runtime: CorpusRuntime) -> None:
-    _show_presets_table()
-    keys = [preset.key for preset in list_settings_presets()]
-    preset_key = Prompt.ask('Preset', choices=keys, default='cpu_rapido')
-    action = Prompt.ask('Acao', choices=['preview', 'apply'], default='preview')
-    if action == 'preview':
-        preview = preview_settings_preset(preset_key)
-        console.print(Panel(_preset_changes_text(preview.changes), title=f'Preview {preset_key}', border_style=PURPLE_DIM))
-        return
-    result = apply_settings_preset(preset_key)
-    runtime.clear()
-    console.print(Panel(_preset_changes_text(result.changes), title=f'Preset aplicado: {preset_key}', border_style='green'))
-
-
-def _print_catalog_warnings() -> None:
-    warnings = [row for row in settings_catalog_payload() if row['warning']]
-    for row in warnings:
-        console.print(f'[yellow]{row["label"]}: {row["warning"]}[/yellow]')
-
-
-def _settings_menu(runtime: CorpusRuntime) -> None:
-    _clear_screen()
-    _print_header()
-    _show_settings_table()
-    _print_catalog_warnings()
-    console.print()
-    for row in settings_catalog_payload():
-        console.print(f'[{TEXT_DIM}][{row["index"]}][/{TEXT_DIM}] {row["label"]} ({row["key"]})')
-    console.print(f'[{TEXT_DIM}][P][/{TEXT_DIM}] Presets')
-    console.print(f'[{TEXT_DIM}][R][/{TEXT_DIM}] Resetar user_settings.json')
-    console.print()
-    choice = Prompt.ask('Setting', default='0')
-    if choice == '0':
-        return
-    if choice.lower() == 'p':
-        _presets_menu(runtime)
-        return
-    if choice.lower() == 'r':
-        reset_user_settings()
-        runtime.clear()
-        console.print('[green]Configuracoes resetadas.[/green]')
-        return
-    rows = settings_catalog_payload()
-    selected = next((row for row in rows if str(row['index']) == choice), None)
-    if selected is None:
-        console.print('[yellow]Opcao invalida.[/yellow]')
-        return
-    spec = get_setting_spec(selected['key'])
-    if selected['key'] == 'answer_api_key':
-        value = Prompt.ask('FREE_PLAUD_ANSWER_API_KEY (vazio remove)', password=console.is_terminal, default='')
-        path = save_answer_api_key(value)
-        runtime.clear()
-        console.print(f'[green]answer_api_key salva em {path}.[/green]' if value.strip() else f'[green]answer_api_key removida de {path}.[/green]')
-        return
-    choices = [option.value for option in spec.options] or None
-    current = selected['value']
-    value = Prompt.ask(spec.label, choices=choices, default='' if current is None else str(current))
-    save_catalog_setting(spec.key, value)
-    runtime.clear()
-    console.print(f'[green]{spec.label} salvo.[/green]')
 
 
 def run_terminal_menu() -> None:
@@ -285,7 +186,7 @@ def run_terminal_menu() -> None:
             elif choice == '6':
                 _benchmark(runtime)
             elif choice == '7':
-                _settings_menu(runtime)
+                settings_menu(runtime)
             elif choice == '8':
                 _show_doctor()
             elif choice == '9':

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { XIcon } from './Icons';
 import { useVaultContext } from '../hooks/useVaultContext';
-import { bridge, type BackendSettings } from '../services/bridge';
+import { bridge, type BackendSettings, type SettingRow } from '../services/bridge';
 
 // Props do modal de configurações
 interface SettingsModalProps {
@@ -20,6 +20,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [applyingPreset, setApplyingPreset] = useState('');
   const [isTestingProvider, setIsTestingProvider] = useState(false);
   const [isIndexingVault, setIsIndexingVault] = useState(false);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [operationStatus, setOperationStatus] = useState('');
 
   // Consome o contexto global do vault
@@ -177,7 +178,65 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     }
   };
 
+  const renderSettingRow = (row: SettingRow) => (
+    <div key={row.key} className="settings-item settings-item--stacked">
+      <div className="settings-item__info">
+        <span className="settings-item__label">{row.label}</span>
+        <span className="settings-item__description">
+          {row.description}
+          {row.recommended !== null && ` · recomendado: ${row.recommended}`}
+        </span>
+        {row.warning && (
+          <span className="settings-warning">{row.warning}</span>
+        )}
+      </div>
+
+      {row.options.length > 0 ? (
+        <select
+          className="settings-select settings-control-wide"
+          value={settingDrafts[row.key] ?? ''}
+          aria-label={row.label}
+          onChange={(event) =>
+            setSettingDrafts((prev) => ({ ...prev, [row.key]: event.target.value }))
+          }
+        >
+          {row.options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ) : row.value_type === 'bool' ? (
+        <select
+          className="settings-select settings-control-wide"
+          value={settingDrafts[row.key] ?? 'false'}
+          aria-label={row.label}
+          onChange={(event) =>
+            setSettingDrafts((prev) => ({ ...prev, [row.key]: event.target.value }))
+          }
+        >
+          <option value="true">Sim</option>
+          <option value="false">Não</option>
+        </select>
+      ) : (
+        <input
+          type={row.value_type === 'int' || row.value_type === 'float' ? 'number' : 'text'}
+          className="vault-picker__input settings-control-wide"
+          value={settingDrafts[row.key] ?? ''}
+          placeholder={row.placeholder ?? ''}
+          aria-label={row.label}
+          onChange={(event) =>
+            setSettingDrafts((prev) => ({ ...prev, [row.key]: event.target.value }))
+          }
+        />
+      )}
+    </div>
+  );
+
   if (!isOpen) return null;
+
+  const simpleRows = backendSettings?.settings_catalog.filter((row) => row.layer === 'simple' && !row.secret) ?? [];
+  const advancedRows = backendSettings?.settings_catalog.filter((row) => row.layer === 'advanced' && !row.secret) ?? [];
 
   // Renderiza diretamente no document.body via Portal.
   // O overlay usa display:flex para centralizar o modal de forma confiável.
@@ -320,68 +379,34 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
           <div className="settings-divider" aria-hidden="true" />
 
-          {/* Seção: Backend */}
-          <section className="settings-section" aria-labelledby="settings-backend">
-            <h3 id="settings-backend" className="settings-section__title">
-              Backend
+          {/* Seção: Backend simples */}
+          <section className="settings-section" aria-labelledby="settings-simple">
+            <h3 id="settings-simple" className="settings-section__title">
+              Simples
             </h3>
 
-            {backendSettings?.settings_catalog
-              .filter((row) => !row.secret)
-              .map((row) => (
-                <div key={row.key} className="settings-item settings-item--stacked">
-                  <div className="settings-item__info">
-                    <span className="settings-item__label">{row.label}</span>
-                    <span className="settings-item__description">
-                      {row.description}
-                      {row.recommended !== null && ` · recomendado: ${row.recommended}`}
-                    </span>
-                    {row.warning && (
-                      <span className="settings-warning">{row.warning}</span>
-                    )}
-                  </div>
+            {simpleRows.map(renderSettingRow)}
+          </section>
 
-                  {row.options.length > 0 ? (
-                    <select
-                      className="settings-select settings-control-wide"
-                      value={settingDrafts[row.key] ?? ''}
-                      aria-label={row.label}
-                      onChange={(event) =>
-                        setSettingDrafts((prev) => ({ ...prev, [row.key]: event.target.value }))
-                      }
-                    >
-                      {row.options.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : row.value_type === 'bool' ? (
-                    <select
-                      className="settings-select settings-control-wide"
-                      value={settingDrafts[row.key] ?? 'false'}
-                      aria-label={row.label}
-                      onChange={(event) =>
-                        setSettingDrafts((prev) => ({ ...prev, [row.key]: event.target.value }))
-                      }
-                    >
-                      <option value="true">Sim</option>
-                      <option value="false">Não</option>
-                    </select>
-                  ) : (
-                    <input
-                      type={row.value_type === 'int' || row.value_type === 'float' ? 'number' : 'text'}
-                      className="vault-picker__input settings-control-wide"
-                      value={settingDrafts[row.key] ?? ''}
-                      placeholder={row.placeholder ?? ''}
-                      aria-label={row.label}
-                      onChange={(event) =>
-                        setSettingDrafts((prev) => ({ ...prev, [row.key]: event.target.value }))
-                      }
-                    />
-                  )}
-                </div>
-              ))}
+          <div className="settings-divider" aria-hidden="true" />
+
+          <section className="settings-section" aria-labelledby="settings-advanced">
+            <div className="settings-section__header">
+              <h3 id="settings-advanced" className="settings-section__title">
+                Avançado
+              </h3>
+              <button
+                id="settings-advanced-toggle"
+                type="button"
+                className="vault-picker__btn"
+                onClick={() => setShowAdvancedSettings((value) => !value)}
+                aria-expanded={showAdvancedSettings}
+              >
+                {showAdvancedSettings ? 'Ocultar' : 'Mostrar'}
+              </button>
+            </div>
+
+            {showAdvancedSettings && advancedRows.map(renderSettingRow)}
 
             <button
               id="btn-save-backend-settings"

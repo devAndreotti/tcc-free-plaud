@@ -253,10 +253,17 @@ Input:focus {
     margin-top: 1;
 }
 
-#settings-device-row,
-#settings-strategy-row {
+#settings-device-row {
     layout: grid;
     grid-size: 3 1;
+    grid-gutter: 1 0;
+    height: 3;
+    margin-top: 0;
+}
+
+#settings-strategy-row {
+    layout: grid;
+    grid-size: 4 1;
     grid-gutter: 1 0;
     height: 3;
     margin-top: 0;
@@ -274,6 +281,8 @@ Input:focus {
     height: 1;
 }
 
+#settings-answer-row,
+#settings-answer-advanced-row,
 #settings-number-row,
 #settings-path-row,
 #settings-worker-row {
@@ -285,6 +294,7 @@ Input:focus {
 }
 
 #settings-path-row,
+#settings-answer-row,
 #settings-worker-row {
     grid-size: 2 1;
 }
@@ -299,7 +309,7 @@ Input:focus {
 
 #settings-action-row {
     layout: grid;
-    grid-size: 3 1;
+    grid-size: 4 1;
     grid-gutter: 1 0;
     height: 1;
     margin-top: 1;
@@ -529,6 +539,8 @@ Screen.compact #notes-action-row {
 Screen.compact #settings-device-row,
 Screen.compact #settings-preset-row,
 Screen.compact #settings-strategy-row,
+Screen.compact #settings-answer-row,
+Screen.compact #settings-answer-advanced-row,
 Screen.compact #settings-number-row,
 Screen.compact #settings-path-row,
 Screen.compact #settings-worker-row,
@@ -539,6 +551,8 @@ Screen.compact #settings-action-row {
 
 Screen.compact #settings-number-row,
 Screen.compact #settings-path-row,
+Screen.compact #settings-answer-row,
+Screen.compact #settings-answer-advanced-row,
 Screen.compact #settings-worker-row {
     height: 1;
 }
