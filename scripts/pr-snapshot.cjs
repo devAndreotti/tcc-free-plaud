@@ -159,10 +159,14 @@ function isCopilotReviewer(login) {
   return /^(copilot|copilot\[bot\]|copilot-pull-request-reviewer\[bot\])$/i.test(String(login || ''));
 }
 
+function isBlockingComment(body) {
+  return /bloqueador|blocker|changes?\s+required|required\s+changes?/i.test(String(body || ''));
+}
+
 function collectCopilotBlockers(inlineComments) {
   return (inlineComments || [])
     .filter((comment) => isCopilotReviewer(comment?.user?.login))
-    .filter((comment) => /bloqueador|blocker|required/i.test(comment.body || ''))
+    .filter((comment) => isBlockingComment(comment.body))
     .map(formatInlineComment);
 }
 

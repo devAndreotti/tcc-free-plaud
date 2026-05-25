@@ -183,6 +183,57 @@ test('buildSnapshot falls back to workflow jobs when checks are inaccessible', (
   assert.deepEqual(snapshot.actions, ['ready']);
 });
 
+test('buildSnapshot does not treat Copilot advisory comments as blockers', () => {
+  const ghJson = (args) => {
+    const key = args.join(' ');
+    if (key.startsWith('pr view 42 --json number,title,state,mergeable,mergeStateStatus')) {
+      return {
+        number: 42,
+        title: 'Setup gate',
+        state: 'OPEN',
+        mergeable: 'MERGEABLE',
+        mergeStateStatus: 'CLEAN',
+        headRefName: 'codex/qg-setup',
+        baseRefName: 'main',
+        url: 'https://github.com/owner/repo/pull/42',
+        isDraft: false,
+      };
+    }
+    if (key === 'pr checks 42 --json name,state,link,startedAt,completedAt') {
+      return [{ name: 'Lint', status: 'completed', conclusion: 'success' }];
+    }
+    if (key === 'api repos/owner/repo/pulls/42/comments') {
+      return [
+        {
+          user: { login: 'Copilot' },
+          path: 'scripts/doctor.test.cjs',
+          line: 30,
+          body: 'Sugestão: validar policy.ci.requiredChecks contra os job names.',
+        },
+      ];
+    }
+    if (key === 'api repos/owner/repo/pulls/42/reviews') return [];
+    if (key === 'run list --branch codex/qg-setup --limit 1 --json databaseId,status,conclusion,workflowName,displayTitle,headBranch') {
+      return [{ databaseId: 456, status: 'completed', conclusion: 'success', workflowName: 'Quality Gate' }];
+    }
+    if (key === 'run view 456 --json jobs') return { jobs: [{ name: 'Lint', status: 'completed', conclusion: 'success' }] };
+    throw new Error(`unexpected gh call: ${key}`);
+  };
+
+  const snapshot = buildSnapshot({
+    pr: 42,
+    repo: 'owner/repo',
+    ghJson,
+    githubApi: (apiPath) => {
+      if (apiPath === '/repos/owner/repo/actions/runs/456/artifacts') return { artifacts: [] };
+      throw new Error(`unexpected api path: ${apiPath}`);
+    },
+  });
+
+  assert.deepEqual(snapshot.copilotBlockers, []);
+  assert.deepEqual(snapshot.actions, ['ready']);
+});
+
 test('buildSnapshot falls back to GitHub API when gh is unavailable', () => {
   const githubApi = (apiPath) => {
     if (apiPath === '/repos/owner/repo/pulls/42') {
