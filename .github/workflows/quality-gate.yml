@@ -48,7 +48,7 @@ jobs:
           mkdir -p ../coverage
           uvx ruff check src tests --output-format=json > ../coverage/ruff.json
       - name: Upload Ruff report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ruff-report
@@ -81,7 +81,7 @@ jobs:
         working-directory: .
         run: node scripts/quality-gate.js check
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-report
@@ -100,7 +100,7 @@ jobs:
       - name: Docker Image Doctor gate
         run: node scripts/docker-gate.cjs --project . --json
       - name: Upload Docker gate report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: docker-gate-report
