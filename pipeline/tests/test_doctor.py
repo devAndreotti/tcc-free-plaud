@@ -121,3 +121,19 @@ def test_doctor_reports_corpus_inconsistency(tmp_path: Path) -> None:
     assert corpus.status == 'error'  # type: ignore[attr-defined]
     assert corpus.details['status'] == 'inconsistent'  # type: ignore[attr-defined]
     assert corpus.details['stale_vector_chunks_count'] == 1  # type: ignore[attr-defined]
+
+
+def test_doctor_returns_structured_errors_when_corpus_status_crashes(tmp_path: Path, monkeypatch) -> None:
+    def broken_corpus_status(**kwargs):  # noqa: ANN003, ANN202
+        _ = kwargs
+        raise RuntimeError('chroma indisponivel')
+
+    monkeypatch.setattr('free_plaud.app.doctor_corpus.get_corpus_status', broken_corpus_status)
+
+    report = run_doctor(settings=_settings(tmp_path))
+
+    checks = _by_code(report)
+    assert report.status == 'error'
+    assert checks['fts'].status == 'error'  # type: ignore[attr-defined]
+    assert checks['corpus'].status == 'error'  # type: ignore[attr-defined]
+    assert 'chroma indisponivel' in checks['corpus'].message  # type: ignore[attr-defined]

@@ -3,9 +3,9 @@ from collections.abc import Callable
 from time import perf_counter
 
 from free_plaud.app.config import Settings, get_settings
+from free_plaud.app.doctor_corpus import safe_corpus_checks
 from free_plaud.app.doctor_models import DoctorCheck, DoctorReport, DoctorStatus
 from free_plaud.app.local_env import answer_api_key_is_configured
-from free_plaud.corpus.service import get_corpus_status
 from free_plaud.providers import embed as embed_provider
 from free_plaud.storage.sqlite import init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
@@ -144,67 +144,6 @@ def _chroma_check(settings: Settings, vector_store: LocalVectorStore | None) -> 
     )
 
 
-def _fts_status_to_check(status: str, count: int) -> DoctorCheck:
-    if status == 'ready':
-        return DoctorCheck(
-            code='fts',
-            status='ok',
-            message='FTS5 pronto.',
-            details={'fts_status': status, 'fts_chunks_count': count},
-        )
-    if status == 'unavailable':
-        return DoctorCheck(
-            code='fts',
-            status='error',
-            message='FTS5 indisponivel no SQLite atual.',
-            action='Verifique build do SQLite/Python usado pelo ambiente.',
-            details={'fts_status': status, 'fts_chunks_count': count},
-        )
-    return DoctorCheck(
-        code='fts',
-        status='warning',
-        message=f'Indice lexical FTS esta {status}.',
-        action='Reindexe ou reconstrua o corpus para sincronizar FTS.',
-        details={'fts_status': status, 'fts_chunks_count': count},
-    )
-
-
-def _corpus_checks(
-    settings: Settings,
-    connection: sqlite3.Connection | None,
-    vector_store: LocalVectorStore | None,
-) -> list[DoctorCheck]:
-    status = get_corpus_status(settings=settings, connection=connection, vector_store=vector_store)
-    if status.status == 'clean':
-        corpus_status: DoctorStatus = 'ok'
-        message = 'Corpus consistente entre SQLite e Chroma.'
-        action = None
-    elif status.status == 'empty':
-        corpus_status = 'warning'
-        message = 'Corpus vazio.'
-        action = 'Indexe uma pasta ou arquivo antes de perguntar.'
-    elif status.status == 'sqlite_only':
-        corpus_status = 'warning'
-        message = 'Corpus existe no SQLite, mas faltam vetores no Chroma.'
-        action = 'Reindexe ou rode rebuild do corpus.'
-    else:
-        corpus_status = 'error'
-        message = 'Corpus inconsistente entre SQLite e Chroma.'
-        action = 'Reindexe ou rode rebuild do corpus.'
-
-    status_payload = status.model_dump()
-    return [
-        _fts_status_to_check(status.fts_status, status.fts_chunks_count),
-        DoctorCheck(
-            code='corpus',
-            status=corpus_status,
-            message=message,
-            action=action,
-            details=status_payload,
-        ),
-    ]
-
-
 def _answer_provider_check(settings: Settings) -> DoctorCheck:
     if settings.answer_provider == 'extractive':
         return DoctorCheck(
@@ -273,7 +212,7 @@ def run_doctor(
         _run_check('sqlite', lambda: _sqlite_check(resolved_settings, connection)),
         _run_check('chroma', lambda: _chroma_check(resolved_settings, vector_store)),
     ]
-    checks.extend(_corpus_checks(resolved_settings, connection, vector_store))
+    checks.extend(safe_corpus_checks(resolved_settings, connection, vector_store))
     checks.extend(
         [
             _run_check('answer_provider', lambda: _answer_provider_check(resolved_settings)),
