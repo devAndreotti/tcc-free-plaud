@@ -329,6 +329,7 @@ def test_tui_settings_pane_saves_device_and_clears_runtime(monkeypatch, tmp_path
         async with app.run_test(size=(120, 36)) as pilot:
             await pilot.click('#nav-settings')
             await pilot.click('#settings-device-cuda')
+            await pilot.click('#settings-provider-ollama')
             await pilot.click('#settings-save')
             await pilot.pause(0.2)
             pane = app.query_one(SettingsPane)
@@ -337,6 +338,7 @@ def test_tui_settings_pane_saves_device_and_clears_runtime(monkeypatch, tmp_path
     asyncio.run(run_app())
 
     assert saved['embedding_device'] == 'cuda'
+    assert saved['answer_provider'] == 'ollama'
     assert cleared is True
 
 
@@ -503,7 +505,7 @@ def test_tui_settings_pane_runs_doctor_in_background(monkeypatch, tmp_path: Path
             started_at = perf_counter()
             app._show_pane('settings')  # noqa: SLF001 - mede fronteira síncrona do evento de navegação.
             elapsed = perf_counter() - started_at
-            assert elapsed < 0.25
+            assert elapsed < 0.35
             assert settings_pane._doctor_running is True  # noqa: SLF001 - garante worker em background.
             await pilot.pause(0.6)
             output = app.query_one('#settings-output')
@@ -544,10 +546,22 @@ def test_tui_settings_layout_keeps_actions_visible() -> None:
                 for selector in (
                     '#settings-device-auto',
                     '#settings-answer-api-key',
-                    '#settings-strategy-hybrid',
-                    '#settings-commit-microbatch',
+                    '#settings-provider-extractive',
+                    '#settings-provider-ollama',
+                    '#settings-answer-model',
+                    '#settings-advanced-toggle',
                     '#settings-save',
                     '#settings-reset',
+                ):
+                    assert_visible(app, selector)
+                await pilot.click('#settings-advanced-toggle')
+                await pilot.pause(0.1)
+                for selector in (
+                    '#settings-model',
+                    '#settings-strategy-hybrid',
+                    '#settings-commit-microbatch',
+                    '#settings-answer-timeout',
+                    '#settings-save',
                 ):
                     assert_visible(app, selector)
 

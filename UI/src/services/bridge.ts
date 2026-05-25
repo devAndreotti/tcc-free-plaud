@@ -70,6 +70,7 @@ export interface SettingRow {
   description: string;
   group: string;
   value_type: 'string' | 'int' | 'float' | 'bool' | 'path' | 'enum' | 'secret';
+  layer: 'simple' | 'advanced';
   storage: 'user_settings' | 'local_env';
   value: string | number | boolean | null;
   display_value: string;
@@ -219,6 +220,22 @@ const mockSendMessage = async (message: string): Promise<string> => {
   return response;
 };
 
+type MockSettingRow = Omit<
+  SettingRow,
+  'storage' | 'options' | 'secret' | 'placeholder' | 'warning' | 'local_env_path'
+> &
+  Partial<Pick<SettingRow, 'storage' | 'options' | 'placeholder' | 'warning' | 'local_env_path'>>;
+
+const mockSettingRow = (row: MockSettingRow): SettingRow => ({
+  storage: 'user_settings',
+  options: [],
+  secret: false,
+  placeholder: null,
+  warning: null,
+  local_env_path: null,
+  ...row,
+});
+
 // ─── Serviço de bridge exportado ─────────────────────────────────────────────
 export const bridge = {
   /**
@@ -357,23 +374,65 @@ export const bridge = {
         error_count: 0,
       },
       settings_catalog: [
-        {
+        mockSettingRow({
           index: 1,
+          key: 'embedding_device',
+          label: 'Device de embedding',
+          description: 'Onde roda o modelo de embedding quando ele suporta device.',
+          group: 'Embeddings',
+          value_type: 'enum',
+          layer: 'simple',
+          value: 'cpu',
+          display_value: 'cpu',
+          options: [
+            { value: 'auto', label: 'Auto' },
+            { value: 'cpu', label: 'CPU' },
+            { value: 'cuda', label: 'CUDA' },
+          ],
+          recommended: 'auto',
+        }),
+        mockSettingRow({
+          index: 2,
+          key: 'answer_provider',
+          label: 'Provedor de resposta',
+          description: 'Quem transforma evidencias recuperadas em resposta final.',
+          group: 'LLM',
+          value_type: 'enum',
+          layer: 'simple',
+          value: 'extractive',
+          display_value: 'extractive',
+          options: [
+            { value: 'extractive', label: 'Extractive' },
+            { value: 'ollama', label: 'Ollama' },
+            { value: 'lmstudio', label: 'LM Studio' },
+            { value: 'openai-compatible', label: 'OpenAI-compatible' },
+          ],
+          recommended: 'extractive',
+        }),
+        mockSettingRow({
+          index: 3,
+          key: 'answer_model',
+          label: 'Modelo de resposta',
+          description: 'Modelo LLM usado pelo provider generativo.',
+          group: 'LLM',
+          value_type: 'string',
+          layer: 'simple',
+          value: 'llama3.1:8b',
+          display_value: 'llama3.1:8b',
+          recommended: 'llama3.1:8b',
+        }),
+        mockSettingRow({
+          index: 4,
           key: 'retrieval_top_k',
           label: 'Chunks por pergunta',
           description: 'Quantos chunks o Ask recupera para montar evidencias e resposta.',
           group: 'Retrieval',
           value_type: 'int',
-          storage: 'user_settings',
+          layer: 'advanced',
           value: 4,
           display_value: '4',
-          options: [],
           recommended: 4,
-          secret: false,
-          placeholder: null,
-          warning: null,
-          local_env_path: null,
-        },
+        }),
       ],
     };
   },

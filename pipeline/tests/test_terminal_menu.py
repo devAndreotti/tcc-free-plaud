@@ -44,6 +44,10 @@ def test_terminal_settings_menu_uses_human_catalog(monkeypatch, tmp_path: Path) 
     result = runner.invoke(app, ['menu'], input='7\n0\n0\n')
 
     assert result.exit_code == 0
+    assert 'Simples' in result.stdout
+    assert 'Avancado' in result.stdout
+    assert 'Provedor de resposta' in result.stdout
+    assert 'Modelo de resposta' in result.stdout
     assert 'Chunks por pergunta' in result.stdout
     assert 'Tamanho do chunk' in result.stdout
     assert 'Sobreposição' in result.stdout

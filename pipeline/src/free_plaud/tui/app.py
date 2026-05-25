@@ -762,9 +762,11 @@ class SettingsPane(Vertical):
         super().__init__(**kwargs)
         settings = get_settings()
         self.selected_device = settings.embedding_device
+        self.selected_answer_provider = settings.answer_provider
         self.selected_strategy = settings.default_ask_strategy
         self.selected_commit_mode = settings.corpus_commit_mode
         self.recursive_default = settings.corpus_recursive_default
+        self.advanced_visible = False
         self._doctor_running = False
         self._doctor_request_id = 0
 
@@ -774,7 +776,7 @@ class SettingsPane(Vertical):
             yield Static('Settings', classes='hero-title')
             yield Static('Preferencias do app salvas em user_settings.json.', classes='hero-subtitle')
         with Container(id='settings-form-card'):
-            yield Static('Runtime', classes='card-title')
+            yield Static('Simples', classes='card-title')
             with Container(id='settings-preset-row'):
                 for preset in list_settings_presets():
                     yield ActionCell(preset.label, id=f'settings-preset-{preset.key}', classes='strategy-button')
@@ -782,19 +784,17 @@ class SettingsPane(Vertical):
                 yield ActionCell('Auto', id='settings-device-auto', classes='strategy-button')
                 yield ActionCell('CPU', id='settings-device-cpu', classes='strategy-button')
                 yield ActionCell('CUDA', id='settings-device-cuda', classes='strategy-button')
-            yield Input(value=settings.embedding_model, placeholder='embedding_model', id='settings-model')
+            with Container(id='settings-provider-row'):
+                yield ActionCell('Extractive', id='settings-provider-extractive', classes='strategy-button')
+                yield ActionCell('Ollama', id='settings-provider-ollama', classes='strategy-button')
+                yield ActionCell('LM Studio', id='settings-provider-lmstudio', classes='strategy-button')
+                yield ActionCell('OpenAI', id='settings-provider-openai-compatible', classes='strategy-button')
+            with Container(id='settings-answer-row'):
+                yield Input(value=settings.answer_model, placeholder='answer_model', id='settings-answer-model')
             with Container(id='settings-strategy-row'):
                 yield ActionCell('Lexical', id='settings-strategy-lexical', classes='strategy-button')
                 yield ActionCell('Vector', id='settings-strategy-vector', classes='strategy-button')
                 yield ActionCell('Hybrid', id='settings-strategy-hybrid', classes='strategy-button')
-            with Container(id='settings-number-row'):
-                yield Input(value=str(settings.retrieval_top_k), placeholder='top_k', id='settings-top-k')
-                yield Input(value=str(settings.default_chunk_size), placeholder='chunk_size', id='settings-chunk-size')
-                yield Input(value=str(settings.default_chunk_overlap), placeholder='overlap', id='settings-overlap')
-            with Container(id='settings-commit-row'):
-                yield ActionCell('Auto', id='settings-commit-auto', classes='strategy-button')
-                yield ActionCell('Atomic', id='settings-commit-atomic', classes='strategy-button')
-                yield ActionCell('Microbatch', id='settings-commit-microbatch', classes='strategy-button')
                 yield ActionCell('Recursivo', id='settings-recursive', classes='strategy-button')
             with Container(id='settings-path-row'):
                 yield Input(value=str(settings.default_corpus_path or ''), placeholder=r'D:\caminho\pasta padrao', id='settings-corpus-path')
@@ -803,17 +803,33 @@ class SettingsPane(Vertical):
                     id='settings-answer-api-key',
                     password=True,
                 )
-            with Container(id='settings-worker-row'):
-                yield Input(
-                    value=str(settings.corpus_embedding_batch_size),
-                    placeholder='embedding_batch',
-                    id='settings-embedding-batch',
-                )
-                yield Input(value=str(settings.corpus_index_workers), placeholder='workers', id='settings-workers')
             with Container(id='settings-action-row'):
                 yield ActionCell('Salvar', id='settings-save', classes='primary-action')
                 yield ActionCell('Testar provider', id='settings-test-provider', classes='strategy-button')
                 yield ActionCell('Resetar', id='settings-reset', classes='strategy-button')
+                yield ActionCell('Avancado', id='settings-advanced-toggle', classes='strategy-button')
+            with Container(id='settings-advanced-fields', classes='hidden'):
+                yield Static('Avancado', classes='card-title')
+                yield Input(value=settings.embedding_model, placeholder='embedding_model', id='settings-model')
+                with Container(id='settings-number-row'):
+                    yield Input(value=str(settings.retrieval_top_k), placeholder='top_k', id='settings-top-k')
+                    yield Input(value=str(settings.default_chunk_size), placeholder='chunk_size', id='settings-chunk-size')
+                    yield Input(value=str(settings.default_chunk_overlap), placeholder='overlap', id='settings-overlap')
+                with Container(id='settings-commit-row'):
+                    yield ActionCell('Auto', id='settings-commit-auto', classes='strategy-button')
+                    yield ActionCell('Atomic', id='settings-commit-atomic', classes='strategy-button')
+                    yield ActionCell('Microbatch', id='settings-commit-microbatch', classes='strategy-button')
+                with Container(id='settings-answer-advanced-row'):
+                    yield Input(value=str(settings.answer_base_url or ''), placeholder='answer_base_url', id='settings-answer-base-url')
+                    yield Input(value=str(settings.answer_temperature), placeholder='temperature', id='settings-answer-temperature')
+                    yield Input(value=str(settings.answer_timeout_seconds), placeholder='timeout', id='settings-answer-timeout')
+                with Container(id='settings-worker-row'):
+                    yield Input(
+                        value=str(settings.corpus_embedding_batch_size),
+                        placeholder='embedding_batch',
+                        id='settings-embedding-batch',
+                    )
+                    yield Input(value=str(settings.corpus_index_workers), placeholder='workers', id='settings-workers')
         with Container(id='settings-result-card'):
             yield Static('Estado', classes='card-title')
             yield RichLog(markup=True, wrap=True, id='settings-output')
@@ -844,6 +860,11 @@ class SettingsPane(Vertical):
             self.selected_device = control_id.removeprefix('settings-device-')
             self._sync_controls()
             return
+        if control_id.startswith('settings-provider-'):
+            event.stop()
+            self.selected_answer_provider = control_id.removeprefix('settings-provider-')
+            self._sync_controls()
+            return
         if control_id.startswith('settings-strategy-'):
             event.stop()
             self.selected_strategy = control_id.removeprefix('settings-strategy-')
@@ -852,6 +873,11 @@ class SettingsPane(Vertical):
         if control_id.startswith('settings-commit-'):
             event.stop()
             self.selected_commit_mode = control_id.removeprefix('settings-commit-')
+            self._sync_controls()
+            return
+        if control_id == 'settings-advanced-toggle':
+            event.stop()
+            self.advanced_visible = not self.advanced_visible
             self._sync_controls()
             return
         if control_id == 'settings-recursive':
@@ -894,10 +920,15 @@ class SettingsPane(Vertical):
 
     def _load_from_settings(self, settings: Settings) -> None:
         self.selected_device = settings.embedding_device
+        self.selected_answer_provider = settings.answer_provider
         self.selected_strategy = settings.default_ask_strategy
         self.selected_commit_mode = settings.corpus_commit_mode
         self.recursive_default = settings.corpus_recursive_default
         self.query_one('#settings-model', Input).value = settings.embedding_model
+        self.query_one('#settings-answer-model', Input).value = settings.answer_model
+        self.query_one('#settings-answer-base-url', Input).value = str(settings.answer_base_url or '')
+        self.query_one('#settings-answer-temperature', Input).value = str(settings.answer_temperature)
+        self.query_one('#settings-answer-timeout', Input).value = str(settings.answer_timeout_seconds)
         self.query_one('#settings-top-k', Input).value = str(settings.retrieval_top_k)
         self.query_one('#settings-chunk-size', Input).value = str(settings.default_chunk_size)
         self.query_one('#settings-overlap', Input).value = str(settings.default_chunk_overlap)
@@ -909,6 +940,11 @@ class SettingsPane(Vertical):
     def _sync_controls(self) -> None:
         for device in ('auto', 'cpu', 'cuda'):
             self.query_one(f'#settings-device-{device}', ActionCell).set_class(device == self.selected_device, 'strategy-active')
+        for provider in ('extractive', 'ollama', 'lmstudio', 'openai-compatible'):
+            self.query_one(f'#settings-provider-{provider}', ActionCell).set_class(
+                provider == self.selected_answer_provider,
+                'strategy-active',
+            )
         for strategy in ASK_STRATEGIES:
             self.query_one(f'#settings-strategy-{strategy}', ActionCell).set_class(
                 strategy == self.selected_strategy,
@@ -919,12 +955,22 @@ class SettingsPane(Vertical):
         recursive = self.query_one('#settings-recursive', ActionCell)
         recursive.update('Recursivo: Sim' if self.recursive_default else 'Recursivo: Nao')
         recursive.set_class(self.recursive_default, 'strategy-active')
+        advanced = self.query_one('#settings-advanced-fields')
+        advanced.set_class(not self.advanced_visible, 'hidden')
+        advanced_toggle = self.query_one('#settings-advanced-toggle', ActionCell)
+        advanced_toggle.update('Avancado: Sim' if self.advanced_visible else 'Avancado')
+        advanced_toggle.set_class(self.advanced_visible, 'strategy-active')
 
     def _save(self) -> None:
         try:
             values = {
                 'embedding_device': self.selected_device,
                 'embedding_model': self.query_one('#settings-model', Input).value,
+                'answer_provider': self.selected_answer_provider,
+                'answer_model': self.query_one('#settings-answer-model', Input).value.strip(),
+                'answer_base_url': self.query_one('#settings-answer-base-url', Input).value.strip() or None,
+                'answer_temperature': float(self.query_one('#settings-answer-temperature', Input).value),
+                'answer_timeout_seconds': int(self.query_one('#settings-answer-timeout', Input).value),
                 'retrieval_top_k': int(self.query_one('#settings-top-k', Input).value),
                 'default_ask_strategy': self.selected_strategy,
                 'default_chunk_size': int(self.query_one('#settings-chunk-size', Input).value),
