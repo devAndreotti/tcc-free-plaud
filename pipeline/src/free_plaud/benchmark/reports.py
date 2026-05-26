@@ -5,6 +5,26 @@ from pathlib import Path
 from free_plaud.benchmark.runners import BenchmarkComparisonResult, BenchmarkRunResult
 
 
+SETTINGS_SNAPSHOT_FIELDS = [
+    'embedding_model',
+    'embedding_device',
+    'default_ask_strategy',
+    'retrieval_top_k',
+    'default_chunk_size',
+    'default_chunk_overlap',
+    'answer_provider',
+    'settings_created_at',
+]
+
+
+def _settings_snapshot_row(result: BenchmarkRunResult | BenchmarkComparisonResult) -> dict[str, object]:
+    if result.settings_snapshot is None:
+        return {field: '' for field in SETTINGS_SNAPSHOT_FIELDS}
+    payload = result.settings_snapshot.model_dump(mode='json')
+    payload['settings_created_at'] = payload.pop('created_at')
+    return payload
+
+
 def export_benchmark_json(result: BenchmarkRunResult, path: Path) -> Path:
     """Exporta o resultado completo do benchmark para JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,7 +47,9 @@ def export_benchmark_csv(result: BenchmarkRunResult, path: Path) -> Path:
         'reciprocal_rank',
         'latency_ms',
         'relevant_rank',
+        *SETTINGS_SNAPSHOT_FIELDS,
     ]
+    settings_snapshot = _settings_snapshot_row(result)
     with path.open('w', encoding='utf-8', newline='') as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -42,6 +64,7 @@ def export_benchmark_csv(result: BenchmarkRunResult, path: Path) -> Path:
                     'reciprocal_rank': query.reciprocal_rank,
                     'latency_ms': query.latency_ms,
                     'relevant_rank': query.relevant_rank,
+                    **settings_snapshot,
                 }
             )
     return path
@@ -76,7 +99,9 @@ def export_benchmark_comparison_csv(result: BenchmarkComparisonResult, path: Pat
         'recall_at_10',
         'duration_ms',
         'avg_query_latency_ms',
+        *SETTINGS_SNAPSHOT_FIELDS,
     ]
+    settings_snapshot = _settings_snapshot_row(result)
     with path.open('w', encoding='utf-8', newline='') as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -100,6 +125,7 @@ def export_benchmark_comparison_csv(result: BenchmarkComparisonResult, path: Pat
                         'recall_at_10': run.metrics['recall_at_10'],
                         'duration_ms': run.duration_ms,
                         'avg_query_latency_ms': run.metrics['avg_latency_ms'],
+                        **settings_snapshot,
                     }
                 )
     return path

@@ -284,3 +284,30 @@ def test_desktop_api_exposes_notes_methods(monkeypatch) -> None:
     assert api.deleteNote('nota-1', 'APAGAR')['ok'] is True
     assert api.deleteNote('nota-1', '')['status'] == 'confirmation_required'
     assert api.reindexNote('nota-1')['chunks_indexed'] == 2
+
+
+def test_desktop_api_runs_benchmark_compare(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        module,
+        'run_benchmark_compare',
+        lambda suite_path, runtime=None: calls.append(str(suite_path)) or {  # noqa: ARG005
+            'ok': True,
+            'comparison_id': 'cmp-ui',
+            'suite_name': 'suite-ui',
+            'summaries': {'hybrid': {'mrr': 1.0, 'recall_at_3': 1.0, 'avg_query_latency_ms': 4.0}},
+            'json_report_path': 'data/results/cmp-ui.json',
+            'csv_report_path': 'data/results/cmp-ui.csv',
+            'settings_snapshot': {'embedding_model': 'fake-hash', 'embedding_device': 'cpu'},
+        },
+    )
+
+    result = module.Api().runBenchmarkCompare('suite.json')
+
+    assert calls == ['suite.json']
+    assert result['ok'] is True
+    assert result['comparison_id'] == 'cmp-ui'
+    assert result['json_report_path'].endswith('cmp-ui.json')
+    assert result['settings_snapshot']['embedding_device'] == 'cpu'

@@ -1,7 +1,6 @@
 import asyncio
 import threading
 from pathlib import Path
-from time import perf_counter, sleep
 from types import SimpleNamespace
 
 import pytest
@@ -484,9 +483,12 @@ def test_tui_settings_pane_renders_doctor_error_without_crash(monkeypatch, tmp_p
 def test_tui_settings_pane_runs_doctor_in_background(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    doctor_started = threading.Event()
+    doctor_release = threading.Event()
 
     def slow_doctor(*, settings):  # noqa: ANN001, ANN202
-        sleep(0.4)
+        doctor_started.set()
+        doctor_release.wait(timeout=2)
         return DoctorReport(
             status='ok',
             checks=[DoctorCheck(code='corpus', status='ok', message='Corpus consistente.', latency_ms=1)],
@@ -502,12 +504,16 @@ def test_tui_settings_pane_runs_doctor_in_background(monkeypatch, tmp_path: Path
         app = FreePlaudApp()
         async with app.run_test(size=(120, 38)) as pilot:
             settings_pane = app.query_one(SettingsPane)
-            started_at = perf_counter()
             app._show_pane('settings')  # noqa: SLF001 - mede fronteira síncrona do evento de navegação.
-            elapsed = perf_counter() - started_at
-            assert elapsed < 0.35
             assert settings_pane._doctor_running is True  # noqa: SLF001 - garante worker em background.
-            await pilot.pause(0.6)
+            for _ in range(20):
+                if doctor_started.is_set():
+                    break
+                await pilot.pause(0.05)
+            assert doctor_started.is_set() is True
+            assert doctor_release.is_set() is False
+            doctor_release.set()
+            await pilot.pause(0.3)
             output = app.query_one('#settings-output')
             text = '\n'.join(getattr(line, 'plain', str(line)) for line in output.lines)
             assert 'Corpus consistente.' in text

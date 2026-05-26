@@ -15,6 +15,7 @@ from free_plaud.benchmark.reports import (
     export_benchmark_json,
 )
 from free_plaud.benchmark.runners import compare_benchmark_suite, run_benchmark
+from free_plaud.benchmark.service import build_settings_snapshot
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import get_embedder
@@ -72,31 +73,35 @@ def run(
         vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
         embedder = get_embedder(resolved_embedding_model, device=settings.embedding_device)
 
-    result = run_benchmark(
-        note,
-        dataset,
-        connection=connection,
-        strategy=strategy,  # type: ignore[arg-type]
-        top_k=top_k,
-        chunk_size=chunk_size,
-        overlap=overlap,
-        run_name=run_name,
-        vector_store=vector_store,
-        embedder=embedder,
-        hybrid_rank_constant=hybrid_rank_constant,
-        hybrid_lexical_weight=hybrid_lexical_weight,
-        hybrid_vector_weight=hybrid_vector_weight,
-        hybrid_lexical_pool=hybrid_lexical_pool,
-        hybrid_vector_pool=hybrid_vector_pool,
-    )
-    payload = result.model_dump(mode='json')
-    if export:
-        output_base = settings.results_dir / result.benchmark_run_id
-        json_path = export_benchmark_json(result, output_base.with_suffix('.json'))
-        csv_path = export_benchmark_csv(result, output_base.with_suffix('.csv'))
-        payload['json_report_path'] = str(json_path)
-        payload['csv_report_path'] = str(csv_path)
-    typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
+    try:
+        result = run_benchmark(
+            note,
+            dataset,
+            connection=connection,
+            strategy=strategy,  # type: ignore[arg-type]
+            top_k=top_k,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            run_name=run_name,
+            vector_store=vector_store,
+            embedder=embedder,
+            hybrid_rank_constant=hybrid_rank_constant,
+            hybrid_lexical_weight=hybrid_lexical_weight,
+            hybrid_vector_weight=hybrid_vector_weight,
+            hybrid_lexical_pool=hybrid_lexical_pool,
+            hybrid_vector_pool=hybrid_vector_pool,
+            settings_snapshot=build_settings_snapshot(settings),
+        )
+        payload = result.model_dump(mode='json')
+        if export:
+            output_base = settings.results_dir / result.benchmark_run_id
+            json_path = export_benchmark_json(result, output_base.with_suffix('.json'))
+            csv_path = export_benchmark_csv(result, output_base.with_suffix('.csv'))
+            payload['json_report_path'] = str(json_path)
+            payload['csv_report_path'] = str(csv_path)
+        typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
+    finally:
+        connection.close()
 
 
 @app.command("compare")
@@ -125,26 +130,30 @@ def compare(
     resolved_embedding_model = embedding_model or settings.embedding_model
     embedder = get_embedder(resolved_embedding_model, device=settings.embedding_device)
 
-    result = compare_benchmark_suite(
-        suite,
-        workspace_dir=settings.workspace_dir,
-        connection=connection,
-        top_k=top_k,
-        chunk_size=chunk_size,
-        overlap=overlap,
-        vector_store=vector_store,
-        embedder=embedder,
-        hybrid_rank_constant=hybrid_rank_constant,
-        hybrid_lexical_weight=hybrid_lexical_weight,
-        hybrid_vector_weight=hybrid_vector_weight,
-        hybrid_lexical_pool=hybrid_lexical_pool,
-        hybrid_vector_pool=hybrid_vector_pool,
-    )
-    payload = result.model_dump(mode='json')
-    if export:
-        output_base = settings.results_dir / result.comparison_id
-        json_path = export_benchmark_comparison_json(result, output_base.with_suffix('.json'))
-        csv_path = export_benchmark_comparison_csv(result, output_base.with_suffix('.csv'))
-        payload['json_report_path'] = str(json_path)
-        payload['csv_report_path'] = str(csv_path)
-    typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
+    try:
+        result = compare_benchmark_suite(
+            suite,
+            workspace_dir=settings.workspace_dir,
+            connection=connection,
+            top_k=top_k,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            vector_store=vector_store,
+            embedder=embedder,
+            hybrid_rank_constant=hybrid_rank_constant,
+            hybrid_lexical_weight=hybrid_lexical_weight,
+            hybrid_vector_weight=hybrid_vector_weight,
+            hybrid_lexical_pool=hybrid_lexical_pool,
+            hybrid_vector_pool=hybrid_vector_pool,
+            settings_snapshot=build_settings_snapshot(settings),
+        )
+        payload = result.model_dump(mode='json')
+        if export:
+            output_base = settings.results_dir / result.comparison_id
+            json_path = export_benchmark_comparison_json(result, output_base.with_suffix('.json'))
+            csv_path = export_benchmark_comparison_csv(result, output_base.with_suffix('.csv'))
+            payload['json_report_path'] = str(json_path)
+            payload['csv_report_path'] = str(csv_path)
+        typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
+    finally:
+        connection.close()
