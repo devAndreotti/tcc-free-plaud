@@ -5,6 +5,12 @@ const isActiveJob = (snapshot: IndexJobSnapshot | null) => snapshot?.status === 
 
 const formatRate = (value: number, unit: string) => `${value.toFixed(2)} ${unit}`;
 
+const getProgressPercent = (snapshot: IndexJobSnapshot | null) => {
+  const progress = snapshot?.progress;
+  if (!progress || progress.total_found <= 0) return 0;
+  return Math.min(100, (progress.processed_count / progress.total_found) * 100);
+};
+
 const QueuePanel = () => {
   const [folderPath, setFolderPath] = useState('');
   const [job, setJob] = useState<IndexJobSnapshot | null>(null);
@@ -15,6 +21,7 @@ const QueuePanel = () => {
     if (!job?.progress) return '0/0';
     return `${job.progress.processed_count}/${job.progress.total_found}`;
   }, [job]);
+  const progressPercent = getProgressPercent(job);
 
   const refreshJob = useCallback(async (jobId: string) => {
     const latest = await bridge.getIndexJob(jobId);
@@ -147,13 +154,18 @@ const QueuePanel = () => {
               </div>
             </dl>
 
-            <div className="queue-panel__progress" aria-label="Progresso do job">
+            <div
+              className="queue-panel__progress"
+              role="progressbar"
+              aria-label="Progresso do job"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progressPercent)}
+            >
               <div
                 className="queue-panel__progress-bar"
                 style={{
-                  width: `${job.progress && job.progress.total_found > 0
-                    ? Math.min(100, (job.progress.processed_count / job.progress.total_found) * 100)
-                    : 0}%`,
+                  width: `${progressPercent}%`,
                 }}
               />
             </div>

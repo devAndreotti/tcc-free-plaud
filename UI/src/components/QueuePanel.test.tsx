@@ -82,6 +82,7 @@ describe('QueuePanel', () => {
     expect(screen.getByText('embedding')).toBeTruthy();
     expect(screen.getByText('1/3')).toBeTruthy();
     expect(screen.getByText('10.00 arquivos/s')).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: 'Progresso do job' }).getAttribute('aria-valuenow')).toBe('33');
   });
 
   it('cancela job ativo sem iniciar outro', async () => {
