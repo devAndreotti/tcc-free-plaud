@@ -37,6 +37,50 @@ export interface IndexVaultResult {
   skipped_count: number;
 }
 
+export interface IndexJobProgress {
+  phase: string;
+  current_path: string | null;
+  total_found: number;
+  processed_count: number;
+  indexed_count: number;
+  unchanged_count: number;
+  failed_count: number;
+  skipped_count: number;
+  elapsed_ms: number;
+  warmup_ms: number;
+  embedding_ms: number;
+  writing_ms: number;
+  committed_count: number;
+  commit_mode_requested: string;
+  commit_mode_resolved: string;
+  batch_index: number;
+  batch_total: number;
+  message: string | null;
+}
+
+export interface IndexJobFileError {
+  source_path: string;
+  message: string;
+  error_code: string | null;
+}
+
+export interface IndexJobSnapshot {
+  job_id: string;
+  status: 'running' | 'success' | 'partial' | 'failed' | 'cancelled' | string;
+  source_path: string;
+  started_at: string;
+  finished_at: string | null;
+  progress: IndexJobProgress | null;
+  result: IndexVaultResult | null;
+  error_code: string | null;
+  message: string | null;
+  last_errors: IndexJobFileError[];
+  cancel_requested: boolean;
+  files_per_second: number;
+  chunks_per_second: number;
+  eta_seconds: number | null;
+}
+
 export interface BackendSettings {
   answer_provider: string;
   answer_model: string;
@@ -239,6 +283,15 @@ interface PythonApi {
   /** Indexa a pasta selecionada no corpus local do backend. */
   indexVault?: (folderPath: string) => Promise<IndexVaultResult>;
 
+  /** Inicia job assíncrono de indexação de pasta. */
+  startIndexJob?: (folderPath: string, rebuild?: boolean) => Promise<IndexJobSnapshot>;
+
+  /** Consulta snapshot de job de indexação. */
+  getIndexJob?: (jobId: string) => Promise<IndexJobSnapshot>;
+
+  /** Solicita cancelamento cooperativo de job de indexação. */
+  cancelIndexJob?: (jobId: string) => Promise<IndexJobSnapshot>;
+
   /** Retorna resumo das configurações/backend para o modal. */
   getBackendSettings?: () => Promise<BackendSettings>;
 
@@ -412,6 +465,50 @@ const MOCK_BENCHMARK_RESULT: BenchmarkCompareResult = {
   },
 };
 
+const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobSnapshot => ({
+  job_id: 'idx-mock',
+  status,
+  source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)',
+  started_at: new Date().toISOString(),
+  finished_at: status === 'running' ? null : new Date().toISOString(),
+  progress: {
+    phase: status === 'running' ? 'embedding' : status,
+    current_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Introdução.md',
+    total_found: 5,
+    processed_count: status === 'running' ? 2 : 5,
+    indexed_count: status === 'running' ? 1 : 5,
+    unchanged_count: 0,
+    failed_count: 0,
+    skipped_count: 0,
+    elapsed_ms: status === 'running' ? 1200 : 2400,
+    warmup_ms: 120,
+    embedding_ms: 480,
+    writing_ms: 200,
+    committed_count: status === 'running' ? 1 : 5,
+    commit_mode_requested: 'auto',
+    commit_mode_resolved: 'microbatch',
+    batch_index: status === 'running' ? 1 : 2,
+    batch_total: 2,
+    message: status === 'running' ? 'Processando Introdução.md' : 'Indexacao finalizada.',
+  },
+  result: status === 'running' ? null : {
+    ok: true,
+    status: 'success',
+    total_found: 5,
+    indexed_count: 5,
+    unchanged_count: 0,
+    failed_count: 0,
+    skipped_count: 0,
+  },
+  error_code: null,
+  message: status === 'running' ? 'Processando Introdução.md' : 'Indexacao finalizada.',
+  last_errors: [],
+  cancel_requested: status === 'cancelled',
+  files_per_second: 2.08,
+  chunks_per_second: 8.33,
+  eta_seconds: status === 'running' ? 2 : 0,
+});
+
 // ─── Serviço de bridge exportado ─────────────────────────────────────────────
 export const bridge = {
   /**
@@ -504,6 +601,31 @@ export const bridge = {
       failed_count: 0,
       skipped_count: 0,
     };
+  },
+
+  startIndexJob: async (folderPath: string, rebuild = false): Promise<IndexJobSnapshot> => {
+    if (isDesktopApp && window.pywebview?.api.startIndexJob) {
+      return window.pywebview.api.startIndexJob(folderPath, rebuild);
+    }
+    console.debug(`[Bridge Mock] startIndexJob: ${folderPath} rebuild=${String(rebuild)}`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return mockIndexJob('running');
+  },
+
+  getIndexJob: async (jobId: string): Promise<IndexJobSnapshot> => {
+    if (isDesktopApp && window.pywebview?.api.getIndexJob) {
+      return window.pywebview.api.getIndexJob(jobId);
+    }
+    console.debug(`[Bridge Mock] getIndexJob: ${jobId}`);
+    return mockIndexJob('running');
+  },
+
+  cancelIndexJob: async (jobId: string): Promise<IndexJobSnapshot> => {
+    if (isDesktopApp && window.pywebview?.api.cancelIndexJob) {
+      return window.pywebview.api.cancelIndexJob(jobId);
+    }
+    console.debug(`[Bridge Mock] cancelIndexJob: ${jobId}`);
+    return mockIndexJob('cancelled');
   },
 
   getBackendSettings: async (): Promise<BackendSettings> => {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { HamburgerIcon, FolderIcon, ZapIcon } from './Icons';
+import { HamburgerIcon, FolderIcon, QueueIcon, ZapIcon } from './Icons';
 import HamburgerMenu from './HamburgerMenu';
 
 // Props da barra lateral
@@ -8,11 +8,12 @@ interface SidebarProps {
   onNewTab: () => void;
   onOpenNotes: () => void;
   onOpenBenchmark: () => void;
-  activeView: 'chat' | 'notes' | 'benchmark';
+  onOpenQueue: () => void;
+  activeView: 'chat' | 'notes' | 'benchmark' | 'queue';
 }
 
 // Componente da barra lateral esquerda da aplicação
-const Sidebar = ({ onOpenSettings, onNewTab, onOpenNotes, onOpenBenchmark, activeView }: SidebarProps) => {
+const Sidebar = ({ onOpenSettings, onNewTab, onOpenNotes, onOpenBenchmark, onOpenQueue, activeView }: SidebarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
@@ -60,6 +61,20 @@ const Sidebar = ({ onOpenSettings, onNewTab, onOpenNotes, onOpenBenchmark, activ
         >
           <ZapIcon size={20} />
           <span className="sidebar__nav-label">Benchmark</span>
+        </button>
+
+        {/* Botão Queue */}
+        <button
+          id="btn-sidebar-queue"
+          type="button"
+          className={`sidebar__nav-btn ${activeView === 'queue' ? 'sidebar__nav-btn--active' : ''}`}
+          aria-label="Fila"
+          aria-pressed={activeView === 'queue'}
+          title="Fila"
+          onClick={onOpenQueue}
+        >
+          <QueueIcon size={20} />
+          <span className="sidebar__nav-label">Fila</span>
         </button>
       </nav>
 

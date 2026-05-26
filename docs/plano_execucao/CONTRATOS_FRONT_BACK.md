@@ -151,6 +151,54 @@ type QueueItem = {
 }
 ```
 
+### IndexJobSnapshot
+
+```ts
+type IndexJobProgress = {
+  phase: string
+  current_path: string | null
+  total_found: number
+  processed_count: number
+  indexed_count: number
+  unchanged_count: number
+  failed_count: number
+  skipped_count: number
+  elapsed_ms: number
+  warmup_ms: number
+  embedding_ms: number
+  writing_ms: number
+  committed_count: number
+  commit_mode_requested: string
+  commit_mode_resolved: string
+  batch_index: number
+  batch_total: number
+  message: string | null
+}
+
+type IndexJobFileError = {
+  source_path: string
+  message: string
+  error_code: string | null
+}
+
+type IndexJobSnapshot = {
+  job_id: string
+  status: 'running' | 'success' | 'partial' | 'failed' | 'cancelled'
+  source_path: string
+  started_at: string
+  finished_at: string | null
+  progress: IndexJobProgress | null
+  result: unknown | null
+  error_code: string | null
+  message: string | null
+  last_errors: IndexJobFileError[]
+  cancel_requested: boolean
+  files_per_second: number
+  chunks_per_second: number
+  eta_seconds: number | null
+}
+```
+
 ### ExperimentRunSummary
 
 ```ts
@@ -181,6 +229,9 @@ interface BackendBridge {
   deleteNote(noteId: string, confirmation: string): Promise<NoteDeleteResult>
   reindexNote(noteId: string): Promise<NoteReindexResult>
   listQueue(): Promise<QueueItem[]>
+  startIndexJob(folderPath: string, rebuild?: boolean): Promise<IndexJobSnapshot>
+  getIndexJob(jobId: string): Promise<IndexJobSnapshot>
+  cancelIndexJob(jobId: string): Promise<IndexJobSnapshot>
   listExperiments(): Promise<ExperimentRunSummary[]>
 }
 ```

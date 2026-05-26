@@ -106,6 +106,58 @@ def test_desktop_api_index_vault_returns_batch_summary(monkeypatch, tmp_path: Pa
     }
 
 
+def test_desktop_api_exposes_index_queue_methods(monkeypatch, tmp_path: Path) -> None:
+    module = _load_ui_main(monkeypatch)
+    started: list[tuple[str, bool]] = []
+    cancelled: list[str] = []
+
+    class FakeSnapshot:
+        def __init__(self, job_id: str, status: str = 'running') -> None:
+            self.job_id = job_id
+            self.status = status
+
+        def model_dump(self, mode='json'):  # noqa: ANN001, ANN202, ARG002
+            return {
+                'job_id': self.job_id,
+                'status': self.status,
+                'source_path': str(tmp_path),
+                'started_at': '2026-05-26T10:00:00+00:00',
+                'finished_at': None,
+                'progress': None,
+                'result': None,
+                'error_code': None,
+                'message': None,
+                'last_errors': [],
+                'cancel_requested': False,
+                'files_per_second': 0.0,
+                'chunks_per_second': 0.0,
+                'eta_seconds': None,
+            }
+
+    def fake_start_index_job(folder_path, *, rebuild, runtime):  # noqa: ANN001, ANN202
+        started.append((str(folder_path), rebuild))
+        return FakeSnapshot('job-ui')
+
+    def fake_get_index_job(job_id):  # noqa: ANN001, ANN202
+        return FakeSnapshot(job_id, status='running')
+
+    def fake_cancel_index_job(job_id):  # noqa: ANN001, ANN202
+        cancelled.append(job_id)
+        return FakeSnapshot(job_id, status='cancelled')
+
+    monkeypatch.setattr(module, 'start_index_job', fake_start_index_job)
+    monkeypatch.setattr(module, 'get_index_job', fake_get_index_job)
+    monkeypatch.setattr(module, 'cancel_index_job', fake_cancel_index_job)
+
+    api = module.Api()
+
+    assert api.startIndexJob(str(tmp_path))['job_id'] == 'job-ui'
+    assert started == [(str(tmp_path), False)]
+    assert api.getIndexJob('job-ui')['status'] == 'running'
+    assert api.cancelIndexJob('job-ui')['status'] == 'cancelled'
+    assert cancelled == ['job-ui']
+
+
 def test_desktop_api_exposes_settings_catalog(monkeypatch) -> None:
     module = _load_ui_main(monkeypatch)
 

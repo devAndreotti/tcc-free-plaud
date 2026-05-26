@@ -40,6 +40,7 @@ from free_plaud.app.local_env import answer_api_key_is_configured, load_local_en
 from free_plaud.app.settings_catalog import save_catalog_setting, settings_catalog_payload
 from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.benchmark.service import run_benchmark_compare
+from free_plaud.corpus.jobs import cancel_index_job, get_index_job, start_index_job
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.notes.service import delete_note, get_note_detail, list_notes, reindex_note
 from free_plaud.providers.answer import test_answer_provider
@@ -121,6 +122,16 @@ class Api:
             'failed_count': result.failed_count,
             'skipped_count': result.skipped_count,
         }
+
+    def startIndexJob(self, folder_path: str, rebuild: bool = False) -> dict:
+        snapshot = start_index_job(Path(folder_path).expanduser(), rebuild=rebuild, runtime=self.runtime)
+        return snapshot.model_dump(mode='json')
+
+    def getIndexJob(self, job_id: str) -> dict:
+        return get_index_job(job_id).model_dump(mode='json')
+
+    def cancelIndexJob(self, job_id: str) -> dict:
+        return cancel_index_job(job_id).model_dump(mode='json')
 
     def getBackendSettings(self) -> dict:
         settings = get_settings()
