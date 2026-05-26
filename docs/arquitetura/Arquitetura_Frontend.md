@@ -187,6 +187,8 @@ Na evolução atual, a UI React dentro do PyWebView deixa de responder apenas mo
 - a pasta selecionada no modal pode ser indexada no corpus local
 - a tela Notes lista notas indexadas, abre detalhe com Markdown estruturado e chunks,
   apaga nota com confirmação textual e reindexa a partir do `source_path` persistido
+- a tela Fila inicia indexação de pasta como job em background por processo, consulta progresso,
+  calcula taxa/ETA a partir dos eventos do backend e solicita cancelamento cooperativo
 - respostas exibem texto, fontes e `latencia_ms` preservando quebras de linha
 - settings de frontend, TUI e menu terminal passam a consumir o catálogo canônico de
   `free_plaud.app.settings_catalog`, evitando rótulos divergentes para `top_k`,

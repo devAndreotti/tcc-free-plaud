@@ -12,6 +12,7 @@ import ChatInput from './components/ChatInput';
 import GraphPanel from './components/GraphPanel';
 import NotesPanel from './components/NotesPanel';
 import BenchmarkPanel from './components/BenchmarkPanel';
+import QueuePanel from './components/QueuePanel';
 import { bridge } from './services/bridge';
 import { VaultProvider } from './contexts/VaultContext';
 
@@ -28,7 +29,7 @@ const INITIAL_TAB: Tab = {
 
 // Estado de conversa vazia para reutilização
 const EMPTY_MESSAGES: MessageData[] = [];
-type WorkspaceView = 'chat' | 'notes' | 'benchmark';
+type WorkspaceView = 'chat' | 'notes' | 'benchmark' | 'queue';
 
 function App() {
   // Gerenciamento de abas
@@ -184,6 +185,7 @@ function App() {
           onNewTab={handleNewTab}
           onOpenNotes={() => setWorkspaceView('notes')}
           onOpenBenchmark={() => setWorkspaceView('benchmark')}
+          onOpenQueue={() => setWorkspaceView('queue')}
           activeView={workspaceView}
         />
 
@@ -205,6 +207,8 @@ function App() {
           {workspaceView === 'notes' && <NotesPanel />}
 
           {workspaceView === 'benchmark' && <BenchmarkPanel />}
+
+          {workspaceView === 'queue' && <QueuePanel />}
 
           {workspaceView === 'chat' && activeTab?.type === 'chat' && (
             <main
