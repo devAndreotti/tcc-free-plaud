@@ -34,6 +34,19 @@ from free_plaud.storage.vector import LocalVectorStore
 PIPELINE_VERSION = 'pipeline-0.7.0'
 
 
+class BenchmarkSettingsSnapshot(BaseModel):
+    """Configuração operacional gravada junto do resultado experimental."""
+
+    embedding_model: str
+    embedding_device: str
+    default_ask_strategy: str
+    retrieval_top_k: int
+    default_chunk_size: int
+    default_chunk_overlap: int
+    answer_provider: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class BenchmarkQueryResult(BaseModel):
     sample_id: str
     question: str
@@ -60,6 +73,7 @@ class BenchmarkRunResult(BaseModel):
     metrics: dict[str, float | int]
     queries: list[BenchmarkQueryResult]
     hybrid_config: dict[str, int | float | None] | None = None
+    settings_snapshot: BenchmarkSettingsSnapshot | None = None
     started_at: datetime
     finished_at: datetime
     duration_ms: int
@@ -96,6 +110,7 @@ class BenchmarkComparisonResult(BaseModel):
     chunk_size: int
     overlap: int
     hybrid_config: dict[str, int | float | None] | None = None
+    settings_snapshot: BenchmarkSettingsSnapshot | None = None
     summaries: dict[str, BenchmarkStrategySummary]
     cases: list[BenchmarkCaseComparisonResult]
     started_at: datetime
@@ -191,6 +206,7 @@ def run_benchmark(
     hybrid_vector_weight: float = DEFAULT_HYBRID_VECTOR_WEIGHT,
     hybrid_lexical_pool: int | None = None,
     hybrid_vector_pool: int | None = None,
+    settings_snapshot: BenchmarkSettingsSnapshot | None = None,
 ) -> BenchmarkRunResult:
     """Executa benchmark reproduzível sobre uma nota canônica."""
     started_at = datetime.now(UTC)
@@ -270,6 +286,7 @@ def run_benchmark(
             if strategy == 'hybrid'
             else None
         ),
+        settings_snapshot=settings_snapshot,
         started_at=started_at,
         finished_at=finished_at,
         duration_ms=duration_ms,
@@ -295,6 +312,7 @@ def compare_benchmark_suite(
     hybrid_vector_weight: float = DEFAULT_HYBRID_VECTOR_WEIGHT,
     hybrid_lexical_pool: int | None = None,
     hybrid_vector_pool: int | None = None,
+    settings_snapshot: BenchmarkSettingsSnapshot | None = None,
 ) -> BenchmarkComparisonResult:
     """Compara lexical, vector e hybrid em múltiplos documentos de forma reproduzível."""
     started_at = datetime.now(UTC)
@@ -321,6 +339,7 @@ def compare_benchmark_suite(
             chunk_size=chunk_size,
             overlap=overlap,
             run_name=f'{suite.suite_name}-{case.case_id}-lexical',
+            settings_snapshot=settings_snapshot,
         )
         vector_result = run_benchmark(
             note,
@@ -333,6 +352,7 @@ def compare_benchmark_suite(
             run_name=f'{suite.suite_name}-{case.case_id}-vector',
             vector_store=vector_store,
             embedder=embedder,
+            settings_snapshot=settings_snapshot,
         )
         hybrid_result = run_benchmark(
             note,
@@ -350,6 +370,7 @@ def compare_benchmark_suite(
             hybrid_vector_weight=hybrid_vector_weight,
             hybrid_lexical_pool=hybrid_lexical_pool,
             hybrid_vector_pool=hybrid_vector_pool,
+            settings_snapshot=settings_snapshot,
         )
 
         lexical_runs.append(lexical_result)
@@ -384,6 +405,7 @@ def compare_benchmark_suite(
             'lexical_pool': hybrid_lexical_pool or max(top_k * 3, top_k),
             'vector_pool': hybrid_vector_pool or max(top_k * 8, 24),
         },
+        settings_snapshot=settings_snapshot,
         summaries={
             'lexical': _summarize_strategy('lexical', lexical_runs),
             'vector': _summarize_strategy('vector', vector_runs),
@@ -415,6 +437,9 @@ def _persist_benchmark_result(connection, note: Note, result: BenchmarkRunResult
                 'chunk_size': result.chunk_size,
                 'overlap': result.overlap,
                 'hybrid_config': result.hybrid_config,
+                'settings_snapshot': (
+                    result.settings_snapshot.model_dump(mode='json') if result.settings_snapshot else None
+                ),
             },
             metrics=dict(result.metrics),
             started_at=result.started_at,

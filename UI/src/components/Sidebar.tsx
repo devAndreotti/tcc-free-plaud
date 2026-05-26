@@ -7,23 +7,13 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onNewTab: () => void;
   onOpenNotes: () => void;
-  activeView: 'chat' | 'notes';
+  onOpenBenchmark: () => void;
+  activeView: 'chat' | 'notes' | 'benchmark';
 }
 
 // Componente da barra lateral esquerda da aplicação
-const Sidebar = ({ onOpenSettings, onNewTab, onOpenNotes, activeView }: SidebarProps) => {
+const Sidebar = ({ onOpenSettings, onNewTab, onOpenNotes, onOpenBenchmark, activeView }: SidebarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [activeItem, setActiveItem] = useState<string | null>(null);
-
-  // Navega para a seção selecionada
-  const handleNavClick = (item: string) => {
-    setActiveItem((prev) => (prev === item ? null : item));
-  };
-
-  const handleNotesClick = () => {
-    setActiveItem(null);
-    onOpenNotes();
-  };
 
   return (
     <aside className="sidebar" role="complementary" aria-label="Barra de navegação">
@@ -52,24 +42,24 @@ const Sidebar = ({ onOpenSettings, onNewTab, onOpenNotes, activeView }: SidebarP
           aria-label="Notes"
           aria-pressed={activeView === 'notes'}
           title="Notes"
-          onClick={handleNotesClick}
+          onClick={onOpenNotes}
         >
           <FolderIcon size={20} />
           <span className="sidebar__nav-label">Notes</span>
         </button>
 
-        {/* Botão Skills */}
+        {/* Botão Benchmark */}
         <button
-          id="btn-sidebar-skills"
+          id="btn-sidebar-benchmark"
           type="button"
-          className={`sidebar__nav-btn ${activeItem === 'skills' ? 'sidebar__nav-btn--active' : ''}`}
-          aria-label="Skills"
-          aria-pressed={activeItem === 'skills'}
-          title="Skills"
-          onClick={() => handleNavClick('skills')}
+          className={`sidebar__nav-btn ${activeView === 'benchmark' ? 'sidebar__nav-btn--active' : ''}`}
+          aria-label="Benchmark"
+          aria-pressed={activeView === 'benchmark'}
+          title="Benchmark"
+          onClick={onOpenBenchmark}
         >
           <ZapIcon size={20} />
-          <span className="sidebar__nav-label">Skills</span>
+          <span className="sidebar__nav-label">Benchmark</span>
         </button>
       </nav>
 

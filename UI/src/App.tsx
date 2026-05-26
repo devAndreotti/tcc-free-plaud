@@ -11,6 +11,7 @@ import MessageBubble, {
 import ChatInput from './components/ChatInput';
 import GraphPanel from './components/GraphPanel';
 import NotesPanel from './components/NotesPanel';
+import BenchmarkPanel from './components/BenchmarkPanel';
 import { bridge } from './services/bridge';
 import { VaultProvider } from './contexts/VaultContext';
 
@@ -27,7 +28,7 @@ const INITIAL_TAB: Tab = {
 
 // Estado de conversa vazia para reutilização
 const EMPTY_MESSAGES: MessageData[] = [];
-type WorkspaceView = 'chat' | 'notes';
+type WorkspaceView = 'chat' | 'notes' | 'benchmark';
 
 function App() {
   // Gerenciamento de abas
@@ -182,6 +183,7 @@ function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           onNewTab={handleNewTab}
           onOpenNotes={() => setWorkspaceView('notes')}
+          onOpenBenchmark={() => setWorkspaceView('benchmark')}
           activeView={workspaceView}
         />
 
@@ -201,6 +203,8 @@ function App() {
 
           {/* View ativa conforme a aba selecionada */}
           {workspaceView === 'notes' && <NotesPanel />}
+
+          {workspaceView === 'benchmark' && <BenchmarkPanel />}
 
           {workspaceView === 'chat' && activeTab?.type === 'chat' && (
             <main

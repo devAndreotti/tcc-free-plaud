@@ -39,6 +39,7 @@ from free_plaud.app.doctor import run_doctor
 from free_plaud.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
 from free_plaud.app.settings_catalog import save_catalog_setting, settings_catalog_payload
 from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
+from free_plaud.benchmark.service import run_benchmark_compare
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.notes.service import delete_note, get_note_detail, list_notes, reindex_note
 from free_plaud.providers.answer import test_answer_provider
@@ -199,6 +200,23 @@ class Api:
     def reindexNote(self, note_id: str) -> dict:
         result = reindex_note(note_id, runtime=self.runtime)
         return result.model_dump(mode='json')
+
+    def runBenchmarkCompare(self, suite_path: str) -> dict:
+        return run_benchmark_compare(Path(suite_path), runtime=self.runtime)
+
+    def selectBenchmarkSuite(self) -> str:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes('-topmost', True)
+        path = filedialog.askopenfilename(
+            title='Selecionar suite.json',
+            filetypes=[('JSON', '*.json'), ('Todos os arquivos', '*.*')],
+        )
+        root.destroy()
+        return path or ''
 
     def selectFolder(self) -> str:
         """

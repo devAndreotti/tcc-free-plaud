@@ -15,6 +15,7 @@ from free_plaud.benchmark.reports import (
     export_benchmark_json,
 )
 from free_plaud.benchmark.runners import compare_benchmark_suite, run_benchmark
+from free_plaud.benchmark.service import build_settings_snapshot
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import get_embedder
@@ -88,6 +89,7 @@ def run(
         hybrid_vector_weight=hybrid_vector_weight,
         hybrid_lexical_pool=hybrid_lexical_pool,
         hybrid_vector_pool=hybrid_vector_pool,
+        settings_snapshot=build_settings_snapshot(settings),
     )
     payload = result.model_dump(mode='json')
     if export:
@@ -139,6 +141,7 @@ def compare(
         hybrid_vector_weight=hybrid_vector_weight,
         hybrid_lexical_pool=hybrid_lexical_pool,
         hybrid_vector_pool=hybrid_vector_pool,
+        settings_snapshot=build_settings_snapshot(settings),
     )
     payload = result.model_dump(mode='json')
     if export:

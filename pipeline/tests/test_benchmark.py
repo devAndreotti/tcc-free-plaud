@@ -12,8 +12,14 @@ from free_plaud.benchmark.datasets import (
     load_benchmark_suite,
 )
 from free_plaud.benchmark.metrics import mean_reciprocal_rank, recall_at_k_from_ranks
-from free_plaud.benchmark.reports import export_benchmark_csv, export_benchmark_json
-from free_plaud.benchmark.runners import compare_benchmark_suite, run_benchmark
+from free_plaud.benchmark.reports import (
+    export_benchmark_comparison_csv,
+    export_benchmark_comparison_json,
+    export_benchmark_csv,
+    export_benchmark_json,
+)
+from free_plaud.benchmark.runners import BenchmarkSettingsSnapshot, compare_benchmark_suite, run_benchmark
+from free_plaud.benchmark.service import run_benchmark_compare
 from free_plaud.cli import app
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note
@@ -35,6 +41,11 @@ class FakeEmbedder:
                 vector[slot] += 1.0
             embeddings.append(vector)
         return embeddings
+
+
+class FakeRuntime:
+    def get_embedder(self) -> FakeEmbedder:
+        return FakeEmbedder()
 
 
 def _build_note(tmp_path: Path) -> Note:
@@ -470,6 +481,147 @@ def test_compare_benchmark_suite_runs_lexical_vector_and_hybrid_strategies(tmp_p
     assert result.cases[0].lexical.metrics['recall_at_3'] == 1.0
     assert result.cases[0].vector.metrics['recall_at_3'] == 1.0
     assert result.cases[0].hybrid.metrics['recall_at_3'] == 1.0
+
+
+def test_benchmark_comparison_exports_settings_snapshot(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'benchmark.md'
+    sample_file.write_text(
+        '# Benchmark\n\n'
+        'O benchmark mede recall, latencia e cobertura de citacoes para comparar retrieval.\n'
+        'A recuperacao vetorial usa embeddings persistidos no ChromaDB local.\n',
+        encoding='utf-8',
+    )
+    dataset_path = tmp_path / 'dataset.json'
+    dataset_path.write_text(
+        json.dumps(
+            {
+                'dataset_name': 'snapshot-dataset',
+                'samples': [
+                    {
+                        'sample_id': 'q-1',
+                        'question': 'O que o benchmark mede?',
+                        'expected_note_id': 'benchmark',
+                        'expected_terms': ['recall', 'latencia'],
+                    }
+                ],
+            }
+        ),
+        encoding='utf-8',
+    )
+    suite_path = tmp_path / 'suite.json'
+    suite_path.write_text(
+        json.dumps(
+            {
+                'suite_name': 'snapshot-suite',
+                'cases': [
+                    {
+                        'case_id': 'case-1',
+                        'document_path': sample_file.name,
+                        'dataset_path': dataset_path.name,
+                    }
+                ],
+            }
+        ),
+        encoding='utf-8',
+    )
+    snapshot = BenchmarkSettingsSnapshot(
+        embedding_model='fake-hash',
+        embedding_device='cpu',
+        default_ask_strategy='hybrid',
+        retrieval_top_k=4,
+        default_chunk_size=120,
+        default_chunk_overlap=30,
+        answer_provider='extractive',
+    )
+
+    result = compare_benchmark_suite(
+        load_benchmark_suite(suite_path),
+        workspace_dir=tmp_path,
+        top_k=4,
+        chunk_size=120,
+        overlap=30,
+        vector_store=LocalVectorStore(tmp_path / 'results' / 'vector_store', collection_name='snapshot_suite'),
+        embedder=FakeEmbedder(),
+        settings_snapshot=snapshot,
+    )
+    json_path = export_benchmark_comparison_json(result, tmp_path / 'comparison.json')
+    csv_path = export_benchmark_comparison_csv(result, tmp_path / 'comparison.csv')
+
+    payload = json.loads(json_path.read_text(encoding='utf-8'))
+    with csv_path.open(encoding='utf-8', newline='') as handle:
+        csv_rows = list(csv.DictReader(handle))
+
+    assert payload['settings_snapshot']['embedding_model'] == 'fake-hash'
+    assert payload['settings_snapshot']['retrieval_top_k'] == 4
+    assert payload['summaries']['hybrid']['mrr'] == 1.0
+    assert csv_rows[0]['embedding_device'] == 'cpu'
+    assert csv_rows[0]['answer_provider'] == 'extractive'
+
+
+def test_run_benchmark_compare_service_exports_structured_payload(tmp_path: Path) -> None:
+    sample_file = tmp_path / 'benchmark.md'
+    sample_file.write_text(
+        '# Benchmark\n\n'
+        'O benchmark mede recall, latencia e cobertura de citacoes para comparar retrieval.\n'
+        'A recuperacao vetorial usa embeddings persistidos no ChromaDB local.\n',
+        encoding='utf-8',
+    )
+    dataset_path = tmp_path / 'dataset.json'
+    dataset_path.write_text(
+        json.dumps(
+            {
+                'dataset_name': 'service-dataset',
+                'samples': [
+                    {
+                        'sample_id': 'q-1',
+                        'question': 'O que o benchmark mede?',
+                        'expected_note_id': 'benchmark',
+                        'expected_terms': ['recall', 'latencia'],
+                    }
+                ],
+            }
+        ),
+        encoding='utf-8',
+    )
+    suite_path = tmp_path / 'suite.json'
+    suite_path.write_text(
+        json.dumps(
+            {
+                'suite_name': 'service-suite',
+                'cases': [
+                    {
+                        'case_id': 'case-1',
+                        'document_path': sample_file.name,
+                        'dataset_path': dataset_path.name,
+                    }
+                ],
+            }
+        ),
+        encoding='utf-8',
+    )
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        datasets_dir=tmp_path / 'data' / 'datasets',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+        embedding_model='fake-hash',
+        embedding_device='cpu',
+        retrieval_top_k=4,
+        default_chunk_size=120,
+        default_chunk_overlap=30,
+    )
+
+    payload = run_benchmark_compare('suite.json', runtime=FakeRuntime(), settings=settings)
+
+    assert payload['ok'] is True
+    assert payload['suite_name'] == 'service-suite'
+    assert payload['summaries']['hybrid']['recall_at_3'] == 1.0
+    assert payload['settings_snapshot']['embedding_model'] == 'fake-hash'
+    assert Path(payload['json_report_path']).exists()
+    assert Path(payload['csv_report_path']).exists()
 
 
 def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, tmp_path: Path) -> None:

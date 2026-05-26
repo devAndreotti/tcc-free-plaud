@@ -168,6 +168,39 @@ export interface NoteReindexResult {
   message: string | null;
 }
 
+export interface BenchmarkSettingsSnapshot {
+  embedding_model: string;
+  embedding_device: string;
+  default_ask_strategy: string;
+  retrieval_top_k: number;
+  default_chunk_size: number;
+  default_chunk_overlap: number;
+  answer_provider: string;
+  created_at?: string;
+}
+
+export interface BenchmarkStrategySummary {
+  strategy: string;
+  case_count: number;
+  query_count: number;
+  mrr: number;
+  recall_at_3: number;
+  recall_at_5: number;
+  recall_at_10: number;
+  duration_ms: number;
+  avg_query_latency_ms: number;
+}
+
+export interface BenchmarkCompareResult {
+  ok: boolean;
+  comparison_id: string;
+  suite_name: string;
+  summaries: Record<string, BenchmarkStrategySummary>;
+  json_report_path: string;
+  csv_report_path: string;
+  settings_snapshot: BenchmarkSettingsSnapshot | null;
+}
+
 interface PythonApi {
   /**
    * Envia mensagem do usuário para o backend Python.
@@ -241,6 +274,12 @@ interface PythonApi {
 
   /** Reindexa uma nota a partir do source_path salvo no banco. */
   reindexNote?: (noteId: string) => Promise<NoteReindexResult>;
+
+  /** Abre o seletor nativo para suite.json de benchmark. */
+  selectBenchmarkSuite?: () => Promise<string>;
+
+  /** Executa benchmark compare e exporta JSON/CSV com snapshot de settings. */
+  runBenchmarkCompare?: (suitePath: string) => Promise<BenchmarkCompareResult>;
 }
 
 declare global {
@@ -319,6 +358,59 @@ const MOCK_NOTES: NoteDetail[] = [
     ],
   },
 ];
+
+const MOCK_BENCHMARK_RESULT: BenchmarkCompareResult = {
+  ok: true,
+  comparison_id: 'cmp-mock',
+  suite_name: 'suite-mock',
+  summaries: {
+    lexical: {
+      strategy: 'lexical',
+      case_count: 1,
+      query_count: 3,
+      mrr: 0.67,
+      recall_at_3: 0.67,
+      recall_at_5: 0.67,
+      recall_at_10: 0.67,
+      duration_ms: 32,
+      avg_query_latency_ms: 4,
+    },
+    vector: {
+      strategy: 'vector',
+      case_count: 1,
+      query_count: 3,
+      mrr: 0.83,
+      recall_at_3: 1,
+      recall_at_5: 1,
+      recall_at_10: 1,
+      duration_ms: 64,
+      avg_query_latency_ms: 8,
+    },
+    hybrid: {
+      strategy: 'hybrid',
+      case_count: 1,
+      query_count: 3,
+      mrr: 1,
+      recall_at_3: 1,
+      recall_at_5: 1,
+      recall_at_10: 1,
+      duration_ms: 81,
+      avg_query_latency_ms: 10,
+    },
+  },
+  json_report_path: 'data\\results\\cmp-mock.json',
+  csv_report_path: 'data\\results\\cmp-mock.csv',
+  settings_snapshot: {
+    embedding_model: 'fake-hash',
+    embedding_device: 'cpu',
+    default_ask_strategy: 'hybrid',
+    retrieval_top_k: 4,
+    default_chunk_size: 800,
+    default_chunk_overlap: 120,
+    answer_provider: 'extractive',
+    created_at: new Date().toISOString(),
+  },
+};
 
 // ─── Serviço de bridge exportado ─────────────────────────────────────────────
 export const bridge = {
@@ -673,6 +765,23 @@ export const bridge = {
       chunks_indexed: 2,
       message: 'Mock reindexed.',
     };
+  },
+
+  selectBenchmarkSuite: async (): Promise<string> => {
+    if (isDesktopApp && window.pywebview?.api.selectBenchmarkSuite) {
+      return window.pywebview.api.selectBenchmarkSuite();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return 'data\\datasets\\suite-mock.json';
+  },
+
+  runBenchmarkCompare: async (suitePath: string): Promise<BenchmarkCompareResult> => {
+    if (isDesktopApp && window.pywebview?.api.runBenchmarkCompare) {
+      return window.pywebview.api.runBenchmarkCompare(suitePath);
+    }
+    console.debug(`[Bridge Mock] runBenchmarkCompare: ${suitePath}`);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    return MOCK_BENCHMARK_RESULT;
   },
 
   /** Indica se o app está rodando dentro do PyWebView (desktop) */
