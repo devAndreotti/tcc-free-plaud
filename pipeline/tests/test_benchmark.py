@@ -1,6 +1,7 @@
 import csv
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
@@ -46,6 +47,13 @@ class FakeEmbedder:
 class FakeRuntime:
     def get_embedder(self) -> FakeEmbedder:
         return FakeEmbedder()
+
+
+class FakeConnection:
+    closed = False
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def _build_note(tmp_path: Path) -> Note:
@@ -403,6 +411,47 @@ def test_benchmark_run_cli_accepts_hybrid_knobs(monkeypatch, tmp_path: Path) -> 
     }
 
 
+def test_benchmark_run_cli_closes_sqlite_connection(monkeypatch, tmp_path: Path) -> None:
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        datasets_dir=tmp_path / 'data' / 'datasets',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+    )
+    sample_file = tmp_path / 'benchmark.md'
+    sample_file.write_text('# Benchmark\n\nTexto de benchmark.\n', encoding='utf-8')
+    dataset_path = tmp_path / 'dataset.json'
+    dataset_path.write_text(json.dumps({'dataset_name': 'close-dataset', 'samples': []}), encoding='utf-8')
+    connection = FakeConnection()
+
+    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.benchmark.cli.init_sqlite', lambda path: connection)  # noqa: ARG005
+    monkeypatch.setattr(
+        'free_plaud.benchmark.cli.run_benchmark',
+        lambda *args, **kwargs: SimpleNamespace(  # noqa: ARG005
+            benchmark_run_id='run-close',
+            model_dump=lambda mode='json': {'benchmark_run_id': 'run-close'},
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            'benchmark',
+            'run',
+            str(sample_file),
+            '--dataset',
+            str(dataset_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert connection.closed is True
+
+
 def test_compare_benchmark_suite_runs_lexical_vector_and_hybrid_strategies(tmp_path: Path) -> None:
     sample_file = tmp_path / 'benchmark.md'
     sample_file.write_text(
@@ -724,3 +773,39 @@ def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, t
     assert Path(payload['json_report_path']).exists()
     assert Path(payload['csv_report_path']).exists()
     assert payload['embedding_model'] == 'fake-hash'
+
+
+def test_benchmark_compare_cli_closes_sqlite_connection(monkeypatch, tmp_path: Path) -> None:
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        datasets_dir=tmp_path / 'data' / 'datasets',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+        embedding_model='fake-hash',
+    )
+    suite_path = tmp_path / 'suite.json'
+    suite_path.write_text(
+        json.dumps({'suite_name': 'close-suite', 'cases': []}),
+        encoding='utf-8',
+    )
+    connection = FakeConnection()
+
+    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.benchmark.cli.init_sqlite', lambda path: connection)  # noqa: ARG005
+    monkeypatch.setattr('free_plaud.benchmark.cli.LocalVectorStore', lambda *args, **kwargs: object())  # noqa: ARG005
+    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda *args, **kwargs: FakeEmbedder())  # noqa: ARG005
+    monkeypatch.setattr(
+        'free_plaud.benchmark.cli.compare_benchmark_suite',
+        lambda *args, **kwargs: SimpleNamespace(  # noqa: ARG005
+            comparison_id='cmp-close',
+            model_dump=lambda mode='json': {'comparison_id': 'cmp-close'},
+        ),
+    )
+
+    result = runner.invoke(app, ['benchmark', 'compare', '--suite', str(suite_path)])
+
+    assert result.exit_code == 0
+    assert connection.closed is True
