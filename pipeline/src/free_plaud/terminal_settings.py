@@ -92,6 +92,15 @@ def _model_discovery_border(status: str) -> str:
     return 'red'
 
 
+def _ask_model_choice(total: int) -> str:
+    valid_choices = {str(index) for index in range(1, total + 1)}
+    while True:
+        choice = Prompt.ask('Escolha modelo ou ENTER para manter', default='')
+        if not choice or choice in valid_choices:
+            return choice
+        console.print('[yellow]Opcao invalida.[/yellow]')
+
+
 def _models_menu(runtime: CorpusRuntime) -> None:
     result = list_answer_models()
     header = (
@@ -113,8 +122,7 @@ def _models_menu(runtime: CorpusRuntime) -> None:
         table.add_row(str(index), model.label)
     console.print(table)
 
-    choices = [str(index) for index in range(1, len(result.models) + 1)]
-    choice = Prompt.ask('Escolha modelo ou ENTER para manter', choices=[*choices, ''], default='')
+    choice = _ask_model_choice(len(result.models))
     if not choice:
         return
     selected = result.models[int(choice) - 1]
