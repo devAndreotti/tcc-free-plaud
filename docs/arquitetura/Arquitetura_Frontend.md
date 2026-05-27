@@ -193,6 +193,8 @@ Na evolução atual, a UI React dentro do PyWebView deixa de responder apenas mo
 - settings de frontend, TUI e menu terminal passam a consumir o catálogo canônico de
   `free_plaud.app.settings_catalog`, evitando rótulos divergentes para `top_k`,
   `chunk_size`, `overlap`, provider, device e segredo local
+- o modal de configurações lista modelos expostos pelo provider configurado via backend,
+  sem vazar API key e sem acessar endpoints locais direto pelo React
 
 O modo `npm run dev` continua mockado porque não há IPC PyWebView no navegador comum. Para validar
 a integração real, é necessário gerar o build e abrir `UI/main.py` pelo ambiente do pipeline com

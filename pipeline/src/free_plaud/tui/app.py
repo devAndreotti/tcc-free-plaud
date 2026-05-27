@@ -24,6 +24,7 @@ from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.answer import test_answer_provider
+from free_plaud.providers.model_discovery import list_answer_models
 from free_plaud.providers.embed import get_embedder
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.retrieval.rag import answer_with_citations
@@ -148,6 +149,22 @@ def _provider_test_message(result) -> str:  # noqa: ANN001
         f'latencia_ms={result.latency_ms}\n'
         f'erro={result.error or "-"}'
     )
+
+
+def _model_discovery_message(result) -> str:  # noqa: ANN001
+    lines = [
+        f'provider={result.provider}',
+        f'base_url={result.base_url or "-"}',
+        f'status={result.status}',
+        f'latencia_ms={result.latency_ms}',
+        f'cached={result.cached}',
+        f'mensagem={result.message or "-"}',
+    ]
+    if result.models:
+        lines.extend(['', 'Modelos:'])
+        lines.extend(f'- {model.label}' for model in result.models)
+        lines.extend(['', 'Copie um modelo para answer_model e clique Salvar.'])
+    return '\n'.join(lines)
 
 
 class ActionCell(Static, can_focus=True):
@@ -806,6 +823,7 @@ class SettingsPane(Vertical):
             with Container(id='settings-action-row'):
                 yield ActionCell('Salvar', id='settings-save', classes='primary-action')
                 yield ActionCell('Testar provider', id='settings-test-provider', classes='strategy-button')
+                yield ActionCell('Listar modelos', id='settings-list-models', classes='strategy-button')
                 yield ActionCell('Resetar', id='settings-reset', classes='strategy-button')
                 yield ActionCell('Avancado', id='settings-advanced-toggle', classes='strategy-button')
             with Container(id='settings-advanced-fields', classes='hidden'):
@@ -891,8 +909,17 @@ class SettingsPane(Vertical):
             return
         if control_id == 'settings-test-provider':
             event.stop()
+            self._doctor_request_id += 1
+            self._doctor_running = False
             self._render_message('Testando provider...')
             self._run_provider_test()
+            return
+        if control_id == 'settings-list-models':
+            event.stop()
+            self._doctor_request_id += 1
+            self._doctor_running = False
+            self._render_message('Listando modelos...')
+            self._run_model_discovery()
             return
         if control_id == 'settings-reset':
             event.stop()
@@ -1013,6 +1040,18 @@ class SettingsPane(Vertical):
 
     def _render_provider_test(self, result) -> None:  # noqa: ANN001
         self._render_message(_provider_test_message(result))
+
+    @work(thread=True)
+    def _run_model_discovery(self) -> None:
+        try:
+            result = list_answer_models()
+        except Exception as exc:  # noqa: BLE001 - UI precisa exibir erro operacional.
+            self.app.call_from_thread(self._render_error, exc)
+            return
+        self.app.call_from_thread(self._render_model_discovery, result)
+
+    def _render_model_discovery(self, result) -> None:  # noqa: ANN001
+        self._render_message(_model_discovery_message(result))
 
     @work(thread=True)
     def _run_doctor(self, settings: Settings, request_id: int) -> None:

@@ -172,6 +172,30 @@ export interface AnswerProviderTestResult {
   error: string | null;
 }
 
+export type ModelDiscoveryStatus =
+  | 'ok'
+  | 'not_applicable'
+  | 'offline'
+  | 'unauthorized'
+  | 'error';
+
+export interface ModelInfo {
+  id: string;
+  label: string;
+  provider: string;
+  details: Record<string, unknown>;
+}
+
+export interface ModelDiscoveryResult {
+  provider: string;
+  base_url: string | null;
+  status: ModelDiscoveryStatus;
+  models: ModelInfo[];
+  latency_ms: number;
+  cached: boolean;
+  message: string | null;
+}
+
 export interface NoteSummary {
   note_id: string;
   title: string;
@@ -309,6 +333,9 @@ interface PythonApi {
 
   /** Testa provider LLM com prompt sintetico, sem usar corpus. */
   testAnswerProvider?: () => Promise<AnswerProviderTestResult>;
+
+  /** Lista modelos expostos pelo provider LLM configurado. */
+  listAnswerModels?: () => Promise<ModelDiscoveryResult>;
 
   /** Salva ou remove FREE_PLAUD_ANSWER_API_KEY em pipeline/.env. */
   saveApiKey?: (apiKey: string) => Promise<SaveApiKeyResult>;
@@ -812,6 +839,26 @@ export const bridge = {
       status: 'not_applicable',
       latency_ms: 0,
       error: null,
+    };
+  },
+
+  listAnswerModels: async (): Promise<ModelDiscoveryResult> => {
+    const pywebviewApi = globalThis.window?.pywebview?.api;
+    if (isDesktopApp && pywebviewApi?.listAnswerModels) {
+      return pywebviewApi.listAnswerModels();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return {
+      provider: 'ollama',
+      base_url: 'http://localhost:11434',
+      status: 'ok',
+      models: [
+        { id: 'llama3.1:8b', label: 'llama3.1:8b', provider: 'ollama', details: { size: 4661224676 } },
+        { id: 'mistral:7b', label: 'mistral:7b', provider: 'ollama', details: {} },
+      ],
+      latency_ms: 12,
+      cached: false,
+      message: null,
     };
   },
 

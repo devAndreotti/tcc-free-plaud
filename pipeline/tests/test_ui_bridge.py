@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
 from free_plaud.providers.answer import AnswerProviderTestResult
+from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
 from free_plaud.retrieval.models import AskResponse, Citation, UsedSource
 
 
@@ -260,6 +261,28 @@ def test_desktop_api_tests_answer_provider(monkeypatch) -> None:
     assert result['status'] == 'ok'
     assert result['provider'] == 'ollama'
     assert result['latency_ms'] == 7
+
+
+def test_desktop_api_lists_answer_models(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    monkeypatch.setattr(
+        module,
+        'list_answer_models',
+        lambda: ModelDiscoveryResult(
+            provider='ollama',
+            base_url='http://localhost:11434',
+            status='ok',
+            models=[ModelInfo(id='llama3.1:8b', label='llama3.1:8b', provider='ollama')],
+            latency_ms=9,
+        ),
+    )
+
+    result = module.Api().listAnswerModels()
+
+    assert result['status'] == 'ok'
+    assert result['provider'] == 'ollama'
+    assert result['models'][0]['id'] == 'llama3.1:8b'
+    assert 'api_key' not in result
 
 
 def test_desktop_api_saves_backend_setting(monkeypatch, tmp_path: Path) -> None:

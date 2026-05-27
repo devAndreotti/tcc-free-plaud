@@ -44,6 +44,7 @@ from free_plaud.corpus.jobs import cancel_index_job, get_index_job, start_index_
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.notes.service import delete_note, get_note_detail, list_notes, reindex_note
 from free_plaud.providers.answer import test_answer_provider
+from free_plaud.providers.model_discovery import list_answer_models
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
 
@@ -178,6 +179,9 @@ class Api:
 
     def testAnswerProvider(self) -> dict:
         return test_answer_provider().model_dump(mode='json')
+
+    def listAnswerModels(self) -> dict:  # NOSONAR - contrato publico do PyWebView consumido pelo front.
+        return list_answer_models().model_dump(mode='json')
 
     def saveApiKey(self, api_key: str) -> dict:
         path = save_answer_api_key(api_key)

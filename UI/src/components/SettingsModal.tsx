@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { XIcon } from './Icons';
 import { useVaultContext } from '../hooks/useVaultContext';
-import { bridge, type BackendSettings, type SettingRow } from '../services/bridge';
+import { bridge, type BackendSettings, type ModelDiscoveryResult, type SettingRow } from '../services/bridge';
 
 // Props do modal de configurações
 interface SettingsModalProps {
@@ -19,6 +19,8 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [isSavingBackendSettings, setIsSavingBackendSettings] = useState(false);
   const [applyingPreset, setApplyingPreset] = useState('');
   const [isTestingProvider, setIsTestingProvider] = useState(false);
+  const [isListingModels, setIsListingModels] = useState(false);
+  const [modelDiscovery, setModelDiscovery] = useState<ModelDiscoveryResult | null>(null);
   const [isIndexingVault, setIsIndexingVault] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [operationStatus, setOperationStatus] = useState('');
@@ -178,6 +180,30 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     }
   };
 
+  const handleListModels = async () => {
+    if (isListingModels) return;
+    setIsListingModels(true);
+    setOperationStatus('Listando modelos do provider...');
+    try {
+      const result = await bridge.listAnswerModels();
+      setModelDiscovery(result);
+      const messageSuffix = result.message ? ` | ${result.message}` : '';
+      setOperationStatus(
+        `Modelos: ${result.status} | provider=${result.provider} | encontrados=${result.models.length} | latencia_ms=${result.latency_ms}${messageSuffix}`
+      );
+    } catch (error) {
+      console.error('[SettingsModal] Erro ao listar modelos:', error);
+      setOperationStatus('Erro ao listar modelos.');
+    } finally {
+      setIsListingModels(false);
+    }
+  };
+
+  const handleSelectModel = (modelId: string) => {
+    setSettingDrafts((prev) => ({ ...prev, answer_model: modelId }));
+    setOperationStatus(`Modelo selecionado no draft: ${modelId}. Clique Salvar backend para gravar.`);
+  };
+
   const renderSettingRow = (row: SettingRow) => (
     <div key={row.key} className="settings-item settings-item--stacked">
       <div className="settings-item__info">
@@ -241,11 +267,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   // Renderiza diretamente no document.body via Portal.
   // O overlay usa display:flex para centralizar o modal de forma confiável.
   return createPortal(
-    <div
-      className="modal-overlay"
-      onClick={onClose}
-      aria-hidden="true"
-    >
+    <div className="modal-overlay">
       {/* Janela do modal — filho direto do overlay flex */}
       <div
         ref={modalRef}
@@ -254,7 +276,6 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
         aria-modal="true"
         aria-labelledby="settings-title"
         tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Cabeçalho do modal */}
         <div className="modal__header">
@@ -466,7 +487,44 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                 >
                   {isTestingProvider ? 'Testando…' : 'Testar'}
                 </button>
+                <button
+                  id="btn-list-models"
+                  type="button"
+                  className="vault-picker__btn"
+                  onClick={handleListModels}
+                  disabled={isListingModels}
+                  aria-label="Listar modelos"
+                >
+                  {isListingModels ? 'Listando…' : 'Listar modelos'}
+                </button>
               </div>
+              {modelDiscovery && (
+                <div className="settings-item settings-item--stacked" aria-live="polite">
+                  <span className="settings-inline-status">
+                    modelos: {modelDiscovery.status} · {modelDiscovery.provider} · {modelDiscovery.latency_ms} ms
+                    {modelDiscovery.cached ? ' · cache' : ''}
+                  </span>
+                  {modelDiscovery.message && (
+                    <span className="settings-warning">{modelDiscovery.message}</span>
+                  )}
+                  {modelDiscovery.models.length > 0 && (
+                    <ul className="settings-model-list" aria-label="Modelos encontrados">
+                      {modelDiscovery.models.map((model) => (
+                        <li key={model.id} className="settings-model-list__item">
+                          <button
+                            type="button"
+                            className="vault-picker__btn settings-model-option"
+                            onClick={() => handleSelectModel(model.id)}
+                            aria-label={`Selecionar ${model.label}`}
+                          >
+                            {model.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
               {backendSettings && (
                 <span className="settings-inline-status">
                   corpus: {backendSettings.notes_count} notas · {backendSettings.sqlite_chunks_count} chunks

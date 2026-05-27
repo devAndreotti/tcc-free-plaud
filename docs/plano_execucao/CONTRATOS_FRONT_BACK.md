@@ -228,6 +228,7 @@ interface BackendBridge {
   getNoteDetail(noteId: string): Promise<NoteDetail>
   deleteNote(noteId: string, confirmation: string): Promise<NoteDeleteResult>
   reindexNote(noteId: string): Promise<NoteReindexResult>
+  listAnswerModels(): Promise<ModelDiscoveryResult>
   listQueue(): Promise<QueueItem[]>
   startIndexJob(folderPath: string, rebuild?: boolean): Promise<IndexJobSnapshot>
   getIndexJob(jobId: string): Promise<IndexJobSnapshot>
@@ -235,6 +236,46 @@ interface BackendBridge {
   listExperiments(): Promise<ExperimentRunSummary[]>
 }
 ```
+
+## Discovery de modelos de resposta
+
+O frontend nao consulta Ollama, LM Studio ou OpenAI-compatible diretamente. Ele chama
+`listAnswerModels()` no bridge local e recebe payload seguro:
+
+```ts
+type ModelDiscoveryStatus =
+  | 'ok'
+  | 'not_applicable'
+  | 'offline'
+  | 'unauthorized'
+  | 'error'
+
+interface ModelInfo {
+  id: string
+  label: string
+  provider: string
+  details: Record<string, unknown>
+}
+
+interface ModelDiscoveryResult {
+  provider: string
+  base_url: string | null
+  status: ModelDiscoveryStatus
+  models: ModelInfo[]
+  latency_ms: number
+  cached: boolean
+  message: string | null
+}
+```
+
+Regras:
+
+1. `extractive` retorna `not_applicable`, sem rede.
+2. Ollama usa endpoint nativo `/api/tags`, mesmo quando o chat usa `/v1`.
+3. LM Studio e OpenAI-compatible usam `/models`.
+4. servidor offline retorna `offline`, sem traceback.
+5. API key nunca aparece no payload.
+6. escolher modelo na UI preenche draft de `answer_model`; salvar continua sendo acao separada.
 
 ## Regra para a implementacao do frontend
 

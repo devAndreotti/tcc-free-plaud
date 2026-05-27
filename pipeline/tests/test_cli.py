@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
 from free_plaud.cli import app
+from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
 from free_plaud.providers.answer import AnswerProviderTestResult
 from free_plaud.storage.sqlite import count_chunks, count_notes, init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
@@ -167,6 +168,27 @@ def test_provider_test_answer_cli_returns_json(monkeypatch) -> None:
     assert payload['status'] == 'ok'
     assert payload['provider'] == 'ollama'
     assert payload['latency_ms'] == 7
+
+
+def test_provider_list_models_cli_returns_json(monkeypatch) -> None:
+    monkeypatch.setattr(
+        'free_plaud.providers.cli.list_answer_models',
+        lambda: ModelDiscoveryResult(
+            provider='ollama',
+            base_url='http://localhost:11434',
+            status='ok',
+            models=[ModelInfo(id='llama3.1:8b', label='llama3.1:8b', provider='ollama', details={'size': 123})],
+            latency_ms=5,
+        ),
+    )
+
+    result = runner.invoke(app, ['provider', 'list-models'])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['status'] == 'ok'
+    assert payload['models'][0]['id'] == 'llama3.1:8b'
+    assert payload['models'][0]['details']['size'] == 123
 
 
 def test_corpus_index_cli_persists_file(monkeypatch, tmp_path: Path) -> None:
