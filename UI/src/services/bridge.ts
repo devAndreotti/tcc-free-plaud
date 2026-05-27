@@ -843,8 +843,9 @@ export const bridge = {
   },
 
   listAnswerModels: async (): Promise<ModelDiscoveryResult> => {
-    if (isDesktopApp && window.pywebview?.api.listAnswerModels) {
-      return window.pywebview.api.listAnswerModels();
+    const pywebviewApi = globalThis.window?.pywebview?.api;
+    if (isDesktopApp && pywebviewApi?.listAnswerModels) {
+      return pywebviewApi.listAnswerModels();
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
     return {

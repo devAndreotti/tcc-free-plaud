@@ -2,6 +2,8 @@ import json
 from io import BytesIO
 from urllib.error import HTTPError, URLError
 
+import pytest
+
 from free_plaud.app.config import Settings
 from free_plaud.providers.model_discovery import clear_model_discovery_cache, list_answer_models
 
@@ -55,7 +57,7 @@ def test_ollama_default_calls_api_tags(monkeypatch, tmp_path) -> None:  # noqa: 
 
     def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
         called_urls.append(request.full_url)
-        assert timeout == 2.0
+        assert timeout == pytest.approx(2.0)
         return FakeResponse({'models': [{'name': 'llama3.1:8b', 'size': 123, 'details': {'family': 'llama'}}]})
 
     monkeypatch.setattr('free_plaud.providers.model_discovery.urlopen', fake_urlopen)

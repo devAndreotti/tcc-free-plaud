@@ -12,6 +12,8 @@ from free_plaud.providers.answer import INVALID_BASE_URL_ERROR, _default_base_ur
 
 ModelDiscoveryStatus = Literal['ok', 'not_applicable', 'offline', 'unauthorized', 'error']
 CACHE_TTL_SECONDS = 10.0
+OLLAMA_DETAIL_KEYS = ('size', 'modified_at', 'digest')
+OLLAMA_NESTED_DETAIL_KEYS = ('family', 'parameter_size', 'quantization_level')
 
 
 class ModelInfo(BaseModel):
@@ -89,32 +91,38 @@ def _request(endpoint: str, settings: Settings, timeout_seconds: float) -> bytes
         return response.read()
 
 
-def _ollama_models(payload: object) -> list[ModelInfo]:
-    if not isinstance(payload, dict) or not isinstance(payload.get('models'), list):
+def _model_items(payload: object, key: str) -> list[object]:
+    if not isinstance(payload, dict) or not isinstance(payload.get(key), list):
         raise ValueError('resposta nao contem modelos')
-    models: list[ModelInfo] = []
-    for item in payload['models']:
-        if not isinstance(item, dict) or not item.get('name'):
-            continue
-        details: dict[str, object] = {}
-        for key in ('size', 'modified_at', 'digest'):
-            if key in item:
-                details[key] = item[key]
-        raw_details = item.get('details')
-        if isinstance(raw_details, dict):
-            for key in ('family', 'parameter_size', 'quantization_level'):
-                if key in raw_details:
-                    details[key] = raw_details[key]
-        model_id = str(item['name'])
-        models.append(ModelInfo(id=model_id, label=model_id, provider='ollama', details=details))
-    return models
+    return payload[key]
+
+
+def _copy_details(source: dict[str, object], keys: tuple[str, ...]) -> dict[str, object]:
+    return {key: source[key] for key in keys if key in source}
+
+
+def _ollama_details(item: dict[str, object]) -> dict[str, object]:
+    details = _copy_details(item, OLLAMA_DETAIL_KEYS)
+    raw_details = item.get('details')
+    if isinstance(raw_details, dict):
+        details.update(_copy_details(raw_details, OLLAMA_NESTED_DETAIL_KEYS))
+    return details
+
+
+def _ollama_model(item: object) -> ModelInfo | None:
+    if not isinstance(item, dict) or not item.get('name'):
+        return None
+    model_id = str(item['name'])
+    return ModelInfo(id=model_id, label=model_id, provider='ollama', details=_ollama_details(item))
+
+
+def _ollama_models(payload: object) -> list[ModelInfo]:
+    return [model for item in _model_items(payload, 'models') if (model := _ollama_model(item)) is not None]
 
 
 def _openai_models(payload: object, provider: str) -> list[ModelInfo]:
-    if not isinstance(payload, dict) or not isinstance(payload.get('data'), list):
-        raise ValueError('resposta nao contem modelos')
     models: list[ModelInfo] = []
-    for item in payload['data']:
+    for item in _model_items(payload, 'data'):
         if not isinstance(item, dict) or not item.get('id'):
             continue
         model_id = str(item['id'])
@@ -152,6 +160,81 @@ def _save_cache(key: tuple[str, str | None, bool], result: ModelDiscoveryResult)
     _CACHE[key] = (time(), result)
 
 
+def _default_openai_without_key(settings: Settings) -> bool:
+    return (
+        settings.answer_provider == 'openai-compatible'
+        and not settings.answer_base_url
+        and not settings.answer_api_key
+    )
+
+
+def _not_applicable_result(settings: Settings, started_at: float) -> ModelDiscoveryResult:
+    return _safe_result(
+        settings,
+        base_url=None,
+        status='not_applicable',
+        started_at=started_at,
+        message='Provider extractive nao usa modelo generativo.',
+    )
+
+
+def _invalid_base_url_result(settings: Settings, base_url: str | None, started_at: float) -> ModelDiscoveryResult:
+    return _safe_result(
+        settings,
+        base_url=base_url,
+        status='error',
+        started_at=started_at,
+        message=INVALID_BASE_URL_ERROR,
+    )
+
+
+def _unauthorized_result(settings: Settings, base_url: str, started_at: float) -> ModelDiscoveryResult:
+    return _safe_result(
+        settings,
+        base_url=base_url,
+        status='unauthorized',
+        started_at=started_at,
+        message='API key ausente para listar modelos do provider remoto.',
+    )
+
+
+def _request_models_result(
+    settings: Settings,
+    *,
+    base_url: str,
+    timeout_seconds: float,
+    started_at: float,
+) -> ModelDiscoveryResult:
+    try:
+        body = _request(_endpoint_for(settings, base_url), settings, timeout_seconds)
+        models = _parse_models(settings, body)
+    except HTTPError as exc:
+        return _http_error_result(settings, base_url=base_url, started_at=started_at, exc=exc)
+    except (URLError, TimeoutError):
+        return _safe_result(
+            settings,
+            base_url=base_url,
+            status='offline',
+            started_at=started_at,
+            message='Servidor indisponivel ou timeout.',
+        )
+    except ValueError as exc:
+        return _safe_result(settings, base_url=base_url, status='error', started_at=started_at, message=str(exc))
+    return _safe_result(settings, base_url=base_url, status='ok', started_at=started_at, models=models)
+
+
+def _http_error_result(
+    settings: Settings,
+    *,
+    base_url: str,
+    started_at: float,
+    exc: HTTPError,
+) -> ModelDiscoveryResult:
+    status: ModelDiscoveryStatus = 'unauthorized' if exc.code in {401, 403} else 'error'
+    message = 'Credencial ausente ou invalida.' if status == 'unauthorized' else f'Provider respondeu HTTP {exc.code}.'
+    return _safe_result(settings, base_url=base_url, status=status, started_at=started_at, message=message)
+
+
 def list_answer_models(
     settings: Settings | None = None,
     *,
@@ -161,36 +244,14 @@ def list_answer_models(
     resolved = settings or get_settings()
     started_at = perf_counter()
     if resolved.answer_provider == 'extractive':
-        return _safe_result(
-            resolved,
-            base_url=None,
-            status='not_applicable',
-            started_at=started_at,
-            message='Provider extractive nao usa modelo generativo.',
-        )
+        return _not_applicable_result(resolved, started_at)
 
     base_url = _discovery_base_url(resolved)
     if base_url is None or not _is_http_base_url(base_url):
-        return _safe_result(
-            resolved,
-            base_url=base_url,
-            status='error',
-            started_at=started_at,
-            message=INVALID_BASE_URL_ERROR,
-        )
+        return _invalid_base_url_result(resolved, base_url, started_at)
 
-    if (
-        resolved.answer_provider == 'openai-compatible'
-        and not resolved.answer_base_url
-        and not resolved.answer_api_key
-    ):
-        return _safe_result(
-            resolved,
-            base_url=base_url,
-            status='unauthorized',
-            started_at=started_at,
-            message='API key ausente para listar modelos do provider remoto.',
-        )
+    if _default_openai_without_key(resolved):
+        return _unauthorized_result(resolved, base_url, started_at)
 
     key = _cache_key(resolved, base_url)
     if use_cache:
@@ -198,26 +259,12 @@ def list_answer_models(
         if cached is not None:
             return cached
 
-    try:
-        body = _request(_endpoint_for(resolved, base_url), resolved, timeout_seconds)
-        models = _parse_models(resolved, body)
-    except HTTPError as exc:
-        status: ModelDiscoveryStatus = 'unauthorized' if exc.code in {401, 403} else 'error'
-        message = 'Credencial ausente ou invalida.' if status == 'unauthorized' else f'Provider respondeu HTTP {exc.code}.'
-        result = _safe_result(resolved, base_url=base_url, status=status, started_at=started_at, message=message)
-    except (URLError, TimeoutError):
-        result = _safe_result(
-            resolved,
-            base_url=base_url,
-            status='offline',
-            started_at=started_at,
-            message='Servidor indisponivel ou timeout.',
-        )
-    except ValueError as exc:
-        result = _safe_result(resolved, base_url=base_url, status='error', started_at=started_at, message=str(exc))
-    else:
-        result = _safe_result(resolved, base_url=base_url, status='ok', started_at=started_at, models=models)
-
+    result = _request_models_result(
+        resolved,
+        base_url=base_url,
+        timeout_seconds=timeout_seconds,
+        started_at=started_at,
+    )
     if use_cache:
         _save_cache(key, result)
     return result

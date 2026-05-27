@@ -180,7 +180,7 @@ class Api:
     def testAnswerProvider(self) -> dict:
         return test_answer_provider().model_dump(mode='json')
 
-    def listAnswerModels(self) -> dict:
+    def listAnswerModels(self) -> dict:  # NOSONAR - contrato publico do PyWebView consumido pelo front.
         return list_answer_models().model_dump(mode='json')
 
     def saveApiKey(self, api_key: str) -> dict:

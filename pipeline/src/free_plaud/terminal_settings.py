@@ -84,9 +84,16 @@ def _presets_menu(runtime: CorpusRuntime) -> None:
     console.print(Panel(_preset_changes_text(result.changes), title=f'Preset aplicado: {preset_key}', border_style='green'))
 
 
+def _model_discovery_border(status: str) -> str:
+    if status == 'ok':
+        return 'green'
+    if status in {'not_applicable', 'offline'}:
+        return 'yellow'
+    return 'red'
+
+
 def _models_menu(runtime: CorpusRuntime) -> None:
     result = list_answer_models()
-    border = 'green' if result.status == 'ok' else 'yellow' if result.status in {'not_applicable', 'offline'} else 'red'
     header = (
         f'provider={result.provider}\n'
         f'base_url={result.base_url or "-"}\n'
@@ -95,7 +102,7 @@ def _models_menu(runtime: CorpusRuntime) -> None:
         f'cached={result.cached}\n'
         f'mensagem={result.message or "-"}'
     )
-    console.print(Panel(header, title='Listar modelos', border_style=border))
+    console.print(Panel(header, title='Listar modelos', border_style=_model_discovery_border(result.status)))
     if not result.models:
         return
 

@@ -2227,7 +2227,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
   width: 100%;
+}
+
+.settings-model-list__item {
+  max-width: 100%;
 }
 
 .settings-model-option {

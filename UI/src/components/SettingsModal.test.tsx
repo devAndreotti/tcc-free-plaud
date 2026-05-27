@@ -19,7 +19,7 @@ vi.mock('../services/bridge', () => ({
 
 vi.mock('../hooks/useVaultContext', () => ({
   useVaultContext: () => ({
-    vaultPath: 'C:\\Vault',
+    vaultPath: String.raw`C:\Vault`,
     selectVault: vi.fn(),
     isScanning: false,
   }),
@@ -30,7 +30,7 @@ const backendSettings = {
   answer_model: 'old-model',
   answer_base_url: 'http://localhost:11434/v1',
   answer_api_key_configured: false,
-  local_env_path: 'pipeline\\.env',
+  local_env_path: String.raw`pipeline\.env`,
   default_ask_strategy: 'hybrid',
   notes_count: 1,
   sqlite_chunks_count: 2,

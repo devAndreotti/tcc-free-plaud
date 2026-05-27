@@ -187,8 +187,9 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     try {
       const result = await bridge.listAnswerModels();
       setModelDiscovery(result);
+      const messageSuffix = result.message ? ` | ${result.message}` : '';
       setOperationStatus(
-        `Modelos: ${result.status} | provider=${result.provider} | encontrados=${result.models.length} | latencia_ms=${result.latency_ms}${result.message ? ` | ${result.message}` : ''}`
+        `Modelos: ${result.status} | provider=${result.provider} | encontrados=${result.models.length} | latencia_ms=${result.latency_ms}${messageSuffix}`
       );
     } catch (error) {
       console.error('[SettingsModal] Erro ao listar modelos:', error);
@@ -266,10 +267,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   // Renderiza diretamente no document.body via Portal.
   // O overlay usa display:flex para centralizar o modal de forma confiável.
   return createPortal(
-    <div
-      className="modal-overlay"
-      onClick={onClose}
-    >
+    <div className="modal-overlay">
       {/* Janela do modal — filho direto do overlay flex */}
       <div
         ref={modalRef}
@@ -278,7 +276,6 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
         aria-modal="true"
         aria-labelledby="settings-title"
         tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Cabeçalho do modal */}
         <div className="modal__header">
@@ -511,19 +508,20 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                     <span className="settings-warning">{modelDiscovery.message}</span>
                   )}
                   {modelDiscovery.models.length > 0 && (
-                    <div className="settings-model-list" role="list" aria-label="Modelos encontrados">
+                    <ul className="settings-model-list" aria-label="Modelos encontrados">
                       {modelDiscovery.models.map((model) => (
-                        <button
-                          key={model.id}
-                          type="button"
-                          className="vault-picker__btn settings-model-option"
-                          onClick={() => handleSelectModel(model.id)}
-                          aria-label={`Selecionar ${model.label}`}
-                        >
-                          {model.label}
-                        </button>
+                        <li key={model.id} className="settings-model-list__item">
+                          <button
+                            type="button"
+                            className="vault-picker__btn settings-model-option"
+                            onClick={() => handleSelectModel(model.id)}
+                            aria-label={`Selecionar ${model.label}`}
+                          >
+                            {model.label}
+                          </button>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   )}
                 </div>
               )}
