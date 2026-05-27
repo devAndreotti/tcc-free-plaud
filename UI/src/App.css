@@ -2223,6 +2223,20 @@
   margin: 0;
 }
 
+.settings-model-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.settings-model-option {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ============================================================
    BOTÃO GRAFO — ESTADO ATIVO
    ============================================================ */

@@ -19,6 +19,7 @@ from free_plaud.corpus.models import (
 )
 from free_plaud.notes.schemas import Note
 from free_plaud.providers.answer import AnswerProviderTestResult
+from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
 from free_plaud.retrieval.models import AskResponse, Citation, UsedSource
 from free_plaud.tui.app import (
     ASK_MODES,
@@ -439,6 +440,34 @@ def test_tui_settings_pane_tests_answer_provider(monkeypatch, tmp_path: Path) ->
             text = '\n'.join(getattr(line, 'plain', str(line)) for line in output.lines)
             assert 'provider=ollama' in text
             assert 'status=ok' in text
+
+    asyncio.run(run_app())
+
+
+def test_tui_settings_pane_lists_answer_models(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr(
+        'free_plaud.tui.app.list_answer_models',
+        lambda: ModelDiscoveryResult(
+            provider='ollama',
+            base_url='http://localhost:11434',
+            status='ok',
+            models=[ModelInfo(id='llama3.1:8b', label='llama3.1:8b', provider='ollama')],
+            latency_ms=8,
+        ),
+    )
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 38)) as pilot:
+            await pilot.click('#nav-settings')
+            await pilot.click('#settings-list-models')
+            await pilot.pause(0.3)
+            output = app.query_one('#settings-output')
+            text = '\n'.join(getattr(line, 'plain', str(line)) for line in output.lines)
+            assert 'provider=ollama' in text
+            assert 'llama3.1:8b' in text
 
     asyncio.run(run_app())
 

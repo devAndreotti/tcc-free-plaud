@@ -7,6 +7,7 @@ from free_plaud.app.config import get_settings
 from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
 from free_plaud.cli import app
 from free_plaud.providers.answer import AnswerProviderTestResult
+from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
 
 runner = CliRunner()
 
@@ -84,6 +85,33 @@ def test_terminal_menu_can_update_answer_api_key(monkeypatch, tmp_path: Path) ->
     local_env = tmp_path / 'pipeline' / '.env'
     assert 'FREE_PLAUD_ANSWER_API_KEY=sk-menu-test' in local_env.read_text(encoding='utf-8')
     assert not (results_dir / 'user_settings.json').exists()
+    get_settings.cache_clear()
+
+
+def test_terminal_settings_menu_can_list_models_and_save_choice(monkeypatch, tmp_path: Path) -> None:
+    results_dir = tmp_path / 'data' / 'results'
+    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        'free_plaud.terminal_settings.list_answer_models',
+        lambda: ModelDiscoveryResult(
+            provider='ollama',
+            base_url='http://localhost:11434',
+            status='ok',
+            models=[
+                ModelInfo(id='llama3.1:8b', label='llama3.1:8b', provider='ollama'),
+                ModelInfo(id='mistral:7b', label='mistral:7b', provider='ollama'),
+            ],
+            latency_ms=4,
+        ),
+    )
+
+    result = runner.invoke(app, ['menu'], input='7\nM\n2\n0\n')
+
+    assert result.exit_code == 0
+    assert 'Modelos encontrados' in result.stdout
+    payload = json.loads((results_dir / 'user_settings.json').read_text(encoding='utf-8'))
+    assert payload['answer_model'] == 'mistral:7b'
     get_settings.cache_clear()
 
 

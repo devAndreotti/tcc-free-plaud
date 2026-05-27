@@ -8,6 +8,7 @@ from free_plaud.app.local_env import local_env_path_for, save_answer_api_key
 from free_plaud.app.settings_catalog import get_setting_spec, save_catalog_setting, settings_catalog_payload
 from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.corpus.runtime import CorpusRuntime
+from free_plaud.providers.model_discovery import list_answer_models
 
 console = Console()
 PURPLE = '#a21caf'
@@ -83,6 +84,38 @@ def _presets_menu(runtime: CorpusRuntime) -> None:
     console.print(Panel(_preset_changes_text(result.changes), title=f'Preset aplicado: {preset_key}', border_style='green'))
 
 
+def _models_menu(runtime: CorpusRuntime) -> None:
+    result = list_answer_models()
+    border = 'green' if result.status == 'ok' else 'yellow' if result.status in {'not_applicable', 'offline'} else 'red'
+    header = (
+        f'provider={result.provider}\n'
+        f'base_url={result.base_url or "-"}\n'
+        f'status={result.status}\n'
+        f'latencia_ms={result.latency_ms}\n'
+        f'cached={result.cached}\n'
+        f'mensagem={result.message or "-"}'
+    )
+    console.print(Panel(header, title='Listar modelos', border_style=border))
+    if not result.models:
+        return
+
+    table = Table(title='Modelos encontrados', border_style=PURPLE_DIM)
+    table.add_column('#', justify='right')
+    table.add_column('modelo')
+    for index, model in enumerate(result.models, start=1):
+        table.add_row(str(index), model.label)
+    console.print(table)
+
+    choices = [str(index) for index in range(1, len(result.models) + 1)]
+    choice = Prompt.ask('Escolha modelo ou ENTER para manter', choices=[*choices, ''], default='')
+    if not choice:
+        return
+    selected = result.models[int(choice) - 1]
+    save_catalog_setting('answer_model', selected.id)
+    runtime.clear()
+    console.print(f'[green]answer_model salvo: {selected.id}[/green]')
+
+
 def _print_catalog_warnings() -> None:
     warnings = [row for row in settings_catalog_payload() if row['warning']]
     for row in warnings:
@@ -98,6 +131,7 @@ def _print_setting_choices() -> None:
                 console.print(f'[{TEXT_DIM}][{row["index"]}][/{TEXT_DIM}] {row["label"]} ({row["key"]})')
         console.print()
     console.print(f'[{TEXT_DIM}][P][/{TEXT_DIM}] Presets')
+    console.print(f'[{TEXT_DIM}][M][/{TEXT_DIM}] Listar modelos do provider')
     console.print(f'[{TEXT_DIM}][R][/{TEXT_DIM}] Resetar user_settings.json')
     console.print()
 
@@ -114,6 +148,9 @@ def settings_menu(runtime: CorpusRuntime) -> None:
         return
     if choice.lower() == 'p':
         _presets_menu(runtime)
+        return
+    if choice.lower() == 'm':
+        _models_menu(runtime)
         return
     if choice.lower() == 'r':
         reset_user_settings()
