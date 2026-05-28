@@ -221,6 +221,4 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
 
     if not content:
         return result('error', 'Provider retornou resposta vazia.')
-    if content.casefold() != 'ok':
-        return result('error', 'Provider respondeu diferente de ok.')
     return result('ok')

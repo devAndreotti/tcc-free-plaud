@@ -184,7 +184,7 @@ def test_provider_test_urlopen_value_error_returns_controlled_error(monkeypatch,
     assert result.error == 'Provider base_url invalida. Use http:// ou https://.'
 
 
-def test_provider_test_unexpected_content_returns_error(monkeypatch, tmp_path: Path) -> None:
+def test_provider_test_accepts_non_empty_model_response(monkeypatch, tmp_path: Path) -> None:
     def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
         return FakeHTTPResponse({'choices': [{'message': {'content': 'servico pronto'}}]})
 
@@ -192,8 +192,32 @@ def test_provider_test_unexpected_content_returns_error(monkeypatch, tmp_path: P
 
     result = run_answer_provider_test(_settings(tmp_path))
 
+    assert result.status == 'ok'
+    assert result.error is None
+
+
+def test_provider_test_rejects_empty_content(monkeypatch, tmp_path: Path) -> None:
+    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+        return FakeHTTPResponse({'choices': [{'message': {'content': '   '}}]})
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+
+    result = run_answer_provider_test(_settings(tmp_path))
+
     assert result.status == 'error'
-    assert result.error == 'Provider respondeu diferente de ok.'
+    assert result.error == 'Provider retornou resposta vazia.'
+
+
+def test_provider_test_rejects_invalid_payload(monkeypatch, tmp_path: Path) -> None:
+    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+        return FakeHTTPResponse({'choices': []})
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+
+    result = run_answer_provider_test(_settings(tmp_path))
+
+    assert result.status == 'error'
+    assert result.error == 'Provider retornou payload invalido.'
 
 
 def test_provider_test_extractive_is_not_applicable(tmp_path: Path) -> None:
