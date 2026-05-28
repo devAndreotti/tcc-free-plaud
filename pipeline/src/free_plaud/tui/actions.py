@@ -20,7 +20,7 @@ from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.corpus.service import get_corpus_status, index_corpus_path, rebuild_corpus, reset_corpus
 from free_plaud.notes.schemas import Note
 from free_plaud.providers.answer import get_answer_provider
-from free_plaud.providers.embed import get_embedder
+from free_plaud.providers.embed import get_embedder, validate_runtime_embedding_model
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.storage.sqlite import get_all_notes, init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
@@ -48,6 +48,7 @@ def ask_corpus(
     vector_store = None
     embedder = None
     if strategy in {'vector', 'hybrid'}:
+        validate_runtime_embedding_model(resolved_settings.embedding_model)
         if runtime is not None:
             vector_store = runtime.get_vector_store()
             embedder = runtime.get_embedder()
@@ -141,6 +142,7 @@ def index_corpus_folder(
     resolved_settings = settings or get_settings()
     resolved_recursive = resolved_settings.corpus_recursive_default if recursive is None else recursive
     ensure_runtime_dirs(resolved_settings)
+    validate_runtime_embedding_model(resolved_settings.embedding_model)
     vector_store = runtime.get_vector_store() if runtime is not None else None
     embedder = None
     if runtime is not None:
@@ -215,6 +217,7 @@ def compare_suite_from_tui(
     target = Path(suite_path).expanduser()
     if not target.exists():
         raise FileNotFoundError(f'Suite nao encontrada: {target}')
+    validate_runtime_embedding_model(resolved_settings.embedding_model)
 
     suite = load_benchmark_suite(target)
     connection = init_sqlite(resolved_settings.sqlite_path)
