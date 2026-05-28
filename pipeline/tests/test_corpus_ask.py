@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from free_plaud.app.config import Settings
-from free_plaud.corpus.ask import answer_corpus_with_citations, build_answer_contexts
+from free_plaud.corpus.ask import answer_corpus_with_citations, build_answer_contexts, validate_generated_answer
 from free_plaud.corpus.service import index_corpus_path
 from free_plaud.notes.metadata import build_note_id
 from free_plaud.notes.schemas import Note
@@ -40,7 +40,28 @@ class FakeAnswerProvider:
 
     def answer(self, question: str, contexts: list[str]) -> str:
         self.calls.append((question, contexts))
-        return 'Resposta final gerada com IA a partir das evidencias.'
+        return 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+
+
+class UnsupportedNumberAnswerProvider:
+    provider_name = 'unsupported-number'
+
+    def answer(self, question: str, contexts: list[str]) -> str:  # noqa: ARG002
+        return 'RabbitMQ foi adotado como message broker padrao do pipeline com lote de 64 KB.'
+
+
+class SentinelAnswerProvider:
+    provider_name = 'sentinel'
+
+    def answer(self, question: str, contexts: list[str]) -> str:  # noqa: ARG002
+        return 'NAO_ENCONTRADO: os dados recuperados nao sustentam resposta.'
+
+
+class GenericNoAnswerProvider:
+    provider_name = 'generic'
+
+    def answer(self, question: str, contexts: list[str]) -> str:  # noqa: ARG002
+        return 'Nao consegui recuperar essa informacao. Voce pode verificar a documentacao oficial.'
 
 
 class FailingAnswerProvider:
@@ -168,6 +189,74 @@ def test_build_answer_contexts_includes_clean_chunk_evidence_and_budget(tmp_path
     assert 'metadata repetida' not in context
     assert len(context) <= 420
     assert sum(len(item) for item in contexts) <= 460
+
+
+def test_validate_generated_answer_rejects_unsupported_numbers(tmp_path: Path) -> None:
+    claim = AnswerClaim(
+        text='RabbitMQ foi adotado como message broker padrao do pipeline.',
+        citations=[
+            Citation(
+                note_id='note-1',
+                note_version=1,
+                chunk_id='chunk-1',
+                snippet='RabbitMQ foi adotado como message broker padrao do pipeline.',
+                source_path=str(tmp_path / 'note-1.md'),
+                char_start=0,
+                char_end=60,
+            )
+        ],
+        support_level='direct',
+    )
+
+    validation = validate_generated_answer(
+        'Qual message broker foi adotado?',
+        'RabbitMQ foi adotado como message broker padrao do pipeline com lote de 64 KB.',
+        ['RabbitMQ foi adotado como message broker padrao do pipeline.'],
+        [claim],
+    )
+
+    assert validation.action == 'fallback_extractive'
+    assert validation.reason == 'unsupported_number'
+
+
+def test_validate_generated_answer_turns_sentinel_into_no_answer() -> None:
+    validation = validate_generated_answer(
+        'Qual message broker foi adotado?',
+        'NAO_ENCONTRADO: os dados recuperados nao sustentam resposta.',
+        ['RabbitMQ foi adotado como message broker padrao do pipeline.'],
+        [],
+    )
+
+    assert validation.action == 'no_answer'
+    assert validation.reason == 'generated_no_answer_sentinel'
+
+
+def test_validate_generated_answer_accepts_faithful_short_answer(tmp_path: Path) -> None:
+    claim = AnswerClaim(
+        text='RabbitMQ foi adotado como message broker padrao do pipeline.',
+        citations=[
+            Citation(
+                note_id='note-1',
+                note_version=1,
+                chunk_id='chunk-1',
+                snippet='RabbitMQ foi adotado como message broker padrao do pipeline.',
+                source_path=str(tmp_path / 'note-1.md'),
+                char_start=0,
+                char_end=60,
+            )
+        ],
+        support_level='direct',
+    )
+
+    validation = validate_generated_answer(
+        'Qual message broker foi adotado?',
+        'RabbitMQ foi adotado como message broker padrao do pipeline.',
+        ['RabbitMQ foi adotado como message broker padrao do pipeline.'],
+        [claim],
+    )
+
+    assert validation.action == 'accept'
+    assert validation.reason is None
 
 
 def test_answer_corpus_with_citations_stitches_multiple_files(tmp_path: Path) -> None:
@@ -320,7 +409,7 @@ def test_answer_corpus_calls_answer_provider_only_after_citations(tmp_path: Path
     )
 
     assert response.status == 'answer'
-    assert response.answer == 'Resposta final gerada com IA a partir das evidencias.'
+    assert response.answer == 'RabbitMQ foi adotado como message broker padrao do pipeline.'
     assert response.citations
     assert len(provider.calls) == 1
     question, contexts = provider.calls[0]
@@ -328,6 +417,65 @@ def test_answer_corpus_calls_answer_provider_only_after_citations(tmp_path: Path
     assert any('RabbitMQ foi adotado' in context for context in contexts)
     assert any('source_path:' in context for context in contexts)
     assert any('chunk_id:' in context for context in contexts)
+
+
+def test_answer_corpus_falls_back_when_generated_answer_has_unsupported_number(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=UnsupportedNumberAnswerProvider(),
+    )
+
+    assert response.status == 'answer'
+    assert '64 KB' not in (response.answer or '')
+    assert 'RabbitMQ foi adotado' in (response.answer or '')
+    assert any('unsupported_number' in limitation for limitation in response.limitations)
+
+
+def test_answer_corpus_turns_generated_sentinel_into_no_answer(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=SentinelAnswerProvider(),
+    )
+
+    assert response.status == 'no_answer'
+    assert response.reason_for_no_answer == 'generated_no_answer_sentinel'
+
+
+def test_answer_corpus_turns_generic_generated_no_answer_into_no_answer(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=GenericNoAnswerProvider(),
+    )
+
+    assert response.status == 'no_answer'
+    assert response.reason_for_no_answer == 'generated_generic_no_answer'
 
 
 def test_answer_corpus_does_not_call_answer_provider_without_hits(tmp_path: Path) -> None:
