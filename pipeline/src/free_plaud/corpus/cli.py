@@ -16,7 +16,12 @@ from free_plaud.corpus.service import (
     reset_corpus,
 )
 from free_plaud.providers.answer import get_answer_provider
-from free_plaud.providers.embed import describe_embedding_config, get_embedder
+from free_plaud.providers.embed import (
+    EmbeddingConfigurationError,
+    describe_embedding_config,
+    get_embedder,
+    validate_runtime_embedding_model,
+)
 from free_plaud.storage.sqlite import init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
 
@@ -177,8 +182,19 @@ def ask(
     vector_store = None
     embedder = None
     if strategy in {'vector', 'hybrid'}:
+        try:
+            validate_runtime_embedding_model(settings.embedding_model)
+        except EmbeddingConfigurationError as exc:
+            connection.close()
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from None
         vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
-        embedder = get_embedder(settings.embedding_model, device=settings.embedding_device)
+        try:
+            embedder = get_embedder(settings.embedding_model, device=settings.embedding_device)
+        except EmbeddingConfigurationError as exc:
+            connection.close()
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from None
 
     try:
         response = answer_corpus_with_citations(

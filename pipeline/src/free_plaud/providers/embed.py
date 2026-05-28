@@ -4,6 +4,28 @@ from chromadb.utils import embedding_functions
 from pydantic import BaseModel
 
 EmbeddingDevice = Literal['cpu', 'cuda', 'auto']
+EMBEDDING_TEST_MODEL_HELP = (
+    "fake-hash e modelo de teste e nao deve ser usado no app real. "
+    "Use chroma-default ou sentence-transformer:<modelo>. "
+    "Para voltar ao preset CPU rapido, rode: uv run free-plaud config preset apply cpu_rapido"
+)
+
+
+class EmbeddingConfigurationError(ValueError):
+    """Erro de configuracao de embedding seguro para mostrar em CLI/TUI."""
+
+
+def validate_runtime_embedding_model(model_name: str) -> None:
+    """Falha cedo para modelos que nao podem operar retrieval vetorial real."""
+    if model_name == 'fake-hash':
+        raise EmbeddingConfigurationError(EMBEDDING_TEST_MODEL_HELP)
+    if model_name == 'chroma-default':
+        return
+    if model_name.startswith('sentence-transformer:') and model_name.split(':', 1)[1].strip():
+        return
+    if model_name.startswith('sentence-transformer:'):
+        raise EmbeddingConfigurationError('Embedding model sentence-transformer precisa informar o nome do modelo.')
+    raise EmbeddingConfigurationError(f'Embedding model nao suportado: {model_name}')
 
 
 class EmbeddingDiagnostics(BaseModel):
@@ -115,11 +137,10 @@ def describe_embedding_config(model_name: str, *, device: EmbeddingDevice = 'cpu
 
 def get_embedder(model_name: str, *, device: EmbeddingDevice = 'cpu') -> Embedder:
     """Resolve o adaptador de embeddings configurado para o backend."""
+    validate_runtime_embedding_model(model_name)
     if model_name == 'chroma-default':
         return ChromaDefaultEmbedder()
     if model_name.startswith('sentence-transformer:'):
         resolved_model_name = model_name.split(':', 1)[1].strip()
-        if not resolved_model_name:
-            raise ValueError('Embedding model sentence-transformer precisa informar o nome do modelo.')
         return SentenceTransformerEmbedder(resolved_model_name, device=_resolve_sentence_transformer_device(device))
-    raise ValueError(f'Embedding model nao suportado: {model_name}')
+    raise EmbeddingConfigurationError(f'Embedding model nao suportado: {model_name}')

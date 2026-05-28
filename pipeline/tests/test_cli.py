@@ -226,6 +226,56 @@ def test_corpus_status_cli_returns_consistency_json(monkeypatch, tmp_path: Path)
     assert payload['vector_chunks_count'] == 0
 
 
+def test_corpus_ask_hybrid_rejects_fake_hash_with_actionable_error(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+
+    result = runner.invoke(
+        app,
+        [
+            'corpus',
+            'ask',
+            '--question',
+            'O que e o corpus?',
+            '--strategy',
+            'hybrid',
+        ],
+    )
+
+    combined_output = f'{result.stdout}\n{result.stderr}\n{result.exception or ""}'
+    assert result.exit_code == 1
+    assert 'fake-hash e modelo de teste' in combined_output
+    assert 'uv run free-plaud config preset apply cpu_rapido' in combined_output
+    assert 'Traceback' not in combined_output
+
+
+def test_corpus_ask_lexical_allows_fake_hash_without_embedder(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+
+    def fail_get_embedder(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError('lexical nao deve inicializar embedder')
+
+    monkeypatch.setattr('free_plaud.corpus.cli.get_embedder', fail_get_embedder)
+
+    result = runner.invoke(
+        app,
+        [
+            'corpus',
+            'ask',
+            '--question',
+            'O que e o corpus?',
+            '--strategy',
+            'lexical',
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['status'] == 'no_answer'
+    assert payload['reason_for_no_answer'] == 'empty_corpus'
+
+
 def test_corpus_embedding_info_cli_reports_device(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     settings.embedding_model = 'chroma-default'
@@ -335,6 +385,7 @@ def test_corpus_index_cli_accepts_recursive_directory(monkeypatch, tmp_path: Pat
 
 def test_corpus_ask_cli_answers_against_indexed_directory(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
+    settings.embedding_model = 'sentence-transformer:fake-hash'
     root = tmp_path / 'corpus'
     root.mkdir()
     (root / 'broker.md').write_text(

@@ -341,7 +341,7 @@ def test_benchmark_run_cli_accepts_hybrid_knobs(monkeypatch, tmp_path: Path) -> 
         results_dir=tmp_path / 'data' / 'results',
         sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
-        embedding_model='fake-hash',
+        embedding_model='sentence-transformer:fake-hash',
     )
     sample_file = tmp_path / 'benchmark.md'
     sample_file.write_text(
@@ -409,6 +409,48 @@ def test_benchmark_run_cli_accepts_hybrid_knobs(monkeypatch, tmp_path: Path) -> 
         'lexical_pool': 6,
         'vector_pool': 12,
     }
+
+
+def test_benchmark_run_cli_rejects_fake_hash_with_actionable_error(monkeypatch, tmp_path: Path) -> None:
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        datasets_dir=tmp_path / 'data' / 'datasets',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+        embedding_model='fake-hash',
+    )
+    sample_file = tmp_path / 'benchmark.md'
+    sample_file.write_text('# Benchmark\n\nTexto de benchmark.\n', encoding='utf-8')
+    dataset_path = tmp_path / 'dataset.json'
+    dataset_path.write_text(json.dumps({'dataset_name': 'fake-hash-dataset', 'samples': []}), encoding='utf-8')
+
+    def fail_init_sqlite(_path):  # noqa: ANN001, ANN202
+        raise AssertionError('benchmark nao deve abrir SQLite com fake-hash')
+
+    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('free_plaud.benchmark.cli.init_sqlite', fail_init_sqlite)
+
+    result = runner.invoke(
+        app,
+        [
+            'benchmark',
+            'run',
+            str(sample_file),
+            '--dataset',
+            str(dataset_path),
+            '--strategy',
+            'hybrid',
+        ],
+    )
+
+    combined_output = f'{result.stdout}\n{result.stderr}\n{result.exception or ""}'
+    assert result.exit_code == 1
+    assert 'fake-hash e modelo de teste' in combined_output
+    assert 'uv run free-plaud config preset apply cpu_rapido' in combined_output
+    assert 'Traceback' not in combined_output
 
 
 def test_benchmark_run_cli_closes_sqlite_connection(monkeypatch, tmp_path: Path) -> None:
@@ -742,7 +784,7 @@ def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, t
             '--overlap',
             '30',
             '--embedding-model',
-            'fake-hash',
+            'sentence-transformer:fake-hash',
             '--hybrid-rank-constant',
             '40',
             '--hybrid-lexical-weight',
@@ -784,7 +826,7 @@ def test_benchmark_compare_cli_closes_sqlite_connection(monkeypatch, tmp_path: P
         results_dir=tmp_path / 'data' / 'results',
         sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
-        embedding_model='fake-hash',
+        embedding_model='sentence-transformer:fake-hash',
     )
     suite_path = tmp_path / 'suite.json'
     suite_path.write_text(

@@ -18,7 +18,7 @@ from free_plaud.benchmark.runners import compare_benchmark_suite, run_benchmark
 from free_plaud.benchmark.service import build_settings_snapshot
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
-from free_plaud.providers.embed import get_embedder
+from free_plaud.providers.embed import EmbeddingConfigurationError, get_embedder, validate_runtime_embedding_model
 from free_plaud.retrieval.search import (
     DEFAULT_HYBRID_LEXICAL_WEIGHT,
     DEFAULT_HYBRID_RANK_CONSTANT,
@@ -65,10 +65,16 @@ def run(
     ensure_runtime_dirs(settings)
     note = structure_document(load_document(compose_path(path_parts)))
     dataset = load_benchmark_dataset(dataset_path)
+    resolved_embedding_model = embedding_model or settings.embedding_model
+    if strategy in {'vector', 'hybrid'}:
+        try:
+            validate_runtime_embedding_model(resolved_embedding_model)
+        except EmbeddingConfigurationError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from None
     connection = init_sqlite(settings.sqlite_path)
     vector_store = None
     embedder = None
-    resolved_embedding_model = embedding_model or settings.embedding_model
     if strategy in {'vector', 'hybrid'}:
         vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
         embedder = get_embedder(resolved_embedding_model, device=settings.embedding_device)
@@ -122,12 +128,17 @@ def compare(
     settings = get_settings()
     ensure_runtime_dirs(settings)
     suite = load_benchmark_suite(suite_path)
+    resolved_embedding_model = embedding_model or settings.embedding_model
+    try:
+        validate_runtime_embedding_model(resolved_embedding_model)
+    except EmbeddingConfigurationError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from None
     connection = init_sqlite(settings.sqlite_path)
     vector_store = LocalVectorStore(
         settings.results_dir / 'benchmark_compare' / suite.suite_name,
         collection_name=f'{suite.suite_name}_compare',
     )
-    resolved_embedding_model = embedding_model or settings.embedding_model
     embedder = get_embedder(resolved_embedding_model, device=settings.embedding_device)
 
     try:

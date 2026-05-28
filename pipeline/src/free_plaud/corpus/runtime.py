@@ -4,7 +4,7 @@ from time import perf_counter
 
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
-from free_plaud.providers.embed import Embedder, get_embedder
+from free_plaud.providers.embed import Embedder, get_embedder, validate_runtime_embedding_model
 from free_plaud.storage.vector import LocalVectorStore
 
 
@@ -42,6 +42,7 @@ class CorpusRuntime:
 
     def get_embedder(self) -> Embedder:
         settings = self._settings_now()
+        validate_runtime_embedding_model(settings.embedding_model)
         key = (settings.embedding_model, settings.embedding_device)
         with self._lock:
             if self._embedder is not None and self._embedder_key == key:
@@ -53,6 +54,7 @@ class CorpusRuntime:
 
     def warmup_embedder(self) -> WarmupResult:
         settings = self._settings_now()
+        validate_runtime_embedding_model(settings.embedding_model)
         key = (settings.embedding_model, settings.embedding_device)
         started_at = perf_counter()
         with self._lock:
