@@ -81,16 +81,31 @@ def extract_named_query_terms(query: str) -> list[str]:
     """Extrai anchors nomeados da pergunta, como produtos, siglas e tecnologias."""
     seen: set[str] = set()
     named_terms: list[str] = []
-    for token in TOKEN_PATTERN.findall(query):
+    tokens = TOKEN_PATTERN.findall(query)
+    for index, token in enumerate(tokens):
         lowered = token.lower()
-        if lowered in STOPWORDS or len(token) <= 3:
+        if lowered in STOPWORDS:
             continue
-        if token.isupper() or token[:1].isupper():
+        is_named_token = len(token) > 3 and (token.isupper() or token[:1].isupper())
+        is_short_anchor = _is_adjacent_short_anchor(tokens, index)
+        if is_named_token or is_short_anchor:
             if lowered in seen:
                 continue
             seen.add(lowered)
             named_terms.append(token)
     return named_terms
+
+
+def _is_adjacent_short_anchor(tokens: list[str], index: int) -> bool:
+    token = tokens[index]
+    lowered = token.lower()
+    if len(token) > 3 or lowered in STOPWORDS:
+        return False
+    if not (token.isupper() or any(char.isdigit() for char in token)):
+        return False
+
+    neighbors = [tokens[item].lower() for item in (index - 1, index + 1) if 0 <= item < len(tokens)]
+    return any(len(neighbor) >= 4 and neighbor not in STOPWORDS for neighbor in neighbors)
 
 
 def _strip_accents(text: str) -> str:

@@ -776,6 +776,10 @@ def test_extract_named_query_terms_ignores_interrogatives_and_keeps_product_name
     assert extract_named_query_terms('Como organizar notas pessoais no Obsidian?') == ['Obsidian']
 
 
+def test_extract_named_query_terms_keeps_adjacent_short_anchor() -> None:
+    assert extract_named_query_terms('O que e Estrutura Disco D?') == ['Estrutura', 'Disco', 'D']
+
+
 def test_retrieval_ask_cli_renders_structured_json_response(tmp_path: Path) -> None:
     sample_file = tmp_path / 'ask.md'
     sample_file.write_text(

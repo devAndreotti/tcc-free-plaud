@@ -147,6 +147,20 @@ def _build_distributed_corpus(root: Path) -> None:
     )
 
 
+def _build_short_anchor_corpus(root: Path) -> None:
+    root.mkdir()
+    (root / 'estrutura-disco-c.md').write_text(
+        '# Estrutura Disco C\n\n'
+        'Estrutura Disco C descreve a organizacao do disco C para arquivos do sistema operacional.\n',
+        encoding='utf-8',
+    )
+    (root / 'estrutura-disco-d.md').write_text(
+        '# Estrutura Disco D\n\n'
+        'Estrutura Disco D descreve a organizacao do disco D para arquivos de trabalho e repositorios.\n',
+        encoding='utf-8',
+    )
+
+
 def test_build_answer_contexts_includes_clean_chunk_evidence_and_budget(tmp_path: Path) -> None:
     chunk = _chunk(
         'chunk-1',
@@ -290,6 +304,47 @@ def test_answer_corpus_with_citations_stitches_multiple_files(tmp_path: Path) ->
         build_note_id(root / '03_restricao_arquitetural.md', root_path=root),
     }
     assert len({citation.note_id for citation in response.citations}) >= 3
+
+
+def test_answer_corpus_reranks_short_anchor_in_title_before_similar_document(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_short_anchor_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+    expected_note_id = build_note_id(root / 'estrutura-disco-d.md', root_path=root)
+
+    response = answer_corpus_with_citations(
+        'O que e Estrutura Disco D?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        include_debug=True,
+    )
+
+    assert response.status == 'answer'
+    assert response.debug is not None
+    assert response.debug.hits
+    assert response.debug.hits[0].note_id == expected_note_id
+    assert 'Disco D' in (response.answer or '')
+
+
+def test_answer_corpus_keeps_broad_question_answerable_without_short_anchor_boost(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_short_anchor_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Como organizar estrutura de disco?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+    )
+
+    assert response.status == 'answer'
+    assert 'Disco' in (response.answer or '')
 
 
 def test_answer_corpus_lexical_uses_fts_candidates(monkeypatch, tmp_path: Path) -> None:
