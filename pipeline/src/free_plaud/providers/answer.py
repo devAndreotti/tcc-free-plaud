@@ -14,6 +14,17 @@ AnswerProviderName = Literal['extractive', 'openai-compatible', 'ollama', 'lmstu
 ProviderTestStatus = Literal['ok', 'error', 'not_applicable']
 TEST_ANSWER_PROMPT = 'Responda somente: ok'
 INVALID_BASE_URL_ERROR = 'Provider base_url invalida. Use http:// ou https://.'
+NO_ANSWER_SENTINEL = 'NAO_ENCONTRADO: os dados recuperados nao sustentam resposta.'
+GROUNDED_SYSTEM_PROMPT = (
+    'Voce deve responder em portugues brasileiro usando exclusivamente os CONTEXTOS. '
+    'Nao use conhecimento externo. '
+    'Nao complete lacunas. '
+    'Nao crie exemplos, listas ou explicacoes que nao estejam nos CONTEXTOS. '
+    'Se os CONTEXTOS nao responderem diretamente a PERGUNTA, responda exatamente: '
+    f'{NO_ANSWER_SENTINEL} '
+    'Cada frase factual precisa estar suportada por um CONTEXTO. '
+    'Preserve numeros, nomes e termos tecnicos exatamente como aparecem.'
+)
 
 
 class AnswerProviderError(RuntimeError):
@@ -44,6 +55,24 @@ def _is_http_base_url(value: str) -> bool:
     return parsed.scheme in {'http', 'https'} and bool(parsed.netloc)
 
 
+def build_grounded_chat_messages(question: str, contexts: list[str]) -> list[dict[str, str]]:
+    return [
+        {
+            'role': 'system',
+            'content': GROUNDED_SYSTEM_PROMPT,
+        },
+        {
+            'role': 'user',
+            'content': (
+                f'PERGUNTA:\n{question}\n\n'
+                'CONTEXTOS:\n'
+                + '\n\n'.join(contexts)
+                + '\n\nResponda curto e direto usando somente os CONTEXTOS.'
+            ),
+        },
+    ]
+
+
 @dataclass
 class OpenAICompatibleAnswerProvider:
     base_url: str
@@ -60,25 +89,7 @@ class OpenAICompatibleAnswerProvider:
             raise AnswerProviderError(INVALID_BASE_URL_ERROR)
 
         endpoint = f'{self.base_url.rstrip("/")}/chat/completions'
-        messages = [
-            {
-                'role': 'system',
-                'content': (
-                    'Voce responde em portugues brasileiro usando somente os contextos fornecidos. '
-                    'Nao invente fatos. Se a evidencia for insuficiente, diga que os dados recuperados nao sustentam resposta. '
-                    'Seja direto, claro e preserve nomes tecnicos.'
-                ),
-            },
-            {
-                'role': 'user',
-                'content': (
-                    f'Pergunta:\n{question}\n\n'
-                    'Contextos citaveis recuperados:\n'
-                    + '\n\n'.join(contexts)
-                    + '\n\nEscreva uma resposta final curta e bem estruturada.'
-                ),
-            },
-        ]
+        messages = build_grounded_chat_messages(question, contexts)
         payload = {
             'model': self.model,
             'messages': messages,

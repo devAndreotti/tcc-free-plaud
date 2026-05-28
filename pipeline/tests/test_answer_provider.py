@@ -10,6 +10,7 @@ from free_plaud.providers.answer import (
     AnswerProviderError,
     AnswerProviderTestResult,
     OpenAICompatibleAnswerProvider,
+    build_grounded_chat_messages,
     get_answer_provider,
     test_answer_provider as run_answer_provider_test,
 )
@@ -59,6 +60,26 @@ def test_openai_compatible_provider_posts_chat_completion(monkeypatch) -> None:
     assert body['model'] == 'llama3.1:8b'  # type: ignore[index]
     assert body['temperature'] == 0.1  # type: ignore[index]
     assert 'RabbitMQ foi adotado' in body['messages'][1]['content']  # type: ignore[index]
+
+
+def test_grounded_chat_messages_forbid_external_knowledge_and_define_sentinel() -> None:
+    messages = build_grounded_chat_messages(
+        'Qual broker?',
+        ['[1]\nsource_path: note.md\nchunk_id: c1\ntrecho:\nRabbitMQ foi adotado.'],
+    )
+
+    system_prompt = messages[0]['content']
+    user_prompt = messages[1]['content']
+    assert 'usando exclusivamente os CONTEXTOS' in system_prompt
+    assert 'Nao use conhecimento externo' in system_prompt
+    assert 'Nao complete lacunas' in system_prompt
+    assert 'NAO_ENCONTRADO' in system_prompt
+    assert 'nao sustentam resposta' in system_prompt
+    assert 'Cada frase factual precisa estar suportada' in system_prompt
+    assert 'Preserve numeros, nomes e termos tecnicos exatamente' in system_prompt
+    assert 'seja criativo' not in system_prompt.lower()
+    assert 'PERGUNTA:\nQual broker?' in user_prompt
+    assert 'CONTEXTOS:\n[1]' in user_prompt
 
 
 def test_openai_compatible_provider_wraps_http_errors(monkeypatch) -> None:
