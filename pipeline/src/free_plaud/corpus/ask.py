@@ -3,8 +3,10 @@ import sqlite3
 from time import perf_counter
 from typing import Literal
 
+from pydantic import BaseModel, Field
+
 from free_plaud.notes.schemas import Note
-from free_plaud.providers.answer import AnswerProvider
+from free_plaud.providers.answer import NO_ANSWER_SENTINEL, AnswerProvider
 from free_plaud.providers.embed import Embedder
 from free_plaud.retrieval.debug import build_ask_debug
 from free_plaud.retrieval.models import AnswerClaim, AskDebug, AskResponse, Citation, SearchHit, UsedSource
@@ -42,6 +44,33 @@ TEAM_ANSWER_PATTERN = re.compile(r'\bequipe\s+(?:de|da|do|dos|das)\s+[0-9A-Za-z�
 FRONTMATTER_PATTERN = re.compile(r'\A\s*---\s*\r?\n.*?\r?\n---\s*\r?\n', re.DOTALL)
 ANSWER_CONTEXT_TOTAL_CHAR_BUDGET = 6000
 ANSWER_CONTEXT_MAX_CHARS = 1500
+GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*[A-Za-zÀ-ÖØ-öø-ÿ%]{1,8})?')
+GENERATED_ANCHOR_PATTERN = re.compile(r'\b[A-ZÀ-Ö][A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{2,}\b')
+GENERIC_NO_ANSWER_MARKERS = (
+    'nao consegui recuperar',
+    'não consegui recuperar',
+    'nao encontrei',
+    'não encontrei',
+    'nao foi possivel encontrar',
+    'não foi possível encontrar',
+)
+GENERIC_SUGGESTION_MARKERS = ('documentacao', 'documentação', 'verificar', 'consulte', 'pesquise', 'tente')
+IGNORED_GENERATED_ANCHORS = {
+    'Nao',
+    'Não',
+    'Voce',
+    'Você',
+    'Resposta',
+    'Pergunta',
+    'Contextos',
+    'Contexto',
+}
+
+
+class GeneratedAnswerValidation(BaseModel):
+    action: Literal['accept', 'no_answer', 'fallback_extractive']
+    reason: str | None = None
+    limitations: list[str] = Field(default_factory=list)
 
 
 def _citation_from_corpus_hit(hit: SearchHit, note_lookup: dict[str, Note]) -> Citation:
@@ -151,6 +180,94 @@ def build_answer_contexts(
         contexts.append(context)
         total_chars += len(context)
     return contexts
+
+
+def _normalized_support_text(contexts: list[str], claims: list[AnswerClaim]) -> str:
+    return '\n'.join([*contexts, *(claim.text for claim in claims)]).casefold()
+
+
+def _unsupported_generated_numbers(answer: str, support_text: str) -> list[str]:
+    unsupported: list[str] = []
+    for raw_number in GENERATED_NUMBER_PATTERN.findall(answer):
+        normalized = ' '.join(raw_number.split()).casefold()
+        if normalized and normalized not in support_text and normalized not in unsupported:
+            unsupported.append(normalized)
+    return unsupported
+
+
+def _unsupported_generated_anchors(answer: str, support_text: str) -> list[str]:
+    unsupported: list[str] = []
+    for anchor in GENERATED_ANCHOR_PATTERN.findall(answer):
+        if anchor in IGNORED_GENERATED_ANCHORS:
+            continue
+        normalized = anchor.casefold()
+        if normalized and normalized not in support_text and normalized not in unsupported:
+            unsupported.append(normalized)
+    return unsupported
+
+
+def _is_generic_generated_no_answer(answer: str) -> bool:
+    lowered = answer.casefold()
+    return any(marker in lowered for marker in GENERIC_NO_ANSWER_MARKERS) and any(
+        marker in lowered for marker in GENERIC_SUGGESTION_MARKERS
+    )
+
+
+def validate_generated_answer(
+    question: str,
+    answer: str,
+    contexts: list[str],
+    claims: list[AnswerClaim],
+) -> GeneratedAnswerValidation:
+    """Valida se resposta gerativa pode substituir a resposta extrativa."""
+    _ = question
+    cleaned_answer = answer.strip()
+    if cleaned_answer.startswith('NAO_ENCONTRADO') or cleaned_answer == NO_ANSWER_SENTINEL:
+        return GeneratedAnswerValidation(
+            action='no_answer',
+            reason='generated_no_answer_sentinel',
+            limitations=['Provider generativo declarou que os contextos nao sustentam resposta.'],
+        )
+    if _is_generic_generated_no_answer(cleaned_answer):
+        return GeneratedAnswerValidation(
+            action='no_answer',
+            reason='generated_generic_no_answer',
+            limitations=['Provider generativo retornou negativa generica em vez de resposta sustentada.'],
+        )
+
+    support_text = _normalized_support_text(contexts, claims)
+    unsupported_numbers = _unsupported_generated_numbers(cleaned_answer, support_text)
+    if unsupported_numbers:
+        return GeneratedAnswerValidation(
+            action='fallback_extractive',
+            reason='unsupported_number',
+            limitations=[
+                f'unsupported_number: resposta generativa ignorada por numero sem suporte: {", ".join(unsupported_numbers)}.'
+            ],
+        )
+
+    unsupported_anchors = _unsupported_generated_anchors(cleaned_answer, support_text)
+    if unsupported_anchors:
+        return GeneratedAnswerValidation(
+            action='fallback_extractive',
+            reason='unsupported_anchor',
+            limitations=[
+                f'unsupported_anchor: resposta generativa ignorada por anchor sem suporte: {", ".join(unsupported_anchors)}.'
+            ],
+        )
+
+    answer_terms = normalize_query_terms(cleaned_answer)
+    claim_text = ' '.join(claim.text for claim in claims)
+    if len(answer_terms) >= 4:
+        _, claim_coverage = match_terms_in_text(answer_terms, claim_text)
+        if claim_coverage < 0.35:
+            return GeneratedAnswerValidation(
+                action='fallback_extractive',
+                reason='low_claim_overlap',
+                limitations=['Resposta generativa ignorada por baixa sobreposicao com claims citaveis.'],
+            )
+
+    return GeneratedAnswerValidation(action='accept')
 
 
 def _filter_hits_to_persisted_chunks(hits: list[SearchHit], valid_chunk_ids: set[str]) -> tuple[list[SearchHit], int]:
@@ -560,7 +677,20 @@ def answer_corpus_with_citations(
 
     if answer_provider is not None:
         try:
-            answer = answer_provider.answer(question, build_answer_contexts(claims, hits, note_lookup))
+            answer_contexts = build_answer_contexts(claims, hits, note_lookup)
+            generated_answer = answer_provider.answer(question, answer_contexts)
+            validation = validate_generated_answer(question, generated_answer, answer_contexts, claims)
+            if validation.action == 'accept':
+                answer = generated_answer
+            elif validation.action == 'no_answer':
+                return _no_answer(
+                    validation.reason or 'generated_answer_rejected',
+                    _with_stale_limitations(validation.limitations),
+                    cited_sources,
+                    rejected_hits=hits,
+                )
+            else:
+                limitations.extend(validation.limitations)
         except Exception as exc:  # noqa: BLE001 - RAG deve sobreviver a provider externo indisponivel.
             limitations.append(f'Provider de resposta falhou; usando resposta extrativa. Erro: {exc}')
 
