@@ -114,34 +114,37 @@ Ideal para trabalhar na interface sem precisar do Python.
 Respostas mock são usadas automaticamente.
 
 ```bash
-# Instalar dependências (apenas na primeira vez)
-npm install
-
-# Iniciar servidor de desenvolvimento
-npm run dev
+# Da raiz do repositório
+./fp front
 ```
 
-Acesse `http://localhost:5173` no navegador. O hot reload atualiza a tela automaticamente ao salvar arquivos.
+No PowerShell:
+
+```powershell
+.\fp.ps1 front
+```
+
+O atalho executa `npm --prefix UI run dev`. Acesse `http://localhost:5173` no navegador. O hot reload atualiza a tela automaticamente ao salvar arquivos.
 
 ---
 
 ### 4.2 Desktop com Python
 
 Executa o app como uma janela nativa do Windows, sem abrir navegador.
-Requer que o build do React exista em `dist/`.
+O atalho gera o build do React antes de abrir a janela.
 
 ```bash
-# Passo 1: Instalar dependências Python (apenas na primeira vez)
-pip install -r requirements.txt
-
-# Passo 2: Gerar o build do React
-npm run build
-
-# Passo 3: Executar o app desktop
-python main.py
+# Da raiz do repositório
+./fp app
 ```
 
-> **Nota:** O `dist/` precisa ser regerado com `npm run build` toda vez que você alterar o código do React.
+No PowerShell:
+
+```powershell
+.\fp.ps1 app
+```
+
+O atalho executa o build do React e abre `UI/main.py` pelo ambiente `pipeline` com o extra `desktop`.
 
 ---
 
@@ -421,11 +424,12 @@ Para alterar cores ou espaçamentos globalmente, edite apenas as variáveis em `
 
 | Comando | Descrição |
 |---|---|
+| `.\fp.ps1 front` / `./fp front` | Inicia o frontend mockado com hot reload |
+| `.\fp.ps1 app` / `./fp app` | Builda o React e abre a UI integrada com backend real |
+| `.\fp.ps1 tui` / `./fp tui` | Abre a TUI Textual do backend |
+| `.\fp.ps1 menu` / `./fp menu` | Abre o menu terminal numerado |
 | `npm install` | Instala dependências do Node.js (apenas na primeira vez) |
-| `npm run dev` | Inicia servidor de desenvolvimento com hot reload |
 | `npm run build` | Gera o build de produção em `dist/` |
 | `npm run lint` | Executa o ESLint para verificar erros no código |
-| `pip install -r requirements.txt` | Instala dependências Python |
-| `python main.py` | Executa o app desktop (requer `dist/` gerado) |
 | `pyinstaller assistente_ia.spec --clean` | Compila o `.exe` manualmente |
 | `build_app.bat` | Executa build do React + compilação do `.exe` em sequência |

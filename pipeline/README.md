@@ -19,11 +19,29 @@ O código vive em `src/free_plaud/` e os testes em `tests/`, seguindo o padrão 
 
 ## Comandos iniciais
 
+Da raiz do repositório, use os atalhos curtos:
+
+```bash
+./fp menu
+./fp tui
+./fp test
+```
+
+No PowerShell, use `fp.ps1`:
+
+```powershell
+.\fp.ps1 menu
+.\fp.ps1 tui
+.\fp.ps1 test
+```
+
+Dentro de `pipeline/`, os comandos diretos continuam disponíveis:
+
 ```bash
 uv sync
 uv run free-plaud --help
 uv run free-plaud menu
-uv run free-plaud-tui
+uv run free-plaud tui
 uv run pytest
 ```
 
@@ -35,7 +53,7 @@ uv run free-plaud corpus ask --question "Pergunta" --strategy hybrid --top-k 6
 uv run free-plaud corpus index-benchmark --files 100 --repeat 2
 uv run free-plaud corpus perf-benchmark --files 100 --repeat 1 --ask-repeat 10 --commit-mode auto
 uv run free-plaud corpus embedding-info
-uv run free-plaud-tui
+uv run free-plaud tui
 ```
 
 Na TUI, o modo `Corpus` pergunta contra SQLite + Chroma sem exigir arquivo novo.
