@@ -39,6 +39,9 @@ from free_plaud.storage.vector import LocalVectorStore
 
 RetrievalStrategy = Literal['lexical', 'vector', 'hybrid']
 TEAM_ANSWER_PATTERN = re.compile(r'\bequipe\s+(?:de|da|do|dos|das)\s+[0-9A-Za-zÀ-ÖØ-öø-ÿ_-]+')
+FRONTMATTER_PATTERN = re.compile(r'\A\s*---\s*\r?\n.*?\r?\n---\s*\r?\n', re.DOTALL)
+ANSWER_CONTEXT_TOTAL_CHAR_BUDGET = 6000
+ANSWER_CONTEXT_MAX_CHARS = 1500
 
 
 def _citation_from_corpus_hit(hit: SearchHit, note_lookup: dict[str, Note]) -> Citation:
@@ -83,12 +86,70 @@ def _hits_for_citations(hits: list[SearchHit], citations: list[Citation]) -> lis
     return [hit for hit in hits if hit.chunk.chunk_id in cited_chunk_ids]
 
 
-def _contexts_for_answer_provider(claims: list[AnswerClaim]) -> list[str]:
+def _clean_chunk_text_for_answer_context(text: str) -> str:
+    cleaned = FRONTMATTER_PATTERN.sub('', text, count=1).strip()
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned
+
+
+def _clip_context_text(text: str, max_chars: int) -> str:
+    if max_chars <= 0:
+        return ''
+    if len(text) <= max_chars:
+        return text
+    marker = '\n...[truncado]'
+    if max_chars <= len(marker):
+        return text[:max_chars]
+    return f'{text[: max_chars - len(marker)].rstrip()}{marker}'
+
+
+def build_answer_contexts(
+    claims: list[AnswerClaim],
+    hits: list[SearchHit],
+    note_lookup: dict[str, Note],
+    *,
+    max_total_chars: int = ANSWER_CONTEXT_TOTAL_CHAR_BUDGET,
+    max_context_chars: int = ANSWER_CONTEXT_MAX_CHARS,
+) -> list[str]:
+    """Monta contexto generativo com evidencia citavel real e budget fixo."""
+    hit_by_chunk_id = {hit.chunk.chunk_id: hit for hit in hits}
     contexts: list[str] = []
+    total_chars = 0
     for index, claim in enumerate(claims, start=1):
-        citation_refs = ', '.join(citation.chunk_id for citation in claim.citations)
-        snippets = ' '.join(citation.snippet for citation in claim.citations)
-        contexts.append(f'[{index}] chunks={citation_refs}\nClaim: {claim.text}\nTrecho: {snippets}')
+        if total_chars >= max_total_chars:
+            break
+        citation = claim.citations[0] if claim.citations else None
+        if citation is None:
+            continue
+
+        note = note_lookup.get(citation.note_id)
+        source_path = str(note.source_path) if note else citation.source_path or ''
+        title = note.title if note else ''
+        chunk_ids = ', '.join(item.chunk_id for item in claim.citations)
+        evidence_parts: list[str] = []
+        for item in claim.citations:
+            cited_hit = hit_by_chunk_id.get(item.chunk_id)
+            raw_text = cited_hit.chunk.chunk_text if cited_hit else item.snippet
+            evidence = _clean_chunk_text_for_answer_context(raw_text)
+            if evidence:
+                evidence_parts.append(evidence)
+
+        header = (
+            f'[{index}]\n'
+            f'source_path: {source_path}\n'
+            f'title: {title}\n'
+            f'note_id: {citation.note_id}\n'
+            f'chunk_id: {chunk_ids}\n'
+            f'claim_extrativo: {claim.text}\n'
+            'trecho:\n'
+        )
+        remaining_total = max_total_chars - total_chars
+        allowed_context_chars = min(max_context_chars, remaining_total)
+        evidence_budget = max(0, allowed_context_chars - len(header))
+        evidence_text = _clip_context_text('\n\n'.join(evidence_parts), evidence_budget)
+        context = _clip_context_text(f'{header}{evidence_text}', allowed_context_chars)
+        contexts.append(context)
+        total_chars += len(context)
     return contexts
 
 
@@ -499,7 +560,7 @@ def answer_corpus_with_citations(
 
     if answer_provider is not None:
         try:
-            answer = answer_provider.answer(question, _contexts_for_answer_provider(claims))
+            answer = answer_provider.answer(question, build_answer_contexts(claims, hits, note_lookup))
         except Exception as exc:  # noqa: BLE001 - RAG deve sobreviver a provider externo indisponivel.
             limitations.append(f'Provider de resposta falhou; usando resposta extrativa. Erro: {exc}')
 

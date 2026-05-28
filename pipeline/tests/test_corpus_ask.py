@@ -1,10 +1,11 @@
 from pathlib import Path
 
 from free_plaud.app.config import Settings
-from free_plaud.corpus.ask import answer_corpus_with_citations
+from free_plaud.corpus.ask import answer_corpus_with_citations, build_answer_contexts
 from free_plaud.corpus.service import index_corpus_path
 from free_plaud.notes.metadata import build_note_id
-from free_plaud.retrieval.models import Chunk, SearchHit
+from free_plaud.notes.schemas import Note
+from free_plaud.retrieval.models import AnswerClaim, Chunk, Citation, SearchHit
 from free_plaud.storage.sqlite import init_sqlite, list_chunks
 from free_plaud.storage.vector import LocalVectorStore
 
@@ -84,6 +85,26 @@ def _chunk(chunk_id: str, note_id: str, text: str) -> Chunk:
     )
 
 
+def _note(tmp_path: Path, note_id: str = 'note-1') -> Note:
+    source_path = tmp_path / f'{note_id}.md'
+    return Note(
+        note_id=note_id,
+        note_version=1,
+        source_type='md',
+        source_path=source_path,
+        source_name=source_path.name,
+        title='Nota de arquitetura',
+        summary='Resumo.',
+        topics=[],
+        tasks=[],
+        tags=['md'],
+        raw_text='',
+        normalized_text='',
+        structured_markdown='',
+        content_hash='a' * 64,
+    )
+
+
 def _build_distributed_corpus(root: Path) -> None:
     root.mkdir()
     (root / '01_contexto_base.md').write_text(
@@ -103,6 +124,50 @@ def _build_distributed_corpus(root: Path) -> None:
         'O padrao Bronze, Silver e Gold divide o pipeline de dados.\n',
         encoding='utf-8',
     )
+
+
+def test_build_answer_contexts_includes_clean_chunk_evidence_and_budget(tmp_path: Path) -> None:
+    chunk = _chunk(
+        'chunk-1',
+        'note-1',
+        '---\ntitle: metadata repetida\nstatus: draft\n---\n'
+        '# Arquitetura\n\nRabbitMQ foi adotado como message broker padrao do pipeline. '
+        'A equipe Plataforma ficou responsavel pelo runbook.',
+    )
+    hit = SearchHit(chunk=chunk, score=1.0, matched_terms=['rabbitmq'], term_coverage=1.0, strategy='lexical')
+    citation = Citation(
+        note_id='note-1',
+        note_version=1,
+        chunk_id='chunk-1',
+        snippet='RabbitMQ foi adotado como message broker padrao do pipeline.',
+        source_path=str(tmp_path / 'note-1.md'),
+        char_start=0,
+        char_end=len(chunk.chunk_text),
+    )
+    claim = AnswerClaim(
+        text='RabbitMQ foi adotado como message broker padrao do pipeline.',
+        citations=[citation],
+        support_level='direct',
+    )
+
+    contexts = build_answer_contexts(
+        [claim],
+        [hit],
+        {'note-1': _note(tmp_path)},
+        max_total_chars=460,
+        max_context_chars=420,
+    )
+
+    assert len(contexts) == 1
+    context = contexts[0]
+    assert 'source_path:' in context
+    assert 'chunk_id: chunk-1' in context
+    assert 'claim_extrativo: RabbitMQ foi adotado' in context
+    assert 'trecho:' in context
+    assert 'RabbitMQ foi adotado como message broker' in context
+    assert 'metadata repetida' not in context
+    assert len(context) <= 420
+    assert sum(len(item) for item in contexts) <= 460
 
 
 def test_answer_corpus_with_citations_stitches_multiple_files(tmp_path: Path) -> None:
@@ -261,6 +326,8 @@ def test_answer_corpus_calls_answer_provider_only_after_citations(tmp_path: Path
     question, contexts = provider.calls[0]
     assert question == 'Qual message broker foi adotado?'
     assert any('RabbitMQ foi adotado' in context for context in contexts)
+    assert any('source_path:' in context for context in contexts)
+    assert any('chunk_id:' in context for context in contexts)
 
 
 def test_answer_corpus_does_not_call_answer_provider_without_hits(tmp_path: Path) -> None:
