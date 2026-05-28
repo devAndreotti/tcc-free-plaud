@@ -48,6 +48,17 @@ class AskDebugHit(BaseModel):
     snippet: str
 
 
+class AskDebugTimings(BaseModel):
+    """Tempos por etapa do Ask para diagnosticar gargalo sem vazar prompt."""
+
+    retrieval_ms: int = 0
+    claim_build_ms: int = 0
+    context_build_ms: int = 0
+    provider_ms: int = 0
+    validation_ms: int = 0
+    total_ms: int = 0
+
+
 class AskDebug(BaseModel):
     """Debug opcional para tuning de retrieval sem poluir respostas normais."""
 
@@ -58,6 +69,9 @@ class AskDebug(BaseModel):
     rejected_hits: list[AskDebugHit] = Field(default_factory=list)
     no_answer_reason: str | None = None
     stale_vector_hits_count: int = 0
+    timings: AskDebugTimings | None = None
+    answer_provider: str | None = None
+    provider_model: str | None = None
 
 
 class Citation(BaseModel):
