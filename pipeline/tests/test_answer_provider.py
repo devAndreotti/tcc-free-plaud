@@ -14,6 +14,7 @@ from free_plaud.providers.answer import (
     get_answer_provider,
     test_answer_provider as run_answer_provider_test,
 )
+from free_plaud.providers.smoke import run_provider_smoke_local
 
 
 class FakeHTTPResponse:
@@ -28,6 +29,19 @@ class FakeHTTPResponse:
 
     def read(self) -> bytes:
         return json.dumps(self.payload).encode('utf-8')
+
+
+class FakeSmokeAnswerProvider:
+    provider_name = 'fake-smoke'
+    model = 'fake-smoke-model'
+
+    def __init__(self) -> None:
+        self.questions: list[str] = []
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        self.questions.append(question)
+        assert contexts
+        return 'Estrutura Disco D descreve a organizacao do disco D para arquivos de trabalho e repositorios.'
 
 
 def test_openai_compatible_provider_posts_chat_completion(monkeypatch) -> None:
@@ -247,3 +261,29 @@ def test_provider_test_extractive_is_not_applicable(tmp_path: Path) -> None:
     assert result.status == 'not_applicable'
     assert result.provider == 'extractive'
     assert result.error is None
+
+
+def test_provider_smoke_local_uses_temp_corpus_and_does_not_call_provider_for_missing_question(tmp_path: Path) -> None:
+    provider = FakeSmokeAnswerProvider()
+    result = run_provider_smoke_local(
+        settings=_settings(tmp_path),
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+        provider_test_result=AnswerProviderTestResult(
+            provider='ollama',
+            model='llama3.1:8b',
+            base_url='http://localhost:11434/v1',
+            status='ok',
+            latency_ms=5,
+            error=None,
+        ),
+    )
+
+    assert result.status == 'ok'
+    assert result.known_question.status == 'answer'
+    assert 'Disco D' in (result.known_question.answer or '')
+    assert result.known_question.citations_count >= 1
+    assert result.missing_question.status == 'no_answer'
+    assert provider.questions == ['O que e Estrutura Disco D?']
+    assert result.workspace_dir is None
