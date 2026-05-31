@@ -8,6 +8,7 @@ from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
 from free_plaud.cli import app
 from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
 from free_plaud.providers.answer import AnswerProviderTestResult
+from free_plaud.providers.smoke import ProviderSmokeAskResult, ProviderSmokeLocalResult
 from free_plaud.storage.sqlite import count_chunks, count_notes, init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
 
@@ -189,6 +190,49 @@ def test_provider_list_models_cli_returns_json(monkeypatch) -> None:
     assert payload['status'] == 'ok'
     assert payload['models'][0]['id'] == 'llama3.1:8b'
     assert payload['models'][0]['details']['size'] == 123
+
+
+def test_provider_smoke_local_cli_returns_json(monkeypatch) -> None:
+    monkeypatch.setattr(
+        'free_plaud.providers.cli.run_provider_smoke_local',
+        lambda strategy, top_k, keep_workspace: ProviderSmokeLocalResult(
+            status='ok',
+            strategy=strategy,
+            top_k=top_k,
+            provider_test=AnswerProviderTestResult(
+                provider='ollama',
+                model='llama3.1:8b',
+                base_url='http://localhost:11434/v1',
+                status='ok',
+                latency_ms=7,
+                error=None,
+            ),
+            known_question=ProviderSmokeAskResult(
+                question='O que e Estrutura Disco D?',
+                status='answer',
+                answer='Estrutura Disco D descreve repositorios.',
+                latency_ms=9,
+                citations_count=1,
+                used_sources_count=1,
+            ),
+            missing_question=ProviderSmokeAskResult(
+                question='Existe algo sobre quantum banana inexistente?',
+                status='no_answer',
+                reason_for_no_answer='no_retrieval_hits',
+                latency_ms=3,
+                citations_count=0,
+                used_sources_count=0,
+            ),
+        ),
+    )
+
+    result = runner.invoke(app, ['provider', 'smoke-local', '--strategy', 'lexical', '--top-k', '4'])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload['status'] == 'ok'
+    assert payload['known_question']['status'] == 'answer'
+    assert payload['missing_question']['status'] == 'no_answer'
 
 
 def test_corpus_index_cli_persists_file(monkeypatch, tmp_path: Path) -> None:
