@@ -2,7 +2,7 @@ import re
 from collections.abc import Mapping, Sequence
 
 from free_plaud.notes.schemas import Note
-from free_plaud.retrieval.models import AskDebug, AskDebugHit, SearchHit
+from free_plaud.retrieval.models import AskDebug, AskDebugHit, AskDebugTimings, SearchHit
 
 
 def _short_debug_snippet(text: str, max_length: int = 180) -> str:
@@ -38,6 +38,9 @@ def build_ask_debug(
     note_lookup: Mapping[str, Note] | None = None,
     no_answer_reason: str | None = None,
     stale_vector_hits_count: int = 0,
+    timings: AskDebugTimings | None = None,
+    answer_provider: str | None = None,
+    provider_model: str | None = None,
 ) -> AskDebug:
     lookup = note_lookup or {}
     return AskDebug(
@@ -48,4 +51,7 @@ def build_ask_debug(
         rejected_hits=[_debug_hit(hit, lookup) for hit in rejected_hits],
         no_answer_reason=no_answer_reason,
         stale_vector_hits_count=stale_vector_hits_count,
+        timings=timings,
+        answer_provider=answer_provider,
+        provider_model=provider_model,
     )

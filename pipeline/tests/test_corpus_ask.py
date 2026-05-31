@@ -34,6 +34,7 @@ class StubVectorStore:
 
 class FakeAnswerProvider:
     provider_name = 'fake'
+    model = 'fake-model'
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, list[str]]] = []
@@ -422,6 +423,58 @@ def test_answer_corpus_debug_includes_hits_and_scores(tmp_path: Path) -> None:
     assert response.debug.hits[0].strategy == 'lexical'
     assert 'message' in response.debug.hits[0].matched_terms
     assert response.debug.hits[0].source_path
+
+
+def test_answer_corpus_debug_includes_stage_timings_without_provider(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        include_debug=True,
+    )
+
+    assert response.debug is not None
+    assert response.debug.timings is not None
+    assert response.debug.timings.retrieval_ms >= 0
+    assert response.debug.timings.claim_build_ms >= 0
+    assert response.debug.timings.context_build_ms == 0
+    assert response.debug.timings.provider_ms == 0
+    assert response.debug.timings.validation_ms == 0
+    assert response.debug.timings.total_ms >= response.debug.timings.retrieval_ms
+    assert response.debug.answer_provider is None
+    assert response.debug.provider_model is None
+
+
+def test_answer_corpus_debug_includes_provider_timings_and_identity(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=FakeAnswerProvider(),
+        include_debug=True,
+    )
+
+    assert response.debug is not None
+    assert response.debug.timings is not None
+    assert response.debug.timings.context_build_ms >= 0
+    assert response.debug.timings.provider_ms >= 0
+    assert response.debug.timings.validation_ms >= 0
+    assert response.debug.answer_provider == 'fake'
+    assert response.debug.provider_model == 'fake-model'
 
 
 def test_answer_corpus_debug_no_answer_includes_reason_and_rejected_hits(tmp_path: Path) -> None:

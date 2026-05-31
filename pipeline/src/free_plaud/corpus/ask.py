@@ -9,7 +9,7 @@ from free_plaud.notes.schemas import Note
 from free_plaud.providers.answer import NO_ANSWER_SENTINEL, AnswerProvider
 from free_plaud.providers.embed import Embedder
 from free_plaud.retrieval.debug import build_ask_debug
-from free_plaud.retrieval.models import AnswerClaim, AskDebug, AskResponse, Citation, SearchHit, UsedSource
+from free_plaud.retrieval.models import AnswerClaim, AskDebug, AskDebugTimings, AskResponse, Citation, SearchHit, UsedSource
 from free_plaud.retrieval.rag import (
     _build_no_answer,
     _dedupe_hits,
@@ -608,6 +608,13 @@ def answer_corpus_with_citations(
     named_query_terms = extract_named_query_terms(question)
     note_lookup: dict[str, Note] = {}
     stale_vector_hits_count = 0
+    stage_timings = AskDebugTimings()
+    answer_provider_name = answer_provider.provider_name if answer_provider is not None else None
+    provider_model_value = getattr(answer_provider, 'model', None) if answer_provider is not None else None
+    provider_model = str(provider_model_value) if provider_model_value is not None else None
+
+    def _elapsed_ms(stage_started_at: float) -> int:
+        return int((perf_counter() - stage_started_at) * 1000)
 
     def _debug_payload(
         *,
@@ -617,6 +624,7 @@ def answer_corpus_with_citations(
     ) -> AskDebug | None:
         if not include_debug:
             return None
+        debug_timings = stage_timings.model_copy(update={'total_ms': int((perf_counter() - started_at) * 1000)})
         return build_ask_debug(
             strategy=strategy,
             query_terms=query_terms,
@@ -626,6 +634,9 @@ def answer_corpus_with_citations(
             note_lookup=note_lookup,
             no_answer_reason=reason,
             stale_vector_hits_count=stale_vector_hits_count,
+            timings=debug_timings,
+            answer_provider=answer_provider_name,
+            provider_model=provider_model,
         )
 
     def _no_answer(
@@ -649,6 +660,7 @@ def answer_corpus_with_citations(
     if count_chunks(connection) == 0:
         return _no_answer('empty_corpus', ['O corpus persistido ainda nao contem chunks indexados.'], [])
 
+    retrieval_started_at = perf_counter()
     valid_chunk_ids = list_chunk_ids(connection)
     raw_hits, stale_vector_hits_count = _retrieve_corpus_hits(
         question,
@@ -672,6 +684,7 @@ def answer_corpus_with_citations(
     note_lookup = get_notes_by_id(connection, [hit.chunk.note_id for hit in hits])
     hits = _rerank_hits_by_short_anchor(question, hits, note_lookup)
     used_sources = _summarize_corpus_sources(hits, note_lookup)
+    stage_timings.retrieval_ms = _elapsed_ms(retrieval_started_at)
 
     if not hits:
         return _no_answer(
@@ -708,6 +721,7 @@ def answer_corpus_with_citations(
                 rejected_hits=hits,
             )
 
+    claim_started_at = perf_counter()
     effective_max_claims = max(1, min(max_claims, top_k))
     if not _question_needs_multiple_claims(question):
         effective_max_claims = 1
@@ -722,6 +736,7 @@ def answer_corpus_with_citations(
     citations = _flatten_citations(claims)
     grounded_text = ' '.join(claim.text for claim in claims)
     grounded_matches, grounded_coverage = match_terms_in_text(query_terms, grounded_text)
+    stage_timings.claim_build_ms = _elapsed_ms(claim_started_at)
 
     if not claims or any(not claim.citations for claim in claims):
         return _no_answer(
@@ -785,9 +800,19 @@ def answer_corpus_with_citations(
 
     if answer_provider is not None:
         try:
+            context_started_at = perf_counter()
             answer_contexts = build_answer_contexts(claims, hits, note_lookup)
-            generated_answer = answer_provider.answer(question, answer_contexts)
+            stage_timings.context_build_ms = _elapsed_ms(context_started_at)
+
+            provider_started_at = perf_counter()
+            try:
+                generated_answer = answer_provider.answer(question, answer_contexts)
+            finally:
+                stage_timings.provider_ms = _elapsed_ms(provider_started_at)
+
+            validation_started_at = perf_counter()
             validation = validate_generated_answer(question, generated_answer, answer_contexts, claims)
+            stage_timings.validation_ms = _elapsed_ms(validation_started_at)
             if validation.action == 'accept':
                 answer = generated_answer
             elif validation.action == 'no_answer':
