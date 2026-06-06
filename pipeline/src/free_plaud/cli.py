@@ -58,3 +58,11 @@ def tree(base: Path | None = None) -> None:
 def menu() -> None:
     """Abre um menu numerado para operar corpus, ask e benchmark no terminal."""
     run_terminal_menu()
+
+
+@app.command("tui")
+def tui() -> None:
+    """Abre a TUI Textual do free-plaud."""
+    from free_plaud.tui.app import main as run_tui
+
+    run_tui()

@@ -52,6 +52,7 @@ def test_root_help_works() -> None:
     assert 'benchmark' in result.stdout
     assert 'corpus' in result.stdout
     assert 'menu' in result.stdout
+    assert 'tui' in result.stdout
 
 
 def test_config_cli_saves_user_settings(monkeypatch, tmp_path: Path) -> None:

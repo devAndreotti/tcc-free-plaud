@@ -44,21 +44,30 @@ Essa ordem prioriza a parte científica do TCC antes da parte cosmética do prod
 
 ## Operação local atual
 
-O backend experimental já roda por CLI, TUI Textual e menu terminal:
+A partir da raiz do projeto, os três modos principais usam atalhos curtos:
 
 ```powershell
-cd D:\Dev\Repos\Own\tcc-free-plaud\pipeline
-uv run free-plaud-tui
-uv run free-plaud menu
+.\fp.ps1 tui
+.\fp.ps1 menu
+.\fp.ps1 app
 ```
 
-A interface React/PyWebView pode chamar o RAG real do corpus indexado:
+Em WSL/Git Bash, os mesmos modos ficam:
+
+```bash
+./fp tui
+./fp menu
+./fp app
+```
+
+- `tui` abre a interface Textual.
+- `menu` abre o menu terminal numerado.
+- `app` gera o build do React e abre a UI integrada PyWebView com o backend real.
+
+Para desenvolver só o frontend mockado no navegador:
 
 ```powershell
-cd D:\Dev\Repos\Own\tcc-free-plaud\UI
-npm.cmd run build
-cd ..\pipeline
-uv run --extra desktop python ..\UI\main.py
+.\fp.ps1 front
 ```
 
 Segredos locais ficam em `.env` e não entram no Git. A chave de resposta generativa deve usar:
