@@ -12,7 +12,7 @@ from free_plaud.benchmark.datasets import (
     load_benchmark_dataset,
     load_benchmark_suite,
 )
-from free_plaud.benchmark.metrics import mean_reciprocal_rank, recall_at_k_from_ranks
+from free_plaud.benchmark.metrics import mean_reciprocal_rank, ndcg_at_k, recall_at_k_from_ranks
 from free_plaud.benchmark.reports import (
     export_benchmark_comparison_csv,
     export_benchmark_comparison_json,
@@ -139,6 +139,27 @@ def test_metrics_compute_mrr_and_recall_at_k_from_ranks() -> None:
     assert mean_reciprocal_rank(ranks) == (1.0 + 0.25 + 0.0) / 3
     assert recall_at_k_from_ranks(ranks, 3) == 1 / 3
     assert recall_at_k_from_ranks(ranks, 5) == 2 / 3
+
+
+def test_run_benchmark_reports_ndcg(tmp_path: Path) -> None:
+    note = _build_note(tmp_path)
+    dataset = BenchmarkDataset(
+        dataset_name='rag-baseline',
+        samples=[
+            BenchmarkSample(
+                sample_id='q-1',
+                question='O que o benchmark mede?',
+                expected_note_id=note.note_id,
+                expected_terms=['recall', 'latencia'],
+            )
+        ],
+    )
+
+    result = run_benchmark(note, dataset, strategy='lexical', top_k=5, chunk_size=120, overlap=30)
+
+    ranks = [query.relevant_rank for query in result.queries]
+    assert result.metrics['ndcg_at_10'] == ndcg_at_k(ranks, 10)
+    assert {'ndcg_at_3', 'ndcg_at_5', 'ndcg_at_10'} <= set(result.metrics)
 
 
 def test_run_benchmark_persists_run_and_queries_in_sqlite(tmp_path: Path) -> None:
