@@ -4,6 +4,7 @@ import pytest
 
 from free_plaud.benchmark.metrics import (
     abstention_metrics,
+    bootstrap_ci,
     lexical_groundedness,
     ndcg_at_k,
 )
@@ -70,3 +71,32 @@ def test_abstention_metrics_empty_and_length_guard() -> None:
 
     with pytest.raises(ValueError):
         abstention_metrics([True], [True, False])
+
+
+def test_bootstrap_ci_brackets_mean_and_is_deterministic() -> None:
+    values = [1.0, 0.5, 0.0, 0.5, 1.0, 0.0, 0.5, 1.0]
+
+    first = bootstrap_ci(values, seed=7)
+    second = bootstrap_ci(values, seed=7)
+
+    assert first == second  # mesma seed => resultado idêntico
+    assert first['lower'] <= first['mean'] <= first['upper']
+    assert first['mean'] == pytest.approx(sum(values) / len(values))
+    # Valores em [0,1] => limites também ficam em [0,1].
+    assert 0.0 <= first['lower'] <= 1.0
+    assert 0.0 <= first['upper'] <= 1.0
+
+
+def test_bootstrap_ci_no_variance_collapses_interval() -> None:
+    constant = bootstrap_ci([0.5, 0.5, 0.5, 0.5])
+    assert constant['lower'] == pytest.approx(0.5)
+    assert constant['upper'] == pytest.approx(0.5)
+
+
+def test_bootstrap_ci_handles_empty_and_singleton() -> None:
+    assert bootstrap_ci([]) == {'mean': 0.0, 'lower': 0.0, 'upper': 0.0, 'confidence': 0.95}
+
+    singleton = bootstrap_ci([0.8])
+    assert singleton['mean'] == pytest.approx(0.8)
+    assert singleton['lower'] == pytest.approx(0.8)
+    assert singleton['upper'] == pytest.approx(0.8)

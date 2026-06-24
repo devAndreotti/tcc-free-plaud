@@ -1,6 +1,8 @@
+import random
 import re
 import unicodedata
 from math import log2
+from statistics import fmean
 
 _TOKEN_PATTERN = re.compile(r'[0-9A-Za-zÀ-ÖØ-öø-ÿ]+')
 
@@ -125,4 +127,42 @@ def abstention_metrics(
         'precision': precision,
         'recall': recall,
         'f1': f1,
+    }
+
+
+def bootstrap_ci(
+    values: list[float],
+    *,
+    confidence: float = 0.95,
+    iterations: int = 1000,
+    seed: int = 0,
+) -> dict[str, float]:
+    """Intervalo de confiança bootstrap (percentil) para a média de uma métrica.
+
+    Recebe os valores por consulta (ex.: reciprocal rank de cada query),
+    reamostra com reposição ``iterations`` vezes e retorna média e limites
+    inferior/superior no nível de confiança dado. Determinístico via ``seed``,
+    sem dependências externas. Serve para reportar ``MRR 0.62 [0.54, 0.71]`` em
+    vez de número solto — relevante quando o dataset é pequeno.
+    """
+    if not values:
+        return {'mean': 0.0, 'lower': 0.0, 'upper': 0.0, 'confidence': confidence}
+    if len(values) == 1:
+        only = float(values[0])
+        return {'mean': only, 'lower': only, 'upper': only, 'confidence': confidence}
+
+    rng = random.Random(seed)
+    sample_size = len(values)
+    resampled_means = [
+        fmean(values[rng.randrange(sample_size)] for _ in range(sample_size)) for _ in range(iterations)
+    ]
+    resampled_means.sort()
+    alpha = (1.0 - confidence) / 2.0
+    lower_index = int(alpha * iterations)
+    upper_index = min(int((1.0 - alpha) * iterations), iterations - 1)
+    return {
+        'mean': fmean(values),
+        'lower': resampled_means[lower_index],
+        'upper': resampled_means[upper_index],
+        'confidence': confidence,
     }
