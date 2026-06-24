@@ -1,3 +1,4 @@
+import dataclasses
 import json
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from free_plaud.cli import app
 from free_plaud.app.config import Settings
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note
+from free_plaud.retrieval.rag import SCORING, ClaimScoringConfig
 from free_plaud.retrieval.rag import _rank_claim_candidates
 from free_plaud.retrieval.rag import _claim_variant_score
 from free_plaud.retrieval.rag import _trim_dangling_tail
@@ -64,6 +66,27 @@ def _build_note(**overrides: object) -> Note:
     }
     payload.update(overrides)
     return Note(**payload)
+
+
+def test_claim_scoring_config_locks_calibrated_defaults() -> None:
+    # Os pesos são calibrados; este teste força que qualquer alteração seja intencional.
+    assert SCORING == ClaimScoringConfig()
+    assert SCORING.noisy_min_length == 24
+    assert SCORING.snippet_max_length == 220
+    assert SCORING.question_like_max_length == 80
+    assert SCORING.short_answer_max_length == 80
+    assert (SCORING.rank_preferred_min, SCORING.rank_preferred_max) == (40, 260)
+    assert SCORING.term_density_scale == 1000
+    assert SCORING.dedupe_max_overlap == 0.65
+    assert (SCORING.support_direct_coverage, SCORING.support_direct_score) == (0.6, 0.7)
+    assert SCORING.coverage_drop_tolerance == 33
+    assert SCORING.length_gain_margin == 20
+    assert SCORING.dangling_comma_max_distance == 48
+
+
+def test_claim_scoring_config_is_frozen() -> None:
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        SCORING.noisy_min_length = 1  # type: ignore[misc]
 
 
 def test_lexical_search_hits_expose_score_and_term_coverage() -> None:
