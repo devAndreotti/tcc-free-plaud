@@ -1,7 +1,10 @@
 import json
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+BenchmarkCategory = Literal['direta', 'inferida', 'negativa']
 
 
 class BenchmarkSample(BaseModel):
@@ -13,6 +16,7 @@ class BenchmarkSample(BaseModel):
     expected_chunk_id: str | None = None
     expected_terms: list[str] = Field(default_factory=list)
     expected_ref: str | None = None
+    category: BenchmarkCategory | None = None
 
 
 class BenchmarkDataset(BaseModel):
