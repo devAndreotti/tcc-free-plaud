@@ -25,6 +25,7 @@ from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.answer import test_answer_provider
 from free_plaud.providers.model_discovery import list_answer_models
+from free_plaud.providers.provisioning import detect_runtime, runtime_hint
 from free_plaud.providers.embed import get_embedder
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.retrieval.rag import answer_with_citations
@@ -140,15 +141,18 @@ def _settings_status_message(settings: Settings, doctor_text: str) -> str:
     )
 
 
-def _provider_test_message(result) -> str:  # noqa: ANN001
-    return (
-        f'provider={result.provider}\n'
-        f'model={result.model}\n'
-        f'base_url={result.base_url}\n'
-        f'status={result.status}\n'
-        f'latencia_ms={result.latency_ms}\n'
-        f'erro={result.error or "-"}'
-    )
+def _provider_test_message(result, hint: str | None = None) -> str:  # noqa: ANN001
+    lines = [
+        f'provider={result.provider}',
+        f'model={result.model}',
+        f'base_url={result.base_url}',
+        f'status={result.status}',
+        f'latencia_ms={result.latency_ms}',
+        f'erro={result.error or "-"}',
+    ]
+    if hint:
+        lines.extend(['', hint])
+    return '\n'.join(lines)
 
 
 def _model_discovery_message(result) -> str:  # noqa: ANN001
@@ -1033,13 +1037,14 @@ class SettingsPane(Vertical):
     def _run_provider_test(self) -> None:
         try:
             result = test_answer_provider()
+            hint = runtime_hint(detect_runtime()) if result.status == 'error' else None
         except Exception as exc:  # noqa: BLE001 - UI precisa exibir erro operacional.
             self.app.call_from_thread(self._render_error, exc)
             return
-        self.app.call_from_thread(self._render_provider_test, result)
+        self.app.call_from_thread(self._render_provider_test, result, hint)
 
-    def _render_provider_test(self, result) -> None:  # noqa: ANN001
-        self._render_message(_provider_test_message(result))
+    def _render_provider_test(self, result, hint: str | None = None) -> None:  # noqa: ANN001
+        self._render_message(_provider_test_message(result, hint))
 
     @work(thread=True)
     def _run_model_discovery(self) -> None:

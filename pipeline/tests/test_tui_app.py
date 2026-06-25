@@ -90,6 +90,25 @@ def _answer(question: str) -> AskResponse:
     )
 
 
+def test_provider_test_message_appends_hint_on_error() -> None:
+    from free_plaud.tui.app import _provider_test_message
+
+    result = SimpleNamespace(
+        provider='ollama',
+        model='llama3.1:8b',
+        base_url='http://localhost:11434/v1',
+        status='error',
+        latency_ms=4263,
+        error='Provider indisponivel: WinError 10061',
+    )
+
+    with_hint = _provider_test_message(result, 'Inicie o Ollama (ollama serve).')
+    assert 'status=error' in with_hint
+    assert 'Inicie o Ollama (ollama serve).' in with_hint
+
+    assert 'Inicie o Ollama' not in _provider_test_message(result)
+
+
 def test_ask_file_exposes_supported_strategies() -> None:
     assert ASK_STRATEGIES == ('lexical', 'vector', 'hybrid')
     assert ASK_MODES == ('corpus', 'file')

@@ -8,6 +8,7 @@ from free_plaud.app.doctor import run_doctor
 from free_plaud.app.doctor_format import doctor_report_text
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.providers.answer import test_answer_provider
+from free_plaud.providers.provisioning import detect_runtime, runtime_hint
 from free_plaud.terminal_settings import settings_menu
 from free_plaud.tui.actions import (
     ask_corpus,
@@ -148,17 +149,17 @@ def _show_doctor() -> None:
 def _test_provider() -> None:
     result = test_answer_provider()
     border = 'green' if result.status == 'ok' else 'yellow' if result.status == 'not_applicable' else 'red'
-    body = '\n'.join(
-        (
-            f'provider={result.provider}',
-            f'model={result.model}',
-            f'base_url={result.base_url}',
-            f'status={result.status}',
-            f'latencia_ms={result.latency_ms}',
-            f'erro={result.error or "-"}',
-        )
-    )
-    console.print(Panel(body, title='Testar provider', border_style=border))
+    fields = [
+        f'provider={result.provider}',
+        f'model={result.model}',
+        f'base_url={result.base_url}',
+        f'status={result.status}',
+        f'latencia_ms={result.latency_ms}',
+        f'erro={result.error or "-"}',
+    ]
+    if result.status == 'error':
+        fields.extend(['', runtime_hint(detect_runtime())])
+    console.print(Panel('\n'.join(fields), title='Testar provider', border_style=border))
 
 
 def run_terminal_menu() -> None:
