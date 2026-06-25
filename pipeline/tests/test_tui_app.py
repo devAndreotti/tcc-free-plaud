@@ -364,13 +364,19 @@ def test_tui_settings_pane_saves_device_and_clears_runtime(monkeypatch, tmp_path
 def test_tui_settings_pane_saves_answer_api_key_to_local_env(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     saved_key: list[str] = []
+    saved_settings: list[dict[str, object]] = []
 
     def fake_save_answer_api_key(api_key: str, *, settings=None):  # noqa: ANN001, ANN202
         saved_key.append(api_key)
         return tmp_path / 'pipeline' / '.env'
 
+    def fake_save_user_settings(values: dict[str, object], *, settings=None):  # noqa: ANN001, ANN202
+        saved_settings.append(values)
+        return _settings(tmp_path)
+
     monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
     monkeypatch.setattr('free_plaud.tui.app.save_answer_api_key', fake_save_answer_api_key)
+    monkeypatch.setattr('free_plaud.tui.app.save_user_settings', fake_save_user_settings)
 
     async def run_app() -> None:
         app = FreePlaudApp()
@@ -383,6 +389,7 @@ def test_tui_settings_pane_saves_answer_api_key_to_local_env(monkeypatch, tmp_pa
     asyncio.run(run_app())
 
     assert saved_key == ['sk-tui-test']
+    assert saved_settings
 
 
 def test_tui_settings_pane_applies_preset_and_clears_runtime(monkeypatch, tmp_path: Path) -> None:

@@ -73,6 +73,7 @@ def _show_status() -> None:
         ('vector_chunks', str(status.vector_chunks_count)),
         ('stale_vectors', str(status.stale_vector_chunks_count)),
         ('missing_vectors', str(status.missing_vector_chunks_count)),
+        ('embedding_mismatches', str(status.embedding_model_mismatch_count)),
     ):
         table.add_row(key, value)
     console.print(table)

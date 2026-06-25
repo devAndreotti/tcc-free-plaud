@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added structured `PDF_PARSE_FAILED` handling for corrupted PDF ingestion.
+- Added corpus status detection for embedding model mismatch between indexed vectors and current settings.
+- Added validation to reject invalid chunk overlap settings before indexing.
+- Fixed corpus reset to fail loudly on Chroma delete errors and preserve SQLite when vector reset fails.
+- Sanitized provider failure limitations to avoid leaking raw remote error payloads.
+
 ## 1.0.0 - 2026-05-24
 
 - Added machine-readable policy/state contract.

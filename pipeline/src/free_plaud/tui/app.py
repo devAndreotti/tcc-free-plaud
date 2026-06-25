@@ -626,6 +626,7 @@ class NotesPane(Vertical):
             ('vector_chunks', str(status.vector_chunks_count)),
             ('stale_vectors', str(status.stale_vector_chunks_count)),
             ('missing_vectors', str(status.missing_vector_chunks_count)),
+            ('embedding_mismatches', str(status.embedding_model_mismatch_count)),
         ):
             status_table.add_row(key, value)
         output.write(status_table)

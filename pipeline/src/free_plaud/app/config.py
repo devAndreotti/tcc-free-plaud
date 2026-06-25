@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import PydanticBaseSettingsSource
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -95,6 +95,12 @@ class Settings(BaseSettings):
     corpus_embedding_batch_size: int = Field(default=64, ge=1, le=512)
     corpus_upsert_batch_size: int = Field(default=128, ge=1, le=1000)
     corpus_index_workers: int = Field(default=1, ge=1, le=16)
+
+    @model_validator(mode='after')
+    def validate_chunk_window(self) -> 'Settings':
+        if self.default_chunk_overlap >= self.default_chunk_size:
+            raise ValueError('default_chunk_overlap deve ser menor que default_chunk_size')
+        return self
 
     @classmethod
     def settings_customise_sources(

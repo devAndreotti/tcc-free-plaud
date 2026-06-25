@@ -1,20 +1,30 @@
 from pathlib import Path
 
 from pypdf import PdfReader
+from pypdf.errors import PyPdfError
 
 from free_plaud.ingest.models import IngestedDocument
 from free_plaud.ingest.validators import validate_source_path
 
+PDF_PARSE_FAILED = 'PDF_PARSE_FAILED'
+
 
 def _extract_pdf_text(path: Path) -> str:
-    reader = PdfReader(str(path))
+    try:
+        reader = PdfReader(str(path))
+    except (PyPdfError, OSError) as exc:
+        raise ValueError(PDF_PARSE_FAILED) from exc
+
     chunks: list[str] = []
 
-    for page in reader.pages:
-        page_text = page.extract_text() or ""
-        normalized = page_text.strip()
-        if normalized:
-            chunks.append(normalized)
+    try:
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            normalized = page_text.strip()
+            if normalized:
+                chunks.append(normalized)
+    except PyPdfError as exc:
+        raise ValueError(PDF_PARSE_FAILED) from exc
 
     return "\n\n".join(chunks).strip()
 

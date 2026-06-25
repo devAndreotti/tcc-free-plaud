@@ -79,6 +79,10 @@ class GeneratedAnswerValidation(BaseModel):
     limitations: list[str] = Field(default_factory=list)
 
 
+def _provider_failure_limitation(exc: Exception) -> str:
+    return f'Provider de resposta falhou; usando resposta extrativa. Erro: {type(exc).__name__}.'
+
+
 def _citation_from_corpus_hit(hit: SearchHit, note_lookup: dict[str, Note]) -> Citation:
     chunk = hit.chunk
     note = note_lookup.get(chunk.note_id)
@@ -825,7 +829,7 @@ def answer_corpus_with_citations(
             else:
                 limitations.extend(validation.limitations)
         except Exception as exc:  # noqa: BLE001 - RAG deve sobreviver a provider externo indisponivel.
-            limitations.append(f'Provider de resposta falhou; usando resposta extrativa. Erro: {exc}')
+            limitations.append(_provider_failure_limitation(exc))
 
     return AskResponse(
         query=question,

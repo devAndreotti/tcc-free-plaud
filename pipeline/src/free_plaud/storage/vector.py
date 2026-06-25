@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import chromadb
+from chromadb.errors import NotFoundError
 from chromadb.api.models.Collection import Collection
 
 from free_plaud.retrieval.models import Chunk, SearchHit
@@ -83,7 +84,7 @@ class LocalVectorStore:
     def reset(self) -> None:
         try:
             self._client.delete_collection(self.collection_name)
-        except Exception:
+        except NotFoundError:
             pass
 
     def upsert_chunks(self, chunks: list[Chunk], embeddings: list[list[float]], *, embedding_model: str) -> None:

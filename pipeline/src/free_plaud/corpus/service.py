@@ -29,7 +29,7 @@ from free_plaud.corpus.models import (
     CorpusStatusResult,
     ResolvedCorpusCommitMode,
 )
-from free_plaud.ingest.loaders import load_document
+from free_plaud.ingest.loaders import PDF_PARSE_FAILED, load_document
 from free_plaud.notes.schemas import Note
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import Embedder, get_embedder
@@ -182,6 +182,8 @@ def _error_code_for_exception(exc: Exception) -> str:
         text = str(exc)
         if text == 'EMPTY_CONTENT':
             return 'EMPTY_CONTENT'
+        if text == PDF_PARSE_FAILED:
+            return PDF_PARSE_FAILED
         if 'Extensão não suportada' in text:
             return 'UNSUPPORTED_MEDIA_TYPE'
     return 'INDEXING_FAILED'
@@ -560,6 +562,11 @@ def get_corpus_status(
 
         stale_chunk_ids = sorted(vector_chunk_ids - sqlite_chunk_ids)
         missing_chunk_ids = sorted(sqlite_chunk_ids - vector_chunk_ids)
+        embedding_model_mismatch_chunk_ids = sorted(
+            chunk_id
+            for chunk_id, metadata in vector_records
+            if metadata.get('embedding_model') not in {None, resolved_settings.embedding_model}
+        )
         stale_chunk_id_set = set(stale_chunk_ids)
         orphan_note_ids = sorted(
             {
@@ -573,7 +580,7 @@ def get_corpus_status(
             status = 'empty'
         elif sqlite_chunk_ids and not vector_chunk_ids:
             status = 'sqlite_only'
-        elif stale_chunk_ids or missing_chunk_ids:
+        elif stale_chunk_ids or missing_chunk_ids or embedding_model_mismatch_chunk_ids:
             status = 'inconsistent'
         else:
             status = 'clean'
@@ -589,9 +596,11 @@ def get_corpus_status(
             vector_chunks_count=len(vector_chunk_ids),
             stale_vector_chunks_count=len(stale_chunk_ids),
             missing_vector_chunks_count=len(missing_chunk_ids),
+            embedding_model_mismatch_count=len(embedding_model_mismatch_chunk_ids),
             orphan_vector_note_ids=orphan_note_ids,
             stale_vector_chunk_ids=stale_chunk_ids,
             missing_vector_chunk_ids=missing_chunk_ids,
+            embedding_model_mismatch_chunk_ids=embedding_model_mismatch_chunk_ids,
             status=status,  # type: ignore[arg-type]
         )
     finally:
@@ -630,8 +639,8 @@ def reset_corpus(
                 status='preview',
             )
 
-        deleted_notes, deleted_chunks = delete_corpus_notes_and_chunks(resolved_connection)
         resolved_vector_store.reset()
+        deleted_notes, deleted_chunks = delete_corpus_notes_and_chunks(resolved_connection)
         return CorpusResetResult(
             dry_run=False,
             would_delete_notes=notes_total,

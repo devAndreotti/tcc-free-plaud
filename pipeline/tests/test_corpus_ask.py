@@ -72,6 +72,13 @@ class FailingAnswerProvider:
         raise RuntimeError('provider fora do ar')
 
 
+class SecretLeakingAnswerProvider:
+    provider_name = 'secret-leaking'
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        raise RuntimeError('HTTP 401: {"error":"bad key sk-secret"}')
+
+
 def _settings(tmp_path: Path) -> Settings:
     return Settings(
         workspace_dir=tmp_path,
@@ -621,6 +628,29 @@ def test_answer_corpus_falls_back_to_extractive_answer_when_provider_fails(tmp_p
     assert response.status == 'answer'
     assert 'RabbitMQ' in (response.answer or '')
     assert any('provider de resposta falhou' in limitation.lower() for limitation in response.limitations)
+
+
+def test_answer_corpus_sanitizes_provider_failure_message(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=SecretLeakingAnswerProvider(),
+    )
+    serialized = ' '.join(response.limitations)
+
+    assert response.status == 'answer'
+    assert 'Provider de resposta falhou' in serialized
+    assert 'RuntimeError' in serialized
+    assert 'sk-secret' not in serialized
+    assert 'bad key' not in serialized
 
 
 def test_answer_corpus_with_citations_returns_no_answer_for_irrelevant_question(tmp_path: Path) -> None:

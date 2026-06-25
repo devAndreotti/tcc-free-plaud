@@ -101,9 +101,11 @@ class CorpusStatusResult(BaseModel):
     vector_chunks_count: int
     stale_vector_chunks_count: int
     missing_vector_chunks_count: int
+    embedding_model_mismatch_count: int = 0
     orphan_vector_note_ids: list[str] = Field(default_factory=list)
     stale_vector_chunk_ids: list[str] = Field(default_factory=list)
     missing_vector_chunk_ids: list[str] = Field(default_factory=list)
+    embedding_model_mismatch_chunk_ids: list[str] = Field(default_factory=list)
     status: Literal['empty', 'clean', 'sqlite_only', 'inconsistent']
 
 
