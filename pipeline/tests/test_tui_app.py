@@ -361,6 +361,33 @@ def test_tui_settings_pane_saves_device_and_clears_runtime(monkeypatch, tmp_path
     assert cleared is True
 
 
+def test_tui_settings_fields_react_to_provider(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 38)) as pilot:
+            await pilot.click('#nav-settings')
+
+            await pilot.click('#settings-provider-openai-compatible')
+            await pilot.pause(0.1)
+            assert not app.query_one('#settings-answer-section').has_class('hidden')
+            assert not app.query_one('#settings-answer-key-section').has_class('hidden')
+
+            await pilot.click('#settings-provider-ollama')
+            await pilot.pause(0.1)
+            assert not app.query_one('#settings-answer-section').has_class('hidden')
+            assert app.query_one('#settings-answer-key-section').has_class('hidden')
+
+            await pilot.click('#settings-provider-extractive')
+            await pilot.pause(0.1)
+            assert app.query_one('#settings-answer-section').has_class('hidden')
+            assert app.query_one('#settings-answer-key-section').has_class('hidden')
+
+    asyncio.run(run_app())
+
+
 def test_tui_settings_pane_saves_answer_api_key_to_local_env(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     saved_key: list[str] = []

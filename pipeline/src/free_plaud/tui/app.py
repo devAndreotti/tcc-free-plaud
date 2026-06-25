@@ -806,25 +806,32 @@ class SettingsPane(Vertical):
                 yield ActionCell('Auto', id='settings-device-auto', classes='strategy-button')
                 yield ActionCell('CPU', id='settings-device-cpu', classes='strategy-button')
                 yield ActionCell('CUDA', id='settings-device-cuda', classes='strategy-button')
+            yield Static('Provider de resposta', classes='section-label')
             with Container(id='settings-provider-row'):
                 yield ActionCell('Extractive', id='settings-provider-extractive', classes='strategy-button')
                 yield ActionCell('Ollama', id='settings-provider-ollama', classes='strategy-button')
                 yield ActionCell('LM Studio', id='settings-provider-lmstudio', classes='strategy-button')
                 yield ActionCell('OpenAI', id='settings-provider-openai-compatible', classes='strategy-button')
-            with Container(id='settings-answer-row'):
-                yield Input(value=settings.answer_model, placeholder='answer_model', id='settings-answer-model')
+            with Container(id='settings-answer-section'):
+                yield Static('Modelo de resposta - escolha da lista (Listar modelos)', classes='field-caption')
+                with Container(id='settings-answer-row'):
+                    yield Input(value=settings.answer_model, placeholder='answer_model', id='settings-answer-model')
+            with Container(id='settings-answer-key-section'):
+                yield Static('Chave de API - so para provider remoto (OpenAI); salva no .env local', classes='field-caption')
+                yield Input(
+                    placeholder='FREE_PLAUD_ANSWER_API_KEY (vazio nao altera)',
+                    id='settings-answer-api-key',
+                    password=True,
+                )
+            yield Static('Recuperacao', classes='section-label')
             with Container(id='settings-strategy-row'):
                 yield ActionCell('Lexical', id='settings-strategy-lexical', classes='strategy-button')
                 yield ActionCell('Vector', id='settings-strategy-vector', classes='strategy-button')
                 yield ActionCell('Hybrid', id='settings-strategy-hybrid', classes='strategy-button')
                 yield ActionCell('Recursivo', id='settings-recursive', classes='strategy-button')
+            yield Static('Corpus - pasta do vault a indexar (vira sua base de busca; nao e a pasta do modelo)', classes='section-label')
             with Container(id='settings-path-row'):
-                yield Input(value=str(settings.default_corpus_path or ''), placeholder=r'D:\caminho\pasta padrao', id='settings-corpus-path')
-                yield Input(
-                    placeholder='FREE_PLAUD_ANSWER_API_KEY (.env local; vazio nao altera)',
-                    id='settings-answer-api-key',
-                    password=True,
-                )
+                yield Input(value=str(settings.default_corpus_path or ''), placeholder=r'D:\caminho\pasta', id='settings-corpus-path')
             with Container(id='settings-action-row'):
                 yield ActionCell('Salvar', id='settings-save', classes='primary-action')
                 yield ActionCell('Testar provider', id='settings-test-provider', classes='strategy-button')
@@ -992,6 +999,10 @@ class SettingsPane(Vertical):
         advanced_toggle = self.query_one('#settings-advanced-toggle', ActionCell)
         advanced_toggle.update('Avancado: Sim' if self.advanced_visible else 'Avancado')
         advanced_toggle.set_class(self.advanced_visible, 'strategy-active')
+        uses_model = self.selected_answer_provider != 'extractive'
+        uses_api_key = self.selected_answer_provider == 'openai-compatible'
+        self.query_one('#settings-answer-section').set_class(not uses_model, 'hidden')
+        self.query_one('#settings-answer-key-section').set_class(not uses_api_key, 'hidden')
 
     def _save(self) -> None:
         try:
