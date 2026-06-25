@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from textual.widgets import Button, Input
+from textual.widgets import Button, Input, Select
 
 from free_plaud.app.config import Settings
 from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
@@ -384,6 +384,36 @@ def test_tui_settings_fields_react_to_provider(monkeypatch, tmp_path: Path) -> N
             await pilot.pause(0.1)
             assert app.query_one('#settings-answer-section').has_class('hidden')
             assert app.query_one('#settings-answer-key-section').has_class('hidden')
+
+    asyncio.run(run_app())
+
+
+def test_tui_settings_model_select_populates_from_discovery(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    fake_result = ModelDiscoveryResult(
+        provider='ollama',
+        base_url='http://localhost:11434',
+        status='ok',
+        models=[
+            ModelInfo(id='gemma4-cuda:latest', label='gemma4-cuda', provider='ollama'),
+            ModelInfo(id='llama3.2:3b', label='llama3.2', provider='ollama'),
+        ],
+        latency_ms=1,
+    )
+    monkeypatch.setattr('free_plaud.tui.app.list_answer_models', lambda *args, **kwargs: fake_result)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 38)) as pilot:
+            await pilot.click('#nav-settings')
+            await pilot.click('#settings-provider-ollama')
+            await pilot.click('#settings-list-models')
+            await pilot.pause(0.3)
+            select = app.query_one('#settings-answer-model', Select)
+            # O modelo descoberto vira selecionavel (atribuir valor fora das opcoes levantaria erro).
+            select.value = 'llama3.2:3b'
+            assert select.value == 'llama3.2:3b'
 
     asyncio.run(run_app())
 

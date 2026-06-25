@@ -10,7 +10,7 @@ from textual.binding import Binding
 from textual.containers import Container, Vertical
 from textual.geometry import Size
 from textual.message import Message
-from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Static
+from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Select, Static
 
 from free_plaud.app.config import Settings, get_settings, reset_user_settings, save_user_settings, user_settings_path_for
 from free_plaud.app.doctor import run_doctor
@@ -815,7 +815,13 @@ class SettingsPane(Vertical):
             with Container(id='settings-answer-section'):
                 yield Static('Modelo de resposta - escolha da lista (Listar modelos)', classes='field-caption')
                 with Container(id='settings-answer-row'):
-                    yield Input(value=settings.answer_model, placeholder='answer_model', id='settings-answer-model')
+                    yield Select(
+                        [(settings.answer_model, settings.answer_model)] if settings.answer_model else [],
+                        value=settings.answer_model if settings.answer_model else Select.BLANK,
+                        allow_blank=True,
+                        prompt='Selecione um modelo (Listar modelos)',
+                        id='settings-answer-model',
+                    )
             with Container(id='settings-answer-key-section'):
                 yield Static('Chave de API - so para provider remoto (OpenAI); salva no .env local', classes='field-caption')
                 yield Input(
@@ -964,7 +970,7 @@ class SettingsPane(Vertical):
         self.selected_commit_mode = settings.corpus_commit_mode
         self.recursive_default = settings.corpus_recursive_default
         self.query_one('#settings-model', Input).value = settings.embedding_model
-        self.query_one('#settings-answer-model', Input).value = settings.answer_model
+        self._set_model_options([], selected=settings.answer_model)
         self.query_one('#settings-answer-base-url', Input).value = str(settings.answer_base_url or '')
         self.query_one('#settings-answer-temperature', Input).value = str(settings.answer_temperature)
         self.query_one('#settings-answer-timeout', Input).value = str(settings.answer_timeout_seconds)
@@ -975,6 +981,18 @@ class SettingsPane(Vertical):
         self.query_one('#settings-embedding-batch', Input).value = str(settings.corpus_embedding_batch_size)
         self.query_one('#settings-workers', Input).value = str(settings.corpus_index_workers)
         self.query_one('#settings-answer-api-key', Input).value = ''
+
+    def _current_answer_model(self) -> str:
+        value = self.query_one('#settings-answer-model', Select).value
+        return '' if value is Select.BLANK else str(value).strip()
+
+    def _set_model_options(self, models: list[str], *, selected: str | None = None) -> None:
+        select = self.query_one('#settings-answer-model', Select)
+        current = selected if selected is not None else self._current_answer_model()
+        options = list(dict.fromkeys(model for model in [current, *models] if model))
+        select.set_options([(model, model) for model in options])
+        if current and current in options:
+            select.value = current
 
     def _sync_controls(self) -> None:
         for device in ('auto', 'cpu', 'cuda'):
@@ -1010,7 +1028,7 @@ class SettingsPane(Vertical):
                 'embedding_device': self.selected_device,
                 'embedding_model': self.query_one('#settings-model', Input).value,
                 'answer_provider': self.selected_answer_provider,
-                'answer_model': self.query_one('#settings-answer-model', Input).value.strip(),
+                'answer_model': self._current_answer_model(),
                 'answer_base_url': self.query_one('#settings-answer-base-url', Input).value.strip() or None,
                 'answer_temperature': float(self.query_one('#settings-answer-temperature', Input).value),
                 'answer_timeout_seconds': int(self.query_one('#settings-answer-timeout', Input).value),
@@ -1069,6 +1087,7 @@ class SettingsPane(Vertical):
 
     def _render_model_discovery(self, result) -> None:  # noqa: ANN001
         self._render_message(_model_discovery_message(result))
+        self._set_model_options([model.id for model in result.models])
 
     @work(thread=True)
     def _run_doctor(self, settings: Settings, request_id: int) -> None:
