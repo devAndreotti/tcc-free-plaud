@@ -124,6 +124,33 @@ def detect_runtime(settings: Settings | None = None) -> RuntimeStatusReport:
     )
 
 
+def runtime_hint(report: RuntimeStatusReport) -> str:
+    """Mensagem acionável em pt-br para o estado do runtime do provider.
+
+    Converte o `status` técnico do `detect_runtime` em uma orientação que o
+    usuário consegue agir, para a UI mostrar isso no lugar de erros crus de
+    socket (ex.: WinError 10061).
+    """
+    if report.status == 'ready':
+        return 'Runtime pronto: servidor no ar e modelo instalado.'
+    if report.status == 'offline':
+        return (
+            'Servidor do provider offline. Inicie o Ollama '
+            '(rode "ollama serve" ou abra o app do Ollama) e teste de novo.'
+        )
+    if report.status == 'no_model':
+        installed = ', '.join(report.installed_models) if report.installed_models else 'nenhum'
+        return (
+            f'Modelo configurado nao esta instalado. Instalados: {installed}. '
+            'Baixe com "provider pull <modelo>" ou aponte answer_model para um destes.'
+        )
+    if report.status == 'unauthorized':
+        return 'Provider remoto exige API key valida para listar e usar modelos.'
+    if report.status == 'not_applicable':
+        return 'Provider extractive nao usa modelo generativo (respostas extrativas).'
+    return report.message or 'Nao foi possivel diagnosticar o runtime.'
+
+
 def _pull_base_url(settings: Settings) -> str:
     return _strip_v1_path(_default_base_url('ollama', settings.answer_base_url))
 
