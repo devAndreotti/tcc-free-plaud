@@ -181,6 +181,14 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         secret=True,
         placeholder='FREE_PLAUD_ANSWER_API_KEY',
     ),
+    SettingSpec(
+        key='answer_max_tokens',
+        label='Max tokens da resposta',
+        description='Limite de tokens de saida do provider; vazio usa o default do modelo. Suba para modelos de reasoning que truncam.',
+        group='LLM',
+        value_type='int',
+        placeholder='vazio = default do modelo',
+    ),
 )
 
 

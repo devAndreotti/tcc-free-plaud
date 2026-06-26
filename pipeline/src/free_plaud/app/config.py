@@ -26,6 +26,7 @@ USER_SETTING_FIELDS = {
     'answer_base_url',
     'answer_temperature',
     'answer_timeout_seconds',
+    'answer_max_tokens',
 }
 
 
@@ -81,6 +82,7 @@ class Settings(BaseSettings):
     answer_api_key: str | None = Field(default=None, exclude=True, repr=False)
     answer_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     answer_timeout_seconds: int = Field(default=60, ge=1, le=300)
+    answer_max_tokens: int | None = Field(default=None, ge=1, le=131072)
     default_ask_strategy: Literal['lexical', 'vector', 'hybrid'] = Field(default='hybrid')
     default_corpus_path: Path | None = Field(default=None)
     corpus_recursive_default: bool = Field(default=True)

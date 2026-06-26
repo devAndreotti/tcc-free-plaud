@@ -58,6 +58,7 @@ def test_settings_catalog_marks_simple_and_advanced_layers(tmp_path: Path) -> No
     assert by_key['answer_base_url']['layer'] == 'advanced'
     assert by_key['answer_temperature']['layer'] == 'advanced'
     assert by_key['answer_timeout_seconds']['layer'] == 'advanced'
+    assert by_key['answer_max_tokens']['layer'] == 'advanced'
 
 
 def test_settings_catalog_warns_when_embedding_model_is_fake_hash(tmp_path: Path) -> None:

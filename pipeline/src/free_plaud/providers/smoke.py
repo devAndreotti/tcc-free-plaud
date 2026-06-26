@@ -94,6 +94,7 @@ def _resolve_answer_provider(settings: Settings, injected_provider: AnswerProvid
         base_url=settings.answer_base_url,
         api_key=settings.answer_api_key,
         temperature=settings.answer_temperature,
+        max_tokens=settings.answer_max_tokens,
         timeout_seconds=settings.answer_timeout_seconds,
     )
 

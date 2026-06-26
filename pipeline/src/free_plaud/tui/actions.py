@@ -73,6 +73,7 @@ def ask_corpus(
                 base_url=resolved_settings.answer_base_url,
                 api_key=resolved_settings.answer_api_key,
                 temperature=resolved_settings.answer_temperature,
+                max_tokens=resolved_settings.answer_max_tokens,
                 timeout_seconds=resolved_settings.answer_timeout_seconds,
             ),
         )
