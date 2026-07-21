@@ -17,36 +17,58 @@ jobs:
   security:
     name: Security audit
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: pipeline
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@v7
-      - run: uv sync --dev
-      - name: Dependency audit
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: UI/package-lock.json
+      - name: Install Python dependencies
+        working-directory: pipeline
+        run: uv sync --locked --dev
+      - name: Audit Python dependencies
+        working-directory: pipeline
         run: uvx pip-audit --path .venv
+      - name: Install UI dependencies
+        working-directory: UI
+        run: npm ci
+      - name: Audit UI dependencies
+        working-directory: UI
+        run: npm audit --audit-level=high
 
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: pipeline
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@v7
-      - run: uv sync --dev
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: UI/package-lock.json
+      - name: Install Python dependencies
+        working-directory: pipeline
+        run: uv sync --locked --dev
       - name: Ruff
+        working-directory: pipeline
         run: |
           mkdir -p ../coverage
           uvx ruff check src tests --output-format=json > ../coverage/ruff.json
+      - name: Install UI dependencies
+        working-directory: UI
+        run: npm ci
+      - name: ESLint
+        working-directory: UI
+        run: npm run lint
       - name: Upload Ruff report
         uses: actions/upload-artifact@v7
         if: always()
@@ -58,9 +80,6 @@ jobs:
   test:
     name: Tests & ratchet
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: pipeline
     steps:
       - uses: actions/checkout@v6
         with:
@@ -72,13 +91,25 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 20
-      - run: uv sync --dev
-      - name: Pytest coverage
+          cache: npm
+          cache-dependency-path: UI/package-lock.json
+      - name: Install Python dependencies
+        working-directory: pipeline
+        run: uv sync --locked --dev
+      - name: Python tests and coverage
+        working-directory: pipeline
         run: |
           mkdir -p ../coverage
-          uv run pytest --basetemp .pytest-tmp-qg --cov=src --cov-report=json:../coverage/coverage.json --cov-report=xml:../coverage/coverage.xml --cov-report=term-missing
-      - name: Ratchet
-        working-directory: .
+          uv run pytest --basetemp .pytest-tmp-qg --cov=src --cov-report=json:../coverage/coverage.json --cov-report=xml:../coverage/coverage.xml --cov-report=lcov:../coverage/lcov.info --cov-report=term-missing
+      - name: Install UI dependencies
+        working-directory: UI
+        run: npm ci
+      - name: UI tests and coverage
+        working-directory: UI
+        run: npm run test:coverage
+      - name: Quality Gate script tests
+        run: node --test scripts/*.test.cjs
+      - name: Coverage ratchet
         run: node scripts/quality-gate.js check
       - name: Upload coverage
         uses: actions/upload-artifact@v7
@@ -88,6 +119,57 @@ jobs:
           path: coverage/
           retention-days: 7
 
+  build:
+    name: Build & smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: UI/package-lock.json
+      - name: Install Python dependencies
+        working-directory: pipeline
+        run: uv sync --locked --dev
+      - name: Build Python package
+        working-directory: pipeline
+        run: uv build
+      - name: Smoke Python CLI
+        working-directory: pipeline
+        run: uv run free-plaud --help
+      - name: Install UI dependencies
+        working-directory: UI
+        run: npm ci
+      - name: Build UI
+        working-directory: UI
+        run: npm run build
+
+  sonar:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: coverage-report
+          path: coverage/
+      - name: SonarCloud scan and Quality Gate
+        uses: SonarSource/sonarqube-scan-action@v6
+        with:
+          args: >
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   docker:
     name: Docker image gate
@@ -111,7 +193,7 @@ jobs:
   report:
     name: PR report
     runs-on: ubuntu-latest
-    needs: [security, lint, test, docker]
+    needs: [security, lint, test, build, sonar, docker]
     if: always() && github.event_name == 'pull_request'
     permissions:
       contents: read
@@ -126,7 +208,7 @@ jobs:
           name: coverage-report
           path: coverage/
         continue-on-error: true
-      - name: Postar sticky comment no PR
+      - name: Post sticky PR report
         run: node scripts/pr-comment.js
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -135,5 +217,6 @@ jobs:
           SECURITY_RESULT: ${{ needs.security.result }}
           LINT_RESULT: ${{ needs.lint.result }}
           TEST_RESULT: ${{ needs.test.result }}
-          REQUIRED_CHECKS: 'Security audit,Lint,Tests & ratchet,Docker image gate'
+          SONAR_RESULT: ${{ needs.sonar.result }}
+          REQUIRED_CHECKS: 'Security audit,Lint,Tests & ratchet,Build & smoke,SonarCloud,Docker image gate'
           DOCKER_RESULT: ${{ needs.docker.result }}

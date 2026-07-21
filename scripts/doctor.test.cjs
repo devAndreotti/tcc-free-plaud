@@ -38,6 +38,8 @@ test('policy required checks match workflow job names', () => {
     findMissingRequiredContexts(policy.ci.requiredChecks, parseWorkflowJobNames(workflow)),
     [],
   );
+  assert.equal(policy.ci.requiredChecks.includes('SonarCloud'), true);
+  assert.equal(policy.ci.requiredChecks.includes('Build & smoke'), true);
 });
 
 test('generated state records policy hash and doctor summary', () => {

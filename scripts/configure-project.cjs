@@ -82,16 +82,15 @@ function pythonWorkflow(projectDir, options = {}) {
         with:
           name: coverage-report
           path: coverage/
-      - name: SonarCloud scan
-        uses: SonarSource/sonarqube-scan-action@v5
+      - name: SonarCloud scan and Quality Gate
+        uses: SonarSource/sonarqube-scan-action@v6
+        with:
+          args: >
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300
         env:
           SONAR_TOKEN: \${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-      - name: SonarCloud quality gate check
-        uses: sonarsource/sonarqube-quality-gate-action@v1.2.0
-        timeout-minutes: 5
-        env:
-          SONAR_TOKEN: \${{ secrets.SONAR_TOKEN }}
 ` : '';
   const reportNeeds = includeSonar
     ? '[security, lint, test, sonar, docker]'
@@ -128,7 +127,7 @@ jobs:
         with:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --dev
+      - run: uv sync --locked --dev
       - name: Dependency audit
         run: uvx pip-audit --path .venv
 
@@ -144,7 +143,7 @@ jobs:
         with:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --dev
+      - run: uv sync --locked --dev
       - name: Ruff
         run: |
           mkdir -p ${coverageDir}
@@ -174,11 +173,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: uv sync --dev
+      - run: uv sync --locked --dev
       - name: Pytest coverage
         run: |
           mkdir -p ${coverageDir}
-          uv run pytest --basetemp .pytest-tmp-qg --cov=src --cov-report=json:${coverageJson} --cov-report=xml:${coverageXml} --cov-report=term-missing
+          uv run pytest --basetemp .pytest-tmp-qg --cov=src --cov-report=json:${coverageJson} --cov-report=xml:${coverageXml} --cov-report=lcov:${pythonCoveragePath(projectDir, 'lcov.info')} --cov-report=term-missing
       - name: Ratchet
         working-directory: .
         run: node scripts/quality-gate.js check
