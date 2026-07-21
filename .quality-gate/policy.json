@@ -6,6 +6,8 @@
       "Security audit",
       "Lint",
       "Tests & ratchet",
+      "Build & smoke",
+      "SonarCloud",
       "Docker image gate"
     ],
     "coverageRatchet": true,

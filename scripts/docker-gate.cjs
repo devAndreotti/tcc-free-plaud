@@ -233,6 +233,10 @@ function runDockerGate(options = {}) {
   }
 
   const command = buildDockerDoctorCommand({ policy, projectRoot });
+  if (dryRun) {
+    return { status: 'planned', reason: 'dry-run', detection, command };
+  }
+
   const scriptPath = policy.dockerImageDoctor.scriptPath;
   if (!fs.existsSync(scriptPath)) {
     const result = handleUnavailableDoctor({ policy, detection, command });
@@ -240,10 +244,6 @@ function runDockerGate(options = {}) {
       result.reportPath = writeQualityGateReport(root, result);
     }
     return result;
-  }
-
-  if (dryRun) {
-    return { status: 'planned', reason: 'dry-run', detection, command };
   }
 
   const processResult = invoke(command);
