@@ -24,6 +24,8 @@ book/
 .pytest-tmp*/
 .codex-temp-video-frames/
 .codex-temp-video-thumbs/
+.antigravitycli/
+.ai-memory.toml
 
 # Quality Gate
 coverage/
