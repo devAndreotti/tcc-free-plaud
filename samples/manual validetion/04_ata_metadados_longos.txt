@@ -1,0 +1,83 @@
+ATA DE COMITÊ DE ARQUITETURA — SESSÃO 07/2025
+
+Documento: ACT-2025-07
+Tipo: Ata de Reunião Técnica
+Data: 25 de março de 2025
+Horário de início: 14h00
+Horário de encerramento: 16h15
+Local: Sala de Videoconferência (Google Meet — link interno)
+Convocador: Diretoria de Tecnologia
+Facilitador: Eng. Marcos Vinicius Teixeira
+Secretário: Eng. Priscila Alencar
+Versão do documento: 1.0
+Classificação: Interno — não distribuir externamente
+Número de participantes presentes: 9
+
+PARTICIPANTES
+Marcos Vinicius Teixeira — Arquiteto-Chefe (facilitador)
+Priscila Alencar — Engenheira de Plataforma (secretária)
+Juliana Ramos — Gerente de Produto
+Thiago Cavalcanti — Engenheiro Backend Sênior
+Fernanda Mota — Engenheira de Dados
+Roberto Ishikawa — Engenheiro de Infraestrutura
+Carlos Eduardo Pires — Engenheiro Backend
+Vanessa Borges — Analista de Segurança
+Leonardo Carvalho — Representante da equipe Mobile
+
+DOCUMENTOS DE REFERÊNCIA
+RFC-2025-04: Proposta de adoção de message broker
+RFC-2025-05: Avaliação de Kafka vs. RabbitMQ vs. NATS
+ADR-2024-11: Decisão de migrar para arquitetura orientada a eventos
+Diagrama C4 — nível de container (versão 3.2, fevereiro/2025)
+
+---
+
+OBJETIVO DA SESSÃO
+
+Avaliar as propostas técnicas para adoção de um message broker na plataforma, com base nas RFCs submetidas pelas equipes de Backend e Dados, e tomar uma decisão formal com documentação em ADR.
+
+---
+
+DISCUSSÃO TÉCNICA
+
+O Engenheiro Thiago Cavalcanti apresentou a RFC-2025-05, que compara três soluções de message broker — Apache Kafka, RabbitMQ e NATS — sob as dimensões de throughput, latência, operabilidade e alinhamento com a stack atual.
+
+A principal conclusão da RFC é que o Apache Kafka oferece a maior capacidade de throughput e a melhor integração com os pipelines de dados gerenciados pela engenheira Fernanda Mota, mas introduz complexidade operacional significativa: requer ZooKeeper (ou KRaft em versões recentes), tem uma curva de aprendizado maior para as equipes e implica em custos de infraestrutura mais elevados para clusters de alta disponibilidade.
+
+O RabbitMQ, por sua vez, já é utilizado em dois microserviços legados da plataforma e seria uma escolha de menor risco técnico a curto prazo. Porém, o modelo de filas do RabbitMQ não oferece replay de mensagens nem log imutável, funcionalidades que a equipe de Dados considerou essenciais para auditoria e reprocessamento de eventos históricos.
+
+O NATS foi descartado pela maioria após discussão, principalmente pela ausência de persistência garantida no modo padrão e pela necessidade de adotar JetStream, que adiciona complexidade sem superar o Kafka nas métricas críticas para o caso de uso atual.
+
+A Analista de Segurança Vanessa Borges levantou preocupações sobre a gestão de credenciais e criptografia em trânsito no Kafka, que foram endereçadas por Roberto Ishikawa com referência à configuração TLS já testada no ambiente de staging.
+
+Após debate, o grupo convergiu para a adoção do Apache Kafka, com as seguintes condicionantes registradas:
+
+A primeira condicionante é que a equipe de infraestrutura deve disponibilizar um runbook de operação do cluster antes do início do rollout para produção, cobrindo procedimentos de escalonamento, recuperação de partições e rotação de credenciais.
+
+A segunda condicionante é que a equipe de Backend deve implementar um mecanismo de dead-letter queue para mensagens que falhem no processamento após três tentativas, evitando que erros em consumidores individuais bloqueiem a fila.
+
+A terceira condicionante é que a adoção começa com dois tópicos de baixo risco — notificações de email e logs de auditoria — antes de migrar os eventos de negócio críticos.
+
+---
+
+DECISÕES TOMADAS
+
+1. Adotar Apache Kafka como message broker padrão da plataforma.
+2. Registrar a decisão em ADR-2025-07 com status "Aceito".
+3. Iniciar rollout em Q2/2025, começando pelos tópicos de menor risco.
+4. Prazo para runbook de operação: 15 de abril de 2025 (responsável: Roberto Ishikawa).
+5. Prazo para implementação de dead-letter queue: 30 de abril de 2025 (responsável: Thiago Cavalcanti).
+
+---
+
+PENDÊNCIAS PARA PRÓXIMA SESSÃO
+
+- Apresentação do ADR-2025-07 finalizado para aprovação formal
+- Definição do modelo de tópicos (nomenclatura, particionamento, retenção)
+- Estratégia de migração dos dois microserviços legados que usam RabbitMQ
+
+Próxima sessão agendada para 22 de abril de 2025, às 14h00.
+
+Ata elaborada por: Priscila Alencar
+Data de circulação: 26 de março de 2025
+Prazo para comentários: 28 de março de 2025
