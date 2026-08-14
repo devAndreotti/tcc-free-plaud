@@ -62,7 +62,7 @@ jobs:
         working-directory: pipeline
         run: |
           mkdir -p ../coverage
-          uvx ruff check src tests --output-format=json > ../coverage/ruff.json
+          uv run ruff check src tests --output-format=json > ../coverage/ruff.json
       - name: Install UI dependencies
         working-directory: UI
         run: npm ci
