@@ -7,7 +7,11 @@ from free_plaud.app.config import Settings
 from free_plaud.cli import app
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.chunking import chunk_text
-from free_plaud.storage.models import BenchmarkQueryRecord, BenchmarkRunRecord, ProcessingLogRecord
+from free_plaud.storage.models import (
+    BenchmarkQueryRecord,
+    BenchmarkRunRecord,
+    ProcessingLogRecord,
+)
 from free_plaud.storage.sqlite import (
     connect_sqlite,
     count_fts_chunks,

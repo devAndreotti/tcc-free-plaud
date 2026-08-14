@@ -10,12 +10,31 @@ from textual.binding import Binding
 from textual.containers import Container, Vertical
 from textual.geometry import Size
 from textual.message import Message
-from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Select, Static
+from textual.widgets import (
+    Button,
+    Footer,
+    Header,
+    Input,
+    Label,
+    RichLog,
+    Select,
+    Static,
+)
 
-from free_plaud.app.config import Settings, get_settings, reset_user_settings, save_user_settings, user_settings_path_for
+from free_plaud.app.config import (
+    Settings,
+    get_settings,
+    reset_user_settings,
+    save_user_settings,
+    user_settings_path_for,
+)
 from free_plaud.app.doctor import run_doctor
 from free_plaud.app.doctor_format import doctor_report_text
-from free_plaud.app.local_env import answer_api_key_is_configured, local_env_path_for, save_answer_api_key
+from free_plaud.app.local_env import (
+    answer_api_key_is_configured,
+    local_env_path_for,
+    save_answer_api_key,
+)
 from free_plaud.app.settings_catalog import settings_catalog_payload
 from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets
 from free_plaud.corpus.cancellation import CancellationToken
@@ -24,9 +43,9 @@ from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.answer import test_answer_provider
+from free_plaud.providers.embed import get_embedder
 from free_plaud.providers.model_discovery import list_answer_models
 from free_plaud.providers.provisioning import detect_runtime, runtime_hint
-from free_plaud.providers.embed import get_embedder
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.retrieval.rag import answer_with_citations
 from free_plaud.storage.vector import LocalVectorStore
@@ -141,7 +160,7 @@ def _settings_status_message(settings: Settings, doctor_text: str) -> str:
     )
 
 
-def _provider_test_message(result, hint: str | None = None) -> str:  # noqa: ANN001
+def _provider_test_message(result, hint: str | None = None) -> str:
     lines = [
         f'provider={result.provider}',
         f'model={result.model}',
@@ -155,7 +174,7 @@ def _provider_test_message(result, hint: str | None = None) -> str:  # noqa: ANN
     return '\n'.join(lines)
 
 
-def _model_discovery_message(result) -> str:  # noqa: ANN001
+def _model_discovery_message(result) -> str:
     lines = [
         f'provider={result.provider}',
         f'base_url={result.base_url or "-"}',
@@ -338,7 +357,7 @@ class AskPane(Vertical):
     def _run_file_ask(self, file_path: Path, question: str, strategy: AskStrategy) -> None:
         try:
             response = ask_file(file_path, question, strategy, runtime=self.app.corpus_runtime)
-        except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+        except Exception as exc:
             self.app.call_from_thread(self._render_error, exc)
             return
         self.app.call_from_thread(self._render_response, response)
@@ -347,7 +366,7 @@ class AskPane(Vertical):
     def _run_corpus_ask(self, question: str, strategy: AskStrategy) -> None:
         try:
             response = ask_corpus(question, strategy, runtime=self.app.corpus_runtime)
-        except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+        except Exception as exc:
             self.app.call_from_thread(self._render_error, exc)
             return
         self.app.call_from_thread(self._render_response, response)
@@ -471,7 +490,7 @@ class NotesPane(Vertical):
             folder = self.query_one('#notes-folder-path', Input).value
             try:
                 preflight = preflight_corpus_folder(folder)
-            except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+            except Exception as exc:
                 self._render_error(exc)
                 return
             self._progress_messages = []
@@ -509,7 +528,7 @@ class NotesPane(Vertical):
         try:
             status = corpus_status_from_tui()
             notes = list_corpus_notes()
-        except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+        except Exception as exc:
             self.app.call_from_thread(self._render_error, exc)
             return
         self.app.call_from_thread(self._render_status, status, notes)
@@ -529,7 +548,7 @@ class NotesPane(Vertical):
             )
             status = corpus_status_from_tui()
             notes = list_corpus_notes()
-        except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+        except Exception as exc:
             self.app.call_from_thread(self._render_error, exc)
             return
         self.app.call_from_thread(self._render_index_result, result, status, notes)
@@ -540,7 +559,7 @@ class NotesPane(Vertical):
             result = reset_corpus_from_tui(confirm, runtime=self.app.corpus_runtime)
             status = corpus_status_from_tui()
             notes = list_corpus_notes()
-        except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+        except Exception as exc:
             self.app.call_from_thread(self._render_error, exc)
             return
         self.app.call_from_thread(self._render_reset_result, result, status, notes)
@@ -612,7 +631,7 @@ class NotesPane(Vertical):
         output.clear()
         output.write(Panel(body, title='Indexando', border_style='#7c3aed'))
 
-    def _render_status(self, status, notes, *, clear: bool = True) -> None:  # noqa: ANN001
+    def _render_status(self, status, notes, *, clear: bool = True) -> None:
         output = self.query_one('#notes-output', RichLog)
         if clear:
             output.clear()
@@ -643,7 +662,7 @@ class NotesPane(Vertical):
         self._cancel_token = None
         self._set_running(False)
 
-    def _render_index_result(self, result, status, notes) -> None:  # noqa: ANN001
+    def _render_index_result(self, result, status, notes) -> None:
         output = self.query_one('#notes-output', RichLog)
         self.app.corpus_indexing_partial = False
         output.clear()
@@ -661,7 +680,7 @@ class NotesPane(Vertical):
         )
         self._render_status(status, notes, clear=False)
 
-    def _render_reset_result(self, result, status, notes) -> None:  # noqa: ANN001
+    def _render_reset_result(self, result, status, notes) -> None:
         output = self.query_one('#notes-output', RichLog)
         self.app.corpus_indexing_partial = False
         output.clear()
@@ -738,7 +757,7 @@ class BenchmarkPane(Vertical):
     def _run_benchmark(self, suite_path: Path) -> None:
         try:
             result = compare_suite_from_tui(suite_path, runtime=self.app.corpus_runtime)
-        except Exception as exc:  # noqa: BLE001 - UI precisa renderizar erro operacional.
+        except Exception as exc:
             self.app.call_from_thread(self._render_error, exc)
             return
         self.app.call_from_thread(self._render_result, result)
@@ -749,7 +768,7 @@ class BenchmarkPane(Vertical):
         output.write(Panel(str(exc), title='Erro', border_style='#fb7185'))
         self._set_running(False)
 
-    def _render_result(self, result) -> None:  # noqa: ANN001
+    def _render_result(self, result) -> None:
         output = self.query_one('#benchmark-output', RichLog)
         output.clear()
         output.write(Panel(f'{result.comparison_id}\n{result.suite_name}', title='Comparacao', border_style='#7c3aed'))
@@ -951,7 +970,7 @@ class SettingsPane(Vertical):
     def _apply_preset(self, preset_key: str) -> None:
         try:
             result = apply_settings_preset(preset_key)
-        except Exception as exc:  # noqa: BLE001 - UI precisa exibir validacao de preset.
+        except Exception as exc:
             self._render_error(exc)
             return
         self.app.corpus_runtime.clear()
@@ -1047,7 +1066,7 @@ class SettingsPane(Vertical):
             api_key_path = None
             if api_key:
                 api_key_path = save_answer_api_key(api_key, settings=updated)
-        except Exception as exc:  # noqa: BLE001 - UI precisa exibir validacao.
+        except Exception as exc:
             self._render_error(exc)
             return
         self.app.corpus_runtime.clear()
@@ -1068,24 +1087,24 @@ class SettingsPane(Vertical):
         try:
             result = test_answer_provider()
             hint = runtime_hint(detect_runtime()) if result.status == 'error' else None
-        except Exception as exc:  # noqa: BLE001 - UI precisa exibir erro operacional.
+        except Exception as exc:
             self.app.call_from_thread(self._render_error, exc)
             return
         self.app.call_from_thread(self._render_provider_test, result, hint)
 
-    def _render_provider_test(self, result, hint: str | None = None) -> None:  # noqa: ANN001
+    def _render_provider_test(self, result, hint: str | None = None) -> None:
         self._render_message(_provider_test_message(result, hint))
 
     @work(thread=True)
     def _run_model_discovery(self) -> None:
         try:
             result = list_answer_models()
-        except Exception as exc:  # noqa: BLE001 - UI precisa exibir erro operacional.
+        except Exception as exc:
             self.app.call_from_thread(self._render_error, exc)
             return
         self.app.call_from_thread(self._render_model_discovery, result)
 
-    def _render_model_discovery(self, result) -> None:  # noqa: ANN001
+    def _render_model_discovery(self, result) -> None:
         self._render_message(_model_discovery_message(result))
         self._set_model_options([model.id for model in result.models])
 
@@ -1093,12 +1112,12 @@ class SettingsPane(Vertical):
     def _run_doctor(self, settings: Settings, request_id: int) -> None:
         try:
             report = run_doctor(settings=settings)
-        except Exception as exc:  # noqa: BLE001 - UI precisa exibir diagnostico quebrado.
+        except Exception as exc:
             self.app.call_from_thread(self._render_doctor_error, settings, exc, request_id)
             return
         self.app.call_from_thread(self._render_doctor, settings, report, request_id)
 
-    def _render_doctor(self, settings: Settings, report, request_id: int) -> None:  # noqa: ANN001
+    def _render_doctor(self, settings: Settings, report, request_id: int) -> None:
         if request_id != self._doctor_request_id:
             return
         self._doctor_running = False

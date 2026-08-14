@@ -7,19 +7,27 @@ from rich.console import Console
 from free_plaud.app.cli_paths import compose_path
 from free_plaud.app.config import get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
-from free_plaud.benchmark.datasets import demo_dataset, load_benchmark_dataset, load_benchmark_suite
+from free_plaud.benchmark.datasets import (
+    demo_dataset,
+    load_benchmark_dataset,
+    load_benchmark_suite,
+)
+from free_plaud.benchmark.grounded import evaluate_grounded_answers
 from free_plaud.benchmark.reports import (
     export_benchmark_comparison_csv,
     export_benchmark_comparison_json,
     export_benchmark_csv,
     export_benchmark_json,
 )
-from free_plaud.benchmark.grounded import evaluate_grounded_answers
 from free_plaud.benchmark.runners import compare_benchmark_suite, run_benchmark
 from free_plaud.benchmark.service import build_settings_snapshot
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
-from free_plaud.providers.embed import EmbeddingConfigurationError, get_embedder, validate_runtime_embedding_model
+from free_plaud.providers.embed import (
+    EmbeddingConfigurationError,
+    get_embedder,
+    validate_runtime_embedding_model,
+)
 from free_plaud.retrieval.search import (
     DEFAULT_HYBRID_LEXICAL_WEIGHT,
     DEFAULT_HYBRID_RANK_CONSTANT,

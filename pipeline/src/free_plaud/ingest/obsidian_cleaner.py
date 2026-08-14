@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import ast
 import html
+import re
 from html.parser import HTMLParser
 from pathlib import Path
-import re
 
 import typer
 

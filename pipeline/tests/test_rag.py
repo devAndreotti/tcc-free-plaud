@@ -5,16 +5,23 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from free_plaud.cli import app
 from free_plaud.app.config import Settings
+from free_plaud.cli import app
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note
-from free_plaud.retrieval.rag import SCORING, ClaimScoringConfig
-from free_plaud.retrieval.rag import _rank_claim_candidates
-from free_plaud.retrieval.rag import _claim_variant_score
-from free_plaud.retrieval.rag import _trim_dangling_tail
-from free_plaud.retrieval.rag import answer_with_citations
-from free_plaud.retrieval.search import extract_named_query_terms, lexical_search_hits, normalize_query_terms
+from free_plaud.retrieval.rag import (
+    SCORING,
+    ClaimScoringConfig,
+    _claim_variant_score,
+    _rank_claim_candidates,
+    _trim_dangling_tail,
+    answer_with_citations,
+)
+from free_plaud.retrieval.search import (
+    extract_named_query_terms,
+    lexical_search_hits,
+    normalize_query_terms,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 runner = CliRunner()

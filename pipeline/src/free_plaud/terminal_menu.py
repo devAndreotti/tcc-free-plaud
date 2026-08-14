@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -196,6 +197,6 @@ def run_terminal_menu() -> None:
             else:
                 console.print('[yellow]Opcao invalida.[/yellow]')
             _pause_after_command()
-        except Exception as exc:  # noqa: BLE001 - menu precisa sobreviver a erro operacional.
+        except Exception as exc:
             console.print(Panel(str(exc), title='Erro', border_style='red'))
             _pause_after_command()

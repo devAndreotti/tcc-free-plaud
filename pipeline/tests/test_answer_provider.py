@@ -1,6 +1,7 @@
 import json
 from io import BytesIO
 from pathlib import Path
+from typing import Self
 from urllib.error import HTTPError
 
 import pytest
@@ -14,6 +15,8 @@ from free_plaud.providers.answer import (
     OpenAICompatibleAnswerProvider,
     build_grounded_chat_messages,
     get_answer_provider,
+)
+from free_plaud.providers.answer import (
     test_answer_provider as run_answer_provider_test,
 )
 from free_plaud.providers.smoke import run_provider_smoke_local
@@ -23,10 +26,10 @@ class FakeHTTPResponse:
     def __init__(self, payload: dict[str, object]) -> None:
         self.payload = payload
 
-    def __enter__(self) -> 'FakeHTTPResponse':
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc, traceback) -> None:  # noqa: ANN001
+    def __exit__(self, exc_type, exc, traceback) -> None:
         return None
 
     def read(self) -> bytes:
@@ -49,7 +52,7 @@ class FakeSmokeAnswerProvider:
 def test_openai_compatible_provider_posts_chat_completion(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         captured['url'] = request.full_url
         captured['timeout'] = timeout
         captured['headers'] = dict(request.header_items())
@@ -99,7 +102,7 @@ def test_grounded_chat_messages_forbid_external_knowledge_and_define_sentinel() 
 
 
 def test_openai_compatible_provider_wraps_http_errors(monkeypatch) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         raise HTTPError(
             url=request.full_url,
             code=401,
@@ -137,7 +140,7 @@ def test_get_answer_provider_forwards_max_tokens() -> None:
 def test_openai_compatible_provider_omits_max_tokens_by_default(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeHTTPResponse({'choices': [{'message': {'content': 'ok'}}]})
 
@@ -152,7 +155,7 @@ def test_openai_compatible_provider_omits_max_tokens_by_default(monkeypatch) -> 
 def test_openai_compatible_provider_sends_max_tokens_when_set(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeHTTPResponse({'choices': [{'message': {'content': 'ok'}}]})
 
@@ -169,7 +172,7 @@ def test_openai_compatible_provider_sends_max_tokens_when_set(monkeypatch) -> No
 
 
 def test_openai_compatible_provider_flags_reasoning_without_final_answer(monkeypatch) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         return FakeHTTPResponse(
             {
                 'choices': [
@@ -197,7 +200,7 @@ def test_openai_compatible_provider_flags_reasoning_without_final_answer(monkeyp
 
 
 def test_openai_compatible_provider_treats_null_content_with_reasoning_as_empty(monkeypatch) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         return FakeHTTPResponse(
             {'choices': [{'message': {'content': None, 'reasoning_content': 'pensando...'}}]}
         )
@@ -210,7 +213,7 @@ def test_openai_compatible_provider_treats_null_content_with_reasoning_as_empty(
 
 
 def test_openai_compatible_provider_flags_length_truncation_without_reasoning(monkeypatch) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': [{'message': {'content': ''}, 'finish_reason': 'length'}]})
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -223,7 +226,7 @@ def test_openai_compatible_provider_flags_length_truncation_without_reasoning(mo
 
 
 def test_openai_compatible_provider_keeps_generic_empty_error_without_reasoning(monkeypatch) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': [{'message': {'content': '   '}, 'finish_reason': 'stop'}]})
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -235,7 +238,7 @@ def test_openai_compatible_provider_keeps_generic_empty_error_without_reasoning(
     assert str(excinfo.value) == EMPTY_ANSWER_ERROR
 
 
-def _settings(tmp_path: Path, **overrides) -> Settings:  # noqa: ANN003
+def _settings(tmp_path: Path, **overrides) -> Settings:
     data = {
         'workspace_dir': tmp_path,
         'data_dir': tmp_path / 'data',
@@ -256,7 +259,7 @@ def _settings(tmp_path: Path, **overrides) -> Settings:  # noqa: ANN003
 def test_provider_test_posts_synthetic_prompt_and_returns_ok(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         captured['url'] = request.full_url
         captured['timeout'] = timeout
         captured['headers'] = dict(request.header_items())
@@ -280,7 +283,7 @@ def test_provider_test_posts_synthetic_prompt_and_returns_ok(monkeypatch, tmp_pa
 
 
 def test_provider_test_http_401_returns_controlled_error_without_secret(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         raise HTTPError(
             url=request.full_url,
             code=401,
@@ -299,7 +302,7 @@ def test_provider_test_http_401_returns_controlled_error_without_secret(monkeypa
 
 
 def test_provider_test_timeout_returns_controlled_error(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         raise TimeoutError
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -318,7 +321,7 @@ def test_provider_test_invalid_base_url_returns_controlled_error(tmp_path: Path)
 
 
 def test_provider_test_urlopen_value_error_returns_controlled_error(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         raise ValueError('unknown url type: localhost')
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -330,7 +333,7 @@ def test_provider_test_urlopen_value_error_returns_controlled_error(monkeypatch,
 
 
 def test_provider_test_accepts_non_empty_model_response(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': [{'message': {'content': 'servico pronto'}}]})
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -342,7 +345,7 @@ def test_provider_test_accepts_non_empty_model_response(monkeypatch, tmp_path: P
 
 
 def test_provider_test_rejects_empty_content(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': [{'message': {'content': '   '}}]})
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -354,7 +357,7 @@ def test_provider_test_rejects_empty_content(monkeypatch, tmp_path: Path) -> Non
 
 
 def test_provider_test_rejects_invalid_payload(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': []})
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -366,7 +369,7 @@ def test_provider_test_rejects_invalid_payload(monkeypatch, tmp_path: Path) -> N
 
 
 def test_provider_test_flags_reasoning_empty_answer(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         return FakeHTTPResponse(
             {'choices': [{'message': {'content': '', 'reasoning': 'pensando...'}, 'finish_reason': 'length'}]}
         )
@@ -382,7 +385,7 @@ def test_provider_test_flags_reasoning_empty_answer(monkeypatch, tmp_path: Path)
 def test_provider_test_sends_max_tokens_when_configured(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeHTTPResponse({'choices': [{'message': {'content': 'ok'}}]})
 

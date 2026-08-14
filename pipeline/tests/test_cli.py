@@ -6,8 +6,8 @@ from typer.testing import CliRunner
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
 from free_plaud.cli import app
-from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
 from free_plaud.providers.answer import AnswerProviderTestResult
+from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
 from free_plaud.providers.smoke import ProviderSmokeAskResult, ProviderSmokeLocalResult
 from free_plaud.storage.sqlite import count_chunks, count_notes, init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
@@ -298,7 +298,7 @@ def test_corpus_ask_lexical_allows_fake_hash_without_embedder(monkeypatch, tmp_p
     settings = _settings(tmp_path)
     monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
 
-    def fail_get_embedder(*args, **kwargs):  # noqa: ANN002, ANN003
+    def fail_get_embedder(*args, **kwargs):
         raise AssertionError('lexical nao deve inicializar embedder')
 
     monkeypatch.setattr('free_plaud.corpus.cli.get_embedder', fail_get_embedder)

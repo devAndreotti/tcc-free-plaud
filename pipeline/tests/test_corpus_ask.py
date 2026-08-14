@@ -1,7 +1,11 @@
 from pathlib import Path
 
 from free_plaud.app.config import Settings
-from free_plaud.corpus.ask import answer_corpus_with_citations, build_answer_contexts, validate_generated_answer
+from free_plaud.corpus.ask import (
+    answer_corpus_with_citations,
+    build_answer_contexts,
+    validate_generated_answer,
+)
 from free_plaud.corpus.service import index_corpus_path
 from free_plaud.notes.metadata import build_note_id
 from free_plaud.notes.schemas import Note
@@ -47,21 +51,21 @@ class FakeAnswerProvider:
 class UnsupportedNumberAnswerProvider:
     provider_name = 'unsupported-number'
 
-    def answer(self, question: str, contexts: list[str]) -> str:  # noqa: ARG002
+    def answer(self, question: str, contexts: list[str]) -> str:
         return 'RabbitMQ foi adotado como message broker padrao do pipeline com lote de 64 KB.'
 
 
 class SentinelAnswerProvider:
     provider_name = 'sentinel'
 
-    def answer(self, question: str, contexts: list[str]) -> str:  # noqa: ARG002
+    def answer(self, question: str, contexts: list[str]) -> str:
         return 'NAO_ENCONTRADO: os dados recuperados nao sustentam resposta.'
 
 
 class GenericNoAnswerProvider:
     provider_name = 'generic'
 
-    def answer(self, question: str, contexts: list[str]) -> str:  # noqa: ARG002
+    def answer(self, question: str, contexts: list[str]) -> str:
         return 'Nao consegui recuperar essa informacao. Voce pode verificar a documentacao oficial.'
 
 
@@ -367,7 +371,7 @@ def test_answer_corpus_lexical_uses_fts_candidates(monkeypatch, tmp_path: Path) 
 
     original_search = ask_module.search_chunks_fts
 
-    def spy_search_chunks_fts(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+    def spy_search_chunks_fts(*args, **kwargs):
         calls['count'] += 1
         return original_search(*args, **kwargs)
 

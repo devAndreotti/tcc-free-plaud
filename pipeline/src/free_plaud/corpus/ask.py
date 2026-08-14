@@ -9,7 +9,15 @@ from free_plaud.notes.schemas import Note
 from free_plaud.providers.answer import NO_ANSWER_SENTINEL, AnswerProvider
 from free_plaud.providers.embed import Embedder
 from free_plaud.retrieval.debug import build_ask_debug
-from free_plaud.retrieval.models import AnswerClaim, AskDebug, AskDebugTimings, AskResponse, Citation, SearchHit, UsedSource
+from free_plaud.retrieval.models import (
+    AnswerClaim,
+    AskDebug,
+    AskDebugTimings,
+    AskResponse,
+    Citation,
+    SearchHit,
+    UsedSource,
+)
 from free_plaud.retrieval.rag import (
     _build_no_answer,
     _dedupe_hits,
@@ -456,9 +464,12 @@ def _trim_claim_preserving_query_terms(question: str, query_terms: list[str], cl
         return claim_text.strip(' -,:;')
     lowered_question = question.lower()
     team_answer = TEAM_ANSWER_PATTERN.search(claim_text)
-    if team_answer and ('equipe' in lowered_question or 'responsavel' in lowered_question):
-        if team_answer.group(0) not in trimmed:
-            return claim_text.strip(' -,:;')
+    if (
+        team_answer
+        and ('equipe' in lowered_question or 'responsavel' in lowered_question)
+        and team_answer.group(0) not in trimmed
+    ):
+        return claim_text.strip(' -,:;')
     return trimmed
 
 
@@ -828,7 +839,7 @@ def answer_corpus_with_citations(
                 )
             else:
                 limitations.extend(validation.limitations)
-        except Exception as exc:  # noqa: BLE001 - RAG deve sobreviver a provider externo indisponivel.
+        except Exception as exc:
             limitations.append(_provider_failure_limitation(exc))
 
     return AskResponse(

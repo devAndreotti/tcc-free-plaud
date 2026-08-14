@@ -6,7 +6,11 @@ from pathlib import Path
 
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.models import Chunk
-from free_plaud.storage.models import BenchmarkQueryRecord, BenchmarkRunRecord, ProcessingLogRecord
+from free_plaud.storage.models import (
+    BenchmarkQueryRecord,
+    BenchmarkRunRecord,
+    ProcessingLogRecord,
+)
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -401,7 +405,7 @@ def _note_from_row(row: sqlite3.Row) -> Note:
         content_hash=row['content_hash'],
         provider=row['provider'],
         model=row['model'],
-        created_at=datetime.fromisoformat(str(row['created_at']).replace('Z', '+00:00')),
+        created_at=datetime.fromisoformat(str(row['created_at'])),
     )
 
 

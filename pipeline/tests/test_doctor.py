@@ -44,7 +44,7 @@ def _chunk(chunk_id: str, note_id: str, text: str) -> Chunk:
     )
 
 
-def _by_code(report) -> dict[str, object]:  # noqa: ANN001
+def _by_code(report) -> dict[str, object]:
     return {check.code: check for check in report.checks}
 
 
@@ -124,7 +124,7 @@ def test_doctor_reports_corpus_inconsistency(tmp_path: Path) -> None:
 
 
 def test_doctor_returns_structured_errors_when_corpus_status_crashes(tmp_path: Path, monkeypatch) -> None:
-    def broken_corpus_status(**kwargs):  # noqa: ANN003, ANN202
+    def broken_corpus_status(**kwargs):
         _ = kwargs
         raise RuntimeError('chroma indisponivel')
 

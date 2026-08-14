@@ -13,7 +13,6 @@ from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.models import CorpusIndexBatchResult, CorpusIndexProgress
 from free_plaud.corpus.runtime import CorpusRuntime
 
-
 IndexJobStatus = str
 
 
@@ -176,7 +175,7 @@ class IndexJobManager:
             status = result.status
             message = 'Indexacao finalizada.'
             error_code = None
-        except Exception as exc:  # noqa: BLE001 - background job must preserve structured failure.
+        except Exception as exc:
             status = 'failed'
             message = str(exc)
             error_code = exc.__class__.__name__

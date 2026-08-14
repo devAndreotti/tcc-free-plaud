@@ -12,7 +12,11 @@ from free_plaud.benchmark.datasets import (
     BenchmarkSuite,
     load_benchmark_dataset,
 )
-from free_plaud.benchmark.metrics import mean_reciprocal_rank, ndcg_at_k, recall_at_k_from_ranks
+from free_plaud.benchmark.metrics import (
+    mean_reciprocal_rank,
+    ndcg_at_k,
+    recall_at_k_from_ranks,
+)
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.schemas import Note
 from free_plaud.notes.structurer import structure_document
@@ -28,7 +32,12 @@ from free_plaud.retrieval.search import (
     semantic_search,
 )
 from free_plaud.storage.models import BenchmarkQueryRecord, BenchmarkRunRecord
-from free_plaud.storage.sqlite import insert_benchmark_query, insert_benchmark_run, replace_chunks_for_note, upsert_note
+from free_plaud.storage.sqlite import (
+    insert_benchmark_query,
+    insert_benchmark_run,
+    replace_chunks_for_note,
+    upsert_note,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 PIPELINE_VERSION = 'pipeline-0.7.0'

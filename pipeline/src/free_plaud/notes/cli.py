@@ -1,8 +1,8 @@
 import typer
 from rich.console import Console
 
-from free_plaud.app.config import get_settings
 from free_plaud.app.cli_paths import compose_path
+from free_plaud.app.config import get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.repository import save_note_locally

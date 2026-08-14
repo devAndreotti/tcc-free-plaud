@@ -9,7 +9,12 @@ from free_plaud.cli import app
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note_in_vector_store
 from free_plaud.retrieval.models import Chunk, SearchHit
-from free_plaud.retrieval.search import _fuse_hits_by_rank, hybrid_search, open_semantic_search, semantic_search
+from free_plaud.retrieval.search import (
+    _fuse_hits_by_rank,
+    hybrid_search,
+    open_semantic_search,
+    semantic_search,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 runner = CliRunner()

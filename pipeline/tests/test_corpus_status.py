@@ -3,7 +3,13 @@ from pathlib import Path
 from free_plaud.app.config import Settings
 from free_plaud.corpus.service import get_corpus_status, index_corpus_file
 from free_plaud.retrieval.models import Chunk
-from free_plaud.storage.sqlite import get_notes_by_id, init_sqlite, list_chunks, replace_chunks_for_note, upsert_note
+from free_plaud.storage.sqlite import (
+    get_notes_by_id,
+    init_sqlite,
+    list_chunks,
+    replace_chunks_for_note,
+    upsert_note,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 

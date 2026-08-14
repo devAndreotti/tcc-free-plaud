@@ -5,7 +5,10 @@ from typing import Literal
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.benchmark.datasets import load_benchmark_suite
-from free_plaud.benchmark.runners import BenchmarkComparisonResult, compare_benchmark_suite
+from free_plaud.benchmark.runners import (
+    BenchmarkComparisonResult,
+    compare_benchmark_suite,
+)
 from free_plaud.corpus.ask import answer_corpus_with_citations
 from free_plaud.corpus.cancellation import CancellationToken
 from free_plaud.corpus.discovery import discover_corpus_files
@@ -17,7 +20,12 @@ from free_plaud.corpus.models import (
     CorpusStatusResult,
 )
 from free_plaud.corpus.runtime import CorpusRuntime
-from free_plaud.corpus.service import get_corpus_status, index_corpus_path, rebuild_corpus, reset_corpus
+from free_plaud.corpus.service import (
+    get_corpus_status,
+    index_corpus_path,
+    rebuild_corpus,
+    reset_corpus,
+)
 from free_plaud.notes.schemas import Note
 from free_plaud.providers.answer import get_answer_provider
 from free_plaud.providers.embed import get_embedder, validate_runtime_embedding_model

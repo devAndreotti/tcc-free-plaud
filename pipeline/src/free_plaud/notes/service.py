@@ -86,7 +86,7 @@ def _chunk_counts(connection: sqlite3.Connection) -> dict[str, int]:
     return {str(row['note_id']): int(row['chunk_count']) for row in rows}
 
 
-def _summary_from_note(note, *, chunk_count: int) -> NoteSummary:  # noqa: ANN001
+def _summary_from_note(note, *, chunk_count: int) -> NoteSummary:
     return NoteSummary(
         note_id=note.note_id,
         title=note.title,
@@ -168,7 +168,7 @@ def reindex_note(
     connection: sqlite3.Connection | None = None,
     vector_store: LocalVectorStore | None = None,
     embedder: Embedder | None = None,
-    runtime=None,  # noqa: ANN001
+    runtime=None,
 ) -> NoteReindexResult:
     """Reindexa uma nota a partir do source_path já salvo no banco."""
     resolved_settings = settings or get_settings()

@@ -2,7 +2,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from free_plaud.app.config import Settings, USER_SETTING_FIELDS, get_settings, save_user_settings
+from free_plaud.app.config import (
+    USER_SETTING_FIELDS,
+    Settings,
+    get_settings,
+    save_user_settings,
+)
 
 
 class SettingPreset(BaseModel):

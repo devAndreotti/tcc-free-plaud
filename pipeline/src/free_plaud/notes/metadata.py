@@ -1,7 +1,7 @@
-from pathlib import Path
-from hashlib import sha256
 import re
 import unicodedata
+from hashlib import sha256
+from pathlib import Path
 
 
 def _slug_from_stem(path: Path) -> str:

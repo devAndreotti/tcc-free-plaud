@@ -8,7 +8,11 @@ from urllib.request import Request, urlopen
 from pydantic import BaseModel, Field
 
 from free_plaud.app.config import Settings, get_settings
-from free_plaud.providers.answer import INVALID_BASE_URL_ERROR, _default_base_url, _is_http_base_url
+from free_plaud.providers.answer import (
+    INVALID_BASE_URL_ERROR,
+    _default_base_url,
+    _is_http_base_url,
+)
 
 ModelDiscoveryStatus = Literal['ok', 'not_applicable', 'offline', 'unauthorized', 'error']
 CACHE_TTL_SECONDS = 10.0

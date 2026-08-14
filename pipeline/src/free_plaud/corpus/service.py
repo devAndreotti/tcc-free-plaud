@@ -2,8 +2,8 @@ import json
 import sqlite3
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -39,8 +39,8 @@ from free_plaud.storage.sqlite import (
     count_chunks,
     count_fts_chunks,
     count_notes,
-    delete_note_and_chunks,
     delete_corpus_notes_and_chunks,
+    delete_note_and_chunks,
     get_note_content_hash,
     init_sqlite,
     list_chunk_ids,
@@ -142,7 +142,7 @@ def _unchanged_result(
     chunk_ids: list[str],
     vector_store: LocalVectorStore,
     embedding_model: str,
-) -> CorpusIndexResult:  # noqa: ANN001
+) -> CorpusIndexResult:
     return CorpusIndexResult(
         source_path=str(source_path),
         status='unchanged',
@@ -267,7 +267,7 @@ def _rate(amount: int, elapsed_ms: int) -> float:
     return round(amount / (elapsed_ms / 1000), 3)
 
 
-def _batched(items: list, batch_size: int):  # noqa: ANN001, ANN202
+def _batched(items: list, batch_size: int):
     for start in range(0, len(items), batch_size):
         yield items[start : start + batch_size]
 
@@ -819,7 +819,7 @@ def _percentile(values: list[int], percentile: float) -> float:
     if not values:
         return 0.0
     ordered = sorted(values)
-    index = int(round((len(ordered) - 1) * percentile))
+    index = round((len(ordered) - 1) * percentile)
     return float(ordered[index])
 
 

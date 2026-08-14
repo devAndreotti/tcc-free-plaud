@@ -45,7 +45,7 @@ def _write_fixture(root: Path) -> None:
     (root / 'd.md').write_text('   \n', encoding='utf-8')
 
 
-def _summary(result):  # noqa: ANN001, ANN202
+def _summary(result):
     return [(Path(item.source_path).name, item.status, item.note_id, item.error_code) for item in result.results]
 
 
@@ -81,7 +81,7 @@ def test_parallel_workers_prepare_files_outside_main_thread(monkeypatch, tmp_pat
     original_load_document = service.load_document
     thread_names: set[str] = set()
 
-    def tracked_load_document(path):  # noqa: ANN001, ANN202
+    def tracked_load_document(path):
         thread_names.add(current_thread().name)
         return original_load_document(path)
 

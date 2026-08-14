@@ -1,8 +1,8 @@
 from pathlib import Path
 
 import chromadb
-from chromadb.errors import NotFoundError
 from chromadb.api.models.Collection import Collection
+from chromadb.errors import NotFoundError
 
 from free_plaud.retrieval.models import Chunk, SearchHit
 

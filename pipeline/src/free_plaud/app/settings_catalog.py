@@ -4,7 +4,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from free_plaud.app.config import Settings, get_settings, save_user_settings
-from free_plaud.app.local_env import answer_api_key_is_configured, local_env_path_for, save_answer_api_key
+from free_plaud.app.local_env import (
+    answer_api_key_is_configured,
+    local_env_path_for,
+    save_answer_api_key,
+)
 
 SettingValueType = Literal['string', 'int', 'float', 'bool', 'path', 'enum', 'secret']
 SettingStorage = Literal['user_settings', 'local_env']

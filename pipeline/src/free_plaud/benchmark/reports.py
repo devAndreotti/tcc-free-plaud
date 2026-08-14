@@ -4,7 +4,6 @@ from pathlib import Path
 
 from free_plaud.benchmark.runners import BenchmarkComparisonResult, BenchmarkRunResult
 
-
 SETTINGS_SNAPSHOT_FIELDS = [
     'embedding_model',
     'embedding_device',

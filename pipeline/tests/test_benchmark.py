@@ -12,20 +12,28 @@ from free_plaud.benchmark.datasets import (
     load_benchmark_dataset,
     load_benchmark_suite,
 )
-from free_plaud.benchmark.metrics import mean_reciprocal_rank, ndcg_at_k, recall_at_k_from_ranks
+from free_plaud.benchmark.metrics import (
+    mean_reciprocal_rank,
+    ndcg_at_k,
+    recall_at_k_from_ranks,
+)
 from free_plaud.benchmark.reports import (
     export_benchmark_comparison_csv,
     export_benchmark_comparison_json,
     export_benchmark_csv,
     export_benchmark_json,
 )
-from free_plaud.benchmark.runners import BenchmarkSettingsSnapshot, compare_benchmark_suite, run_benchmark
+from free_plaud.benchmark.runners import (
+    BenchmarkSettingsSnapshot,
+    compare_benchmark_suite,
+    run_benchmark,
+)
 from free_plaud.benchmark.service import run_benchmark_compare
 from free_plaud.cli import app
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note
-from free_plaud.storage.vector import LocalVectorStore
 from free_plaud.storage.sqlite import connect_sqlite, init_sqlite
+from free_plaud.storage.vector import LocalVectorStore
 
 runner = CliRunner()
 
@@ -448,7 +456,7 @@ def test_benchmark_run_cli_rejects_fake_hash_with_actionable_error(monkeypatch, 
     dataset_path = tmp_path / 'dataset.json'
     dataset_path.write_text(json.dumps({'dataset_name': 'fake-hash-dataset', 'samples': []}), encoding='utf-8')
 
-    def fail_init_sqlite(_path):  # noqa: ANN001, ANN202
+    def fail_init_sqlite(_path):
         raise AssertionError('benchmark nao deve abrir SQLite com fake-hash')
 
     monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
@@ -491,10 +499,10 @@ def test_benchmark_run_cli_closes_sqlite_connection(monkeypatch, tmp_path: Path)
     connection = FakeConnection()
 
     monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.benchmark.cli.init_sqlite', lambda path: connection)  # noqa: ARG005
+    monkeypatch.setattr('free_plaud.benchmark.cli.init_sqlite', lambda path: connection)
     monkeypatch.setattr(
         'free_plaud.benchmark.cli.run_benchmark',
-        lambda *args, **kwargs: SimpleNamespace(  # noqa: ARG005
+        lambda *args, **kwargs: SimpleNamespace(
             benchmark_run_id='run-close',
             model_dump=lambda mode='json': {'benchmark_run_id': 'run-close'},
         ),
@@ -857,12 +865,12 @@ def test_benchmark_compare_cli_closes_sqlite_connection(monkeypatch, tmp_path: P
     connection = FakeConnection()
 
     monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.benchmark.cli.init_sqlite', lambda path: connection)  # noqa: ARG005
-    monkeypatch.setattr('free_plaud.benchmark.cli.LocalVectorStore', lambda *args, **kwargs: object())  # noqa: ARG005
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda *args, **kwargs: FakeEmbedder())  # noqa: ARG005
+    monkeypatch.setattr('free_plaud.benchmark.cli.init_sqlite', lambda path: connection)
+    monkeypatch.setattr('free_plaud.benchmark.cli.LocalVectorStore', lambda *args, **kwargs: object())
+    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda *args, **kwargs: FakeEmbedder())
     monkeypatch.setattr(
         'free_plaud.benchmark.cli.compare_benchmark_suite',
-        lambda *args, **kwargs: SimpleNamespace(  # noqa: ARG005
+        lambda *args, **kwargs: SimpleNamespace(
             comparison_id='cmp-close',
             model_dump=lambda mode='json': {'comparison_id': 'cmp-close'},
         ),

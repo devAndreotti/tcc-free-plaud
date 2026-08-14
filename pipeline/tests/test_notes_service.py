@@ -2,7 +2,12 @@ from pathlib import Path
 
 from free_plaud.app.config import Settings
 from free_plaud.corpus.service import index_corpus_file
-from free_plaud.notes.service import delete_note, get_note_detail, list_notes, reindex_note
+from free_plaud.notes.service import (
+    delete_note,
+    get_note_detail,
+    list_notes,
+    reindex_note,
+)
 from free_plaud.storage.sqlite import connect_sqlite, count_chunks, count_notes
 from free_plaud.storage.vector import LocalVectorStore
 

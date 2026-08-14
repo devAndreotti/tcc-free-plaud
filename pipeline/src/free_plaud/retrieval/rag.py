@@ -6,9 +6,16 @@ from typing import Literal
 
 from free_plaud.notes.schemas import Note
 from free_plaud.providers.embed import Embedder
-from free_plaud.retrieval.indexer import index_note, index_note_in_vector_store
 from free_plaud.retrieval.debug import build_ask_debug
-from free_plaud.retrieval.models import AnswerClaim, AskDebug, AskResponse, Citation, SearchHit, UsedSource
+from free_plaud.retrieval.indexer import index_note, index_note_in_vector_store
+from free_plaud.retrieval.models import (
+    AnswerClaim,
+    AskDebug,
+    AskResponse,
+    Citation,
+    SearchHit,
+    UsedSource,
+)
 from free_plaud.retrieval.search import (
     LOW_SIGNAL_QUERY_TERMS,
     extract_named_query_terms,
@@ -192,7 +199,7 @@ def _query_phrases(question: str) -> list[tuple[str, ...]]:
     phrases: list[tuple[str, ...]] = []
     seen: set[tuple[str, ...]] = set()
     for size in range(4, 1, -1):
-        for index in range(0, max(len(tokens) - size + 1, 0)):
+        for index in range(max(len(tokens) - size + 1, 0)):
             phrase = tuple(tokens[index : index + size])
             if phrase in seen:
                 continue
@@ -211,7 +218,7 @@ def _phrase_match_score(question: str, candidate: str) -> tuple[int, int, int]:
     candidate_windows = {
         tuple(candidate_tokens[index : index + size])
         for size in range(2, min(4, len(candidate_tokens)) + 1)
-        for index in range(0, len(candidate_tokens) - size + 1)
+        for index in range(len(candidate_tokens) - size + 1)
     }
     longest = 0
     hits = 0
@@ -220,7 +227,7 @@ def _phrase_match_score(question: str, candidate: str) -> tuple[int, int, int]:
         if phrase in candidate_windows:
             longest = max(longest, len(phrase))
             hits += 1
-            for index in range(0, len(candidate_tokens) - len(phrase) + 1):
+            for index in range(len(candidate_tokens) - len(phrase) + 1):
                 if tuple(candidate_tokens[index : index + len(phrase)]) == phrase:
                     if earliest_index is None or index < earliest_index:
                         earliest_index = index
@@ -352,9 +359,7 @@ def _is_administrative_prefix(candidate: str) -> bool:
         return False
     if _is_heading_like(collapsed):
         return True
-    if len(collapsed) <= 60 and collapsed == collapsed.upper() and len(collapsed.split()) >= 2:
-        return True
-    return False
+    return bool(len(collapsed) <= 60 and collapsed == collapsed.upper() and len(collapsed.split()) >= 2)
 
 
 def _leading_fragment_penalty(candidate: str) -> int:
@@ -382,7 +387,7 @@ def _claim_variant_score(question: str, query_terms: list[str], candidate: str) 
         phrase_longest,
         phrase_hits,
         len(matched_terms),
-        int(round(term_coverage * 100)),
+        round(term_coverage * 100),
         -leading_fragment_penalty,
         phrase_position,
         embedding_bonus,
@@ -433,7 +438,7 @@ def _trim_claim_span(question: str, query_terms: list[str], claim_text: str) -> 
 
     window_sizes = (1, 2) if _question_needs_multiple_claims(question) else (1,)
 
-    for base in list(variants):
+    for base in variants:
         parts = [_clean_claim_candidate(part) for part in SENTENCE_SPLIT_PATTERN.split(base)]
         sentences = [part for part in parts if part]
         for start in range(len(sentences)):
@@ -544,7 +549,7 @@ def _rank_claim_candidates(chunk_text: str, question: str, query_terms: list[str
                 phrase_longest,
                 phrase_hits,
                 variant_matches,
-                int(round(variant_coverage * 100)),
+                round(variant_coverage * 100),
                 -leading_fragment_penalty,
                 phrase_position,
                 embedding_bonus,

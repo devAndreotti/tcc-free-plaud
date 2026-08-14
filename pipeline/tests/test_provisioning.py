@@ -1,4 +1,5 @@
 import json
+from typing import Self
 from urllib.error import URLError
 
 from typer.testing import CliRunner
@@ -20,7 +21,7 @@ from free_plaud.providers.provisioning import (
 runner = CliRunner()
 
 
-def _settings(tmp_path, *, provider='ollama', model='gemma2:2b-instruct-q4_K_M', base_url=None):  # noqa: ANN001
+def _settings(tmp_path, *, provider='ollama', model='gemma2:2b-instruct-q4_K_M', base_url=None):
     return Settings(
         workspace_dir=tmp_path,
         data_dir=tmp_path / 'data',
@@ -39,17 +40,17 @@ class FakeStreamResponse:
     def __init__(self, lines: list[bytes]) -> None:
         self._lines = lines
 
-    def __enter__(self) -> 'FakeStreamResponse':
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *args: object) -> None:
         return None
 
-    def __iter__(self):  # noqa: ANN204
+    def __iter__(self):
         return iter(self._lines)
 
 
-def _discovery(status, models=None, base_url='http://localhost:11434', message=None):  # noqa: ANN001
+def _discovery(status, models=None, base_url='http://localhost:11434', message=None):
     return ModelDiscoveryResult(
         provider='ollama',
         base_url=base_url,
@@ -71,7 +72,7 @@ def test_catalog_seeded_with_both_gemmas() -> None:
     assert catalog_entry('inexistente') is None
 
 
-def test_detect_runtime_ready_when_model_installed(monkeypatch, tmp_path) -> None:  # noqa: ANN001
+def test_detect_runtime_ready_when_model_installed(monkeypatch, tmp_path) -> None:
     model = ModelInfo(id='gemma2:2b-instruct-q4_K_M', label='gemma2', provider='ollama')
     monkeypatch.setattr(
         'free_plaud.providers.provisioning.list_answer_models',
@@ -84,7 +85,7 @@ def test_detect_runtime_ready_when_model_installed(monkeypatch, tmp_path) -> Non
     assert 'gemma2:2b-instruct-q4_K_M' in report.installed_models
 
 
-def test_detect_runtime_no_model_when_server_up_but_model_missing(monkeypatch, tmp_path) -> None:  # noqa: ANN001
+def test_detect_runtime_no_model_when_server_up_but_model_missing(monkeypatch, tmp_path) -> None:
     other = ModelInfo(id='llama3.1:8b', label='llama', provider='ollama')
     monkeypatch.setattr(
         'free_plaud.providers.provisioning.list_answer_models',
@@ -97,7 +98,7 @@ def test_detect_runtime_no_model_when_server_up_but_model_missing(monkeypatch, t
     assert report.message is not None
 
 
-def test_detect_runtime_offline_propagates(monkeypatch, tmp_path) -> None:  # noqa: ANN001
+def test_detect_runtime_offline_propagates(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         'free_plaud.providers.provisioning.list_answer_models',
         lambda settings, **kwargs: _discovery('offline', message='Servidor indisponivel ou timeout.'),
@@ -108,7 +109,7 @@ def test_detect_runtime_offline_propagates(monkeypatch, tmp_path) -> None:  # no
     assert report.status == 'offline'
 
 
-def test_ensure_model_streams_progress_until_success(monkeypatch, tmp_path) -> None:  # noqa: ANN001
+def test_ensure_model_streams_progress_until_success(monkeypatch, tmp_path) -> None:
     lines = [
         json.dumps({'status': 'pulling manifest'}).encode('utf-8'),
         json.dumps({'status': 'downloading', 'completed': 50, 'total': 100}).encode('utf-8'),
@@ -116,7 +117,7 @@ def test_ensure_model_streams_progress_until_success(monkeypatch, tmp_path) -> N
     ]
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         captured['url'] = request.full_url
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeStreamResponse(lines)
@@ -135,7 +136,7 @@ def test_ensure_model_streams_progress_until_success(monkeypatch, tmp_path) -> N
     assert events[-1].status == 'success'
 
 
-def test_ensure_model_surfaces_error_event(monkeypatch, tmp_path) -> None:  # noqa: ANN001
+def test_ensure_model_surfaces_error_event(monkeypatch, tmp_path) -> None:
     lines = [json.dumps({'error': 'pull model manifest: file does not exist'}).encode('utf-8')]
     monkeypatch.setattr(
         'free_plaud.providers.provisioning.urlopen',
@@ -149,8 +150,8 @@ def test_ensure_model_surfaces_error_event(monkeypatch, tmp_path) -> None:  # no
     assert 'file does not exist' in result.error
 
 
-def test_ensure_model_reports_offline(monkeypatch, tmp_path) -> None:  # noqa: ANN001
-    def boom(request, timeout):  # noqa: ANN001, ANN202
+def test_ensure_model_reports_offline(monkeypatch, tmp_path) -> None:
+    def boom(request, timeout):
         raise URLError('connection refused')
 
     monkeypatch.setattr('free_plaud.providers.provisioning.urlopen', boom)
@@ -161,8 +162,8 @@ def test_ensure_model_reports_offline(monkeypatch, tmp_path) -> None:  # noqa: A
     assert 'indisponivel' in result.error
 
 
-def test_ensure_model_rejects_non_ollama_without_network(monkeypatch, tmp_path) -> None:  # noqa: ANN001
-    def fail(*args, **kwargs):  # noqa: ANN002, ANN003
+def test_ensure_model_rejects_non_ollama_without_network(monkeypatch, tmp_path) -> None:
+    def fail(*args, **kwargs):
         raise AssertionError('nao deve tocar a rede para provider nao-ollama')
 
     monkeypatch.setattr('free_plaud.providers.provisioning.urlopen', fail)
@@ -173,7 +174,7 @@ def test_ensure_model_rejects_non_ollama_without_network(monkeypatch, tmp_path) 
     assert 'ollama' in result.error
 
 
-def _report(status, installed=None, message=None):  # noqa: ANN001, ANN202
+def _report(status, installed=None, message=None):
     return RuntimeStatusReport(
         provider='ollama',
         base_url='http://localhost:11434',
@@ -208,14 +209,14 @@ def test_provider_catalog_cli_lists_presets() -> None:
     assert {'gemma-veloz', 'gemma-inteligente'} <= catalog_ids
 
 
-def test_provider_pull_cli_resolves_catalog_and_streams(monkeypatch, tmp_path) -> None:  # noqa: ANN001
+def test_provider_pull_cli_resolves_catalog_and_streams(monkeypatch, tmp_path) -> None:
     lines = [
         json.dumps({'status': 'downloading', 'completed': 10, 'total': 10}).encode('utf-8'),
         json.dumps({'status': 'success'}).encode('utf-8'),
     ]
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeStreamResponse(lines)
 

@@ -4,8 +4,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import Field, model_validator
-from pydantic_settings import PydanticBaseSettingsSource
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 WORKSPACE_DIR = Path(__file__).resolve().parents[4]
 USER_SETTINGS_FILENAME = 'user_settings.json'

@@ -3,10 +3,22 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
-from free_plaud.app.config import get_settings, reset_user_settings, user_settings_path_for
+from free_plaud.app.config import (
+    get_settings,
+    reset_user_settings,
+    user_settings_path_for,
+)
 from free_plaud.app.local_env import local_env_path_for, save_answer_api_key
-from free_plaud.app.settings_catalog import get_setting_spec, save_catalog_setting, settings_catalog_payload
-from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
+from free_plaud.app.settings_catalog import (
+    get_setting_spec,
+    save_catalog_setting,
+    settings_catalog_payload,
+)
+from free_plaud.app.settings_presets import (
+    apply_settings_preset,
+    list_settings_presets,
+    preview_settings_preset,
+)
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.providers.model_discovery import list_answer_models
 
@@ -53,7 +65,7 @@ def _show_settings_table() -> None:
     console.print(f'[{TEXT_DIM}]local_env: {local_env_path_for(settings)}[/{TEXT_DIM}]')
 
 
-def _preset_changes_text(changes) -> str:  # noqa: ANN001
+def _preset_changes_text(changes) -> str:
     if not changes:
         return 'Sem mudancas em relacao a configuracao atual.'
     return '\n'.join(f'- {key}: {change.before} -> {change.after}' for key, change in changes.items())

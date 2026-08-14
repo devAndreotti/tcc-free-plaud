@@ -1,7 +1,7 @@
-from hashlib import sha256
-from pathlib import Path
 import re
 import unicodedata
+from hashlib import sha256
+from pathlib import Path
 
 from free_plaud.ingest.models import IngestedDocument
 from free_plaud.notes.markdown import render_note_markdown
@@ -401,7 +401,7 @@ def _score_summary_candidate(candidate: str, title: str, is_blockquote: bool) ->
         score -= 160
     if '@' in candidate or candidate.count('|') >= 2:
         score -= 220
-    if candidate.startswith('```') or candidate.startswith('def ') or candidate.startswith('class '):
+    if candidate.startswith(('```', 'def ', 'class ')):
         score -= 240
     if is_blockquote:
         score -= 120

@@ -3,8 +3,18 @@ from typing import Any
 
 import typer
 
-from free_plaud.app.config import editable_settings_payload, get_settings, reset_user_settings, save_user_settings, user_settings_path_for
-from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
+from free_plaud.app.config import (
+    editable_settings_payload,
+    get_settings,
+    reset_user_settings,
+    save_user_settings,
+    user_settings_path_for,
+)
+from free_plaud.app.settings_presets import (
+    apply_settings_preset,
+    list_settings_presets,
+    preview_settings_preset,
+)
 
 app = typer.Typer(help='Configura preferencias do app em user_settings.json.', no_args_is_help=True)
 preset_app = typer.Typer(help='Lista, previsualiza e aplica presets transacionais.', no_args_is_help=True)

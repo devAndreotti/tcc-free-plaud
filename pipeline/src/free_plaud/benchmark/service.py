@@ -3,8 +3,15 @@ from pathlib import Path
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.benchmark.datasets import load_benchmark_suite
-from free_plaud.benchmark.reports import export_benchmark_comparison_csv, export_benchmark_comparison_json
-from free_plaud.benchmark.runners import BenchmarkComparisonResult, BenchmarkSettingsSnapshot, compare_benchmark_suite
+from free_plaud.benchmark.reports import (
+    export_benchmark_comparison_csv,
+    export_benchmark_comparison_json,
+)
+from free_plaud.benchmark.runners import (
+    BenchmarkComparisonResult,
+    BenchmarkSettingsSnapshot,
+    compare_benchmark_suite,
+)
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.providers.embed import get_embedder
 from free_plaud.storage.sqlite import init_sqlite

@@ -3,7 +3,12 @@ from pathlib import Path
 from free_plaud.app.config import Settings
 from free_plaud.corpus.service import index_corpus_path, reset_corpus
 from free_plaud.storage.models import BenchmarkRunRecord
-from free_plaud.storage.sqlite import count_chunks, count_notes, init_sqlite, insert_benchmark_run
+from free_plaud.storage.sqlite import (
+    count_chunks,
+    count_notes,
+    init_sqlite,
+    insert_benchmark_run,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 

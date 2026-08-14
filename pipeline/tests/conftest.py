@@ -37,8 +37,8 @@ def _build_simple_pdf_bytes(text: str) -> bytes:
     objects = [
         b'1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
         b'2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
-        b'3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] '
-        b'/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n',
+        (b'3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] '
+        b'/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n'),
     ]
     stream = (
         'BT\n'
