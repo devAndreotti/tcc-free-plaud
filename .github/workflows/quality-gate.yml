@@ -162,7 +162,7 @@ jobs:
           name: coverage-report
           path: coverage/
       - name: SonarCloud scan and Quality Gate
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@v8
         with:
           args: >
             -Dsonar.qualitygate.wait=true
