@@ -7,7 +7,12 @@ from rich.console import Console
 from free_plaud.app.cli_paths import compose_path
 from free_plaud.app.config import get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
-from free_plaud.benchmark.datasets import demo_dataset, load_benchmark_dataset, load_benchmark_suite
+from free_plaud.benchmark.datasets import (
+    demo_dataset,
+    load_benchmark_dataset,
+    load_benchmark_suite,
+)
+from free_plaud.benchmark.grounded import evaluate_grounded_answers
 from free_plaud.benchmark.reports import (
     export_benchmark_comparison_csv,
     export_benchmark_comparison_json,
@@ -18,7 +23,11 @@ from free_plaud.benchmark.runners import compare_benchmark_suite, run_benchmark
 from free_plaud.benchmark.service import build_settings_snapshot
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
-from free_plaud.providers.embed import EmbeddingConfigurationError, get_embedder, validate_runtime_embedding_model
+from free_plaud.providers.embed import (
+    EmbeddingConfigurationError,
+    get_embedder,
+    validate_runtime_embedding_model,
+)
 from free_plaud.retrieval.search import (
     DEFAULT_HYBRID_LEXICAL_WEIGHT,
     DEFAULT_HYBRID_RANK_CONSTANT,
@@ -108,6 +117,46 @@ def run(
         typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
     finally:
         connection.close()
+
+
+@app.command("answer-eval")
+def answer_eval(
+    path_parts: list[str] = typer.Argument(..., metavar="PATH"),
+    dataset_path: Path = typer.Option(..., '--dataset', '-d', help="Dataset JSON com perguntas e categoria (direta/inferida/negativa)."),
+    strategy: str = typer.Option('lexical', '--strategy', '-s', help="Estrategia: lexical, vector ou hybrid."),
+    top_k: int = typer.Option(3, '--top-k', min=1),
+    embedding_model: str | None = typer.Option(None, '--embedding-model', help="Override do embedding model para strategy=vector ou strategy=hybrid."),
+) -> None:
+    """Mede faithfulness (groundedness) e qualidade da abstenção do RAG."""
+    if strategy not in {'lexical', 'vector', 'hybrid'}:
+        raise typer.BadParameter("strategy deve ser 'lexical', 'vector' ou 'hybrid'.")
+
+    settings = get_settings()
+    ensure_runtime_dirs(settings)
+    note = structure_document(load_document(compose_path(path_parts)))
+    dataset = load_benchmark_dataset(dataset_path)
+
+    vector_store = None
+    embedder = None
+    if strategy in {'vector', 'hybrid'}:
+        resolved_embedding_model = embedding_model or settings.embedding_model
+        try:
+            validate_runtime_embedding_model(resolved_embedding_model)
+        except EmbeddingConfigurationError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from None
+        vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+        embedder = get_embedder(resolved_embedding_model, device=settings.embedding_device)
+
+    report = evaluate_grounded_answers(
+        note,
+        dataset,
+        strategy=strategy,  # type: ignore[arg-type]
+        top_k=top_k,
+        vector_store=vector_store,
+        embedder=embedder,
+    )
+    typer.echo(json.dumps(report.model_dump(mode='json'), ensure_ascii=True, indent=2))
 
 
 @app.command("compare")

@@ -12,7 +12,11 @@ from free_plaud.benchmark.datasets import (
     BenchmarkSuite,
     load_benchmark_dataset,
 )
-from free_plaud.benchmark.metrics import mean_reciprocal_rank, recall_at_k_from_ranks
+from free_plaud.benchmark.metrics import (
+    mean_reciprocal_rank,
+    ndcg_at_k,
+    recall_at_k_from_ranks,
+)
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.schemas import Note
 from free_plaud.notes.structurer import structure_document
@@ -28,7 +32,12 @@ from free_plaud.retrieval.search import (
     semantic_search,
 )
 from free_plaud.storage.models import BenchmarkQueryRecord, BenchmarkRunRecord
-from free_plaud.storage.sqlite import insert_benchmark_query, insert_benchmark_run, replace_chunks_for_note, upsert_note
+from free_plaud.storage.sqlite import (
+    insert_benchmark_query,
+    insert_benchmark_run,
+    replace_chunks_for_note,
+    upsert_note,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 PIPELINE_VERSION = 'pipeline-0.7.0'
@@ -87,6 +96,7 @@ class BenchmarkStrategySummary(BaseModel):
     recall_at_3: float
     recall_at_5: float
     recall_at_10: float
+    ndcg_at_10: float
     duration_ms: int
     avg_query_latency_ms: float
 
@@ -184,6 +194,7 @@ def _summarize_strategy(strategy: str, runs: list[BenchmarkRunResult]) -> Benchm
         recall_at_3=recall_at_k_from_ranks(ranks, 3),
         recall_at_5=recall_at_k_from_ranks(ranks, 5),
         recall_at_10=recall_at_k_from_ranks(ranks, 10),
+        ndcg_at_10=ndcg_at_k(ranks, 10),
         duration_ms=sum(run.duration_ms for run in runs),
         avg_query_latency_ms=(sum(query_latencies) / len(query_latencies)) if query_latencies else 0.0,
     )
@@ -258,6 +269,9 @@ def run_benchmark(
         'recall_at_3': recall_at_k_from_ranks(ranks, 3),
         'recall_at_5': recall_at_k_from_ranks(ranks, 5),
         'recall_at_10': recall_at_k_from_ranks(ranks, 10),
+        'ndcg_at_3': ndcg_at_k(ranks, 3),
+        'ndcg_at_5': ndcg_at_k(ranks, 5),
+        'ndcg_at_10': ndcg_at_k(ranks, 10),
         'latency_ms': duration_ms,
         'avg_latency_ms': sum(result.latency_ms for result in query_results) / len(query_results)
         if query_results

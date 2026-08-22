@@ -1,17 +1,22 @@
 import json
 from io import BytesIO
 from pathlib import Path
+from typing import Self
 from urllib.error import HTTPError
 
 import pytest
 
 from free_plaud.app.config import Settings
 from free_plaud.providers.answer import (
+    EMPTY_ANSWER_ERROR,
+    REASONING_EMPTY_ANSWER_ERROR,
     AnswerProviderError,
     AnswerProviderTestResult,
     OpenAICompatibleAnswerProvider,
     build_grounded_chat_messages,
     get_answer_provider,
+)
+from free_plaud.providers.answer import (
     test_answer_provider as run_answer_provider_test,
 )
 from free_plaud.providers.smoke import run_provider_smoke_local
@@ -21,10 +26,10 @@ class FakeHTTPResponse:
     def __init__(self, payload: dict[str, object]) -> None:
         self.payload = payload
 
-    def __enter__(self) -> 'FakeHTTPResponse':
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc, traceback) -> None:  # noqa: ANN001
+    def __exit__(self, exc_type, exc, traceback) -> None:
         return None
 
     def read(self) -> bytes:
@@ -47,7 +52,7 @@ class FakeSmokeAnswerProvider:
 def test_openai_compatible_provider_posts_chat_completion(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         captured['url'] = request.full_url
         captured['timeout'] = timeout
         captured['headers'] = dict(request.header_items())
@@ -97,7 +102,7 @@ def test_grounded_chat_messages_forbid_external_knowledge_and_define_sentinel() 
 
 
 def test_openai_compatible_provider_wraps_http_errors(monkeypatch) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         raise HTTPError(
             url=request.full_url,
             code=401,
@@ -125,7 +130,115 @@ def test_get_answer_provider_uses_local_defaults_and_keeps_extract_empty() -> No
     assert lmstudio.base_url == 'http://localhost:1234/v1'
 
 
-def _settings(tmp_path: Path, **overrides) -> Settings:  # noqa: ANN003
+def test_get_answer_provider_forwards_max_tokens() -> None:
+    provider = get_answer_provider('ollama', model='gemma4-cuda', max_tokens=512)
+
+    assert isinstance(provider, OpenAICompatibleAnswerProvider)
+    assert provider.max_tokens == 512
+
+
+def test_openai_compatible_provider_omits_max_tokens_by_default(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request, timeout):
+        captured['body'] = json.loads(request.data.decode('utf-8'))
+        return FakeHTTPResponse({'choices': [{'message': {'content': 'ok'}}]})
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    provider = OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='gemma4-cuda')
+
+    provider.answer('Pergunta?', ['[chunk] Evidencia.'])
+
+    assert 'max_tokens' not in captured['body']  # type: ignore[operator]
+
+
+def test_openai_compatible_provider_sends_max_tokens_when_set(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request, timeout):
+        captured['body'] = json.loads(request.data.decode('utf-8'))
+        return FakeHTTPResponse({'choices': [{'message': {'content': 'ok'}}]})
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    provider = OpenAICompatibleAnswerProvider(
+        base_url='http://localhost:11434/v1',
+        model='gemma4-cuda',
+        max_tokens=256,
+    )
+
+    provider.answer('Pergunta?', ['[chunk] Evidencia.'])
+
+    assert captured['body']['max_tokens'] == 256  # type: ignore[index]
+
+
+def test_openai_compatible_provider_flags_reasoning_without_final_answer(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        return FakeHTTPResponse(
+            {
+                'choices': [
+                    {
+                        'message': {'content': '', 'reasoning': 'CADEIA_DE_PENSAMENTO_NAO_DEVE_VAZAR'},
+                        'finish_reason': 'length',
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    provider = OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='gemma4-cuda')
+
+    with pytest.raises(AnswerProviderError) as excinfo:
+        provider.answer('Pergunta?', ['[chunk] Evidencia.'])
+
+    message = str(excinfo.value)
+    assert message == REASONING_EMPTY_ANSWER_ERROR
+    assert 'reasoning' in message
+    assert 'answer_max_tokens' in message
+    assert 'instruct' in message
+    # O chain-of-thought nunca pode vazar como resposta.
+    assert 'CADEIA_DE_PENSAMENTO_NAO_DEVE_VAZAR' not in message
+
+
+def test_openai_compatible_provider_treats_null_content_with_reasoning_as_empty(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        return FakeHTTPResponse(
+            {'choices': [{'message': {'content': None, 'reasoning_content': 'pensando...'}}]}
+        )
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    provider = OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='gemma-pt')
+
+    with pytest.raises(AnswerProviderError, match='reasoning'):
+        provider.answer('Pergunta?', ['[chunk] Evidencia.'])
+
+
+def test_openai_compatible_provider_flags_length_truncation_without_reasoning(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        return FakeHTTPResponse({'choices': [{'message': {'content': ''}, 'finish_reason': 'length'}]})
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    provider = OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='gemma4-cuda')
+
+    with pytest.raises(AnswerProviderError) as excinfo:
+        provider.answer('Pergunta?', ['[chunk] Evidencia.'])
+
+    assert str(excinfo.value) == REASONING_EMPTY_ANSWER_ERROR
+
+
+def test_openai_compatible_provider_keeps_generic_empty_error_without_reasoning(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        return FakeHTTPResponse({'choices': [{'message': {'content': '   '}, 'finish_reason': 'stop'}]})
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    provider = OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='llama3.1:8b')
+
+    with pytest.raises(AnswerProviderError) as excinfo:
+        provider.answer('Pergunta?', ['[chunk] Evidencia.'])
+
+    assert str(excinfo.value) == EMPTY_ANSWER_ERROR
+
+
+def _settings(tmp_path: Path, **overrides) -> Settings:
     data = {
         'workspace_dir': tmp_path,
         'data_dir': tmp_path / 'data',
@@ -146,7 +259,7 @@ def _settings(tmp_path: Path, **overrides) -> Settings:  # noqa: ANN003
 def test_provider_test_posts_synthetic_prompt_and_returns_ok(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         captured['url'] = request.full_url
         captured['timeout'] = timeout
         captured['headers'] = dict(request.header_items())
@@ -170,7 +283,7 @@ def test_provider_test_posts_synthetic_prompt_and_returns_ok(monkeypatch, tmp_pa
 
 
 def test_provider_test_http_401_returns_controlled_error_without_secret(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         raise HTTPError(
             url=request.full_url,
             code=401,
@@ -189,7 +302,7 @@ def test_provider_test_http_401_returns_controlled_error_without_secret(monkeypa
 
 
 def test_provider_test_timeout_returns_controlled_error(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         raise TimeoutError
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -208,7 +321,7 @@ def test_provider_test_invalid_base_url_returns_controlled_error(tmp_path: Path)
 
 
 def test_provider_test_urlopen_value_error_returns_controlled_error(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         raise ValueError('unknown url type: localhost')
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -220,7 +333,7 @@ def test_provider_test_urlopen_value_error_returns_controlled_error(monkeypatch,
 
 
 def test_provider_test_accepts_non_empty_model_response(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': [{'message': {'content': 'servico pronto'}}]})
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -232,7 +345,7 @@ def test_provider_test_accepts_non_empty_model_response(monkeypatch, tmp_path: P
 
 
 def test_provider_test_rejects_empty_content(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': [{'message': {'content': '   '}}]})
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -244,7 +357,7 @@ def test_provider_test_rejects_empty_content(monkeypatch, tmp_path: Path) -> Non
 
 
 def test_provider_test_rejects_invalid_payload(monkeypatch, tmp_path: Path) -> None:
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ANN202
+    def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': []})
 
     monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
@@ -253,6 +366,35 @@ def test_provider_test_rejects_invalid_payload(monkeypatch, tmp_path: Path) -> N
 
     assert result.status == 'error'
     assert result.error == 'Provider retornou payload invalido.'
+
+
+def test_provider_test_flags_reasoning_empty_answer(monkeypatch, tmp_path: Path) -> None:
+    def fake_urlopen(request, timeout):
+        return FakeHTTPResponse(
+            {'choices': [{'message': {'content': '', 'reasoning': 'pensando...'}, 'finish_reason': 'length'}]}
+        )
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+
+    result = run_answer_provider_test(_settings(tmp_path))
+
+    assert result.status == 'error'
+    assert result.error == REASONING_EMPTY_ANSWER_ERROR
+
+
+def test_provider_test_sends_max_tokens_when_configured(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request, timeout):
+        captured['body'] = json.loads(request.data.decode('utf-8'))
+        return FakeHTTPResponse({'choices': [{'message': {'content': 'ok'}}]})
+
+    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+
+    result = run_answer_provider_test(_settings(tmp_path, answer_max_tokens=1024))
+
+    assert result.status == 'ok'
+    assert captured['body']['max_tokens'] == 1024  # type: ignore[index]
 
 
 def test_provider_test_extractive_is_not_applicable(tmp_path: Path) -> None:

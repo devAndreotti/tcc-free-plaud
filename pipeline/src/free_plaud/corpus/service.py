@@ -2,8 +2,8 @@ import json
 import sqlite3
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,7 +29,7 @@ from free_plaud.corpus.models import (
     CorpusStatusResult,
     ResolvedCorpusCommitMode,
 )
-from free_plaud.ingest.loaders import load_document
+from free_plaud.ingest.loaders import PDF_PARSE_FAILED, load_document
 from free_plaud.notes.schemas import Note
 from free_plaud.notes.structurer import structure_document
 from free_plaud.providers.embed import Embedder, get_embedder
@@ -39,8 +39,8 @@ from free_plaud.storage.sqlite import (
     count_chunks,
     count_fts_chunks,
     count_notes,
-    delete_note_and_chunks,
     delete_corpus_notes_and_chunks,
+    delete_note_and_chunks,
     get_note_content_hash,
     init_sqlite,
     list_chunk_ids,
@@ -142,7 +142,7 @@ def _unchanged_result(
     chunk_ids: list[str],
     vector_store: LocalVectorStore,
     embedding_model: str,
-) -> CorpusIndexResult:  # noqa: ANN001
+) -> CorpusIndexResult:
     return CorpusIndexResult(
         source_path=str(source_path),
         status='unchanged',
@@ -182,6 +182,8 @@ def _error_code_for_exception(exc: Exception) -> str:
         text = str(exc)
         if text == 'EMPTY_CONTENT':
             return 'EMPTY_CONTENT'
+        if text == PDF_PARSE_FAILED:
+            return PDF_PARSE_FAILED
         if 'Extensão não suportada' in text:
             return 'UNSUPPORTED_MEDIA_TYPE'
     return 'INDEXING_FAILED'
@@ -265,7 +267,7 @@ def _rate(amount: int, elapsed_ms: int) -> float:
     return round(amount / (elapsed_ms / 1000), 3)
 
 
-def _batched(items: list, batch_size: int):  # noqa: ANN001, ANN202
+def _batched(items: list, batch_size: int):
     for start in range(0, len(items), batch_size):
         yield items[start : start + batch_size]
 
@@ -560,6 +562,11 @@ def get_corpus_status(
 
         stale_chunk_ids = sorted(vector_chunk_ids - sqlite_chunk_ids)
         missing_chunk_ids = sorted(sqlite_chunk_ids - vector_chunk_ids)
+        embedding_model_mismatch_chunk_ids = sorted(
+            chunk_id
+            for chunk_id, metadata in vector_records
+            if metadata.get('embedding_model') not in {None, resolved_settings.embedding_model}
+        )
         stale_chunk_id_set = set(stale_chunk_ids)
         orphan_note_ids = sorted(
             {
@@ -573,7 +580,7 @@ def get_corpus_status(
             status = 'empty'
         elif sqlite_chunk_ids and not vector_chunk_ids:
             status = 'sqlite_only'
-        elif stale_chunk_ids or missing_chunk_ids:
+        elif stale_chunk_ids or missing_chunk_ids or embedding_model_mismatch_chunk_ids:
             status = 'inconsistent'
         else:
             status = 'clean'
@@ -589,9 +596,11 @@ def get_corpus_status(
             vector_chunks_count=len(vector_chunk_ids),
             stale_vector_chunks_count=len(stale_chunk_ids),
             missing_vector_chunks_count=len(missing_chunk_ids),
+            embedding_model_mismatch_count=len(embedding_model_mismatch_chunk_ids),
             orphan_vector_note_ids=orphan_note_ids,
             stale_vector_chunk_ids=stale_chunk_ids,
             missing_vector_chunk_ids=missing_chunk_ids,
+            embedding_model_mismatch_chunk_ids=embedding_model_mismatch_chunk_ids,
             status=status,  # type: ignore[arg-type]
         )
     finally:
@@ -630,8 +639,8 @@ def reset_corpus(
                 status='preview',
             )
 
-        deleted_notes, deleted_chunks = delete_corpus_notes_and_chunks(resolved_connection)
         resolved_vector_store.reset()
+        deleted_notes, deleted_chunks = delete_corpus_notes_and_chunks(resolved_connection)
         return CorpusResetResult(
             dry_run=False,
             would_delete_notes=notes_total,
@@ -810,7 +819,7 @@ def _percentile(values: list[int], percentile: float) -> float:
     if not values:
         return 0.0
     ordered = sorted(values)
-    index = int(round((len(ordered) - 1) * percentile))
+    index = round((len(ordered) - 1) * percentile)
     return float(ordered[index])
 
 

@@ -4,7 +4,6 @@ from pathlib import Path
 
 from free_plaud.benchmark.runners import BenchmarkComparisonResult, BenchmarkRunResult
 
-
 SETTINGS_SNAPSHOT_FIELDS = [
     'embedding_model',
     'embedding_device',
@@ -97,6 +96,7 @@ def export_benchmark_comparison_csv(result: BenchmarkComparisonResult, path: Pat
         'recall_at_3',
         'recall_at_5',
         'recall_at_10',
+        'ndcg_at_10',
         'duration_ms',
         'avg_query_latency_ms',
         *SETTINGS_SNAPSHOT_FIELDS,
@@ -123,6 +123,7 @@ def export_benchmark_comparison_csv(result: BenchmarkComparisonResult, path: Pat
                         'recall_at_3': run.metrics['recall_at_3'],
                         'recall_at_5': run.metrics['recall_at_5'],
                         'recall_at_10': run.metrics['recall_at_10'],
+                        'ndcg_at_10': run.metrics['ndcg_at_10'],
                         'duration_ms': run.duration_ms,
                         'avg_query_latency_ms': run.metrics['avg_latency_ms'],
                         **settings_snapshot,

@@ -1,3 +1,4 @@
+import itertools
 import re
 
 CONNECTOR_WORDS = {
@@ -28,8 +29,6 @@ CONNECTOR_WORDS = {
     'umas',
     'ao',
     'aos',
-    'a',
-    'as',
     'se',
     'eh',
     'é',
@@ -71,9 +70,7 @@ def _should_merge_tokens(left: str, right: str) -> bool:
         return False
     if left.isupper() and right.isupper() and len(left) <= 5 and len(right) <= 12:
         return True
-    if len(left) <= 3:
-        return True
-    return False
+    return len(left) <= 3
 
 
 def _repair_fragmented_ocr_line(line: str) -> str:
@@ -81,7 +78,7 @@ def _repair_fragmented_ocr_line(line: str) -> str:
     word_tokens = [token for token in tokens if _is_word_fragment(token)]
     suspicious_pairs = [
         (left, right)
-        for left, right in zip(tokens, tokens[1:])
+        for left, right in itertools.pairwise(tokens)
         if _should_merge_tokens(left, right)
     ]
     strong_pairs = [
@@ -131,9 +128,7 @@ def _should_merge_summary_tokens(left: str, right: str) -> bool:
         return True
     if len(left) <= 3 or len(right) <= 3:
         return True
-    if len(left) <= 5 and len(right) <= 5:
-        return True
-    return False
+    return bool(len(left) <= 5 and len(right) <= 5)
 
 
 def repair_ocr_summary_text(text: str) -> str:
@@ -141,7 +136,7 @@ def repair_ocr_summary_text(text: str) -> str:
     tokens = text.split()
     suspicious_pairs = [
         (left, right)
-        for left, right in zip(tokens, tokens[1:])
+        for left, right in itertools.pairwise(tokens)
         if _should_merge_summary_tokens(left, right)
     ]
     if len(suspicious_pairs) < 4:

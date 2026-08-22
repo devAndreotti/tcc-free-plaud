@@ -9,7 +9,12 @@ from pydantic import BaseModel
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.corpus.ask import RetrievalStrategy, answer_corpus_with_citations
 from free_plaud.corpus.service import index_corpus_path
-from free_plaud.providers.answer import AnswerProvider, AnswerProviderTestResult, get_answer_provider, test_answer_provider
+from free_plaud.providers.answer import (
+    AnswerProvider,
+    AnswerProviderTestResult,
+    get_answer_provider,
+    test_answer_provider,
+)
 from free_plaud.providers.embed import get_embedder
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.storage.sqlite import init_sqlite
@@ -94,6 +99,7 @@ def _resolve_answer_provider(settings: Settings, injected_provider: AnswerProvid
         base_url=settings.answer_base_url,
         api_key=settings.answer_api_key,
         temperature=settings.answer_temperature,
+        max_tokens=settings.answer_max_tokens,
         timeout_seconds=settings.answer_timeout_seconds,
     )
 
@@ -167,7 +173,7 @@ def run_provider_smoke_local(
             workspace_dir=str(workspace_dir) if keep_workspace else None,
             error=None if ok else 'Smoke local nao atendeu todos os criterios esperados.',
         )
-    except Exception as exc:  # noqa: BLE001 - comando de smoke deve retornar erro estruturado.
+    except Exception as exc:
         fallback_provider_test = provider_test_result or AnswerProviderTestResult(
             provider=base_settings.answer_provider,
             model=base_settings.answer_model,

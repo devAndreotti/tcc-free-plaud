@@ -3,7 +3,13 @@ from pathlib import Path
 from free_plaud.app.config import Settings
 from free_plaud.corpus.service import get_corpus_status, index_corpus_file
 from free_plaud.retrieval.models import Chunk
-from free_plaud.storage.sqlite import get_notes_by_id, init_sqlite, list_chunks, replace_chunks_for_note, upsert_note
+from free_plaud.storage.sqlite import (
+    get_notes_by_id,
+    init_sqlite,
+    list_chunks,
+    replace_chunks_for_note,
+    upsert_note,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 
@@ -129,3 +135,26 @@ def test_corpus_status_reports_sqlite_only_and_missing_vectors(tmp_path: Path) -
     missing = get_corpus_status(settings=settings, connection=connection, vector_store=vector_store)
     assert missing.status == 'inconsistent'
     assert missing.missing_vector_chunks_count == 1
+
+
+def test_corpus_status_reports_embedding_model_mismatch(tmp_path: Path) -> None:
+    settings = _settings(tmp_path, collection_name='corpus_status_embedding_model_mismatch')
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+    source = tmp_path / 'broker.md'
+    source.write_text('# Broker\n\nRabbitMQ foi adotado como message broker padrao.\n', encoding='utf-8')
+    indexed = index_corpus_file(
+        source,
+        settings=settings,
+        connection=connection,
+        vector_store=vector_store,
+        embedder=FakeEmbedder(),
+    )
+    changed_settings = settings.model_copy(update={'embedding_model': 'chroma-default'})
+
+    status = get_corpus_status(settings=changed_settings, connection=connection, vector_store=vector_store)
+
+    assert indexed.status == 'success'
+    assert status.status == 'inconsistent'
+    assert status.embedding_model_mismatch_count == indexed.chunks_indexed
+    assert status.embedding_model_mismatch_chunk_ids

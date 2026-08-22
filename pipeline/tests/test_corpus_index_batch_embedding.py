@@ -167,7 +167,7 @@ def test_index_corpus_path_microbatch_commits_visible_batches(tmp_path: Path) ->
     vector_store = RecordingVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
     committed_counts: list[int] = []
 
-    def record_progress(event):  # noqa: ANN001
+    def record_progress(event):
         if event.phase == 'committed':
             committed_counts.append(count_notes(connection))
 

@@ -4,10 +4,19 @@ import mimetypes
 from pathlib import Path
 from uuid import uuid4
 
-from free_plaud.ingest.loaders import load_document
+from free_plaud.ingest.loaders import PDF_PARSE_FAILED, load_document
 from free_plaud.ingest.models import IngestionResult
 
 logger = logging.getLogger('free_plaud.ingest')
+EMPTY_CONTENT = 'EMPTY_CONTENT'
+UNSUPPORTED_MEDIA_TYPE = 'UNSUPPORTED_MEDIA_TYPE'
+
+
+def _error_code_for_value_error(exc: ValueError) -> str:
+    text = str(exc)
+    if text in {EMPTY_CONTENT, PDF_PARSE_FAILED}:
+        return text
+    return UNSUPPORTED_MEDIA_TYPE
 
 
 def _build_ingestion_id() -> str:
@@ -52,7 +61,7 @@ def ingest_file(path: Path, correlation_id: str | None = None) -> IngestionResul
         document = load_document(source_path)
 
         if not document.raw_text.strip():
-            raise ValueError('EMPTY_CONTENT')
+            raise ValueError(EMPTY_CONTENT)
 
         result = IngestionResult(
             ingestion_id=ingestion_id,
@@ -92,7 +101,7 @@ def ingest_file(path: Path, correlation_id: str | None = None) -> IngestionResul
             message='Source file not found.',
         )
     except ValueError as exc:
-        error_code = 'EMPTY_CONTENT' if str(exc) == 'EMPTY_CONTENT' else 'UNSUPPORTED_MEDIA_TYPE'
+        error_code = _error_code_for_value_error(exc)
         logger.error(
             'ingestion.failed correlation_id=%s ingestion_id=%s source_path=%s error_code=%s',
             resolved_correlation_id,

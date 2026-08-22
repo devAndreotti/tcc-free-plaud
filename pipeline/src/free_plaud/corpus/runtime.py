@@ -4,7 +4,11 @@ from time import perf_counter
 
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
-from free_plaud.providers.embed import Embedder, get_embedder, validate_runtime_embedding_model
+from free_plaud.providers.embed import (
+    Embedder,
+    get_embedder,
+    validate_runtime_embedding_model,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 

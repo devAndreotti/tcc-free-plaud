@@ -2,7 +2,12 @@ import re
 from collections.abc import Mapping, Sequence
 
 from free_plaud.notes.schemas import Note
-from free_plaud.retrieval.models import AskDebug, AskDebugHit, AskDebugTimings, SearchHit
+from free_plaud.retrieval.models import (
+    AskDebug,
+    AskDebugHit,
+    AskDebugTimings,
+    SearchHit,
+)
 
 
 def _short_debug_snippet(text: str, max_length: int = 180) -> str:

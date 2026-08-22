@@ -3,7 +3,12 @@ from pathlib import Path
 from free_plaud.app.config import Settings
 from free_plaud.corpus.service import index_corpus_path, reset_corpus
 from free_plaud.storage.models import BenchmarkRunRecord
-from free_plaud.storage.sqlite import count_chunks, count_notes, init_sqlite, insert_benchmark_run
+from free_plaud.storage.sqlite import (
+    count_chunks,
+    count_notes,
+    init_sqlite,
+    insert_benchmark_run,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 
@@ -104,3 +109,34 @@ def test_reset_corpus_yes_clears_notes_chunks_and_vectors_but_keeps_benchmark(tm
     assert second.deleted_notes == 0
     assert second.deleted_chunks == 0
     assert second.deleted_vectors == 0
+
+
+def test_reset_corpus_preserves_sqlite_when_vector_reset_fails(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+    index_corpus_path(root, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+
+    class FailingVectorStore:
+        collection_name = vector_store.collection_name
+
+        def count(self) -> int:
+            return vector_store.count()
+
+        def reset(self) -> None:
+            raise RuntimeError('vector reset failed')
+
+    notes_before = count_notes(connection)
+    chunks_before = count_chunks(connection)
+
+    try:
+        reset_corpus(settings=settings, connection=connection, vector_store=FailingVectorStore(), dry_run=False)  # type: ignore[arg-type]
+    except RuntimeError as exc:
+        assert str(exc) == 'vector reset failed'
+    else:
+        raise AssertionError('reset_corpus deveria propagar falha de reset vetorial')
+
+    assert count_notes(connection) == notes_before
+    assert count_chunks(connection) == chunks_before

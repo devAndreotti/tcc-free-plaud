@@ -3,9 +3,12 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field
-from pydantic_settings import PydanticBaseSettingsSource
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, model_validator
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 WORKSPACE_DIR = Path(__file__).resolve().parents[4]
 USER_SETTINGS_FILENAME = 'user_settings.json'
@@ -26,6 +29,7 @@ USER_SETTING_FIELDS = {
     'answer_base_url',
     'answer_temperature',
     'answer_timeout_seconds',
+    'answer_max_tokens',
 }
 
 
@@ -81,6 +85,7 @@ class Settings(BaseSettings):
     answer_api_key: str | None = Field(default=None, exclude=True, repr=False)
     answer_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     answer_timeout_seconds: int = Field(default=60, ge=1, le=300)
+    answer_max_tokens: int | None = Field(default=None, ge=1, le=131072)
     default_ask_strategy: Literal['lexical', 'vector', 'hybrid'] = Field(default='hybrid')
     default_corpus_path: Path | None = Field(default=None)
     corpus_recursive_default: bool = Field(default=True)
@@ -95,6 +100,12 @@ class Settings(BaseSettings):
     corpus_embedding_batch_size: int = Field(default=64, ge=1, le=512)
     corpus_upsert_batch_size: int = Field(default=128, ge=1, le=1000)
     corpus_index_workers: int = Field(default=1, ge=1, le=16)
+
+    @model_validator(mode='after')
+    def validate_chunk_window(self) -> 'Settings':
+        if self.default_chunk_overlap >= self.default_chunk_size:
+            raise ValueError('default_chunk_overlap deve ser menor que default_chunk_size')
+        return self
 
     @classmethod
     def settings_customise_sources(

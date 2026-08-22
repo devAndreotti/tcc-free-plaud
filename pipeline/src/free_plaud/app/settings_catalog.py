@@ -4,7 +4,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from free_plaud.app.config import Settings, get_settings, save_user_settings
-from free_plaud.app.local_env import answer_api_key_is_configured, local_env_path_for, save_answer_api_key
+from free_plaud.app.local_env import (
+    answer_api_key_is_configured,
+    local_env_path_for,
+    save_answer_api_key,
+)
 
 SettingValueType = Literal['string', 'int', 'float', 'bool', 'path', 'enum', 'secret']
 SettingStorage = Literal['user_settings', 'local_env']
@@ -180,6 +184,14 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         storage='local_env',
         secret=True,
         placeholder='FREE_PLAUD_ANSWER_API_KEY',
+    ),
+    SettingSpec(
+        key='answer_max_tokens',
+        label='Max tokens da resposta',
+        description='Limite de tokens de saida do provider; vazio usa o default do modelo. Suba para modelos de reasoning que truncam.',
+        group='LLM',
+        value_type='int',
+        placeholder='vazio = default do modelo',
     ),
 )
 

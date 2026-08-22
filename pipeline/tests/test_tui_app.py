@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from textual.widgets import Button, Input
+from textual.widgets import Button, Input, Select
 
 from free_plaud.app.config import Settings
 from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
@@ -90,6 +90,25 @@ def _answer(question: str) -> AskResponse:
     )
 
 
+def test_provider_test_message_appends_hint_on_error() -> None:
+    from free_plaud.tui.app import _provider_test_message
+
+    result = SimpleNamespace(
+        provider='ollama',
+        model='llama3.1:8b',
+        base_url='http://localhost:11434/v1',
+        status='error',
+        latency_ms=4263,
+        error='Provider indisponivel: WinError 10061',
+    )
+
+    with_hint = _provider_test_message(result, 'Inicie o Ollama (ollama serve).')
+    assert 'status=error' in with_hint
+    assert 'Inicie o Ollama (ollama serve).' in with_hint
+
+    assert 'Inicie o Ollama' not in _provider_test_message(result)
+
+
 def test_ask_file_exposes_supported_strategies() -> None:
     assert ASK_STRATEGIES == ('lexical', 'vector', 'hybrid')
     assert ASK_MODES == ('corpus', 'file')
@@ -139,13 +158,13 @@ def test_ask_file_lexical_uses_file_pipeline_without_vector_dependencies(monkeyp
     monkeypatch.setattr('free_plaud.tui.app.load_document', lambda path: ('document', path))
     monkeypatch.setattr('free_plaud.tui.app.structure_document', lambda document: _note(sample))
 
-    def fail_vector_store(*args, **kwargs):  # noqa: ANN002, ANN003
+    def fail_vector_store(*args, **kwargs):
         raise AssertionError('lexical nao deve inicializar vector store')
 
-    def fail_embedder(*args, **kwargs):  # noqa: ANN002, ANN003
+    def fail_embedder(*args, **kwargs):
         raise AssertionError('lexical nao deve inicializar embedder')
 
-    def fake_answer_with_citations(note, question, top_k, **kwargs):  # noqa: ANN001, ANN002, ANN003
+    def fake_answer_with_citations(note, question, top_k, **kwargs):
         captured.update(note=note, question=question, top_k=top_k, kwargs=kwargs)
         return _answer(question)
 
@@ -179,7 +198,7 @@ def test_ask_file_hybrid_initializes_vector_dependencies(monkeypatch, tmp_path: 
     monkeypatch.setattr('free_plaud.tui.app.LocalVectorStore', FakeVectorStore)
     monkeypatch.setattr('free_plaud.tui.app.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
-    def fake_answer_with_citations(note, question, top_k, **kwargs):  # noqa: ANN001, ANN002, ANN003
+    def fake_answer_with_citations(note, question, top_k, **kwargs):
         captured.update(note=note, question=question, top_k=top_k, kwargs=kwargs)
         return _answer(question)
 
@@ -212,7 +231,7 @@ def test_ask_file_rejects_invalid_inputs(tmp_path: Path) -> None:
 def test_tui_ask_button_runs_corpus_by_default(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
-    def fake_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:  # noqa: ANN003
+    def fake_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:
         captured.update(question=question, strategy=strategy)
         return _answer(question)
 
@@ -238,7 +257,7 @@ def test_tui_ask_button_runs_file_mode_when_selected(monkeypatch, tmp_path: Path
     sample.write_text('# Sample\n\nTexto.\n', encoding='utf-8')
     captured: dict[str, object] = {}
 
-    def fake_ask_file(file_path: Path, question: str, strategy: str, **kwargs) -> AskResponse:  # noqa: ANN003
+    def fake_ask_file(file_path: Path, question: str, strategy: str, **kwargs) -> AskResponse:
         captured.update(file_path=file_path, question=question, strategy=strategy)
         return _answer(question)
 
@@ -306,7 +325,7 @@ def test_tui_settings_pane_saves_device_and_clears_runtime(monkeypatch, tmp_path
     cleared = False
     saved: dict[str, object] = {}
 
-    def fake_save_user_settings(values: dict[str, object], *, settings=None):  # noqa: ANN001, ANN202
+    def fake_save_user_settings(values: dict[str, object], *, settings=None):
         saved.update(values)
         updated = _settings(tmp_path)
         updated.embedding_device = values['embedding_device']  # type: ignore[assignment]
@@ -342,16 +361,104 @@ def test_tui_settings_pane_saves_device_and_clears_runtime(monkeypatch, tmp_path
     assert cleared is True
 
 
+def test_tui_settings_fields_react_to_provider(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 38)) as pilot:
+            await pilot.click('#nav-settings')
+
+            await pilot.click('#settings-provider-openai-compatible')
+            await pilot.pause(0.1)
+            assert not app.query_one('#settings-answer-section').has_class('hidden')
+            assert not app.query_one('#settings-answer-key-section').has_class('hidden')
+
+            await pilot.click('#settings-provider-ollama')
+            await pilot.pause(0.1)
+            assert not app.query_one('#settings-answer-section').has_class('hidden')
+            assert app.query_one('#settings-answer-key-section').has_class('hidden')
+
+            await pilot.click('#settings-provider-extractive')
+            await pilot.pause(0.1)
+            assert app.query_one('#settings-answer-section').has_class('hidden')
+            assert app.query_one('#settings-answer-key-section').has_class('hidden')
+
+    asyncio.run(run_app())
+
+
+def test_tui_settings_model_select_populates_from_discovery(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    fake_result = ModelDiscoveryResult(
+        provider='ollama',
+        base_url='http://localhost:11434',
+        status='ok',
+        models=[
+            ModelInfo(id='gemma4-cuda:latest', label='gemma4-cuda', provider='ollama'),
+            ModelInfo(id='llama3.2:3b', label='llama3.2', provider='ollama'),
+        ],
+        latency_ms=1,
+    )
+    monkeypatch.setattr('free_plaud.tui.app.list_answer_models', lambda *args, **kwargs: fake_result)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 38)) as pilot:
+            await pilot.click('#nav-settings')
+            await pilot.click('#settings-provider-ollama')
+            await pilot.click('#settings-list-models')
+            await pilot.pause(0.3)
+            select = app.query_one('#settings-answer-model', Select)
+            # O modelo descoberto vira selecionavel (atribuir valor fora das opcoes levantaria erro).
+            select.value = 'llama3.2:3b'
+            assert select.value == 'llama3.2:3b'
+
+    asyncio.run(run_app())
+
+
+def test_tui_settings_blank_model_blocks_save_for_generative_provider(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+
+    def fail_save_user_settings(*args, **kwargs):
+        raise AssertionError('nao deveria salvar com answer_model em branco')
+
+    monkeypatch.setattr('free_plaud.tui.app.save_user_settings', fail_save_user_settings)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 38)) as pilot:
+            await pilot.click('#nav-settings')
+            await pilot.click('#settings-provider-ollama')
+            select = app.query_one('#settings-answer-model', Select)
+            select.clear()
+            await pilot.click('#settings-save')
+            await pilot.pause(0.2)
+            output = app.query_one('#settings-output')
+            text = '\n'.join(getattr(line, 'plain', str(line)) for line in output.lines)
+            assert 'Selecione um modelo' in text
+
+    asyncio.run(run_app())
+
+
 def test_tui_settings_pane_saves_answer_api_key_to_local_env(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     saved_key: list[str] = []
+    saved_settings: list[dict[str, object]] = []
 
-    def fake_save_answer_api_key(api_key: str, *, settings=None):  # noqa: ANN001, ANN202
+    def fake_save_answer_api_key(api_key: str, *, settings=None):
         saved_key.append(api_key)
         return tmp_path / 'pipeline' / '.env'
 
+    def fake_save_user_settings(values: dict[str, object], *, settings=None):
+        saved_settings.append(values)
+        return _settings(tmp_path)
+
     monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
     monkeypatch.setattr('free_plaud.tui.app.save_answer_api_key', fake_save_answer_api_key)
+    monkeypatch.setattr('free_plaud.tui.app.save_user_settings', fake_save_user_settings)
 
     async def run_app() -> None:
         app = FreePlaudApp()
@@ -364,6 +471,7 @@ def test_tui_settings_pane_saves_answer_api_key_to_local_env(monkeypatch, tmp_pa
     asyncio.run(run_app())
 
     assert saved_key == ['sk-tui-test']
+    assert saved_settings
 
 
 def test_tui_settings_pane_applies_preset_and_clears_runtime(monkeypatch, tmp_path: Path) -> None:
@@ -375,7 +483,7 @@ def test_tui_settings_pane_applies_preset_and_clears_runtime(monkeypatch, tmp_pa
     captured: list[str] = []
     cleared = False
 
-    def fake_apply_settings_preset(name: str):  # noqa: ANN202
+    def fake_apply_settings_preset(name: str):
         captured.append(name)
         return SimpleNamespace(preset=SimpleNamespace(key=name), settings=updated)
 
@@ -515,7 +623,7 @@ def test_tui_settings_pane_runs_doctor_in_background(monkeypatch, tmp_path: Path
     doctor_started = threading.Event()
     doctor_release = threading.Event()
 
-    def slow_doctor(*, settings):  # noqa: ANN001, ANN202
+    def slow_doctor(*, settings):
         doctor_started.set()
         doctor_release.wait(timeout=2)
         return DoctorReport(
@@ -533,8 +641,8 @@ def test_tui_settings_pane_runs_doctor_in_background(monkeypatch, tmp_path: Path
         app = FreePlaudApp()
         async with app.run_test(size=(120, 38)) as pilot:
             settings_pane = app.query_one(SettingsPane)
-            app._show_pane('settings')  # noqa: SLF001 - mede fronteira síncrona do evento de navegação.
-            assert settings_pane._doctor_running is True  # noqa: SLF001 - garante worker em background.
+            app._show_pane('settings')
+            assert settings_pane._doctor_running is True
             for _ in range(20):
                 if doctor_started.is_set():
                     break
@@ -610,7 +718,7 @@ def test_tui_ask_button_ignores_double_click_while_running(monkeypatch, tmp_path
     started = threading.Event()
     release = threading.Event()
 
-    def fake_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:  # noqa: ANN003
+    def fake_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:
         calls.append(strategy)
         started.set()
         release.wait(timeout=2)
@@ -639,7 +747,7 @@ def test_tui_ask_button_restores_state_after_worker_error(monkeypatch, tmp_path:
     sample = tmp_path / 'sample.md'
     sample.write_text('# Sample\n\nTexto.\n', encoding='utf-8')
 
-    def fail_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:  # noqa: ANN003
+    def fail_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:
         raise FileNotFoundError('arquivo quebrado')
 
     monkeypatch.setattr('free_plaud.tui.app.ask_corpus', fail_ask_corpus)
@@ -661,7 +769,7 @@ def test_tui_ask_button_restores_state_after_worker_error(monkeypatch, tmp_path:
 def test_tui_clear_button_resets_ask_response(monkeypatch) -> None:
     calls = 0
 
-    def fake_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:  # noqa: ANN003
+    def fake_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:
         nonlocal calls
         calls += 1
         return _answer(question)
@@ -684,7 +792,7 @@ def test_tui_clear_button_resets_ask_response(monkeypatch) -> None:
 
 
 def test_tui_layout_mounts_at_supported_sizes() -> None:
-    def assert_inside(parent, child) -> None:  # noqa: ANN001
+    def assert_inside(parent, child) -> None:
         parent_region = parent.region
         child_region = child.region
         assert child_region.x >= parent_region.x
@@ -805,7 +913,7 @@ def test_tui_buttons_do_not_use_default_active_flash() -> None:
 def test_tui_notes_can_index_folder_and_reset_with_confirmation(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def fake_index_folder(  # noqa: ANN001
+    def fake_index_folder(
         path: Path,
         *,
         rebuild: bool,
@@ -826,7 +934,7 @@ def test_tui_notes_can_index_folder_and_reset_with_confirmation(monkeypatch, tmp
             results=[],
         )
 
-    def fake_reset(confirm: str, **kwargs) -> CorpusResetResult:  # noqa: ANN003
+    def fake_reset(confirm: str, **kwargs) -> CorpusResetResult:
         captured['reset_confirm'] = confirm
         return CorpusResetResult(
             dry_run=False,
@@ -855,7 +963,7 @@ def test_tui_notes_can_index_folder_and_reset_with_confirmation(monkeypatch, tmp
             status='empty',
         ),
     )
-    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', lambda: [])
+    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', list)
 
     async def run_app() -> None:
         app = FreePlaudApp()
@@ -879,7 +987,7 @@ def test_tui_notes_can_index_folder_and_reset_with_confirmation(monkeypatch, tmp
 def test_tui_notes_rejects_empty_folder_before_index(monkeypatch) -> None:
     calls = 0
 
-    def fake_index_folder(  # noqa: ANN001
+    def fake_index_folder(
         path: Path,
         *,
         rebuild: bool,
@@ -919,7 +1027,7 @@ def test_tui_notes_runs_preflight_before_index(monkeypatch, tmp_path: Path) -> N
             skipped=[CorpusSkippedPath(path=str(tmp_path / 'image.png'), reason='unsupported_extension')],
         )
 
-    def fake_index_folder(  # noqa: ANN001
+    def fake_index_folder(
         path: Path,
         *,
         rebuild: bool,
@@ -955,7 +1063,7 @@ def test_tui_notes_runs_preflight_before_index(monkeypatch, tmp_path: Path) -> N
             status='empty',
         ),
     )
-    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', lambda: [])
+    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', list)
 
     async def run_app() -> None:
         app = FreePlaudApp()
@@ -977,7 +1085,7 @@ def test_tui_notes_runs_preflight_before_index(monkeypatch, tmp_path: Path) -> N
 def test_tui_notes_passes_progress_callback_to_indexer(monkeypatch, tmp_path: Path) -> None:
     progress_called = False
 
-    def fake_index_folder(  # noqa: ANN001
+    def fake_index_folder(
         path: Path,
         *,
         rebuild: bool,
@@ -1027,7 +1135,7 @@ def test_tui_notes_passes_progress_callback_to_indexer(monkeypatch, tmp_path: Pa
             status='empty',
         ),
     )
-    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', lambda: [])
+    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', list)
 
     async def run_app() -> None:
         app = FreePlaudApp()
@@ -1053,7 +1161,7 @@ def test_tui_notes_cancel_button_cancels_running_index(monkeypatch, tmp_path: Pa
         *,
         rebuild: bool,
         runtime=None,
-        progress=None,  # noqa: ANN001
+        progress=None,
         cancel_token: CancellationToken | None = None,
     ) -> CorpusIndexBatchResult:
         captured['token'] = cancel_token
@@ -1086,7 +1194,7 @@ def test_tui_notes_cancel_button_cancels_running_index(monkeypatch, tmp_path: Pa
             status='empty',
         ),
     )
-    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', lambda: [])
+    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', list)
 
     async def run_app() -> None:
         app = FreePlaudApp()
@@ -1109,7 +1217,7 @@ def test_tui_notes_cancel_button_cancels_running_index(monkeypatch, tmp_path: Pa
 def test_tui_reset_requires_literal_confirmation(monkeypatch) -> None:
     calls = 0
 
-    def fake_reset(confirm: str, **kwargs) -> CorpusResetResult:  # noqa: ANN003
+    def fake_reset(confirm: str, **kwargs) -> CorpusResetResult:
         nonlocal calls
         calls += 1
         return CorpusResetResult(dry_run=False, would_delete_notes=0, would_delete_chunks=0, would_delete_vectors=0)
@@ -1151,7 +1259,7 @@ def test_tui_benchmark_runs_suite_comparison(monkeypatch, tmp_path: Path) -> Non
             'hybrid': Summary('hybrid'),
         }
 
-    def fake_compare(path: Path, **kwargs):  # noqa: ANN003, ANN202
+    def fake_compare(path: Path, **kwargs):
         captured['suite_path'] = path
         return Result()
 

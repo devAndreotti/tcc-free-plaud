@@ -29,6 +29,7 @@ gpu-cu128 = [
 dev = [
   "pytest>=8.3.0",
   "pytest-cov>=5.0.0",
+  "ruff==0.16.3",
 ]
 
 [project.scripts]
@@ -38,6 +39,13 @@ free-plaud-tui = "free_plaud.tui.app:main"
 [build-system]
 requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
+
+[tool.ruff.lint]
+# B008: Typer requires calling Argument()/Option() as parameter defaults.
+# RUF012: Textual widgets declare BINDINGS as a class attribute by design.
+# BLE001: doctor/embed boundary code intentionally catches any exception to report diagnostics without crashing.
+# TRY004: input/response validation here intentionally raises ValueError, not TypeError.
+ignore = ["B008", "RUF012", "BLE001", "TRY004"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

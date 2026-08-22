@@ -28,6 +28,14 @@ def test_load_document_extracts_text_from_pdf(sample_pdf_file: Path) -> None:
     assert 'Conteudo PDF de teste para extracao local-first.' in document.raw_text
 
 
+def test_load_document_rejects_corrupted_pdf(tmp_path: Path) -> None:
+    corrupted = tmp_path / 'corrupted.pdf'
+    corrupted.write_bytes(b'%PDF-1.4\nconteudo quebrado sem xref')
+
+    with pytest.raises(ValueError, match='PDF_PARSE_FAILED'):
+        load_document(corrupted)
+
+
 def test_load_document_rejects_unsupported_extension(tmp_path: Path) -> None:
     unsupported = tmp_path / 'sample.docx'
     unsupported.write_text('arquivo nao suportado', encoding='utf-8')

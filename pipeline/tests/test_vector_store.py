@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from free_plaud.app.config import Settings
@@ -8,7 +9,12 @@ from free_plaud.cli import app
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.indexer import index_note_in_vector_store
 from free_plaud.retrieval.models import Chunk, SearchHit
-from free_plaud.retrieval.search import _fuse_hits_by_rank, hybrid_search, open_semantic_search, semantic_search
+from free_plaud.retrieval.search import (
+    _fuse_hits_by_rank,
+    hybrid_search,
+    open_semantic_search,
+    semantic_search,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 runner = CliRunner()
@@ -97,6 +103,26 @@ def test_delete_by_note_id_uses_filtered_lookup_without_global_scan(monkeypatch,
     assert deleted == len(first_chunks)
     assert store.query(embedder.embed(['benchmark recall'])[0], top_k=5, note_id=first.note_id) == []
     assert store.query(embedder.embed(['benchmark recall'])[0], top_k=5, note_id=second.note_id)
+
+
+def test_vector_store_reset_ignores_missing_collection(tmp_path: Path) -> None:
+    store = LocalVectorStore(tmp_path / 'vector_store', collection_name='missing_collection')
+
+    store.reset()
+
+    assert store.count() == 0
+
+
+def test_vector_store_reset_propagates_delete_failures(monkeypatch, tmp_path: Path) -> None:
+    store = LocalVectorStore(tmp_path / 'vector_store', collection_name='reset_failure')
+
+    def fail_delete_collection(_name: str) -> None:
+        raise RuntimeError('delete failed')
+
+    monkeypatch.setattr(store._client, 'delete_collection', fail_delete_collection)
+
+    with pytest.raises(RuntimeError, match='delete failed'):
+        store.reset()
 
 
 def test_semantic_search_returns_ranked_hits_for_related_query(tmp_path: Path) -> None:

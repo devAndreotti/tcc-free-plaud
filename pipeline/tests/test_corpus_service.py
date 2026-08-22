@@ -2,9 +2,18 @@ from pathlib import Path
 
 from free_plaud.app.config import Settings
 from free_plaud.corpus.cancellation import CancellationToken
-from free_plaud.corpus.service import get_corpus_status, index_corpus_file, index_corpus_path
+from free_plaud.corpus.service import (
+    get_corpus_status,
+    index_corpus_file,
+    index_corpus_path,
+)
 from free_plaud.notes.metadata import build_note_id
-from free_plaud.storage.sqlite import connect_sqlite, count_notes, init_sqlite, list_chunk_ids
+from free_plaud.storage.sqlite import (
+    connect_sqlite,
+    count_notes,
+    init_sqlite,
+    list_chunk_ids,
+)
 from free_plaud.storage.vector import LocalVectorStore
 
 
@@ -391,7 +400,7 @@ def test_index_corpus_path_emits_progress_events_for_directory(tmp_path: Path) -
     )
 
     assert result.status == 'success'
-    assert [event.phase for event in events][0] == 'discovering'
+    assert next(event.phase for event in events) == 'discovering'
     assert 'loading' in {event.phase for event in events}
     assert 'embedding' in {event.phase for event in events}
     assert events[-1].phase == 'finished'
@@ -425,7 +434,7 @@ def test_index_corpus_path_stops_between_files_when_cancelled(tmp_path: Path) ->
     (root / 'b.md').write_text('# B\n\nSegundo arquivo.', encoding='utf-8')
     token = CancellationToken()
 
-    def cancel_after_first(progress) -> None:  # noqa: ANN001
+    def cancel_after_first(progress) -> None:
         if progress.phase == 'loading' and progress.processed_count == 1:
             token.cancel()
 

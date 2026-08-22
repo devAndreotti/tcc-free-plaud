@@ -8,6 +8,7 @@ from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
 from free_plaud.cli import app
 from free_plaud.providers.answer import AnswerProviderTestResult
 from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
+from free_plaud.providers.provisioning import RuntimeStatusReport
 
 runner = CliRunner()
 
@@ -155,3 +156,33 @@ def test_terminal_menu_can_test_provider(monkeypatch) -> None:
     assert 'Testar provider' in result.stdout
     assert 'ollama' in result.stdout
     assert 'ok' in result.stdout
+
+
+def test_terminal_menu_provider_error_shows_actionable_hint(monkeypatch) -> None:
+    monkeypatch.setattr(
+        'free_plaud.terminal_menu.test_answer_provider',
+        lambda: AnswerProviderTestResult(
+            provider='ollama',
+            model='llama3.1:8b',
+            base_url='http://localhost:11434/v1',
+            status='error',
+            latency_ms=4000,
+            error='Provider indisponivel: WinError 10061',
+        ),
+    )
+    monkeypatch.setattr(
+        'free_plaud.terminal_menu.detect_runtime',
+        lambda *args, **kwargs: RuntimeStatusReport(
+            provider='ollama',
+            base_url='http://localhost:11434',
+            status='offline',
+            installed_models=[],
+            message=None,
+        ),
+    )
+
+    result = runner.invoke(app, ['menu'], input='9\n\n0\n')
+
+    assert result.exit_code == 0
+    # Em vez do WinError cru, o usuário vê orientação acionável.
+    assert 'offline' in result.stdout

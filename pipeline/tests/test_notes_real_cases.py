@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from free_plaud.ingest.models import IngestedDocument
 from free_plaud.ingest.loaders import load_document
+from free_plaud.ingest.models import IngestedDocument
 from free_plaud.notes.structurer import structure_document
 
 

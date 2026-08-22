@@ -1,0 +1,92 @@
+RELA TÓRIO DE AVALI AÇÃO DE FERRAMENTAS
+DE MONITORAMENTO DE INFRA ESTRUTURA
+Versão: 2 .1
+Data : 14 /fev/ 2025
+Equip e responsável : Platafor ma & SRE
+
+1. OBJ ETIVO
+
+Este relat ório apr esenta os resultados da avali ação comparativa de três
+ferramentas de monitoramento de infra estrutura conduz ida pela equipe de
+Platafo rma durante os meses de dezem bro de 2024 e jan eiro de 2025.
+O ob jetivo é selecionar a solu ção que melhor atende aos requisi tos de
+obs ervabilidade, custo oper acional e integração com a stack atual.
+
+2. FERRA MENTAS AVALIADAS
+
+Foram avali adas as seguintes soluções:
+
+- Prometheus + Grafana (auto -hospedado)
+- Datadog (SaaS)
+- New Re lic (SaaS)
+
+Cada ferr amenta foi test ada em um ambien te de staging repr esentativo
+du rante quatro semanas, com carga simulada equivalente a 60% do tráfego
+de prod ução.
+
+3. CRITÉR IOS DE AVALIAÇÃO
+
+Os critérios utiliz ados na avali ação foram definidos em conjunto com as
+equi pes de Eng enharia, Infra estrutura e Finan ças:
+
+a) Cobert ura de métricas: capaci dade de coletar métricas de infra-
+estrutura, aplica ção e negócio em um único painel.
+
+b) Ale rtas e notific ações: flexibili dade na configu ração de alertas,
+integ ração com PagerDuty e Slack.
+
+c) Ret enção de dados: período de retenção padrão e cust o de retenção
+estendi da.
+
+d) Custo tot al: incluindo licen ças, infra estrutura adicional
+e horas de eng enharia para manutenção.
+
+e) Curva de aprend izado: tempo estimado para que um engenheiro
+sem experi ência prévia seja produt ivo na ferramenta.
+
+4. RESULT ADOS
+
+4.1 Prometheus + Grafana
+
+Ponto s positivos: custo de licença zero, altíssima flexib ilidade,
+grande ecoss istema de exporters e dashb oards prontos.
+
+Pontos neg ativos: exige infra estrutura própria para alta dispon ibilidade
+(Thanos ou Cortex), manutenção oper acional significati va, alerting
+menos ergon ômico que as soluções SaaS.
+
+Custo estim ado mensal (infra + eng): R$ 4.200
+
+4.2 Dat adog
+
+Pontos pos itivos: onboarding rápido, excelente UX, APM integrado,
+logs e métricas no mesmo painel, su porte responsivo.
+
+Pon tos negativos: custo elev ado em escala, modelo de pric ing baseado
+em host pode surp reender em ambientes com auto-scaling agressivo.
+
+Cust o estimado mens al (licença): R$ 18.700
+
+4.3 New Relic
+
+Pontos posit ivos: modelo de preci ng baseado em dados ingeri dos
+é mais prev isível que o do Dat adog em cen ários de escala variável.
+Interface de NRQL é poderosa para consultas ad-hoc.
+
+Pontos neg ativos: curva de aprendizad o mais íngreme, documentação
+menos organiz ada, integração com PagerDuty requer configu ração manual.
+
+Custo estim ado mensal (licença): R$ 13.400
+
+5. RECOMENDAÇÃO
+
+A equipe recomenda a adoção do Prometheus + Grafana para o ambiente
+de produção, complementado com Thanos para retenção de longo prazo
+e alta disponibilidade. Apesar do custo operacional maior, a economia
+de licença justifica o investimento em automação da infraestrutura de
+monitoramento, especialmente considerando o roadmap de crescimento
+previsto para os próximos 18 meses.
+
+A decisão foi ratificada pelo Diretor de Tecnologia em 17/02/2025.
+
+--- FIM DO DOCUMENTO ---

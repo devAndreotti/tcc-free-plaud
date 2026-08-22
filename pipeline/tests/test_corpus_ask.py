@@ -1,7 +1,11 @@
 from pathlib import Path
 
 from free_plaud.app.config import Settings
-from free_plaud.corpus.ask import answer_corpus_with_citations, build_answer_contexts, validate_generated_answer
+from free_plaud.corpus.ask import (
+    answer_corpus_with_citations,
+    build_answer_contexts,
+    validate_generated_answer,
+)
 from free_plaud.corpus.service import index_corpus_path
 from free_plaud.notes.metadata import build_note_id
 from free_plaud.notes.schemas import Note
@@ -47,21 +51,21 @@ class FakeAnswerProvider:
 class UnsupportedNumberAnswerProvider:
     provider_name = 'unsupported-number'
 
-    def answer(self, question: str, contexts: list[str]) -> str:  # noqa: ARG002
+    def answer(self, question: str, contexts: list[str]) -> str:
         return 'RabbitMQ foi adotado como message broker padrao do pipeline com lote de 64 KB.'
 
 
 class SentinelAnswerProvider:
     provider_name = 'sentinel'
 
-    def answer(self, question: str, contexts: list[str]) -> str:  # noqa: ARG002
+    def answer(self, question: str, contexts: list[str]) -> str:
         return 'NAO_ENCONTRADO: os dados recuperados nao sustentam resposta.'
 
 
 class GenericNoAnswerProvider:
     provider_name = 'generic'
 
-    def answer(self, question: str, contexts: list[str]) -> str:  # noqa: ARG002
+    def answer(self, question: str, contexts: list[str]) -> str:
         return 'Nao consegui recuperar essa informacao. Voce pode verificar a documentacao oficial.'
 
 
@@ -70,6 +74,13 @@ class FailingAnswerProvider:
 
     def answer(self, question: str, contexts: list[str]) -> str:
         raise RuntimeError('provider fora do ar')
+
+
+class SecretLeakingAnswerProvider:
+    provider_name = 'secret-leaking'
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        raise RuntimeError('HTTP 401: {"error":"bad key sk-secret"}')
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -360,7 +371,7 @@ def test_answer_corpus_lexical_uses_fts_candidates(monkeypatch, tmp_path: Path) 
 
     original_search = ask_module.search_chunks_fts
 
-    def spy_search_chunks_fts(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+    def spy_search_chunks_fts(*args, **kwargs):
         calls['count'] += 1
         return original_search(*args, **kwargs)
 
@@ -621,6 +632,29 @@ def test_answer_corpus_falls_back_to_extractive_answer_when_provider_fails(tmp_p
     assert response.status == 'answer'
     assert 'RabbitMQ' in (response.answer or '')
     assert any('provider de resposta falhou' in limitation.lower() for limitation in response.limitations)
+
+
+def test_answer_corpus_sanitizes_provider_failure_message(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=SecretLeakingAnswerProvider(),
+    )
+    serialized = ' '.join(response.limitations)
+
+    assert response.status == 'answer'
+    assert 'Provider de resposta falhou' in serialized
+    assert 'RuntimeError' in serialized
+    assert 'sk-secret' not in serialized
+    assert 'bad key' not in serialized
 
 
 def test_answer_corpus_with_citations_returns_no_answer_for_irrelevant_question(tmp_path: Path) -> None:

@@ -15,6 +15,13 @@ ProviderTestStatus = Literal['ok', 'error', 'not_applicable']
 TEST_ANSWER_PROMPT = 'Responda somente: ok'
 INVALID_BASE_URL_ERROR = 'Provider base_url invalida. Use http:// ou https://.'
 NO_ANSWER_SENTINEL = 'NAO_ENCONTRADO: os dados recuperados nao sustentam resposta.'
+EMPTY_ANSWER_ERROR = 'Provider retornou resposta vazia.'
+REASONING_EMPTY_ANSWER_ERROR = (
+    'Provider gerou apenas raciocinio (reasoning) sem resposta final. '
+    'Modelos de reasoning gastam tokens pensando antes de responder: '
+    'aumente answer_timeout_seconds, suba answer_max_tokens, ou use um modelo instruct.'
+)
+REASONING_KEYS = ('reasoning', 'reasoning_content')
 GROUNDED_SYSTEM_PROMPT = (
     'Voce deve responder em portugues brasileiro usando exclusivamente os CONTEXTOS. '
     'Nao use conhecimento externo. '
@@ -73,12 +80,51 @@ def build_grounded_chat_messages(question: str, contexts: list[str]) -> list[dic
     ]
 
 
+def _reasoning_text(message: dict[str, object]) -> str:
+    """Texto de chain-of-thought emitido por modelos de reasoning, se houver."""
+    for key in REASONING_KEYS:
+        value = message.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ''
+
+
+def _extract_answer_text(decoded: object) -> tuple[str, dict[str, object], object]:
+    """Extrai (content normalizado, message, finish_reason) de um payload chat/completions.
+
+    Levanta KeyError/IndexError/TypeError quando o payload nao tem o formato esperado,
+    para o chamador traduzir em 'payload invalido'. Trata content ausente ou null como
+    string vazia (modelos de reasoning costumam emitir content=null).
+    """
+    choice = decoded['choices'][0]  # type: ignore[index]
+    message = choice['message']
+    if not isinstance(message, dict):
+        raise TypeError('message do provider nao e um objeto')
+    content = message.get('content')
+    text = content.strip() if isinstance(content, str) else ''
+    finish_reason = choice.get('finish_reason') if isinstance(choice, dict) else None
+    return text, message, finish_reason
+
+
+def _empty_answer_error_message(message: dict[str, object], finish_reason: object) -> str:
+    """Mensagem acionavel quando content vem vazio.
+
+    Distingue o modelo de reasoning (so emitiu raciocinio, ou truncou em
+    finish_reason='length') do vazio puro. NUNCA usa o texto de reasoning como resposta:
+    ele e chain-of-thought, nao a resposta fundamentada nos contextos.
+    """
+    if _reasoning_text(message) or finish_reason == 'length':
+        return REASONING_EMPTY_ANSWER_ERROR
+    return EMPTY_ANSWER_ERROR
+
+
 @dataclass
 class OpenAICompatibleAnswerProvider:
     base_url: str
     model: str
     api_key: str | None = None
     temperature: float = 0.2
+    max_tokens: int | None = None
     timeout_seconds: int = 60
     provider_name: str = 'openai-compatible'
 
@@ -90,11 +136,13 @@ class OpenAICompatibleAnswerProvider:
 
         endpoint = f'{self.base_url.rstrip("/")}/chat/completions'
         messages = build_grounded_chat_messages(question, contexts)
-        payload = {
+        payload: dict[str, object] = {
             'model': self.model,
             'messages': messages,
             'temperature': self.temperature,
         }
+        if self.max_tokens is not None:
+            payload['max_tokens'] = self.max_tokens
         headers = {'Content-Type': 'application/json'}
         if self.api_key:
             headers['Authorization'] = f'Bearer {self.api_key}'
@@ -120,13 +168,12 @@ class OpenAICompatibleAnswerProvider:
 
         try:
             decoded = json.loads(body.decode('utf-8'))
-            content = decoded['choices'][0]['message']['content']
+            answer, message, finish_reason = _extract_answer_text(decoded)
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise AnswerProviderError('Provider retornou payload invalido.') from exc
 
-        answer = str(content).strip()
         if not answer:
-            raise AnswerProviderError('Provider retornou resposta vazia.')
+            raise AnswerProviderError(_empty_answer_error_message(message, finish_reason))
         return answer
 
 
@@ -147,6 +194,7 @@ def get_answer_provider(
     base_url: str | None = None,
     api_key: str | None = None,
     temperature: float = 0.2,
+    max_tokens: int | None = None,
     timeout_seconds: int = 60,
 ) -> AnswerProvider | None:
     if provider_name == 'extractive':
@@ -156,6 +204,7 @@ def get_answer_provider(
         model=model,
         api_key=api_key,
         temperature=temperature,
+        max_tokens=max_tokens,
         timeout_seconds=timeout_seconds,
         provider_name=provider_name,
     )
@@ -185,11 +234,13 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
             error=INVALID_BASE_URL_ERROR,
         )
     endpoint = f'{base_url.rstrip("/")}/chat/completions'
-    payload = {
+    payload: dict[str, object] = {
         'model': resolved.answer_model,
         'messages': [{'role': 'user', 'content': TEST_ANSWER_PROMPT}],
         'temperature': 0,
     }
+    if resolved.answer_max_tokens is not None:
+        payload['max_tokens'] = resolved.answer_max_tokens
     headers = {'Content-Type': 'application/json'}
     if resolved.answer_api_key:
         headers['Authorization'] = f'Bearer {resolved.answer_api_key}'
@@ -226,10 +277,10 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
 
     try:
         decoded = json.loads(body.decode('utf-8'))
-        content = str(decoded['choices'][0]['message']['content']).strip()
+        content, message, finish_reason = _extract_answer_text(decoded)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError):
         return result('error', 'Provider retornou payload invalido.')
 
     if not content:
-        return result('error', 'Provider retornou resposta vazia.')
+        return result('error', _empty_answer_error_message(message, finish_reason))
     return result('ok')

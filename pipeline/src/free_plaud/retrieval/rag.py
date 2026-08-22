@@ -1,13 +1,21 @@
 import re
 import unicodedata
+from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal
 
 from free_plaud.notes.schemas import Note
 from free_plaud.providers.embed import Embedder
-from free_plaud.retrieval.indexer import index_note, index_note_in_vector_store
 from free_plaud.retrieval.debug import build_ask_debug
-from free_plaud.retrieval.models import AnswerClaim, AskDebug, AskResponse, Citation, SearchHit, UsedSource
+from free_plaud.retrieval.indexer import index_note, index_note_in_vector_store
+from free_plaud.retrieval.models import (
+    AnswerClaim,
+    AskDebug,
+    AskResponse,
+    Citation,
+    SearchHit,
+    UsedSource,
+)
 from free_plaud.retrieval.search import (
     LOW_SIGNAL_QUERY_TERMS,
     extract_named_query_terms,
@@ -37,6 +45,48 @@ ADMIN_PREFIX_MARKERS = {
 }
 DANGLING_TAIL_TOKENS = {'a', 'as', 'o', 'os', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'na', 'nas', 'no', 'nos', 'para', 'por', 'que'}
 LOW_INFORMATION_LEADING_TOKENS = {'a', 'as', 'de', 'da', 'das', 'do', 'dos', 'e', 'em', 'na', 'nas', 'no', 'nos', 'para', 'por'}
+
+
+@dataclass(frozen=True)
+class ClaimScoringConfig:
+    """Pesos e limiares da extração e ranqueamento de claims do RAG lexical.
+
+    Centraliza os números antes embutidos como literais espalhados pelo módulo.
+    Os valores são os calibrados nos experimentos de qualidade de claim
+    (docs/experimentos/09–11); agrupá-los aqui os torna nomeados, testáveis e
+    ajustáveis sem tocar na lógica de scoring.
+    """
+
+    # Limiares de ruído e comprimento.
+    noisy_min_length: int = 24
+    snippet_max_length: int = 220
+    question_like_max_length: int = 80
+    short_answer_max_length: int = 80
+
+    # Faixa de comprimento "preferido" por contexto de scoring.
+    variant_preferred_min: int = 24
+    variant_preferred_max: int = 220
+    rank_preferred_min: int = 40
+    rank_preferred_max: int = 260
+
+    # Densidade de termos e deduplicação por sobreposição de spans.
+    term_density_scale: int = 1000
+    dedupe_max_overlap: float = 0.65
+
+    # Classificação do nível de suporte (direct vs partial).
+    support_direct_coverage: float = 0.6
+    support_direct_score: float = 0.7
+
+    # Refinamento da seleção de claim.
+    coverage_drop_tolerance: int = 33
+    length_gain_margin: int = 20
+
+    # Poda de cauda pendente e de span.
+    dangling_comma_max_distance: int = 48
+    trim_coverage_tolerance: int = 20
+
+
+SCORING = ClaimScoringConfig()
 
 
 def _collapse_whitespace(text: str) -> str:
@@ -76,7 +126,7 @@ def _is_question_like(candidate: str) -> bool:
     lowered = stripped.lower()
     if stripped.endswith('?'):
         return True
-    return len(stripped) < 80 and lowered.startswith(
+    return len(stripped) < SCORING.question_like_max_length and lowered.startswith(
         ('qual ', 'quais ', 'como ', 'o que ', 'por que ', 'quando ', 'onde ', 'quem ')
     )
 
@@ -84,7 +134,7 @@ def _is_question_like(candidate: str) -> bool:
 def _is_noisy_claim(candidate: str) -> bool:
     if not candidate:
         return True
-    if len(candidate) < 24:
+    if len(candidate) < SCORING.noisy_min_length:
         return True
     if _is_question_like(candidate):
         return True
@@ -95,7 +145,7 @@ def _is_noisy_claim(candidate: str) -> bool:
     return candidate[0].islower()
 
 
-def _shorten_snippet(text: str, max_length: int = 220) -> str:
+def _shorten_snippet(text: str, max_length: int = SCORING.snippet_max_length) -> str:
     collapsed = _collapse_whitespace(text)
     if len(collapsed) <= max_length:
         return collapsed
@@ -149,7 +199,7 @@ def _query_phrases(question: str) -> list[tuple[str, ...]]:
     phrases: list[tuple[str, ...]] = []
     seen: set[tuple[str, ...]] = set()
     for size in range(4, 1, -1):
-        for index in range(0, max(len(tokens) - size + 1, 0)):
+        for index in range(max(len(tokens) - size + 1, 0)):
             phrase = tuple(tokens[index : index + size])
             if phrase in seen:
                 continue
@@ -168,7 +218,7 @@ def _phrase_match_score(question: str, candidate: str) -> tuple[int, int, int]:
     candidate_windows = {
         tuple(candidate_tokens[index : index + size])
         for size in range(2, min(4, len(candidate_tokens)) + 1)
-        for index in range(0, len(candidate_tokens) - size + 1)
+        for index in range(len(candidate_tokens) - size + 1)
     }
     longest = 0
     hits = 0
@@ -177,7 +227,7 @@ def _phrase_match_score(question: str, candidate: str) -> tuple[int, int, int]:
         if phrase in candidate_windows:
             longest = max(longest, len(phrase))
             hits += 1
-            for index in range(0, len(candidate_tokens) - len(phrase) + 1):
+            for index in range(len(candidate_tokens) - len(phrase) + 1):
                 if tuple(candidate_tokens[index : index + len(phrase)]) == phrase:
                     if earliest_index is None or index < earliest_index:
                         earliest_index = index
@@ -287,7 +337,7 @@ def _trim_dangling_tail(candidate: str) -> str:
     comma_index = cleaned.rfind(',')
     if (
         comma_index >= 0
-        and (len(cleaned) - comma_index) <= 48
+        and (len(cleaned) - comma_index) <= SCORING.dangling_comma_max_distance
         and not _looks_like_monetary_or_decimal_fragment(cleaned, comma_index)
     ):
         truncated = cleaned[:comma_index].strip()
@@ -309,9 +359,7 @@ def _is_administrative_prefix(candidate: str) -> bool:
         return False
     if _is_heading_like(collapsed):
         return True
-    if len(collapsed) <= 60 and collapsed == collapsed.upper() and len(collapsed.split()) >= 2:
-        return True
-    return False
+    return bool(len(collapsed) <= 60 and collapsed == collapsed.upper() and len(collapsed.split()) >= 2)
 
 
 def _leading_fragment_penalty(candidate: str) -> int:
@@ -333,13 +381,13 @@ def _claim_variant_score(question: str, query_terms: list[str], candidate: str) 
     is_complete = 1 if candidate[-1] in '.!?' else 0
     starts_clean = 1 if candidate[0].isupper() or candidate[0].isdigit() else 0
     noisy_penalty = 1 if _is_noisy_claim(candidate) else 0
-    preferred_length = 1 if 24 <= len(candidate) <= 220 else 0
-    term_density = int((len(matched_terms) * 1000) / max(len(candidate), 1))
+    preferred_length = 1 if SCORING.variant_preferred_min <= len(candidate) <= SCORING.variant_preferred_max else 0
+    term_density = int((len(matched_terms) * SCORING.term_density_scale) / max(len(candidate), 1))
     return (
         phrase_longest,
         phrase_hits,
         len(matched_terms),
-        int(round(term_coverage * 100)),
+        round(term_coverage * 100),
         -leading_fragment_penalty,
         phrase_position,
         embedding_bonus,
@@ -390,7 +438,7 @@ def _trim_claim_span(question: str, query_terms: list[str], claim_text: str) -> 
 
     window_sizes = (1, 2) if _question_needs_multiple_claims(question) else (1,)
 
-    for base in list(variants):
+    for base in variants:
         parts = [_clean_claim_candidate(part) for part in SENTENCE_SPLIT_PATTERN.split(base)]
         sentences = [part for part in parts if part]
         for start in range(len(sentences)):
@@ -439,7 +487,7 @@ def _trim_claim_span(question: str, query_terms: list[str], claim_text: str) -> 
             and item[1][-1] in '.!?'
             and item[0][0] >= max(best_phrase_longest - 1, 1)
             and item[0][2] >= minimum_matches
-            and item[0][3] >= max(best_coverage - 20, 0)
+            and item[0][3] >= max(best_coverage - SCORING.trim_coverage_tolerance, 0)
         ]
         clean_started_candidates = [
             item for item in concise_candidates if item[1][0].isupper() or item[1][0].isdigit()
@@ -492,16 +540,16 @@ def _rank_claim_candidates(chunk_text: str, question: str, query_terms: list[str
             entity_bonus = _entity_signal_bonus(variant_text)
             leading_fragment_penalty = _leading_fragment_penalty(variant_text)
             is_complete = 1 if variant_text[-1] in '.!?' else 0
-            preferred_length = 1 if 40 <= len(variant_text) <= 260 else 0
+            preferred_length = 1 if SCORING.rank_preferred_min <= len(variant_text) <= SCORING.rank_preferred_max else 0
             starts_clean = 1 if variant_text[0].isupper() or variant_text[0].isdigit() else 0
             noisy_penalty = 1 if _is_noisy_claim(variant_text) else 0
             line_count = min(variant_text.count(' - ') + variant_text.count('\n') + 1, 3)
-            term_density = int((variant_matches * 1000) / max(len(variant_text), 1))
+            term_density = int((variant_matches * SCORING.term_density_scale) / max(len(variant_text), 1))
             score_key = (
                 phrase_longest,
                 phrase_hits,
                 variant_matches,
-                int(round(variant_coverage * 100)),
+                round(variant_coverage * 100),
                 -leading_fragment_penalty,
                 phrase_position,
                 embedding_bonus,
@@ -536,7 +584,11 @@ def _citation_from_hit(note: Note, hit: SearchHit) -> Citation:
 
 
 def _support_level(hit: SearchHit, query_terms: list[str]) -> str:
-    if hit.term_coverage >= 0.6 or len(hit.matched_terms) >= min(2, len(query_terms)) or hit.score >= 0.7:
+    if (
+        hit.term_coverage >= SCORING.support_direct_coverage
+        or len(hit.matched_terms) >= min(2, len(query_terms))
+        or hit.score >= SCORING.support_direct_score
+    ):
         return 'direct'
     return 'partial'
 
@@ -552,7 +604,7 @@ def _chunk_overlap_ratio(left: SearchHit, right: SearchHit) -> float:
     return overlap / min(left_size, right_size)
 
 
-def _dedupe_hits(hits: list[SearchHit], *, max_overlap_ratio: float = 0.65) -> list[SearchHit]:
+def _dedupe_hits(hits: list[SearchHit], *, max_overlap_ratio: float = SCORING.dedupe_max_overlap) -> list[SearchHit]:
     deduped: list[SearchHit] = []
     for hit in hits:
         if any(
@@ -596,13 +648,13 @@ def _build_claims(
             selected_starts_clean = 1 if selected_text[0].isupper() or selected_text[0].isdigit() else 0
             if score_key[2] < max(selected_score[2] - 1, 1):
                 continue
-            if score_key[3] < max(selected_score[3] - 33, 0):
+            if score_key[3] < max(selected_score[3] - SCORING.coverage_drop_tolerance, 0):
                 continue
             preserves_phrase_alignment = score_key[0] >= selected_score[0] and score_key[1] >= max(selected_score[1] - 1, 0)
             is_more_direct = (
                 preserves_phrase_alignment
                 and score_key[5] > selected_score[5]
-                and len(claim_text) + 20 < len(selected_text)
+                and len(claim_text) + SCORING.length_gain_margin < len(selected_text)
             )
             if starts_clean > selected_starts_clean or (starts_clean == selected_starts_clean and is_more_direct):
                 selected_score = score_key
@@ -879,7 +931,7 @@ def answer_with_citations(
         if (
             len(query_terms) >= 3
             and best_claim_match_count <= 1
-            and len(answer) < 80
+            and len(answer) < SCORING.short_answer_max_length
             and all(claim.support_level == 'partial' for claim in claims)
         ):
             reason = 'insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity'

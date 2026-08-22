@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from free_plaud.app.config import (
     Settings,
     get_settings,
@@ -14,6 +16,11 @@ def test_settings_have_consistent_defaults() -> None:
     settings = Settings()
     assert settings.default_chunk_size > settings.default_chunk_overlap
     assert settings.retrieval_top_k >= 1
+
+
+def test_settings_reject_invalid_chunk_window() -> None:
+    with pytest.raises(ValueError, match='default_chunk_overlap deve ser menor que default_chunk_size'):
+        Settings(default_chunk_size=100, default_chunk_overlap=100)
 
 
 def test_settings_keep_runtime_data_inside_workspace() -> None:
@@ -100,6 +107,23 @@ def test_save_and_reset_user_settings_round_trip(tmp_path: Path) -> None:
     reset_user_settings(settings=settings)
 
     assert not path.exists()
+
+
+def test_save_user_settings_rejects_invalid_chunk_window_before_writing(tmp_path: Path) -> None:
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        datasets_dir=tmp_path / 'data' / 'datasets',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+    )
+
+    with pytest.raises(ValueError, match='default_chunk_overlap deve ser menor que default_chunk_size'):
+        save_user_settings({'default_chunk_size': 100, 'default_chunk_overlap': 100}, settings=settings)
+
+    assert not user_settings_path_for(settings).exists()
 
 
 def test_save_user_settings_returns_effective_env_override(tmp_path: Path, monkeypatch) -> None:

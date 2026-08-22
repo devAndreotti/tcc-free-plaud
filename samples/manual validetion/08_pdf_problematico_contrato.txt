@@ -1,0 +1,136 @@
+CONTRATO DE PRESTAÇÃO DE SERVIÇOS TÉCNICOS ESPECIALIZADOS Nº 2025/0047
+CONTRATO DE PRESTAÇÃO DE SERVIÇOS TÉCNICOS ESPECIALIZADOS Nº 2025/0047
+
+Partes: EMPRESA CONTRATANTE e FORNECEDORA LTDA
+Vigência: 01/04/2025 a 31/03/2026
+Valor total: R$ 144.000,00 (cento e quarenta e quatro mil reais)
+Tipo: Serviço contínuo — suporte e desenvolvimento
+Número de processo interno: TI-2025-REQ-0112
+
+────────────────────────────────────────────────────────────────
+Sistema de Gestão Documental v3.1 | Confidencial | Pág. 1 de 8
+────────────────────────────────────────────────────────────────
+
+CLÁUSULA 1 — DO OBJETO
+
+O presente contrato tem por objeto a prestação de serviços técnicos especializados em desenvolvimento de software, manutenção evolutiva e suporte técnico de primeiro e segundo níveis para os sistemas de gestão interna da Contratante, conforme especificações técnicas
+constantes do Anexo I deste instrumento, que passa a fazer parte integrante do presente
+contrato para todos os efeitos legais.
+
+CLÁUSULA 2 — DAS OBRIGAÇÕES DA CONTRATADA
+
+A Contratada obriga-se a:
+
+2.1. Disponibilizar equipe técnica composta por, no mínimo: um arquiteto de software
+(dedicação parcial de 40 horas mensais), dois desenvolvedores plenos (dedicação integral)
+e um analista de suporte (dedicação integral).
+
+2.2. Manter canal de atendimento ativo em dias úteis das 08h00 às 18h00, com tempo de
+primeira resposta máximo de 2 (duas) horas para incidentes classificados como críticos
+
+────────────────────────────────────────────────────────────────
+Sistema de Gestão Documental v3.1 | Confidencial | Pág. 2 de 8
+────────────────────────────────────────────────────────────────
+
+e de 8 (oito) horas úteis para incidentes de prioridade normal, conforme matriz de
+prioridades definida no Anexo II.
+
+2.3. Entregar relatório mensal de atividades até o quinto dia útil do mês seguinte ao de
+referência, contendo: horas trabalhadas por profissional, lista de chamados atendidos com
+resolução e tempo de atendimento, progresso das entregas de desenvolvimento planejadas
+e eventuais impedimentos identificados.
+
+2.4. Garantir que todo código-fonte produzido no âmbito deste contrato seja entregue à
+Contratante ao final da vigência, juntamente com documentação técnica atualizada.
+
+CLÁUSULA 3 — DAS OBRIGAÇÕES DA CONTRATANTE
+
+A Contratante obriga-se a:
+
+3.1. Fornecer à Contratada acesso aos ambientes de desenvolvimento, homologação e
+produção necessários à execução dos serviços, dentro do prazo de 5 (cinco) dias úteis
+após a assinatura deste instrumento.
+
+────────────────────────────────────────────────────────────────
+Sistema de Gestão Documental v3.1 | Confidencial | Pág. 3 de 8
+────────────────────────────────────────────────────────────────
+
+3.2. Designar um gestor do contrato responsável por validar entregas, aprovar relatórios
+mensais e centralizar a comunicação com a equipe da Contratada.
+
+3.3. Efetuar o pagamento mensal no valor de R$ 12.000,00 (doze mil reais) até o décimo
+dia útil de cada mês, mediante apresentação de nota fiscal e relatório de atividades
+aprovado pelo gestor do contrato.
+
+CLÁUSULA 4 — DA CONFIDENCIALIDADE
+
+As partes comprometem-se a manter sigilo sobre todas as informações técnicas,
+comerciais e estratégicas às quais tiverem acesso em razão deste contrato, pelo prazo
+de 3 (três) anos após o encerramento da vigência, independentemente do motivo do
+
+────────────────────────────────────────────────────────────────
+Sistema de Gestão Documental v3.1 | Confidencial | Pág. 4 de 8
+────────────────────────────────────────────────────────────────
+
+encerramento. A obrigação de confidencialidade não se aplica a informações que sejam
+de domínio público, que devam ser divulgadas por determinação legal ou judicial, ou que
+sejam desenvolvidas independentemente pela parte receptora sem uso das informações
+confidenciais recebidas.
+
+CLÁUSULA 5 — DA RESCISÃO
+
+Este contrato poderá ser rescindido por qualquer das partes mediante notificação escrita
+com antecedência mínima de 30 (trinta) dias, sem incidência de multa rescisória, desde
+que não haja descumprimento contratual.
+
+Em caso de rescisão por descumprimento, a parte infratora ficará sujeita ao pagamento
+de multa correspondente a 10% (dez por cento) do valor total remanescente do contrato.
+
+────────────────────────────────────────────────────────────────
+Sistema de Gestão Documental v3.1 | Confidencial | Pág. 5 de 8
+────────────────────────────────────────────────────────────────
+
+CLÁUSULA 6 — DAS DISPOSIÇÕES GERAIS
+
+6.1. O presente contrato é regido pelas leis da República Federativa do Brasil, elegendo
+as partes o foro da Comarca de São Paulo para dirimir eventuais controvérsias.
+
+6.2. Qualquer alteração das condições deste instrumento somente será válida mediante
+aditivo contratual assinado por representantes legais de ambas as partes.
+
+6.3. Os Anexos I (Especificações Técnicas) e II (Matriz de Prioridades) fazem parte
+integrante deste contrato.
+
+São Paulo, 28 de março de 2025.
+
+____________________________          ____________________________
+EMPRESA CONTRATANTE                    FORNECEDORA LTDA
+CNPJ: XX.XXX.XXX/0001-XX              CNPJ: YY.YYY.YYY/0001-YY
+
+────────────────────────────────────────────────────────────────
+Sistema de Gestão Documental v3.1 | Confidencial | Pág. 6 de 8
+────────────────────────────────────────────────────────────────
+
+ANEXO I — ESPECIFICAÇÕES TÉCNICAS
+
+Os serviços abrangem os seguintes sistemas e módulos:
+
+- Portal do colaborador (React + Node.js)
+- Módulo financeiro (Python + PostgreSQL)
+- Integração com ERP legado (via API REST)
+- Infraestrutura em nuvem (AWS — instâncias EC2 e RDS)
+
+────────────────────────────────────────────────────────────────
+Sistema de Gestão Documental v3.1 | Confidencial | Pág. 7 de 8
+────────────────────────────────────────────────────────────────
+
+ANEXO II — MATRIZ DE PRIORIDADES
+
+Prioridade Crítica: sistema fora do ar ou perda de dados em produção. SLA: 2h.
+Prioridade Alta: funcionalidade crítica degradada sem workaround. SLA: 4h úteis.
+Prioridade Normal: funcionalidade degradada com workaround disponível. SLA: 8h úteis.
+Prioridade Baixa: melhorias, dúvidas e solicitações não urgentes. SLA: 3 dias úteis.
+
+────────────────────────────────────────────────────────────────
+Sistema de Gestão Documental v3.1 | Confidencial | Pág. 8 de 8
+────────────────────────────────────────────────────────────────

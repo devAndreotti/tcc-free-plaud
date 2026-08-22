@@ -33,7 +33,7 @@ def _settings(tmp_path: Path) -> Settings:
 def test_corpus_runtime_reuses_embedder_and_warms_once(monkeypatch, tmp_path: Path) -> None:
     created: list[FakeEmbedder] = []
 
-    def fake_get_embedder(model_name: str, *, device: str):  # noqa: ANN001, ANN202
+    def fake_get_embedder(model_name: str, *, device: str):
         assert model_name == 'sentence-transformer:fake-runtime'
         assert device == 'cpu'
         embedder = FakeEmbedder()

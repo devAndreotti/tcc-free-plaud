@@ -297,10 +297,8 @@ Input:focus {
     height: 1;
 }
 
-#settings-answer-row,
 #settings-answer-advanced-row,
 #settings-number-row,
-#settings-path-row,
 #settings-worker-row {
     layout: grid;
     grid-size: 3 1;
@@ -309,10 +307,32 @@ Input:focus {
     margin-top: 0;
 }
 
-#settings-path-row,
-#settings-answer-row,
 #settings-worker-row {
     grid-size: 2 1;
+}
+
+#settings-answer-row,
+#settings-path-row {
+    height: 3;
+    margin-top: 0;
+}
+
+#settings-answer-section,
+#settings-answer-key-section {
+    height: auto;
+    margin-top: 0;
+}
+
+.section-label {
+    color: #bda8cf;
+    text-style: bold;
+    margin-top: 0;
+}
+
+.field-caption {
+    color: #8a7aa0;
+    margin-top: 0;
+    height: 1;
 }
 
 #settings-commit-row {

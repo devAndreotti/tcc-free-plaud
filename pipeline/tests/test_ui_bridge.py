@@ -80,7 +80,7 @@ def test_desktop_api_index_vault_returns_batch_summary(monkeypatch, tmp_path: Pa
     module = _load_ui_main(monkeypatch)
     calls: list[Path] = []
 
-    def fake_index_corpus_folder(path: Path, *, runtime):  # noqa: ANN001
+    def fake_index_corpus_folder(path: Path, *, runtime):
         calls.append(path)
         return SimpleNamespace(
             status='success',
@@ -117,7 +117,7 @@ def test_desktop_api_exposes_index_queue_methods(monkeypatch, tmp_path: Path) ->
             self.job_id = job_id
             self.status = status
 
-        def model_dump(self, mode='json'):  # noqa: ANN001, ANN202, ARG002
+        def model_dump(self, mode='json'):
             return {
                 'job_id': self.job_id,
                 'status': self.status,
@@ -135,14 +135,14 @@ def test_desktop_api_exposes_index_queue_methods(monkeypatch, tmp_path: Path) ->
                 'eta_seconds': None,
             }
 
-    def fake_start_index_job(folder_path, *, rebuild, runtime):  # noqa: ANN001, ANN202
+    def fake_start_index_job(folder_path, *, rebuild, runtime):
         started.append((str(folder_path), rebuild))
         return FakeSnapshot('job-ui')
 
-    def fake_get_index_job(job_id):  # noqa: ANN001, ANN202
+    def fake_get_index_job(job_id):
         return FakeSnapshot(job_id, status='running')
 
-    def fake_cancel_index_job(job_id):  # noqa: ANN001, ANN202
+    def fake_cancel_index_job(job_id):
         cancelled.append(job_id)
         return FakeSnapshot(job_id, status='cancelled')
 
@@ -218,7 +218,7 @@ def test_desktop_api_applies_settings_preset_and_clears_runtime(monkeypatch) -> 
         values = {'embedding_model': 'chroma-default', 'embedding_device': 'cpu'}
         changes = {}
 
-    def fake_apply_settings_preset(name: str):  # noqa: ANN202
+    def fake_apply_settings_preset(name: str):
         calls.append(name)
         return FakeResult()
 
@@ -289,7 +289,7 @@ def test_desktop_api_saves_backend_setting(monkeypatch, tmp_path: Path) -> None:
     module = _load_ui_main(monkeypatch)
     calls: list[tuple[str, object]] = []
 
-    def fake_save_catalog_setting(key: str, value: object):  # noqa: ANN001
+    def fake_save_catalog_setting(key: str, value: object):
         calls.append((key, value))
 
     monkeypatch.setattr(module, 'save_catalog_setting', fake_save_catalog_setting)
@@ -306,7 +306,7 @@ def test_desktop_api_exposes_notes_methods(monkeypatch) -> None:
     monkeypatch.setattr(
         module,
         'list_notes',
-        lambda settings=None: [  # noqa: ARG005
+        lambda settings=None: [
             SimpleNamespace(
                 model_dump=lambda mode='json': {
                     'note_id': 'nota-1',
@@ -323,7 +323,7 @@ def test_desktop_api_exposes_notes_methods(monkeypatch) -> None:
     monkeypatch.setattr(
         module,
         'get_note_detail',
-        lambda note_id, settings=None: SimpleNamespace(  # noqa: ARG005
+        lambda note_id, settings=None: SimpleNamespace(
             model_dump=lambda mode='json': {
                 'note_id': note_id,
                 'title': 'Nota 1',
@@ -340,14 +340,14 @@ def test_desktop_api_exposes_notes_methods(monkeypatch) -> None:
     monkeypatch.setattr(
         module,
         'delete_note',
-        lambda note_id, settings=None, vector_store=None: SimpleNamespace(  # noqa: ARG005
+        lambda note_id, settings=None, vector_store=None: SimpleNamespace(
             model_dump=lambda mode='json': {'ok': True, 'note_id': note_id, 'deleted_vectors': 2}
         ),
     )
     monkeypatch.setattr(
         module,
         'reindex_note',
-        lambda note_id, runtime=None: SimpleNamespace(  # noqa: ARG005
+        lambda note_id, runtime=None: SimpleNamespace(
             model_dump=lambda mode='json': {'ok': True, 'note_id': note_id, 'status': 'success', 'chunks_indexed': 2}
         ),
     )
@@ -368,7 +368,7 @@ def test_desktop_api_runs_benchmark_compare(monkeypatch) -> None:
     monkeypatch.setattr(
         module,
         'run_benchmark_compare',
-        lambda suite_path, runtime=None: calls.append(str(suite_path)) or {  # noqa: ARG005
+        lambda suite_path, runtime=None: calls.append(str(suite_path)) or {
             'ok': True,
             'comparison_id': 'cmp-ui',
             'suite_name': 'suite-ui',

@@ -1,0 +1,96 @@
+docker e containers - estudos
+
+---
+
+o que é container?
+
+processo isolado
+namespaces + cgroups
+não é VM
+
+---
+
+diferença VM x container
+VM: kernel próprio
+container: compartilha kernel do host
+
+---
+
+imagem x container
+imagem: template somente leitura
+container: instância em execução de uma imagem
+
+---
+
+comandos básicos
+docker run
+docker ps
+docker stop
+docker rm
+docker images
+docker rmi
+docker build -t nome .
+docker logs
+docker exec -it <id> bash
+
+---
+
+Dockerfile
+
+FROM, RUN, COPY, ADD, ENV, EXPOSE, CMD, ENTRYPOINT
+
+---
+
+volumes
+bind mount: pasta do host montada no container
+volume gerenciado: docker gerencia o ciclo de vida
+tmpfs: em memória, não persiste
+
+---
+
+redes
+bridge: padrão, containers se comunicam por IP interno
+host: container usa rede do host diretamente
+none: sem rede
+
+---
+
+um trecho que eu copiei do livro e vale reler:
+
+O modelo de camadas das imagens Docker é uma das características mais elegantes do sistema. Cada instrução no Dockerfile que modifica o sistema de arquivos — como RUN, COPY ou ADD — cria uma nova camada somente leitura sobre as camadas anteriores. Quando um container é iniciado, o Docker adiciona uma camada de escrita temporária no topo dessas camadas somente leitura, utilizando um mecanismo chamado copy-on-write. Isso significa que dois containers baseados na mesma imagem compartilham todas as camadas de leitura, e cada um possui apenas sua própria camada de escrita isolada. O resultado prático é uma economia significativa de espaço em disco e uma velocidade de inicialização muito maior do que a de máquinas virtuais tradicionais, que precisam copiar todo o sistema de arquivos a cada instância.
+
+---
+
+multi-stage build
+serve pra reduzir tamanho da imagem final
+compile na imagem grande, copie só o binário pra imagem menor
+
+exemplo: compilar Go em golang:1.22 e copiar binário pra scratch ou alpine
+
+---
+
+docker compose
+orquestra múltiplos containers localmente
+define serviços, redes e volumes em YAML
+não é pra produção (pra isso: kubernetes)
+
+---
+
+pendências:
+- estudar overlay network
+- entender como funciona o containerd por baixo
+- ler sobre rootless containers
+- ver como funciona buildkit
+
+---
+
+dúvida: quando usar CMD vs ENTRYPOINT?
+CMD: padrão que pode ser sobrescrito
+ENTRYPOINT: comando fixo, CMD vira argumento
+
+---
+
+links úteis:
+docs.docker.com
+play-with-docker.com
+Ivan Velichko no blog iximiuz
