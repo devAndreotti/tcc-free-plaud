@@ -138,15 +138,23 @@ def runtime_hint(report: RuntimeStatusReport) -> str:
     if report.status == 'ready':
         return 'Runtime pronto: servidor no ar e modelo instalado.'
     if report.status == 'offline':
-        return (
-            'Servidor do provider offline. Inicie o Ollama '
-            '(rode "ollama serve" ou abra o app do Ollama) e teste de novo.'
-        )
+        if report.provider == 'ollama':
+            return (
+                'Servidor do provider offline. Inicie o Ollama '
+                '(rode "ollama serve" ou abra o app do Ollama) e teste de novo.'
+            )
+        base_url = report.base_url or '(base_url nao configurada)'
+        return f'Servidor do provider {report.provider} offline em {base_url}. Verifique se ele esta no ar.'
     if report.status == 'no_model':
         installed = ', '.join(report.installed_models) if report.installed_models else 'nenhum'
+        if report.provider == 'ollama':
+            return (
+                f'Modelo configurado nao esta instalado. Instalados: {installed}. '
+                'Baixe com "provider pull <modelo>" ou aponte answer_model para um destes.'
+            )
         return (
-            f'Modelo configurado nao esta instalado. Instalados: {installed}. '
-            'Baixe com "provider pull <modelo>" ou aponte answer_model para um destes.'
+            f'Modelo configurado nao esta disponivel no provider {report.provider}. Instalados: {installed}. '
+            'Ajuste answer_model para um destes ou verifique a credencial do provider remoto.'
         )
     if report.status == 'unauthorized':
         return 'Provider remoto exige API key valida para listar e usar modelos.'

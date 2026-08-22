@@ -22,7 +22,7 @@ O modelo estrela (star schema) é a base da abordagem de Kimball e continua send
 
 A tabela fato registra eventos ou transações mensuráveis. Em um data warehouse de e-commerce, por exemplo, a tabela `fato_pedido` registraria cada item de pedido com sua quantidade, valor unitário e desconto aplicado, além de chaves para as dimensões de produto, cliente, data e canal de venda. As métricas ficam na fato; os atributos descritivos ficam nas dimensões.
 
-As vantagens do star schema são conhecidas: queries analíticas tendem a ser performáticas porque o modelo desnormalizadoda dimensão evita joins em cadeia, e a estrutura é intuitiva o suficiente para que analistas de negócio consigam entender o modelo sem conhecimento profundo de banco de dados. A desvantagem principal é a redundância de dados nas dimensões — o nome e o endereço de um cliente aparecem em todas as linhas da fato, não em uma tabela separada normalizada.
+As vantagens do star schema são conhecidas: queries analíticas tendem a ser performáticas porque o modelo desnormalizado da dimensão evita joins em cadeia, e a estrutura é intuitiva o suficiente para que analistas de negócio consigam entender o modelo sem conhecimento profundo de banco de dados. A desvantagem principal é a redundância de dados nas dimensões — o nome e o endereço de um cliente aparecem em todas as linhas da fato, não em uma tabela separada normalizada.
 
 ### 1.2 Snowflake Schema
 

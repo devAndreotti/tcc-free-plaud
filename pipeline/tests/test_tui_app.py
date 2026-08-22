@@ -418,6 +418,31 @@ def test_tui_settings_model_select_populates_from_discovery(monkeypatch, tmp_pat
     asyncio.run(run_app())
 
 
+def test_tui_settings_blank_model_blocks_save_for_generative_provider(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+
+    def fail_save_user_settings(*args, **kwargs):
+        raise AssertionError('nao deveria salvar com answer_model em branco')
+
+    monkeypatch.setattr('free_plaud.tui.app.save_user_settings', fail_save_user_settings)
+
+    async def run_app() -> None:
+        app = FreePlaudApp()
+        async with app.run_test(size=(120, 38)) as pilot:
+            await pilot.click('#nav-settings')
+            await pilot.click('#settings-provider-ollama')
+            select = app.query_one('#settings-answer-model', Select)
+            select.clear()
+            await pilot.click('#settings-save')
+            await pilot.pause(0.2)
+            output = app.query_one('#settings-output')
+            text = '\n'.join(getattr(line, 'plain', str(line)) for line in output.lines)
+            assert 'Selecione um modelo' in text
+
+    asyncio.run(run_app())
+
+
 def test_tui_settings_pane_saves_answer_api_key_to_local_env(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     saved_key: list[str] = []

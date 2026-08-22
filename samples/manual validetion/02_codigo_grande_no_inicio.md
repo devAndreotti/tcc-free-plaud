@@ -80,7 +80,7 @@ def ingest_file(path: Path) -> NoteMetadata:
     note_id = hashlib.sha256(file_hash.encode()).hexdigest()[:16]
     title = extract_title_from_markdown(body) or path.stem
     slug = slugify(title)
-    summary = ""  # TODO: implementar geração de resumo
+    summary = ""  # geração de resumo ainda não implementada
     return NoteMetadata(
         note_id=note_id,
         title=title,
@@ -109,7 +109,7 @@ O custo dessa escolha é que dois arquivos com conteúdo idêntico gerarão o me
 
 ## Próximas Etapas
 
-1. Implementar a geração de resumo (linha marcada como `TODO`).
+1. Implementar a geração de resumo (linha marcada como pendente).
 2. Adicionar suporte a extração de frontmatter YAML via `python-frontmatter`.
 3. Criar testes unitários para os casos extremos: arquivo vazio, arquivo só com frontmatter, arquivo com encoding Windows-1252.
 4. Avaliar se a função `normalize_text` deve preservar quebras de linha intencionais em blocos de código.

@@ -1003,7 +1003,7 @@ class SettingsPane(Vertical):
 
     def _current_answer_model(self) -> str:
         value = self.query_one('#settings-answer-model', Select).value
-        return '' if value is Select.BLANK else str(value).strip()
+        return '' if value is Select.BLANK or value is Select.NULL else str(value).strip()
 
     def _set_model_options(self, models: list[str], *, selected: str | None = None) -> None:
         select = self.query_one('#settings-answer-model', Select)
@@ -1043,11 +1043,14 @@ class SettingsPane(Vertical):
 
     def _save(self) -> None:
         try:
+            answer_model = self._current_answer_model()
+            if self.selected_answer_provider != 'extractive' and not answer_model:
+                raise ValueError('Selecione um modelo de resposta antes de salvar (Listar modelos ou digite um nome).')
             values = {
                 'embedding_device': self.selected_device,
                 'embedding_model': self.query_one('#settings-model', Input).value,
                 'answer_provider': self.selected_answer_provider,
-                'answer_model': self._current_answer_model(),
+                'answer_model': answer_model,
                 'answer_base_url': self.query_one('#settings-answer-base-url', Input).value.strip() or None,
                 'answer_temperature': float(self.query_one('#settings-answer-temperature', Input).value),
                 'answer_timeout_seconds': int(self.query_one('#settings-answer-timeout', Input).value),

@@ -174,9 +174,9 @@ def test_ensure_model_rejects_non_ollama_without_network(monkeypatch, tmp_path) 
     assert 'ollama' in result.error
 
 
-def _report(status, installed=None, message=None):
+def _report(status, installed=None, message=None, provider='ollama'):
     return RuntimeStatusReport(
-        provider='ollama',
+        provider=provider,
         base_url='http://localhost:11434',
         status=status,
         installed_models=installed or [],
@@ -198,6 +198,18 @@ def test_runtime_hint_no_model_lists_installed_and_pull() -> None:
 
 def test_runtime_hint_ready_is_positive() -> None:
     assert 'pronto' in runtime_hint(_report('ready')).lower()
+
+
+def test_runtime_hint_offline_non_ollama_does_not_mention_ollama() -> None:
+    hint = runtime_hint(_report('offline', provider='lmstudio')).lower()
+    assert 'ollama' not in hint
+    assert 'lmstudio' in hint
+
+
+def test_runtime_hint_no_model_non_ollama_does_not_suggest_pull() -> None:
+    hint = runtime_hint(_report('no_model', installed=['gpt-4o-mini'], provider='openai-compatible')).lower()
+    assert 'provider pull' not in hint
+    assert 'gpt-4o-mini' in hint
 
 
 def test_provider_catalog_cli_lists_presets() -> None:
