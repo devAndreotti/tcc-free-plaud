@@ -153,3 +153,10 @@ def test_answer_api_key_is_env_only_not_user_settings(tmp_path: Path, monkeypatc
     assert 'answer_api_key' not in payload
 
     get_settings.cache_clear()
+
+
+def test_sanitize_ui_sentinels_cleans_enum_strings():
+    from free_plaud.app.config import Settings
+    s = Settings(answer_model="Select.NULL", default_corpus_path="Select.BLANK")
+    assert s.answer_model == ""
+    assert s.default_corpus_path is None

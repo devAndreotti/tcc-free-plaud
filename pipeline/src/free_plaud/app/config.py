@@ -101,6 +101,18 @@ class Settings(BaseSettings):
     corpus_upsert_batch_size: int = Field(default=128, ge=1, le=1000)
     corpus_index_workers: int = Field(default=1, ge=1, le=16)
 
+    @model_validator(mode='before')
+    @classmethod
+    def sanitize_ui_sentinels(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            sanitized = dict(data)
+            for key in ('answer_model', 'answer_provider', 'embedding_model', 'default_corpus_path'):
+                val = sanitized.get(key)
+                if isinstance(val, str) and val.strip() in ('Select.NULL', 'Select.BLANK', 'null', 'None'):
+                    sanitized[key] = '' if key == 'answer_model' else None
+            return sanitized
+        return data
+
     @model_validator(mode='after')
     def validate_chunk_window(self) -> 'Settings':
         if self.default_chunk_overlap >= self.default_chunk_size:

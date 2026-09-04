@@ -35,10 +35,17 @@ app.add_typer(provider_app, name="provider")
 
 
 @app.command("doctor")
-def doctor() -> None:
+def doctor(
+    fix: bool = typer.Option(False, "--fix", help="Aplica auto-fix com preset cpu_rapido se embedding_model for fake-hash."),
+) -> None:
     """Exibe diagnostico estruturado do ambiente local."""
     settings = get_settings()
     ensure_runtime_dirs(settings)
+    if fix and settings.embedding_model == "fake-hash":
+        from free_plaud.app.settings_presets import apply_settings_preset
+        apply_settings_preset("cpu_rapido", settings=settings)
+        console.print("[green][OK][/green] Preset [bold]cpu_rapido[/bold] aplicado com sucesso.")
+        settings = get_settings()
     report = run_doctor(settings=settings)
     for line in doctor_report_lines(report):
         console.print(line)
@@ -66,3 +73,4 @@ def tui() -> None:
     from free_plaud.tui.app import main as run_tui
 
     run_tui()
+

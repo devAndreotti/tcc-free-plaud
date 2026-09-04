@@ -12,6 +12,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    pool: 'threads',
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'lcov'],
