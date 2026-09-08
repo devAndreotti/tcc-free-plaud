@@ -1,0 +1,291 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Free Plaud Architecture",
+    "subtitle": "Multimodal PKM, Dual Persistence (FTS5 + ChromaDB) & Grounded RAG with Citations",
+    "output": "docs/spec-kit/tcc-free-plaud.architecture.html",
+    "visual_preset": "blueprint",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "ui-modes",
+        "label": "Multi-Interface Ingestion & Ask",
+        "focus": ["cli_mode", "tui_mode", "desktop_mode", "core_facade"],
+        "note": "Typer CLI, Rich Menu, Textual TUI (Ask/Notes/Bench Panes), and PyWebView React 19 route to unified actions."
+      },
+      {
+        "id": "ingest-pipeline",
+        "label": "Ingestion & Dual Persistence",
+        "focus": ["core_facade", "ingest_engine", "notes_struct", "sqlite_fts", "chroma_vectors"],
+        "note": "Whisper audio, PDF, and Vault notes structured into Pydantic models, SQLite FTS5, and ChromaDB."
+      },
+      {
+        "id": "grounded-rag",
+        "label": "Hybrid RRF & Grounded Citations",
+        "focus": ["core_facade", "rag_engine", "sqlite_fts", "chroma_vectors", "llm_providers"],
+        "note": "Reciprocal Rank Fusion fuses BM25 and vector hits; strict span citations verify every claim."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "cli_mode",
+      "type": "frontend",
+      "label": "Typer CLI & Menu",
+      "sublabel": "Typer / Rich Terminal",
+      "pos": [40, 150],
+      "size": [130, 60],
+      "tag": "terminal"
+    },
+    {
+      "id": "tui_mode",
+      "type": "frontend",
+      "label": "Textual TUI",
+      "sublabel": "Ask, Notes, Bench Panes",
+      "pos": [40, 300],
+      "size": [130, 60],
+      "tag": "tui"
+    },
+    {
+      "id": "desktop_mode",
+      "type": "frontend",
+      "label": "Desktop React 19",
+      "sublabel": "PyWebView / Edge Bridge",
+      "pos": [40, 450],
+      "size": [130, 60],
+      "tag": "gui"
+    },
+    {
+      "id": "core_facade",
+      "type": "security",
+      "label": "Unified Facade",
+      "sublabel": "tui.actions / runtime",
+      "pos": [250, 300],
+      "size": [130, 60],
+      "tag": "facade"
+    },
+    {
+      "id": "ingest_engine",
+      "type": "backend",
+      "label": "Ingest & Whisper",
+      "sublabel": "CUDA 12.8 / PyPDF / MD",
+      "pos": [460, 150],
+      "size": [130, 60],
+      "tag": "ingest"
+    },
+    {
+      "id": "notes_struct",
+      "type": "backend",
+      "label": "Notes Structurer",
+      "sublabel": "Pydantic / pt-BR Normalizer",
+      "pos": [460, 300],
+      "size": [130, 60],
+      "tag": "domain"
+    },
+    {
+      "id": "rag_engine",
+      "type": "backend",
+      "label": "Grounded RAG",
+      "sublabel": "RRF & Span Citations",
+      "pos": [460, 450],
+      "size": [130, 60],
+      "tag": "rag"
+    },
+    {
+      "id": "sqlite_fts",
+      "type": "database",
+      "label": "SQLite + FTS5",
+      "sublabel": "BM25 / Chunk Offsets",
+      "pos": [670, 150],
+      "size": [130, 60],
+      "tag": "lexical"
+    },
+    {
+      "id": "chroma_vectors",
+      "type": "database",
+      "label": "ChromaDB",
+      "sublabel": "SentenceTransformers",
+      "pos": [670, 300],
+      "size": [130, 60],
+      "tag": "vector"
+    },
+    {
+      "id": "llm_providers",
+      "type": "cloud",
+      "label": "LLM Providers",
+      "sublabel": "Ollama / LMStudio / APIs",
+      "pos": [880, 450],
+      "size": [130, 60],
+      "tag": "ai"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Free Plaud System Environment",
+      "wraps": [
+        "cli_mode",
+        "tui_mode",
+        "desktop_mode",
+        "core_facade",
+        "ingest_engine",
+        "notes_struct",
+        "rag_engine",
+        "sqlite_fts",
+        "chroma_vectors"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Python Core & Storage Domain",
+      "wraps": [
+        "core_facade",
+        "ingest_engine",
+        "notes_struct",
+        "rag_engine",
+        "sqlite_fts",
+        "chroma_vectors"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "cli-to-facade",
+      "from": "cli_mode",
+      "to": "core_facade",
+      "label": "command",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [[200, 180], [315, 180]]
+    },
+    {
+      "id": "tui-to-facade",
+      "from": "tui_mode",
+      "to": "core_facade",
+      "label": "actions",
+      "variant": "emphasis"
+    },
+    {
+      "id": "desktop-to-facade",
+      "from": "desktop_mode",
+      "to": "core_facade",
+      "label": "JS bridge",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [[200, 480], [315, 480]]
+    },
+    {
+      "id": "facade-to-ingest",
+      "from": "core_facade",
+      "to": "ingest_engine",
+      "label": "ingest",
+      "fromSide": "top",
+      "toSide": "left",
+      "via": [[315, 180], [460, 180]]
+    },
+    {
+      "id": "facade-to-notes",
+      "from": "core_facade",
+      "to": "notes_struct",
+      "label": "notes"
+    },
+    {
+      "id": "facade-to-rag",
+      "from": "core_facade",
+      "to": "rag_engine",
+      "label": "ask query",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "via": [[315, 480], [460, 480]]
+    },
+    {
+      "id": "ingest-to-notes",
+      "from": "ingest_engine",
+      "to": "notes_struct",
+      "label": "raw text",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [460, 240]
+    },
+    {
+      "id": "notes-to-fts",
+      "from": "notes_struct",
+      "to": "sqlite_fts",
+      "label": "index FTS5",
+      "fromSide": "right",
+      "toSide": "left",
+      "via": [[630, 330], [630, 180]]
+    },
+    {
+      "id": "notes-to-chroma",
+      "from": "notes_struct",
+      "to": "chroma_vectors",
+      "label": "index vectors",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [[525, 380], [735, 380]]
+    },
+    {
+      "id": "fts-to-chroma",
+      "from": "sqlite_fts",
+      "to": "chroma_vectors",
+      "label": "RRF merge",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [670, 240]
+    },
+    {
+      "id": "rag-to-chroma",
+      "from": "rag_engine",
+      "to": "chroma_vectors",
+      "label": "hybrid search",
+      "fromSide": "top",
+      "toSide": "right",
+      "via": [[525, 410], [820, 410], [820, 330]]
+    },
+    {
+      "id": "rag-to-llm",
+      "from": "rag_engine",
+      "to": "llm_providers",
+      "label": "grounded prompt",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Multi-Interface Architecture",
+      "items": [
+        "Typer CLI, Rich Menu, Textual TUI (Ask/Notes/Bench Panes), and PyWebView React 19",
+        "All 4 interfaces route through tui.actions and thread-safe CorpusRuntime caching"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Multimodal & Dual Persistence",
+      "items": [
+        "Whisper audio transcription (CUDA 12.8 / faster-whisper), PyPDF, and Obsidian sanitizer",
+        "SQLite FTS5 (BM25 lexical index) and ChromaDB (SentenceTransformers cosine vectors)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Grounded RAG & Strict Citations",
+      "items": [
+        "Reciprocal Rank Fusion (RRF) combines BM25 lexical and vector candidates",
+        "Strict character-level span citations and anti-hallucination verification"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Automated Benchmark Harness",
+      "items": [
+        "Integrated harness evaluating lexical, vector, and hybrid strategies",
+        "Computes MRR, Recall@3, and average latency with JSON/CSV export reports"
+      ]
+    }
+  ]
+}

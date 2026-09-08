@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Free Plaud Corpus & Query Lifecycle",
+    "subtitle": "State transitions from document intake, background embedding, query retrieval to validated synthesis",
+    "output": "docs/spec-kit/tcc-free-plaud.lifecycle.html",
+    "viewBox": [980, 660],
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "main-lifecycle",
+        "label": "Document to Cited Answer",
+        "focus": ["queued", "processing", "indexed", "evaluating", "grounded"],
+        "note": "Document intake, STT transcription, dual indexing, RAG retrieval and verified response."
+      },
+      {
+        "id": "waiting-recovery",
+        "label": "Corpus Insufficiency & Recovery",
+        "focus": ["evaluating", "insufficient", "failed", "processing"],
+        "note": "Handling empty retrieval, missing citations and background re-indexing."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "main", "label": "Pipeline phases" },
+    { "id": "waiting", "label": "Corpus state" },
+    { "id": "exceptions", "label": "Retry & re-index" },
+    { "id": "terminal", "label": "Terminal exits" }
+  ],
+  "states": [
+    { "id": "queued", "type": "start", "label": "Intake", "sublabel": "audio/doc queued", "lane": "main", "col": 0, "step": "01", "tag": "entry" },
+    { "id": "processing", "type": "active", "label": "Processing", "sublabel": "STT & chunking", "lane": "main", "col": 1, "step": "02", "tag": "worker" },
+    { "id": "indexed", "type": "active", "label": "Indexed", "sublabel": "FTS5 + ChromaDB", "lane": "main", "col": 2, "step": "03", "tag": "storage" },
+    { "id": "evaluating", "type": "decision", "label": "Retrieving", "sublabel": "RRF hybrid fusion", "lane": "main", "col": 3, "step": "04", "tag": "rag" },
+    { "id": "grounded", "type": "success", "label": "Synthesized", "sublabel": "verified answer", "lane": "main", "col": 4, "step": "05", "tag": "done" },
+    { "id": "insufficient", "type": "waiting", "label": "Sparse Corpus", "sublabel": "no relevant spans", "lane": "waiting", "col": 1, "tag": "fallback" },
+    { "id": "failed", "type": "failure", "label": "Index Error", "sublabel": "retry extraction", "lane": "exceptions", "col": 0, "yOffset": 78, "tag": "retryable" },
+    { "id": "rejected", "type": "failure", "label": "Hallucination", "sublabel": "span audit failed", "lane": "terminal", "col": 1, "tag": "terminal" }
+  ],
+  "transitions": [
+    { "id": "eval-insufficient", "from": "evaluating", "to": "insufficient", "variant": "default", "route": "drop" },
+    { "id": "proc-failed", "from": "processing", "to": "failed", "variant": "security", "fromSide": "left", "toSide": "left", "via": [[160, 157], [160, 385]] },
+    { "id": "retry-proc", "from": "failed", "to": "processing", "variant": "emphasis", "fromSide": "left", "toSide": "top", "via": [[20, 385], [20, 80], [248, 80]] },
+    { "id": "audit-rejected", "from": "insufficient", "to": "rejected", "variant": "security", "fromSide": "bottom", "toSide": "top", "route": "straight" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Dual Index Lifecycle",
+      "items": [
+        "Ingestion pipelines stream audio to Whisper and text to normalizer",
+        "Both FTS5 and ChromaDB are updated atomically before becoming searchable",
+        "CorpusRuntime keeps in-memory state fresh without cold restarts"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Sparse Corpus Guardrail",
+      "items": [
+        "If RRF produces no hits above the confidence threshold, query routes to Sparse Corpus",
+        "System signals corpus limitation rather than generating ungrounded assumptions"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Deterministic Rejection",
+      "items": [
+        "If LLM generates citations not matching source document spans, response is flagged",
+        "Failed extractions trigger clean retry without polluting the index"
+      ]
+    }
+  ]
+}

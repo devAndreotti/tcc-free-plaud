@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Free Plaud Hybrid RAG Sequence",
+    "subtitle": "Query reception, dual retrieval (FTS5 + ChromaDB), RRF fusion, grounded synthesis and span validation",
+    "output": "docs/spec-kit/tcc-free-plaud.sequence.html",
+    "viewBox": [960, 920],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "query-retrieval",
+        "label": "Dual Retrieval & RRF",
+        "focus": ["user", "facade", "rag", "fts", "chroma"],
+        "note": "Parallel lexical BM25 and vector queries dispatched and merged via Reciprocal Rank Fusion."
+      },
+      {
+        "id": "synthesis-verify",
+        "label": "Grounded LLM & Verification",
+        "focus": ["rag", "llm", "facade", "user"],
+        "note": "Prompt synthesizes response with strict chunk citations, verified against source offsets."
+      }
+    ]
+  },
+  "participants": [
+    { "id": "user", "type": "frontend", "label": "UI Client", "sublabel": "TUI / Web" },
+    { "id": "facade", "type": "security", "label": "Facade", "sublabel": "tui.actions" },
+    { "id": "rag", "type": "backend", "label": "RAG Core", "sublabel": "RRF / spans" },
+    { "id": "fts", "type": "database", "label": "FTS5 Store", "sublabel": "BM25 index" },
+    { "id": "chroma", "type": "database", "label": "ChromaDB", "sublabel": "vectors" },
+    { "id": "llm", "type": "cloud", "label": "LLM", "sublabel": "Ollama / API" }
+  ],
+  "segments": [
+    { "from": 150, "to": 380, "label": "Dual Retrieval" },
+    { "from": 395, "to": 590, "label": "RRF Fusion" },
+    { "from": 605, "to": 830, "label": "Synthesis & Audit" }
+  ],
+  "messages": [
+    { "from": "user", "to": "facade", "y": 180, "label": "ask(query, top_k=5)", "variant": "emphasis" },
+    { "from": "facade", "to": "rag", "y": 220, "label": "execute_rag(query)", "variant": "emphasis" },
+    { "from": "rag", "to": "fts", "y": 260, "label": "bm25_search(query)", "variant": "default" },
+    { "from": "rag", "to": "chroma", "y": 300, "label": "vector_search(query)", "variant": "default" },
+    { "from": "fts", "to": "rag", "y": 340, "label": "lexical_hits[]", "variant": "return" },
+    { "from": "chroma", "to": "rag", "y": 410, "label": "vector_hits[]", "variant": "return" },
+    { "from": "rag", "to": "facade", "y": 470, "label": "rrf_fuse_and_prepare()", "variant": "default" },
+    { "from": "facade", "to": "rag", "y": 510, "label": "prompt_ready", "variant": "return" },
+    { "from": "rag", "to": "llm", "y": 560, "label": "generate(grounded_prompt)", "variant": "emphasis" },
+    { "from": "llm", "to": "rag", "y": 650, "label": "raw_response + citations", "variant": "return" },
+    { "from": "rag", "to": "facade", "y": 710, "label": "verify_span_offsets()", "variant": "emphasis" },
+    { "from": "facade", "to": "rag", "y": 745, "label": "verified_ok", "variant": "return" },
+    { "from": "rag", "to": "facade", "y": 775, "label": "final_grounded_answer", "variant": "return" },
+    { "from": "facade", "to": "user", "y": 810, "label": "render(markdown)", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "facade", "from": 174, "to": 816, "type": "security" },
+    { "participant": "rag", "from": 216, "to": 780, "type": "backend" },
+    { "participant": "fts", "from": 254, "to": 346, "type": "database" },
+    { "participant": "chroma", "from": 294, "to": 416, "type": "database" },
+    { "participant": "llm", "from": 554, "to": 656, "type": "cloud" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Parallel Dual Retrieval",
+      "items": [
+        "FTS5 executes BM25 search over lexical tokens",
+        "ChromaDB matches query embeddings via SentenceTransformers",
+        "Parallel execution bounds retrieval latency to max(FTS5, Vector)"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Reciprocal Rank Fusion",
+      "items": [
+        "Standardized RRF score formula with smoothing constant k=60",
+        "Top-k deduplicated spans formed with explicit token offsets",
+        "Zero-result fallback safely signals corpus insufficiency"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Deterministic Verification",
+      "items": [
+        "LLM responds with verbatim quotes and chunk IDs",
+        "Python runtime validates substring inclusion before rendering",
+        "Zero hallucinations reach the final presentation layer"
+      ]
+    }
+  ]
+}
