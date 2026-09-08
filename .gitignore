@@ -36,3 +36,6 @@ coverage/
 UI/test-results/
 UI/playwright-report/
 
+
+test-results/
+playwright-report/
