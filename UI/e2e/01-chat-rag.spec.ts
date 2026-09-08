@@ -15,7 +15,7 @@ test.describe('Chat & RAG E2E Flow', () => {
     await input.press('Enter');
 
     // Verifica que a mensagem enviada pelo usuário aparece na tela
-    await expect(page.locator('text=Como funciona o pipeline multimodal do Free Plaud?')).toBeVisible();
+    await expect(page.locator('.message__bubble--user').filter({ hasText: 'Como funciona o pipeline multimodal do Free Plaud?' })).toBeVisible();
 
     // Verifica resposta gerada pelo mock do bridge
     await expect(page.locator('text=Recuperação híbrida via BM25 e ChromaDB.')).toBeVisible({ timeout: 10000 });
