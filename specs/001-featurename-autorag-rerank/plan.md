@@ -1,49 +1,39 @@
-# Implementation Plan: AutoRAG Rerank Calibration & Evaluation
+# Implementation Plan: AutoRAG Rerank Calibration & Multi-Agent Execution
 
-**Branch**: `feat/spec-kit-tooling-and-diagrams` | **Date**: 2026-09-07 | **Spec**: `specs/001-featurename-autorag-rerank/spec.md`
+**Branch**: `feat/spec-kit-tooling-and-diagrams` | **Date**: 2026-09-08 | **Spec**: `specs/001-featurename-autorag-rerank/spec.md`
 
-## Summary
-Calibrar os parâmetros de fusão híbrida (Reciprocal Rank Fusion k=60 vs pesos ponderados BM25/vetorial) e padronizar métricas de avaliação de recuperação (MRR, Recall@k e latência) para validação empírica dos experimentos do TCC.
+## Multi-Agent Work Breakdown (5 Subagents)
 
-## Technical Context
-- **Language/Version**: Python 3.12+
-- **Primary Dependencies**: faster-whisper, sentence-transformers, chromadb, sqlite3 (FTS5), typer, rich, pydantic
-- **Storage**: SQLite (FTS5) + ChromaDB local
-- **Testing**: pytest (369 tests, 100% passing)
-- **Target Platform**: Windows 11 Desktop / Linux local-first
-- **Project Type**: CLI + Desktop TUI/PyWebView PKM System
-- **Performance Goals**: Benchmarks executando 50 queries em < 10s
-- **Constraints**: 100% offline/local-first, sem dependência de nuvem para recuperação
+### Subagent 1: Data Contracts & Config Engine
+- **Responsibility**: Schemas Pydantic, parametrização dinâmica de RRF e persistência de settings.
+- **Artifacts**:
+  - `pipeline/src/free_plaud/rag/fusion.py` (ou `retrieval/fusion.py` / `retrieval/search.py`)
+  - `pipeline/src/free_plaud/app/settings_catalog.py`
+  - `pipeline/src/free_plaud/benchmark/metrics.py` (schemas de resultados)
 
-## Constitution Check
-- [x] Local-first: zero dados enviados a servidores externos durante a recuperação e indexação.
-- [x] Dual persistence: FTS5 e ChromaDB mantidos sincronizados no benchmark.
-- [x] Strict Span Citations: preservação de chunk_ids e offsets para checagem determinística.
-- [x] Quality Gates & Ratchet: testes e lint sem regressão.
+### Subagent 2: Hybrid Retrieval & RRF Core
+- **Responsibility**: Algoritmo de Reciprocal Rank Fusion com fator $k$ dinâmico e pesos de fusão.
+- **Artifacts**:
+  - `pipeline/src/free_plaud/retrieval/search.py` (`hybrid_search`, constante $k$)
+  - `pipeline/src/free_plaud/retrieval/rag.py` (encaminhamento de parâmetros)
+  - `pipeline/tests/test_rag.py` (testes de calibração de $k$)
 
-## Project Structure
-```text
-specs/001-featurename-autorag-rerank/
-├── spec.md
-├── plan.md
-├── research.md
-├── data-model.md
-├── quickstart.md
-└── contracts/
-    └── benchmark-cli.md
-```
+### Subagent 3: Benchmark Harness & Evaluation Suite
+- **Responsibility**: Runner comparativo (lexical vs vector vs hybrid) e cálculo de métricas (MRR, Recall@3, Recall@5, latência).
+- **Artifacts**:
+  - `pipeline/src/free_plaud/benchmark/runners.py`
+  - `pipeline/src/free_plaud/benchmark/metrics.py`
+  - `pipeline/tests/test_benchmark.py`
 
-## Source Code Structure
-```text
-pipeline/
-├── src/free_plaud/
-│   ├── benchmark/
-│   │   ├── runner.py
-│   │   └── metrics.py
-│   ├── rag/
-│   │   ├── fusion.py
-│   │   └── retrieval.py
-│   └── cli/
-└── tests/
-    └── test_benchmark.py
-```
+### Subagent 4: CLI, TUI & Facade Integration
+- **Responsibility**: Comandos CLI Typer (`fp benchmark run`), menus interativos e facade `tui.actions`.
+- **Artifacts**:
+  - `pipeline/src/free_plaud/cli.py`
+  - `pipeline/src/free_plaud/benchmark/cli.py`
+  - `pipeline/src/free_plaud/services/corpus.py`
+
+### Subagent 5: Validation, Experiment Docs & Quality Gate Ratchet
+- **Responsibility**: Execução da suíte completa de testes, geração de relatório em `docs/experimentos/` e validação do ratchet.
+- **Artifacts**:
+  - `docs/experimentos/15_calibracao_rrf_tcc.md`
+  - Quality Gate audit (`doctor.cjs`, `policy.json`, baseline ratchet)
