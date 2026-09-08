@@ -12,7 +12,9 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    pool: 'threads',
+    include: ['src/**/*.test.{ts,tsx}'],
+    exclude: ['node_modules', 'dist', 'e2e/**'],
+    testTimeout: 15000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'lcov'],
