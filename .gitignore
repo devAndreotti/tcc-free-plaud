@@ -31,3 +31,8 @@ book/
 coverage/
 .quality-gate/state.json
 .quality-gate/reports/
+
+# Playwright test results
+UI/test-results/
+UI/playwright-report/
+
