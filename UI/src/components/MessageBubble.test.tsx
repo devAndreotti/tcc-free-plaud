@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import MessageBubble, { TypingIndicator, MessageData } from './MessageBubble';
+import MessageBubble, { TypingIndicator } from './MessageBubble';
+import type { MessageData } from './MessageBubble';
 
 describe('MessageBubble', () => {
   it('renderiza mensagem do usuario com icone de usuario', () => {
