@@ -14,6 +14,8 @@ Comandos:
   menu    abre o menu terminal numerado
   app     builda o React e abre o app integrado PyWebView
   front   roda o Vite com mock de desenvolvimento
+  doctor  executa diagnostico estruturado do ambiente
+  bench   executa o benchmark experimental
   test    roda os testes do backend
 
 Exemplos:
@@ -41,6 +43,12 @@ case "$cmd" in
     ;;
   front | dev)
     npm --prefix "$UI" run dev "$@"
+    ;;
+  doctor)
+    (cd "$PIPELINE" && uv run free-plaud doctor "$@")
+    ;;
+  bench)
+    (cd "$PIPELINE" && uv run free-plaud benchmark "$@")
     ;;
   test)
     (cd "$PIPELINE" && uv run pytest "$@")
