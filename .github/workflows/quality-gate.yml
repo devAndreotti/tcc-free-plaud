@@ -96,6 +96,10 @@ jobs:
       - name: Install Python dependencies
         working-directory: pipeline
         run: uv sync --locked --dev --extra audio
+      - name: Install microphone runtime library
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libportaudio2
       - name: Python tests and coverage
         working-directory: pipeline
         run: |

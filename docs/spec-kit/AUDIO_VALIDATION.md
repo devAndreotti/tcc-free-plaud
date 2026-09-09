@@ -50,11 +50,22 @@ Machine-readable reports remain in ignored `data/results/audio/evaluation-*.json
 
 ## Automated gates and delivery
 
-Initial full backend suite: 406 passed, 88.2% coverage; ratchet passed without
-changing baselines. After boundary/integration changes: 17 VAD and six integration
-tests passed. Quality Gate doctor: 9/9; script tests: 64/64. Final rerun pending.
+Final backend suite on the integrated branch: 432 passed. The 17 VAD tests also
+passed through the requested command from the worktree root. Coverage: 89.5%
+overall; audio modules reached 91.3% in the preceding report. Ratchet passed
+without changing any baseline. Quality Gate doctor: 9/9; script tests: 64/64.
+Ruff reports zero errors; all 31 changed Python files pass formatting checks.
+Wheel/sdist builds, CLI smoke and audio model/device doctor checks passed.
+The real CLI transcribed the Portuguese fixture with `--device auto`, reported
+CUDA and persisted native word timestamps. Linux CI installs `libportaudio2`
+for sounddevice, as required by its [installation guide](https://python-sounddevice.readthedocs.io/en/latest/installation.html).
 
-Known external blocker: UI dependency audit reported high-severity js-yaml
-GHSA-2883-xcg3-v3hh and moderate issues. UI dependency changes are outside this
-worktree's scope. No merge is permitted until the required security check passes.
-PR, CI/SonarCloud babysit and merge evidence will be added after local validation.
+UI lint, 12 Vitest tests and build passed. Seven Playwright tests passed against
+the isolated Vite server with mocked IPC. Console logs expose a pre-existing
+missing `scanVault` mock; these assertions do not prove a full live desktop flow.
+
+The initial high-severity js-yaml audit failure was fixed upstream in main and
+integrated without changing UI dependencies in this PR. The repeated audit passed
+the high-severity threshold; three moderate Vitest-related findings remain.
+Python audit reported no known vulnerabilities. Docker gate is skipped because
+this repository has no Docker files. PR and CI/SonarCloud evidence remain pending.

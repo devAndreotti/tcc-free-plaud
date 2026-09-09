@@ -27,15 +27,14 @@
 - [x] Implementar runtime ONNX leve para SenseVoice e Moonshine convivendo com Faster-Whisper.
 - [x] Implementar limpeza conservadora de áudio/transcrição, preservando original e timestamps.
 - [x] Expandir testes automatizados de áudio/VAD e fixtures de avaliação reproduzíveis em `pipeline/tests/test_audio_vad.py` e arquivos auxiliares.
-- [ ] Concluir atualização das tarefas da Worktree 1 com Quality Gate final e evidências de entrega.
+- [x] Atualizar as tarefas da Worktree 1 com evidências de implementação e Quality Gate local.
 
-Evidência parcial: 406 testes Python, 17 testes VAD após correção de cortes,
-6 testes adicionais de integração e 64 testes de scripts passaram. Inferência
-real validada em SenseVoice/Moonshine CPU e Whisper small CPU/CUDA. Captura real
-de 3 segundos produziu 47.398 amostras mono/16 kHz, sem fala detectada. Avaliação
-FLEURS: 54 execuções nos três modos. Resultados e limitações em
-`docs/spec-kit/AUDIO_VALIDATION.md`. Gate final, PR/CI e merge ainda pendentes.
-
+Evidência local: 432 testes Python, 17 testes VAD pela raiz, 64 testes de
+scripts, 12 testes UI e 7 E2E passaram. Cobertura 89,5%; ratchet e Ruff passaram;
+doctor do Quality Gate 9/9. Inferência real em SenseVoice/Moonshine CPU e
+Whisper small CPU/CUDA. Microfone: 47.398 amostras mono/16 kHz, sem fala detectada.
+Avaliação FLEURS: 54 execuções. Detalhes e limitações em
+`docs/spec-kit/AUDIO_VALIDATION.md`. PR/CI/SonarCloud e merge ainda pendentes.
 
 ---
 
