@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
 
-from free_plaud.app.config import Settings
+from free_plaud.app.config import USER_SETTING_FIELDS, Settings
 from free_plaud.app.settings_catalog import (
+    SETTING_SPECS,
     get_setting_spec,
     save_catalog_setting,
     settings_catalog_payload,
@@ -79,6 +80,25 @@ def test_save_catalog_setting_uses_user_settings_or_local_env(tmp_path: Path, mo
     assert payload['retrieval_top_k'] == 7
     assert 'answer_api_key' not in payload
     assert 'FREE_PLAUD_ANSWER_API_KEY=sk-catalog-test' in (tmp_path / 'pipeline' / '.env').read_text(encoding='utf-8')
+
+
+def test_save_catalog_setting_accepts_audio_fields(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+
+    save_catalog_setting('audio_model', 'moonshine-tiny-en', settings=settings)
+    save_catalog_setting('audio_language', 'en', settings=settings)
+    save_catalog_setting('audio_device', 'cpu', settings=settings)
+
+    payload = json.loads((tmp_path / 'data' / 'results' / 'user_settings.json').read_text(encoding='utf-8'))
+    assert payload['audio_model'] == 'moonshine-tiny-en'
+    assert payload['audio_language'] == 'en'
+    assert payload['audio_device'] == 'cpu'
+
+
+def test_user_setting_fields_covers_all_catalog_specs() -> None:
+    catalog_keys = {spec.key for spec in SETTING_SPECS if spec.storage == 'user_settings'}
+    missing = catalog_keys - USER_SETTING_FIELDS
+    assert not missing, f'Specs em user_settings sem chave registrada em USER_SETTING_FIELDS: {missing}'
 
 
 def test_get_setting_spec_rejects_unknown_key() -> None:

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bridge, type IndexJobSnapshot } from '../services/bridge';
 import Dropzone, { type DropzoneToast } from './Dropzone';
 import ToastStack from './ToastStack';
+import { AlertTriangleIcon, ClockIcon, EyeIcon, FileIcon, FolderIcon, GraphIcon, PlayIcon, QueueIcon, StopIcon, ZapIcon } from './Icons';
 
 const isActiveJob = (snapshot: IndexJobSnapshot | null) => snapshot?.status === 'running';
 
@@ -119,16 +120,16 @@ const QueuePanel = () => {
           </div>
           <div className="queue-panel__actions">
             <button type="button" className="queue-panel__button" onClick={chooseFolder} disabled={isBusy || isActiveJob(job)}>
-              Escolher pasta
+              <FolderIcon size={16} /><span>Escolher pasta</span>
             </button>
             <button type="button" className="queue-panel__button" onClick={startJob} disabled={isBusy || isActiveJob(job)}>
-              Indexar
+              <PlayIcon size={16} /><span>Indexar</span>
             </button>
             <button type="button" className="queue-panel__button queue-panel__button--danger" onClick={cancelJob} disabled={isBusy || !isActiveJob(job)}>
-              Cancelar
+              <StopIcon size={16} /><span>Cancelar</span>
             </button>
             <button type="button" className="queue-panel__button" onClick={toggleWatcher} disabled={!folderPath && !watcherActive}>
-              {watcherActive ? 'Parar monitoramento' : 'Monitorar pasta'}
+              <EyeIcon size={16} /><span>{watcherActive ? 'Parar monitoramento' : 'Monitorar pasta'}</span>
             </button>
           </div>
         </div>
@@ -160,42 +161,54 @@ const QueuePanel = () => {
             </div>
 
             <dl className="queue-panel__metrics">
-              <div>
+              <div className="queue-panel__metric-card">
+                <QueueIcon size={16} className="queue-panel__metric-icon" />
                 <dt>fase</dt>
                 <dd>{job.progress?.phase ?? job.status}</dd>
               </div>
-              <div>
+              <div className="queue-panel__metric-card">
+                <FileIcon size={16} className="queue-panel__metric-icon" />
                 <dt>progresso</dt>
                 <dd>{progressText}</dd>
               </div>
-              <div>
+              <div className="queue-panel__metric-card">
+                <ZapIcon size={16} className="queue-panel__metric-icon" />
                 <dt>arquivos/s</dt>
                 <dd>{formatRate(job.files_per_second, 'arquivos/s')}</dd>
               </div>
-              <div>
+              <div className="queue-panel__metric-card">
+                <GraphIcon size={16} className="queue-panel__metric-icon" />
                 <dt>chunks/s</dt>
                 <dd>{formatRate(job.chunks_per_second, 'chunks/s')}</dd>
               </div>
-              <div>
+              <div className="queue-panel__metric-card">
+                <ClockIcon size={16} className="queue-panel__metric-icon" />
                 <dt>ETA</dt>
                 <dd>{job.eta_seconds == null ? '-' : `${job.eta_seconds}s`}</dd>
               </div>
             </dl>
 
-            <div
-              className="queue-panel__progress"
-              role="progressbar"
-              aria-label="Progresso do job"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(progressPercent)}
-            >
+            <div className="queue-panel__progress-row">
               <div
-                className="queue-panel__progress-bar"
-                style={{
-                  width: `${progressPercent}%`,
-                }}
-              />
+                className="queue-panel__progress"
+                role="progressbar"
+                aria-label="Progresso do job"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progressPercent)}
+              >
+                {isActiveJob(job) && progressPercent === 0 ? (
+                  <div className="queue-panel__progress-bar queue-panel__progress-bar--indeterminate" />
+                ) : (
+                  <div
+                    className="queue-panel__progress-bar"
+                    style={{
+                      width: `${progressPercent}%`,
+                    }}
+                  />
+                )}
+              </div>
+              <span className="queue-panel__progress-label">{Math.round(progressPercent)}%</span>
             </div>
 
             <div className="queue-panel__details">
@@ -207,9 +220,12 @@ const QueuePanel = () => {
               <h2>Últimos erros</h2>
               {job.last_errors.length > 0 ? (
                 job.last_errors.map((error) => (
-                  <article key={`${error.source_path}-${error.message}`} className="queue-panel__error">
-                    <code>{error.source_path}</code>
-                    <p>{error.message}</p>
+                  <article key={`${error.source_path}-${error.message}`} className="queue-panel__error" role="alert">
+                    <AlertTriangleIcon size={16} />
+                    <div className="queue-panel__error-body">
+                      <span className="queue-panel__error-path">{error.source_path}</span>
+                      <p>{error.message}</p>
+                    </div>
                   </article>
                 ))
               ) : (
@@ -217,6 +233,13 @@ const QueuePanel = () => {
               )}
             </section>
           </section>
+        ) : isBusy ? (
+          <div className="queue-panel__empty queue-panel__empty--busy">
+            <div className="queue-panel__progress" role="status" aria-label="Preparando indexação">
+              <div className="queue-panel__progress-bar queue-panel__progress-bar--indeterminate" />
+            </div>
+            <p>Preparando job de indexação…</p>
+          </div>
         ) : (
           <div className="queue-panel__empty">Nenhum job iniciado nesta sessão.</div>
         )}

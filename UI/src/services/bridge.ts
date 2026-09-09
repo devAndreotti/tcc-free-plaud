@@ -109,6 +109,24 @@ export interface IndexJobSnapshot {
   eta_seconds: number | null;
 }
 
+/** Resultado de transcricao retornado ao final de um job de audio concluido */
+export interface AudioTranscriptionResult {
+  text: string;
+  language: string;
+  duration_seconds: number;
+}
+
+/** Snapshot de um job de gravacao (microfone) + transcricao local */
+export interface AudioJobSnapshot {
+  job_id: string;
+  status: 'recording' | 'queued' | 'transcribing' | 'completed' | 'failed' | 'cancelled' | string;
+  source_path: string;
+  samples_captured: number;
+  error_code: string | null;
+  message: string | null;
+  result: AudioTranscriptionResult | null;
+}
+
 export interface BackendSettings {
   answer_provider: string;
   answer_model: string;
@@ -356,6 +374,18 @@ interface PythonApi {
   /** Solicita cancelamento cooperativo de job de indexação. */
   cancelIndexJob?: (jobId: string) => Promise<IndexJobSnapshot>;
 
+  /** Inicia gravação do microfone padrão do sistema. */
+  startAudioCapture?: () => Promise<AudioJobSnapshot>;
+
+  /** Consulta status/resultado de um job de gravação+transcrição. */
+  getAudioCapture?: (jobId: string) => Promise<AudioJobSnapshot>;
+
+  /** Encerra a gravação e enfileira a transcrição local. */
+  stopAudioCapture?: (jobId: string) => Promise<AudioJobSnapshot>;
+
+  /** Cancela gravação ou transcrição em andamento. */
+  cancelAudioCapture?: (jobId: string) => Promise<AudioJobSnapshot>;
+
   /** Retorna resumo das configurações/backend para o modal. */
   getBackendSettings?: () => Promise<BackendSettings>;
 
@@ -576,6 +606,20 @@ const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobS
   eta_seconds: status === 'running' ? 2 : 0,
 });
 
+const mockAudioJob = (status: AudioJobSnapshot['status'] = 'recording'): AudioJobSnapshot => ({
+  job_id: 'audio-mock',
+  status,
+  source_path: 'C:\\Users\\usuario\\AppData\\audio\\recordings\\audio-mock.wav',
+  samples_captured: status === 'recording' ? 16_000 : 48_000,
+  error_code: null,
+  message: null,
+  result: status === 'completed' ? {
+    text: '(mock) transcrição de exemplo gerada em ambiente de desenvolvimento.',
+    language: 'pt',
+    duration_seconds: 3,
+  } : null,
+});
+
 // ─── Serviço de bridge exportado ─────────────────────────────────────────────
 let mockWatcherActive = false;
 let mockWatcherDirectory: string | null = null;
@@ -696,6 +740,40 @@ export const bridge = {
     }
     console.debug(`[Bridge Mock] cancelIndexJob: ${jobId}`);
     return mockIndexJob('cancelled');
+  },
+
+  startAudioCapture: async (): Promise<AudioJobSnapshot> => {
+    if (isDesktopApp() && window.pywebview?.api.startAudioCapture) {
+      return window.pywebview.api.startAudioCapture();
+    }
+    console.debug('[Bridge Mock] startAudioCapture');
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return mockAudioJob('recording');
+  },
+
+  getAudioCapture: async (jobId: string): Promise<AudioJobSnapshot> => {
+    if (isDesktopApp() && window.pywebview?.api.getAudioCapture) {
+      return window.pywebview.api.getAudioCapture(jobId);
+    }
+    console.debug(`[Bridge Mock] getAudioCapture: ${jobId}`);
+    return mockAudioJob('completed');
+  },
+
+  stopAudioCapture: async (jobId: string): Promise<AudioJobSnapshot> => {
+    if (isDesktopApp() && window.pywebview?.api.stopAudioCapture) {
+      return window.pywebview.api.stopAudioCapture(jobId);
+    }
+    console.debug(`[Bridge Mock] stopAudioCapture: ${jobId}`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return mockAudioJob('completed');
+  },
+
+  cancelAudioCapture: async (jobId: string): Promise<AudioJobSnapshot> => {
+    if (isDesktopApp() && window.pywebview?.api.cancelAudioCapture) {
+      return window.pywebview.api.cancelAudioCapture(jobId);
+    }
+    console.debug(`[Bridge Mock] cancelAudioCapture: ${jobId}`);
+    return mockAudioJob('cancelled');
   },
 
   startWatcher: async (folderPath: string): Promise<WatcherStartResult> => {
@@ -834,6 +912,53 @@ export const bridge = {
           value: 4,
           display_value: '4',
           recommended: 4,
+        }),
+        mockSettingRow({
+          index: 5,
+          key: 'audio_model',
+          label: 'Modelo de transcrição (voz)',
+          description: 'Modelo local usado para transcrever o áudio gravado no chat.',
+          group: 'Áudio',
+          value_type: 'enum',
+          layer: 'simple',
+          value: 'whisper-small',
+          display_value: 'whisper-small',
+          options: [
+            { value: 'whisper-small', label: 'Whisper Small (multilíngue)' },
+            { value: 'moonshine-tiny-en', label: 'Moonshine Tiny (inglês)' },
+            { value: 'sensevoice-small', label: 'SenseVoice Small' },
+            { value: 'sensevoice-gguf-q8', label: 'SenseVoice GGUF Q8' },
+          ],
+          recommended: 'whisper-small',
+        }),
+        mockSettingRow({
+          index: 6,
+          key: 'audio_language',
+          label: 'Idioma da transcrição',
+          description: 'Código de idioma passado ao modelo de voz (ex.: pt, en).',
+          group: 'Áudio',
+          value_type: 'string',
+          layer: 'simple',
+          value: 'pt',
+          display_value: 'pt',
+          recommended: 'pt',
+        }),
+        mockSettingRow({
+          index: 7,
+          key: 'audio_device',
+          label: 'Device de transcrição',
+          description: 'Onde roda o modelo de voz quando ele suporta device.',
+          group: 'Áudio',
+          value_type: 'enum',
+          layer: 'simple',
+          value: 'auto',
+          display_value: 'auto',
+          options: [
+            { value: 'auto', label: 'Auto' },
+            { value: 'cpu', label: 'CPU' },
+            { value: 'cuda', label: 'CUDA' },
+          ],
+          recommended: 'auto',
         }),
       ],
     };

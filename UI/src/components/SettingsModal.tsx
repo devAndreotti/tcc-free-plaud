@@ -10,6 +10,20 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
+// Chaves do catálogo que pertencem à aba IA (o resto de layer não-secreto vai para Avançado)
+const IA_CATALOG_KEYS = ['answer_provider', 'answer_model', 'answer_base_url'];
+
+type SettingsTab = 'geral' | 'vault' | 'ia' | 'voz' | 'avancado' | 'aparencia';
+
+const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'geral', label: 'Geral' },
+  { id: 'vault', label: 'Vault' },
+  { id: 'ia', label: 'IA' },
+  { id: 'voz', label: 'Voz' },
+  { id: 'avancado', label: 'Avançado' },
+  { id: 'aparencia', label: 'Aparência' },
+];
+
 const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const [apiKey, setApiKey] = useState('');
@@ -22,7 +36,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [isListingModels, setIsListingModels] = useState(false);
   const [modelDiscovery, setModelDiscovery] = useState<ModelDiscoveryResult | null>(null);
   const [isIndexingVault, setIsIndexingVault] = useState(false);
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>('voz');
   const [operationStatus, setOperationStatus] = useState('');
 
   // Consome o contexto global do vault
@@ -131,7 +145,11 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
       setOperationStatus('Configurações do backend salvas.');
     } catch (error) {
       console.error('[SettingsModal] Erro ao salvar settings do backend:', error);
-      setOperationStatus('Erro ao salvar configurações do backend.');
+      setOperationStatus(
+        error instanceof Error
+          ? `Erro ao salvar configurações: ${error.message}`
+          : 'Erro ao salvar configurações do backend.'
+      );
     } finally {
       setIsSavingBackendSettings(false);
     }
@@ -261,8 +279,11 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
   if (!isOpen) return null;
 
-  const simpleRows = backendSettings?.settings_catalog.filter((row) => row.layer === 'simple' && !row.secret) ?? [];
-  const advancedRows = backendSettings?.settings_catalog.filter((row) => row.layer === 'advanced' && !row.secret) ?? [];
+  const audioRows = backendSettings?.settings_catalog.filter((row) => row.group === 'Áudio' && !row.secret) ?? [];
+  const iaCatalogRows = backendSettings?.settings_catalog.filter((row) => IA_CATALOG_KEYS.includes(row.key) && !row.secret) ?? [];
+  const advancedRows = backendSettings?.settings_catalog.filter(
+    (row) => !row.secret && row.group !== 'Áudio' && !IA_CATALOG_KEYS.includes(row.key)
+  ) ?? [];
 
   // Renderiza diretamente no document.body via Portal.
   // O overlay usa display:flex para centralizar o modal de forma confiável.
@@ -271,7 +292,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
       {/* Janela do modal — filho direto do overlay flex */}
       <div
         ref={modalRef}
-        className="modal"
+        className="modal modal--wide"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"
@@ -291,308 +312,314 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
           </button>
         </div>
 
-        {/* Corpo do modal */}
-        <div className="modal__body">
-
-          {/* Seção: Vault */}
-          <section className="settings-section" aria-labelledby="settings-vault">
-            <h3 id="settings-vault" className="settings-section__title">
-              Vault
-            </h3>
-
-            <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-              <div className="settings-item__info">
-                <span className="settings-item__label">Pasta de destino</span>
-                <span className="settings-item__description">
-                  Diretório onde os arquivos gerados serão salvos
-                </span>
-              </div>
-
-              {/* Campo de caminho + botão de seleção */}
-              <div className="vault-picker" role="group" aria-label="Selecionar pasta de destino">
-                <input
-                  id="input-vault-path"
-                  type="text"
-                  className="vault-picker__input"
-                  value={vaultPath}
-                  placeholder="Nenhuma pasta selecionada"
-                  readOnly
-                  aria-label="Caminho da pasta de destino"
-                  title={vaultPath || 'Nenhuma pasta selecionada'}
-                />
-                <button
-                  id="btn-select-vault"
-                  type="button"
-                  className="vault-picker__btn"
-                  onClick={handleSelectVault}
-                  disabled={isSelectingVault}
-                  aria-label="Selecionar pasta de destino"
-                >
-                  {isSelectingVault ? 'Selecionando…' : 'Selecionar'}
-                </button>
-                <button
-                  id="btn-index-vault"
-                  type="button"
-                  className="vault-picker__btn"
-                  onClick={handleIndexVault}
-                  disabled={!vaultPath || isIndexingVault}
-                  aria-label="Indexar corpus"
-                >
-                  {isIndexingVault ? 'Indexando…' : 'Indexar'}
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <div className="settings-divider" aria-hidden="true" />
-
-          <section className="settings-section" aria-labelledby="settings-doctor">
-            <h3 id="settings-doctor" className="settings-section__title">
-              Doctor
-            </h3>
-            <div className="settings-item settings-item--stacked">
-              <div className="settings-item__info">
-                <span className="settings-item__label">
-                  status: {backendSettings?.doctor?.status ?? 'indisponível'}
-                </span>
-                <span className="settings-item__description">
-                  checks: {backendSettings?.doctor?.ok_count ?? 0} ok · {backendSettings?.doctor?.warning_count ?? 0} warning · {backendSettings?.doctor?.error_count ?? 0} error · {backendSettings?.doctor?.latency_ms ?? 0} ms
-                </span>
-              </div>
-              {backendSettings?.doctor?.checks.slice(0, 6).map((check) => (
-                <span
-                  key={check.code}
-                  className={check.status === 'ok' ? 'settings-inline-status' : 'settings-warning'}
-                >
-                  {check.code}: {check.status} - {check.message}
-                </span>
-              ))}
-            </div>
-          </section>
-
-          <div className="settings-divider" aria-hidden="true" />
-
-          <section className="settings-section" aria-labelledby="settings-presets">
-            <h3 id="settings-presets" className="settings-section__title">
-              Presets
-            </h3>
-            {backendSettings?.settings_presets.map((preset) => (
-              <div key={preset.key} className="settings-item settings-item--stacked">
-                <div className="settings-item__info">
-                  <span className="settings-item__label">{preset.label}</span>
-                  <span className="settings-item__description">{preset.description}</span>
-                  <span className="settings-inline-status">
-                    {Object.entries(preset.values).map(([key, value]) => `${key}=${String(value)}`).join(' · ')}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="vault-picker__btn settings-save-wide"
-                  onClick={() => handleApplyPreset(preset.key)}
-                  disabled={Boolean(applyingPreset)}
-                  aria-label={`Aplicar preset ${preset.label}`}
-                >
-                  {applyingPreset === preset.key ? 'Aplicando…' : 'Aplicar'}
-                </button>
-              </div>
-            ))}
-          </section>
-
-          <div className="settings-divider" aria-hidden="true" />
-
-          {/* Seção: Backend simples */}
-          <section className="settings-section" aria-labelledby="settings-simple">
-            <h3 id="settings-simple" className="settings-section__title">
-              Simples
-            </h3>
-
-            {simpleRows.map(renderSettingRow)}
-          </section>
-
-          <div className="settings-divider" aria-hidden="true" />
-
-          <section className="settings-section" aria-labelledby="settings-advanced">
-            <div className="settings-section__header">
-              <h3 id="settings-advanced" className="settings-section__title">
-                Avançado
-              </h3>
+        {/* Corpo do modal: navegação lateral + painel da aba ativa */}
+        <div className="modal__body modal__body--settings">
+          <nav className="settings-nav" aria-label="Categorias de configuração">
+            {SETTINGS_TABS.map((tab) => (
               <button
-                id="settings-advanced-toggle"
+                key={tab.id}
                 type="button"
-                className="vault-picker__btn"
-                onClick={() => setShowAdvancedSettings((value) => !value)}
-                aria-expanded={showAdvancedSettings}
+                className={`settings-nav__item${activeTab === tab.id ? ' settings-nav__item--active' : ''}`}
+                aria-current={activeTab === tab.id ? 'page' : undefined}
+                onClick={() => setActiveTab(tab.id)}
               >
-                {showAdvancedSettings ? 'Ocultar' : 'Mostrar'}
+                {tab.label}
               </button>
-            </div>
+            ))}
+          </nav>
 
-            {showAdvancedSettings && advancedRows.map(renderSettingRow)}
+          <div className="settings-panel">
+            {activeTab === 'geral' && (
+              <section className="settings-section" aria-labelledby="settings-doctor">
+                <h3 id="settings-doctor" className="settings-section__title">
+                  Doctor
+                </h3>
+                {backendSettings ? (
+                  <div className="settings-item settings-item--stacked">
+                    <div className="settings-item__info">
+                      <span className="settings-item__label">
+                        status: {backendSettings.doctor?.status ?? 'indisponível'}
+                      </span>
+                      <span className="settings-item__description">
+                        checks: {backendSettings.doctor?.ok_count ?? 0} ok · {backendSettings.doctor?.warning_count ?? 0} warning · {backendSettings.doctor?.error_count ?? 0} error · {backendSettings.doctor?.latency_ms ?? 0} ms
+                      </span>
+                    </div>
+                    {backendSettings.doctor?.checks.slice(0, 6).map((check) => (
+                      <span
+                        key={check.code}
+                        className={check.status === 'ok' ? 'settings-inline-status' : 'settings-warning'}
+                      >
+                        {check.code}: {check.status} - {check.message}
+                      </span>
+                    ))}
+                    <span className="settings-inline-status">
+                      corpus: {backendSettings.notes_count} notas · {backendSettings.sqlite_chunks_count} chunks
+                    </span>
+                  </div>
+                ) : (
+                  <div className="settings-item settings-item--stacked" aria-label="Carregando diagnóstico">
+                    <div className="skeleton-box skeleton-box--path" />
+                    <div className="skeleton-box skeleton-box--meta" />
+                  </div>
+                )}
+              </section>
+            )}
 
-            <button
-              id="btn-save-backend-settings"
-              type="button"
-              className="vault-picker__btn settings-save-wide"
-              onClick={handleSaveBackendSettings}
-              disabled={!backendSettings || isSavingBackendSettings}
-              aria-label="Salvar configurações do backend"
-            >
-              {isSavingBackendSettings ? 'Salvando…' : 'Salvar backend'}
-            </button>
-          </section>
+            {activeTab === 'vault' && (
+              <section className="settings-section" aria-labelledby="settings-vault">
+                <h3 id="settings-vault" className="settings-section__title">
+                  Vault
+                </h3>
 
-          <div className="settings-divider" aria-hidden="true" />
+                <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <div className="settings-item__info">
+                    <span className="settings-item__label">Pasta de destino</span>
+                    <span className="settings-item__description">
+                      Diretório onde os arquivos gerados serão salvos
+                    </span>
+                  </div>
 
-          {/* Seção: IA */}
-          <section className="settings-section" aria-labelledby="settings-ai">
-            <h3 id="settings-ai" className="settings-section__title">
-              IA
-            </h3>
+                  {/* Campo de caminho + botão de seleção */}
+                  <div className="vault-picker" role="group" aria-label="Selecionar pasta de destino">
+                    <input
+                      id="input-vault-path"
+                      type="text"
+                      className="vault-picker__input"
+                      value={vaultPath}
+                      placeholder="Nenhuma pasta selecionada"
+                      readOnly
+                      aria-label="Caminho da pasta de destino"
+                      title={vaultPath || 'Nenhuma pasta selecionada'}
+                    />
+                    <button
+                      id="btn-select-vault"
+                      type="button"
+                      className="vault-picker__btn"
+                      onClick={handleSelectVault}
+                      disabled={isSelectingVault}
+                      aria-label="Selecionar pasta de destino"
+                    >
+                      {isSelectingVault ? 'Selecionando…' : 'Selecionar'}
+                    </button>
+                    <button
+                      id="btn-index-vault"
+                      type="button"
+                      className="vault-picker__btn"
+                      onClick={handleIndexVault}
+                      disabled={!vaultPath || isIndexingVault}
+                      aria-label="Indexar corpus"
+                    >
+                      {isIndexingVault ? 'Indexando…' : 'Indexar'}
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )}
 
-            <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-              <div className="settings-item__info">
-                <span className="settings-item__label">API key</span>
-                <span className="settings-item__description">
-                  {backendSettings?.answer_api_key_configured ? 'Configurada' : 'Ausente'} · {backendSettings?.answer_provider ?? 'extractive'} · {backendSettings?.answer_model ?? 'modelo local'}
-                </span>
-              </div>
+            {activeTab === 'ia' && (
+              <section className="settings-section" aria-labelledby="settings-ai">
+                <h3 id="settings-ai" className="settings-section__title">
+                  IA
+                </h3>
 
-              <div className="vault-picker" role="group" aria-label="Salvar API key local">
-                <input
-                  id="input-api-key"
-                  type="password"
-                  className="vault-picker__input"
-                  value={apiKey}
-                  placeholder="FREE_PLAUD_ANSWER_API_KEY"
-                  aria-label="API key"
-                  onChange={(event) => setApiKey(event.target.value)}
-                />
-                <button
-                  id="btn-save-api-key"
-                  type="button"
-                  className="vault-picker__btn"
-                  onClick={handleSaveApiKey}
-                  disabled={isSavingApiKey}
-                  aria-label="Salvar API key"
-                >
-                  {isSavingApiKey ? 'Salvando…' : 'Salvar'}
-                </button>
-                <button
-                  id="btn-test-provider"
-                  type="button"
-                  className="vault-picker__btn"
-                  onClick={handleTestProvider}
-                  disabled={isTestingProvider}
-                  aria-label="Testar provider"
-                >
-                  {isTestingProvider ? 'Testando…' : 'Testar'}
-                </button>
-                <button
-                  id="btn-list-models"
-                  type="button"
-                  className="vault-picker__btn"
-                  onClick={handleListModels}
-                  disabled={isListingModels}
-                  aria-label="Listar modelos"
-                >
-                  {isListingModels ? 'Listando…' : 'Listar modelos'}
-                </button>
-              </div>
-              {modelDiscovery && (
-                <div className="settings-item settings-item--stacked" aria-live="polite">
-                  <span className="settings-inline-status">
-                    modelos: {modelDiscovery.status} · {modelDiscovery.provider} · {modelDiscovery.latency_ms} ms
-                    {modelDiscovery.cached ? ' · cache' : ''}
-                  </span>
-                  {modelDiscovery.message && (
-                    <span className="settings-warning">{modelDiscovery.message}</span>
-                  )}
-                  {modelDiscovery.models.length > 0 && (
-                    <ul className="settings-model-list" aria-label="Modelos encontrados">
-                      {modelDiscovery.models.map((model) => (
-                        <li key={model.id} className="settings-model-list__item">
-                          <button
-                            type="button"
-                            className="vault-picker__btn settings-model-option"
-                            onClick={() => handleSelectModel(model.id)}
-                            aria-label={`Selecionar ${model.label}`}
-                          >
-                            {model.label}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <div className="settings-item__info">
+                    <span className="settings-item__label">API key</span>
+                    <span className="settings-item__description">
+                      {backendSettings?.answer_api_key_configured ? 'Configurada' : 'Ausente'} · {backendSettings?.answer_provider ?? 'extractive'} · {backendSettings?.answer_model ?? 'modelo local'}
+                    </span>
+                  </div>
+
+                  <div className="vault-picker" role="group" aria-label="Salvar API key local">
+                    <input
+                      id="input-api-key"
+                      type="password"
+                      className="vault-picker__input"
+                      value={apiKey}
+                      placeholder="FREE_PLAUD_ANSWER_API_KEY"
+                      aria-label="API key"
+                      onChange={(event) => setApiKey(event.target.value)}
+                    />
+                    <button
+                      id="btn-save-api-key"
+                      type="button"
+                      className="vault-picker__btn"
+                      onClick={handleSaveApiKey}
+                      disabled={isSavingApiKey}
+                      aria-label="Salvar API key"
+                    >
+                      {isSavingApiKey ? 'Salvando…' : 'Salvar'}
+                    </button>
+                    <button
+                      id="btn-test-provider"
+                      type="button"
+                      className="vault-picker__btn"
+                      onClick={handleTestProvider}
+                      disabled={isTestingProvider}
+                      aria-label="Testar provider"
+                    >
+                      {isTestingProvider ? 'Testando…' : 'Testar'}
+                    </button>
+                    <button
+                      id="btn-list-models"
+                      type="button"
+                      className="vault-picker__btn"
+                      onClick={handleListModels}
+                      disabled={isListingModels}
+                      aria-label="Listar modelos"
+                    >
+                      {isListingModels ? 'Listando…' : 'Listar modelos'}
+                    </button>
+                  </div>
+                  {modelDiscovery && (
+                    <div className="settings-item settings-item--stacked" aria-live="polite">
+                      <span className="settings-inline-status">
+                        modelos: {modelDiscovery.status} · {modelDiscovery.provider} · {modelDiscovery.latency_ms} ms
+                        {modelDiscovery.cached ? ' · cache' : ''}
+                      </span>
+                      {modelDiscovery.message && (
+                        <span className="settings-warning">{modelDiscovery.message}</span>
+                      )}
+                      {modelDiscovery.models.length > 0 && (
+                        <ul className="settings-model-list" aria-label="Modelos encontrados">
+                          {modelDiscovery.models.map((model) => (
+                            <li key={model.id} className="settings-model-list__item">
+                              <button
+                                type="button"
+                                className="vault-picker__btn settings-model-option"
+                                onClick={() => handleSelectModel(model.id)}
+                                aria-label={`Selecionar ${model.label}`}
+                              >
+                                {model.label}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-              {backendSettings && (
-                <span className="settings-inline-status">
-                  corpus: {backendSettings.notes_count} notas · {backendSettings.sqlite_chunks_count} chunks
-                </span>
-              )}
-            </div>
-          </section>
 
-          {operationStatus && (
-            <>
-              <div className="settings-divider" aria-hidden="true" />
-              <p className="settings-inline-status" role="status">
-                {operationStatus}
-              </p>
-            </>
-          )}
+                {iaCatalogRows.map(renderSettingRow)}
+              </section>
+            )}
 
-          <div className="settings-divider" aria-hidden="true" />
+            {activeTab === 'voz' && (
+              <section className="settings-section" aria-labelledby="settings-voz">
+                <h3 id="settings-voz" className="settings-section__title">
+                  Voz
+                </h3>
+                {audioRows.map(renderSettingRow)}
+              </section>
+            )}
 
-          {/* Seção: Aparência */}
-          <section className="settings-section" aria-labelledby="settings-appearance">
-            <h3 id="settings-appearance" className="settings-section__title">
-              Aparência
-            </h3>
+            {activeTab === 'avancado' && (
+              <>
+                <section className="settings-section" aria-labelledby="settings-presets">
+                  <h3 id="settings-presets" className="settings-section__title">
+                    Presets
+                  </h3>
+                  {backendSettings?.settings_presets.map((preset) => (
+                    <div key={preset.key} className="settings-item settings-item--stacked">
+                      <div className="settings-item__info">
+                        <span className="settings-item__label">{preset.label}</span>
+                        <span className="settings-item__description">{preset.description}</span>
+                        <span className="settings-inline-status">
+                          {Object.entries(preset.values).map(([key, value]) => `${key}=${String(value)}`).join(' · ')}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="vault-picker__btn settings-save-wide"
+                        onClick={() => handleApplyPreset(preset.key)}
+                        disabled={Boolean(applyingPreset)}
+                        aria-label={`Aplicar preset ${preset.label}`}
+                      >
+                        {applyingPreset === preset.key ? 'Aplicando…' : 'Aplicar'}
+                      </button>
+                    </div>
+                  ))}
+                </section>
 
-            <div className="settings-item">
-              <div className="settings-item__info">
-                <span className="settings-item__label">Tema</span>
-                <span className="settings-item__description">
-                  Aparência visual do aplicativo
-                </span>
-              </div>
-              <div className="settings-item__control">
-                <select
-                  id="select-theme"
-                  className="settings-select"
-                  defaultValue="dark"
-                  aria-label="Selecionar tema"
-                >
-                  <option value="dark">Escuro</option>
-                  <option value="light" disabled>Claro (em breve)</option>
-                </select>
-              </div>
-            </div>
-          </section>
+                <div className="settings-divider" aria-hidden="true" />
 
-          <div className="settings-divider" aria-hidden="true" />
+                <section className="settings-section" aria-labelledby="settings-advanced">
+                  <h3 id="settings-advanced" className="settings-section__title">
+                    Avançado
+                  </h3>
+                  {advancedRows.map(renderSettingRow)}
+                </section>
+              </>
+            )}
 
-          {/* Seção: Sobre */}
-          <section className="settings-section" aria-labelledby="settings-about">
-            <h3 id="settings-about" className="settings-section__title">
-              Sobre
-            </h3>
+            {activeTab === 'aparencia' && (
+              <>
+                <section className="settings-section" aria-labelledby="settings-appearance">
+                  <h3 id="settings-appearance" className="settings-section__title">
+                    Aparência
+                  </h3>
 
-            <div className="settings-item">
-              <div className="settings-item__info">
-                <span className="settings-item__label">Assistente IA</span>
-                <span className="settings-item__description">
-                  Interface de chat com inteligência artificial
-                </span>
-              </div>
-              <span className="settings-badge">v0.1.0</span>
-            </div>
-          </section>
+                  <div className="settings-item">
+                    <div className="settings-item__info">
+                      <span className="settings-item__label">Tema</span>
+                      <span className="settings-item__description">
+                        Aparência visual do aplicativo
+                      </span>
+                    </div>
+                    <div className="settings-item__control">
+                      <select
+                        id="select-theme"
+                        className="settings-select"
+                        defaultValue="dark"
+                        aria-label="Selecionar tema"
+                      >
+                        <option value="dark">Escuro</option>
+                        <option value="light" disabled>Claro (em breve)</option>
+                      </select>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="settings-divider" aria-hidden="true" />
+
+                <section className="settings-section" aria-labelledby="settings-about">
+                  <h3 id="settings-about" className="settings-section__title">
+                    Sobre
+                  </h3>
+
+                  <div className="settings-item">
+                    <div className="settings-item__info">
+                      <span className="settings-item__label">Assistente IA</span>
+                      <span className="settings-item__description">
+                        Interface de chat com inteligência artificial
+                      </span>
+                    </div>
+                    <span className="settings-badge">v0.1.0</span>
+                  </div>
+                </section>
+              </>
+            )}
+          </div>
         </div>
+
+        {operationStatus && (
+          <p className="settings-inline-status settings-status-bar" role="status">
+            {operationStatus}
+          </p>
+        )}
 
         {/* Rodapé do modal */}
         <div className="modal__footer">
+          <button
+            id="btn-save-backend-settings"
+            type="button"
+            className="btn-modal-primary"
+            onClick={handleSaveBackendSettings}
+            disabled={!backendSettings || isSavingBackendSettings}
+            aria-label="Salvar configurações do backend"
+          >
+            {isSavingBackendSettings ? 'Salvando…' : 'Salvar configurações'}
+          </button>
           <button
             id="btn-settings-close"
             type="button"

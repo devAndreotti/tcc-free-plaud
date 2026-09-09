@@ -108,6 +108,24 @@ describe('QueuePanel', () => {
     });
   });
 
+  it('mostra últimos erros do job como alertas', async () => {
+    const user = userEvent.setup();
+    bridgeMock.getIndexJob.mockResolvedValue({
+      ...runningJob,
+      last_errors: [
+        { source_path: 'data\\corpus\\notes\\rascunho.md', message: 'Encoding inválido.', error_code: 'BAD_ENCODING' },
+      ],
+    });
+    render(<QueuePanel />);
+
+    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
+    await user.click(screen.getByRole('button', { name: 'Indexar' }));
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText('data\\corpus\\notes\\rascunho.md')).toBeTruthy();
+    expect(screen.getByText('Encoding inválido.')).toBeTruthy();
+  });
+
   it('liga e desliga o watcher de pasta', async () => {
     const user = userEvent.setup();
     render(<QueuePanel />);

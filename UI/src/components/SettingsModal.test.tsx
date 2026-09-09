@@ -63,6 +63,24 @@ const backendSettings = {
       warning: null,
       local_env_path: null,
     },
+    {
+      index: 2,
+      key: 'audio_model',
+      label: 'Modelo de transcrição (voz)',
+      description: 'Modelo local usado para transcrever o áudio gravado no chat.',
+      group: 'Áudio',
+      value_type: 'enum',
+      layer: 'simple',
+      storage: 'user_settings',
+      value: 'whisper-small',
+      display_value: 'whisper-small',
+      options: [{ value: 'whisper-small', label: 'Whisper Small (multilíngue)' }],
+      recommended: 'whisper-small',
+      secret: false,
+      placeholder: null,
+      warning: null,
+      local_env_path: null,
+    },
   ],
 };
 
@@ -95,10 +113,18 @@ describe('SettingsModal', () => {
     });
   });
 
+  it('abre por padrão na aba Voz com os campos de transcrição', async () => {
+    render(<SettingsModal isOpen onClose={vi.fn()} />);
+
+    expect(await screen.findByLabelText('Modelo de transcrição (voz)')).toBeTruthy();
+    expect(screen.queryByLabelText('Modelo de resposta')).toBeNull();
+  });
+
   it('lista modelos e preenche draft de answer_model ao clicar', async () => {
     const user = userEvent.setup();
     render(<SettingsModal isOpen onClose={vi.fn()} />);
 
+    await user.click(screen.getByRole('button', { name: 'IA' }));
     await screen.findByLabelText('Modelo de resposta');
     await user.click(screen.getByRole('button', { name: 'Listar modelos' }));
     await screen.findByText('mistral:7b');
@@ -124,6 +150,7 @@ describe('SettingsModal', () => {
 
     render(<SettingsModal isOpen onClose={vi.fn()} />);
 
+    await user.click(screen.getByRole('button', { name: 'IA' }));
     await screen.findByLabelText('Modelo de resposta');
     await user.click(screen.getByRole('button', { name: 'Listar modelos' }));
 

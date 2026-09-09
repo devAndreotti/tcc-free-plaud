@@ -23,6 +23,10 @@
   --accent-blue-light: #a78bfa;
   --accent-gradient: linear-gradient(135deg, #5b21b6 0%, #7c3aed 50%, #a78bfa 100%);
 
+  /* Vermelho de gravação — distinto do roxo de acento, usado só no estado "gravando" */
+  --rec-red: #ef4444;
+  --rec-red-light: #fca5a5;
+
   /* Cores de texto */
   --text-primary: #ffffff;
   --text-secondary: #a1a1aa;
@@ -123,6 +127,11 @@ html, body {
   50% { box-shadow: 0 0 20px rgba(124, 58, 237, 0.6); }
 }
 
+@keyframes pulse-glow-red {
+  0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.35); }
+  50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.65); }
+}
+
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
@@ -141,6 +150,11 @@ html, body {
 /* Utilitários */
 .fade-in {
   animation: fadeIn var(--transition-base) forwards;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+  transform-origin: center;
 }
 
 .slide-up {

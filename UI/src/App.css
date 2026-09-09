@@ -1052,6 +1052,9 @@
 }
 
 .queue-panel__button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-height: 36px;
   border: 1px solid var(--border-color);
   background: var(--bg-surface);
@@ -1123,8 +1126,7 @@
 }
 
 .queue-panel__job-head code,
-.queue-panel__details code,
-.queue-panel__error code {
+.queue-panel__details code {
   color: var(--accent-blue-light);
   font-size: var(--font-size-xs);
   overflow-wrap: anywhere;
@@ -1175,10 +1177,38 @@
   min-width: 0;
 }
 
+.queue-panel__metric-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.queue-panel__metric-icon {
+  color: var(--text-muted);
+}
+
 .queue-panel__metrics dd {
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   overflow-wrap: anywhere;
+}
+
+.queue-panel__progress-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.queue-panel__progress-row .queue-panel__progress {
+  flex: 1;
+}
+
+.queue-panel__progress-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  min-width: 34px;
+  text-align: right;
 }
 
 .queue-panel__progress {
@@ -1193,6 +1223,14 @@
   height: 100%;
   background: var(--accent-blue);
   transition: width 180ms ease;
+}
+
+/* Progresso indeterminado: reaproveita o shimmer do skeleton quando ainda nao ha % conhecido */
+.queue-panel__progress-bar--indeterminate {
+  width: 40%;
+  background: linear-gradient(90deg, var(--bg-surface) 0%, var(--accent-blue) 50%, var(--bg-surface) 100%);
+  background-size: 250% 100%;
+  animation: shimmer 1.2s linear infinite;
 }
 
 .queue-panel__details,
@@ -1221,6 +1259,27 @@
   gap: var(--spacing-sm);
 }
 
+.queue-panel__error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+.queue-panel__error-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.queue-panel__error-path {
+  color: var(--accent-blue-light);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
+
 .queue-panel__empty {
   min-height: 220px;
   display: flex;
@@ -1228,6 +1287,16 @@
   justify-content: center;
   color: var(--text-muted);
   font-size: var(--font-size-sm);
+}
+
+.queue-panel__empty--busy {
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: 0 var(--spacing-xl);
+}
+
+.queue-panel__empty--busy .queue-panel__progress {
+  width: 100%;
 }
 
 @media (max-width: 900px) {
@@ -1507,14 +1576,25 @@
   color: var(--text-secondary);
 }
 
-.btn-mic.active {
-  color: var(--accent-blue-light);
-  animation: pulse-glow 1.5s ease-in-out infinite;
+.btn-mic--recording {
+  color: var(--rec-red);
+  animation: pulse-glow-red 1.2s ease-in-out infinite;
+}
+
+.btn-mic--processing {
+  color: var(--text-secondary);
 }
 
 .btn-mic svg {
   width: 18px;
   height: 18px;
+}
+
+.recording-timer {
+  font-size: var(--font-size-xs);
+  color: var(--rec-red);
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
 }
 
 /* Botão de enviar */
@@ -1556,6 +1636,18 @@
   font-size: var(--font-size-xs);
   color: var(--text-muted);
   letter-spacing: 0.01em;
+}
+
+.input-footer--error {
+  color: var(--rec-red-light);
+}
+
+.input-footer--recording {
+  color: var(--rec-red);
+}
+
+.input-footer--processing {
+  color: var(--accent-blue-light);
 }
 
 /* ============================================================
@@ -1962,6 +2054,10 @@
   outline: none;
 }
 
+.modal--wide {
+  width: min(760px, calc(100vw - 32px));
+}
+
 /* Cabeçalho do modal */
 .modal__header {
   display: flex;
@@ -2008,10 +2104,72 @@
   gap: var(--spacing-lg);
 }
 
+/* Corpo do modal de Configurações: navegação lateral + painel da aba ativa */
+.modal__body--settings {
+  flex-direction: row;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.settings-nav {
+  width: 180px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spacing-md) var(--spacing-sm);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color-subtle);
+  overflow-y: auto;
+}
+
+.settings-nav__item {
+  text-align: left;
+  padding: 8px var(--spacing-sm);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.settings-nav__item:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.settings-nav__item--active {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent-blue);
+}
+
+.settings-panel {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.settings-status-bar {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-top: 1px solid var(--border-color-subtle);
+  flex-shrink: 0;
+}
+
 /* Rodapé do modal */
 .modal__footer {
   display: flex;
   justify-content: flex-end;
+  gap: var(--spacing-sm);
   padding: var(--spacing-md) var(--spacing-lg);
   border-top: 1px solid var(--border-color-subtle);
   flex-shrink: 0;
@@ -2661,6 +2819,16 @@
 .dropzone--active {
   border-color: var(--accent-blue);
   background: var(--bg-surface-hover);
+}
+
+.dropzone__icon {
+  color: var(--text-muted);
+  transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.dropzone--active .dropzone__icon {
+  color: var(--accent-blue-light);
+  transform: scale(1.3);
 }
 
 .dropzone__hint {
