@@ -6,13 +6,16 @@ from uuid import uuid4
 
 from free_plaud.ingest.loaders import PDF_PARSE_FAILED, load_document
 from free_plaud.ingest.models import IngestionResult
+from free_plaud.providers.audio_models import AudioError
 
-logger = logging.getLogger('free_plaud.ingest')
-EMPTY_CONTENT = 'EMPTY_CONTENT'
-UNSUPPORTED_MEDIA_TYPE = 'UNSUPPORTED_MEDIA_TYPE'
+logger = logging.getLogger("free_plaud.ingest")
+EMPTY_CONTENT = "EMPTY_CONTENT"
+UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE"
 
 
 def _error_code_for_value_error(exc: ValueError) -> str:
+    if isinstance(exc, AudioError):
+        return exc.code
     text = str(exc)
     if text in {EMPTY_CONTENT, PDF_PARSE_FAILED}:
         return text
@@ -20,11 +23,11 @@ def _error_code_for_value_error(exc: ValueError) -> str:
 
 
 def _build_ingestion_id() -> str:
-    return f'ing-{uuid4().hex[:12]}'
+    return f"ing-{uuid4().hex[:12]}"
 
 
 def _build_correlation_id() -> str:
-    return f'corr-{uuid4().hex[:12]}'
+    return f"corr-{uuid4().hex[:12]}"
 
 
 def _detect_media_type(path: Path) -> str | None:
@@ -37,7 +40,7 @@ def _build_content_hash(path: Path) -> str:
 
 
 def _source_type_from_path(path: Path) -> str | None:
-    suffix = path.suffix.lower().removeprefix('.')
+    suffix = path.suffix.lower().removeprefix(".")
     return suffix or None
 
 
@@ -48,7 +51,7 @@ def ingest_file(path: Path, correlation_id: str | None = None) -> IngestionResul
     resolved_correlation_id = correlation_id or _build_correlation_id()
 
     logger.info(
-        'ingestion.started correlation_id=%s ingestion_id=%s source_path=%s',
+        "ingestion.started correlation_id=%s ingestion_id=%s source_path=%s",
         resolved_correlation_id,
         ingestion_id,
         source_path,
@@ -69,15 +72,15 @@ def ingest_file(path: Path, correlation_id: str | None = None) -> IngestionResul
             source_path=document.source_path,
             source_type=document.source_type,
             detected_media_type=detected_media_type,
-            status='success',
+            status="success",
             size_bytes=size_bytes,
             content_sha256=content_sha256,
             raw_text=document.raw_text,
-            message='Document ingested successfully.',
+            message="Document ingested successfully.",
         )
 
         logger.info(
-            'ingestion.completed correlation_id=%s ingestion_id=%s source_path=%s source_type=%s',
+            "ingestion.completed correlation_id=%s ingestion_id=%s source_path=%s source_type=%s",
             resolved_correlation_id,
             ingestion_id,
             source_path,
@@ -86,7 +89,7 @@ def ingest_file(path: Path, correlation_id: str | None = None) -> IngestionResul
         return result
     except FileNotFoundError:
         logger.error(
-            'ingestion.failed correlation_id=%s ingestion_id=%s source_path=%s error_code=INPUT_NOT_FOUND',
+            "ingestion.failed correlation_id=%s ingestion_id=%s source_path=%s error_code=INPUT_NOT_FOUND",
             resolved_correlation_id,
             ingestion_id,
             source_path,
@@ -96,14 +99,14 @@ def ingest_file(path: Path, correlation_id: str | None = None) -> IngestionResul
             correlation_id=resolved_correlation_id,
             source_path=source_path,
             source_type=_source_type_from_path(source_path),
-            status='failed',
-            error_code='INPUT_NOT_FOUND',
-            message='Source file not found.',
+            status="failed",
+            error_code="INPUT_NOT_FOUND",
+            message="Source file not found.",
         )
     except ValueError as exc:
         error_code = _error_code_for_value_error(exc)
         logger.error(
-            'ingestion.failed correlation_id=%s ingestion_id=%s source_path=%s error_code=%s',
+            "ingestion.failed correlation_id=%s ingestion_id=%s source_path=%s error_code=%s",
             resolved_correlation_id,
             ingestion_id,
             source_path,
@@ -115,7 +118,7 @@ def ingest_file(path: Path, correlation_id: str | None = None) -> IngestionResul
             source_path=source_path,
             source_type=_source_type_from_path(source_path),
             detected_media_type=_detect_media_type(source_path),
-            status='failed',
+            status="failed",
             error_code=error_code,
             message=str(exc),
         )

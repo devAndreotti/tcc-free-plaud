@@ -4,9 +4,9 @@ from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
 from free_plaud.ingest.models import IngestedDocument
-from free_plaud.ingest.validators import validate_source_path
+from free_plaud.ingest.validators import AUDIO_EXTENSIONS, validate_source_path
 
-PDF_PARSE_FAILED = 'PDF_PARSE_FAILED'
+PDF_PARSE_FAILED = "PDF_PARSE_FAILED"
 
 
 def _extract_pdf_text(path: Path) -> str:
@@ -38,13 +38,24 @@ def load_document(path: Path) -> IngestedDocument:
     validated = validate_source_path(path)
     suffix = validated.suffix.lower()
 
-    if suffix in {".txt", ".md"}:
+    if suffix in AUDIO_EXTENSIONS:
+        from free_plaud.app.audio_service import audio_options, audio_runtime
+
+        result = audio_runtime().transcribe_result(validated, audio_options())
+        return IngestedDocument(
+            source_path=validated,
+            source_type=suffix.removeprefix("."),
+            raw_text=result.raw_text,
+            cleaned_text=result.text,
+            transcription_path=result.artifact_path,
+        )
+    elif suffix in {".txt", ".md"}:
         raw_text = validated.read_text(encoding="utf-8")
     else:
         raw_text = _extract_pdf_text(validated)
 
     return IngestedDocument(
         source_path=validated,
-        source_type=suffix.removeprefix('.'),
+        source_type=suffix.removeprefix("."),
         raw_text=raw_text.strip(),
     )
