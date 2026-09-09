@@ -1,3 +1,6 @@
+from free_plaud.benchmark.datasets import BenchmarkDataset, BenchmarkSample
+from free_plaud.benchmark.embed_compression_bench import compare_embedding_compression
+from free_plaud.notes.schemas import Note
 from free_plaud.providers.embed_compressor import (
     CompressingEmbedder,
     EmbeddingQuantizationError,
@@ -11,6 +14,7 @@ from free_plaud.providers.embed_compressor import (
     quantized_size_bytes,
     unpack_quantized_vector,
 )
+from free_plaud.storage.vector import LocalVectorStore
 
 
 class FakeEmbedder:
@@ -101,3 +105,76 @@ def test_compressing_embedder_preserves_dim_and_model_name() -> None:
         span = max(raw_vector) - min(raw_vector) or 1.0
         for raw_value, compressed_value in zip(raw_vector, compressed_vector, strict=True):
             assert abs(raw_value - compressed_value) <= span / 255.0 + 1e-9
+
+
+class FakeHashEmbedder:
+    model_name = 'fake-hash'
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        embeddings: list[list[float]] = []
+        for text in texts:
+            vector = [0.0] * 16
+            for token in text.lower().split():
+                slot = sum(ord(char) for char in token) % len(vector)
+                vector[slot] += 1.0
+            embeddings.append(vector)
+        return embeddings
+
+
+def _build_compression_note(tmp_path):
+    text = (
+        'O benchmark mede recall, latencia e cobertura de citacoes para comparar retrieval. '
+        'A recuperacao vetorial usa embeddings persistidos no ChromaDB local. '
+        'O SQLite registra execucoes, metricas e consultas avaliadas.'
+    )
+    return Note(
+        note_id='benchmark-note',
+        note_version=1,
+        source_type='md',
+        source_path=tmp_path / 'benchmark.md',
+        source_name='benchmark.md',
+        title='Benchmark do pipeline RAG',
+        summary='Resumo da nota de benchmark.',
+        topics=[],
+        tasks=[],
+        tags=['md'],
+        raw_text=text,
+        normalized_text=text,
+        structured_markdown=f'# Benchmark do pipeline RAG\n\n{text}\n',
+        content_hash='a' * 64,
+    )
+
+
+def test_compare_embedding_compression_reports_tradeoffs(tmp_path) -> None:
+    note = _build_compression_note(tmp_path)
+    dataset = BenchmarkDataset(
+        dataset_name='rag-compression',
+        samples=[
+            BenchmarkSample(
+                sample_id='q-1',
+                question='O que o benchmark mede?',
+                expected_note_id=note.note_id,
+                expected_terms=['recall', 'latencia'],
+            )
+        ],
+    )
+    vector_store = LocalVectorStore(tmp_path / 'results' / 'vector_store', collection_name='compression_run')
+
+    comparison = compare_embedding_compression(
+        note,
+        dataset,
+        vector_store=vector_store,
+        embedder=FakeHashEmbedder(),
+        top_k=3,
+        chunk_size=120,
+        overlap=30,
+    )
+
+    assert comparison.baseline.retrieval_strategy == 'vector'
+    assert comparison.quantized.retrieval_strategy == 'vector'
+    assert comparison.embedding_dim == 16
+    assert comparison.compression_ratio > 1.0
+    assert comparison.mrr_delta == comparison.quantized.metrics['mrr'] - comparison.baseline.metrics['mrr']
+    assert comparison.recall_at_5_delta == (
+        comparison.quantized.metrics['recall_at_5'] - comparison.baseline.metrics['recall_at_5']
+    )
