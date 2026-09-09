@@ -39,3 +39,5 @@ UI/playwright-report/
 
 test-results/
 playwright-report/
+
+UI/build/

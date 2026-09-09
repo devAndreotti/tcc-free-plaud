@@ -22,6 +22,8 @@ Comandos:
   menu    abre o menu terminal numerado
   app     builda o React e abre o app integrado PyWebView
   front   roda o Vite com mock de desenvolvimento
+  doctor  executa diagnostico estruturado do ambiente
+  bench   executa o benchmark experimental
   test    roda os testes do backend
 
 Exemplos:
@@ -71,6 +73,12 @@ switch ($Command.ToLowerInvariant()) {
     }
     { $_ -in @('front', 'dev') } {
         Invoke-Npm (@('--prefix', $UI, 'run', 'dev') + $Rest)
+    }
+    'doctor' {
+        Invoke-InPipeline 'uv' (@('run', 'free-plaud', 'doctor') + $Rest)
+    }
+    'bench' {
+        Invoke-InPipeline 'uv' (@('run', 'free-plaud', 'benchmark') + $Rest)
     }
     'test' {
         Invoke-InPipeline 'uv' (@('run', 'pytest') + $Rest)
