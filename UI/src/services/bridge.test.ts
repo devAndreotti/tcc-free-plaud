@@ -37,12 +37,79 @@ describe('isDesktopApp (lazy PyWebView detection)', () => {
     expect(await bridge.selectFolder()).toContain('mock');
   });
 
-  it('delegates to window.pywebview.api once it becomes available', async () => {
-    const selectFolder = () => Promise.resolve('C:\\RealVault');
-    (window as unknown as { pywebview: { api: { selectFolder: typeof selectFolder } } }).pywebview = {
-      api: { selectFolder },
-    };
+  it('delegates every bridge method to window.pywebview.api once it becomes available', async () => {
+    const calls: string[] = [];
+    const stubApi = new Proxy(
+      {},
+      {
+        get: (_target, prop: string) => {
+          return (...args: unknown[]) => {
+            calls.push(prop);
+            return Promise.resolve(args[0] ?? { ok: true, active: false, directory: null });
+          };
+        },
+      }
+    );
+    (window as unknown as { pywebview: { api: unknown } }).pywebview = { api: stubApi };
 
-    expect(await bridge.selectFolder()).toBe('C:\\RealVault');
+    await bridge.sendMessage('oi');
+    await bridge.selectFolder();
+    await bridge.scanVault('C:\\Vault');
+    await bridge.saveVaultPath('C:\\Vault');
+    await bridge.loadVaultPath();
+    await bridge.indexVault('C:\\Vault');
+    await bridge.startIndexJob('C:\\Vault', false);
+    await bridge.getIndexJob('job-1');
+    await bridge.cancelIndexJob('job-1');
+    await bridge.startWatcher('C:\\Vault');
+    await bridge.stopWatcher();
+    await bridge.getWatcherStatus();
+    await bridge.pollWatcherEvents();
+    await bridge.getBackendSettings();
+    await bridge.getDoctor();
+    await bridge.listSettingsPresets();
+    await bridge.previewSettingsPreset('preset');
+    await bridge.applySettingsPreset('preset');
+    await bridge.testAnswerProvider();
+    await bridge.listAnswerModels();
+    await bridge.saveApiKey('key');
+    await bridge.saveBackendSetting('key', 'value');
+    await bridge.listNotes();
+    await bridge.getNoteDetail('note-1');
+    await bridge.deleteNote('note-1', 'APAGAR');
+    await bridge.reindexNote('note-1');
+    await bridge.selectBenchmarkSuite();
+    await bridge.runBenchmarkCompare('suite.json');
+
+    expect(calls).toEqual([
+      'sendMessage',
+      'selectFolder',
+      'scanVault',
+      'saveVaultPath',
+      'loadVaultPath',
+      'indexVault',
+      'startIndexJob',
+      'getIndexJob',
+      'cancelIndexJob',
+      'startWatcher',
+      'stopWatcher',
+      'getWatcherStatus',
+      'pollWatcherEvents',
+      'getBackendSettings',
+      'getDoctor',
+      'listSettingsPresets',
+      'previewSettingsPreset',
+      'applySettingsPreset',
+      'testAnswerProvider',
+      'listAnswerModels',
+      'saveApiKey',
+      'saveBackendSetting',
+      'listNotes',
+      'getNoteDetail',
+      'deleteNote',
+      'reindexNote',
+      'selectBenchmarkSuite',
+      'runBenchmarkCompare',
+    ]);
   });
 });
