@@ -8,7 +8,8 @@ Attribution: Google FLEURS contributors, [dataset and references](https://huggin
 `manifest.json` fixes source revision, configuration, split, row identifier,
 reference text and SHA-256 for every file. The files are the first three
 recordings in each Portuguese-Brazil and English-US test TSV, preserving the
-original PCM. Each language repeats one sentence across recordings. This is a
+original PCM. Portuguese repeats one sentence; English includes two distinct
+sentences across the three recordings. This is a
 small reproducible integration fixture, not a representative accuracy benchmark.
 No microphone recording or private speech is included.
 

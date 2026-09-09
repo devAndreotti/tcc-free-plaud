@@ -21,8 +21,9 @@ Validation date: 2026-09-09. Python 3.12.9, Windows, RTX 2050 4 GB.
 ## Reproducible fixture evaluation
 
 Six FLEURS WAV fixtures have license, revision, references and hashes in
-`pipeline/tests/fixtures/audio/manifest.json`. Three recordings per language reuse
-one sentence. These samples prove integration and expose regressions; they do not
+`pipeline/tests/fixtures/audio/manifest.json`. Portuguese has three recordings of
+one sentence; English has three recordings covering two sentences. These samples
+prove integration and expose regressions; they do not
 establish general STT quality. No private microphone audio is committed.
 
 Mean per-recording metrics from 54 real runs:
@@ -74,3 +75,8 @@ Delivery and authoritative final CI/SonarCloud status:
 [PR #69](https://github.com/devAndreotti/tcc-free-plaud/pull/69).
 Copilot reported a review quota limit and did not perform an automated review.
 The six required checks must pass on the final head before squash merge.
+
+The first Linux CI run found a missing `libonnxruntime.so`: the lockfile lacked
+the separate `sherpa-onnx-core` distribution. The audio extra now pins both Sherpa
+packages to 1.13.7. All 12 affected adapter/runtime tests and new real SenseVoice
+and Moonshine inference runs passed after installing the native core package.
