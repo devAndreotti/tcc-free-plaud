@@ -1,7 +1,12 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import QueuePanel from './QueuePanel';
+import { QueueProvider } from '../contexts/QueueContext';
+
+// QueuePanel agora depende do QueueContext — todo render precisa do Provider.
+const renderQueuePanel = () => render(<QueueProvider><QueuePanel /></QueueProvider>);
 
 const bridgeMock = vi.hoisted(() => ({
   selectFolder: vi.fn(),
@@ -78,7 +83,7 @@ describe('QueuePanel', () => {
 
   it('cria job e mostra progresso consultado do backend', async () => {
     const user = userEvent.setup();
-    render(<QueuePanel />);
+    renderQueuePanel();
 
     await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
     await user.click(screen.getByRole('button', { name: 'Indexar' }));
@@ -96,7 +101,7 @@ describe('QueuePanel', () => {
 
   it('cancela job ativo sem iniciar outro', async () => {
     const user = userEvent.setup();
-    render(<QueuePanel />);
+    renderQueuePanel();
 
     await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
     await user.click(screen.getByRole('button', { name: 'Indexar' }));
@@ -116,7 +121,7 @@ describe('QueuePanel', () => {
         { source_path: 'data\\corpus\\notes\\rascunho.md', message: 'Encoding inválido.', error_code: 'BAD_ENCODING' },
       ],
     });
-    render(<QueuePanel />);
+    renderQueuePanel();
 
     await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
     await user.click(screen.getByRole('button', { name: 'Indexar' }));
@@ -128,7 +133,7 @@ describe('QueuePanel', () => {
 
   it('liga e desliga o watcher de pasta', async () => {
     const user = userEvent.setup();
-    render(<QueuePanel />);
+    renderQueuePanel();
 
     await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
     await user.click(screen.getByRole('button', { name: 'Monitorar pasta' }));
@@ -143,5 +148,52 @@ describe('QueuePanel', () => {
       expect(bridgeMock.stopWatcher).toHaveBeenCalled();
     });
     expect(await screen.findByRole('button', { name: 'Monitorar pasta' })).toBeTruthy();
+  });
+
+  it('continua consultando o job mesmo depois de QueuePanel ser desmontado (troca de aba)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ delay: null });
+
+    // Simula a troca de aba do App: QueueProvider fica montado o tempo
+    // todo, mas QueuePanel é desmontado/remontado conforme um toggle,
+    // exatamente como {workspaceView === 'queue' && <QueuePanel/>} em App.tsx.
+    const Harness = () => {
+      const [showQueue, setShowQueue] = useState(true);
+      return (
+        <QueueProvider>
+          <button type="button" onClick={() => setShowQueue((prev) => !prev)}>
+            alternar aba
+          </button>
+          {showQueue && <QueuePanel />}
+        </QueueProvider>
+      );
+    };
+
+    render(<Harness />);
+
+    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
+    await user.click(screen.getByRole('button', { name: 'Indexar' }));
+    await waitFor(() => {
+      expect(bridgeMock.startIndexJob).toHaveBeenCalled();
+    });
+
+    const callsBeforeLeaving = bridgeMock.getIndexJob.mock.calls.length;
+
+    // Sai da aba (desmonta QueuePanel, mas o QueueProvider continua montado).
+    await user.click(screen.getByRole('button', { name: 'alternar aba' }));
+    expect(screen.queryByText('job-queue-1')).toBeNull();
+
+    // Avança o tempo do polling (1s) sem QueuePanel montado.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+
+    expect(bridgeMock.getIndexJob.mock.calls.length).toBeGreaterThan(callsBeforeLeaving);
+
+    // Volta para a aba: o job continua lá, sem precisar recriar nada.
+    await user.click(screen.getByRole('button', { name: 'alternar aba' }));
+    expect(await screen.findByText('job-queue-1')).toBeTruthy();
+
+    vi.useRealTimers();
   });
 });
