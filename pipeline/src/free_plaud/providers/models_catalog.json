@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "id": "silero-vad",
+      "engine": "silero",
+      "format": "onnx",
+      "repo_id": "onnx-community/silero-vad",
+      "revision": "e71cae966052b992a7eca6b17738916ce0eca4ec",
+      "languages": [
+        "*"
+      ],
+      "license": "MIT",
+      "files": [
+        {
+          "path": "onnx/model.onnx",
+          "size": 2243022,
+          "sha256": "a4a068cd6cf1ea8355b84327595838ca748ec29a25bc91fc82e6c299ccdc5808"
+        }
+      ]
+    },
+    {
+      "id": "whisper-small",
+      "engine": "faster-whisper",
+      "format": "ctranslate2",
+      "repo_id": "Systran/faster-whisper-small",
+      "revision": "536b0662742c02347bc0e980a01041f333bce120",
+      "languages": [
+        "pt",
+        "en",
+        "es",
+        "fr",
+        "de",
+        "it",
+        "ja",
+        "ko",
+        "zh",
+        "ru"
+      ],
+      "license": "MIT",
+      "files": [
+        {
+          "path": "config.json",
+          "size": 2370,
+          "sha256": "b55496ac7940a7ae47d2c01eab40edfd8701feec1229d9cce3b40014383fb828"
+        },
+        {
+          "path": "model.bin",
+          "size": 483546902,
+          "sha256": "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671"
+        },
+        {
+          "path": "tokenizer.json",
+          "size": 2203239,
+          "sha256": "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab"
+        },
+        {
+          "path": "vocabulary.txt",
+          "size": 459861,
+          "sha256": "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913"
+        }
+      ]
+    },
+    {
+      "id": "moonshine-tiny-en",
+      "engine": "moonshine",
+      "format": "onnx",
+      "repo_id": "csukuangfj/sherpa-onnx-moonshine-tiny-en-int8",
+      "revision": "bf2b762c076d8ea61e2af0b3851c9564fb77552e",
+      "languages": [
+        "en"
+      ],
+      "license": "MIT",
+      "files": [
+        {
+          "path": "cached_decode.int8.onnx",
+          "size": 45264830,
+          "sha256": "2aff28bba6a03d8dcf5c9feac45462629bae37317442299f28115ad09da773f6"
+        },
+        {
+          "path": "encode.int8.onnx",
+          "size": 18249187,
+          "sha256": "8774dfba578de027ec6595c2c654a0836434489bc963a0db124a7f181f571acb"
+        },
+        {
+          "path": "preprocess.onnx",
+          "size": 6800738,
+          "sha256": "f33addce61a143460fe753b5ee5b7db255e5140b5b779c065b94f6c83ff0bf4e"
+        },
+        {
+          "path": "tokens.txt",
+          "size": 436688,
+          "sha256": "1165c2aeb9f72f457a83be2d459a09054f27490acd9b41bd43794dfd25e296ea"
+        },
+        {
+          "path": "uncached_decode.int8.onnx",
+          "size": 53216096,
+          "sha256": "216737000dd5881a17aa043f6bbd286add33e4c3b0ae257153e2ec15438bdc41"
+        }
+      ]
+    },
+    {
+      "id": "sensevoice-small",
+      "engine": "sensevoice",
+      "format": "onnx",
+      "repo_id": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
+      "revision": "2365baeacb507f821a0c8120fcee3d484dba7a07",
+      "languages": [
+        "zh",
+        "en",
+        "ja",
+        "ko",
+        "yue"
+      ],
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "model.int8.onnx",
+          "size": 239233841,
+          "sha256": "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51"
+        },
+        {
+          "path": "tokens.txt",
+          "size": 315894,
+          "sha256": "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc"
+        }
+      ]
+    },
+    {
+      "id": "sensevoice-gguf-q8",
+      "engine": "catalog-only",
+      "format": "gguf",
+      "repo_id": "handy-computer/SenseVoiceSmall-gguf",
+      "revision": "4a08b8e900b38a977e32eb08d5d0697d6e72ba04",
+      "languages": [
+        "zh",
+        "en",
+        "ja",
+        "ko",
+        "yue"
+      ],
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SenseVoiceSmall-Q8_0.gguf",
+          "size": 252684608,
+          "sha256": "6c759ee4c9748c9b3f7a5a60ca74f0f7e685fb9d45d1378fce7cfd62f59adf29"
+        }
+      ]
+    }
+  ]
+}

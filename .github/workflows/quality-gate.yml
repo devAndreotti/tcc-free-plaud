@@ -30,7 +30,7 @@ jobs:
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
         working-directory: pipeline
-        run: uv sync --locked --dev
+        run: uv sync --locked --dev --extra audio
       - name: Audit Python dependencies
         working-directory: pipeline
         run: uvx pip-audit --path .venv
@@ -57,7 +57,7 @@ jobs:
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
         working-directory: pipeline
-        run: uv sync --locked --dev
+        run: uv sync --locked --dev --extra audio
       - name: Ruff
         working-directory: pipeline
         run: |
@@ -95,7 +95,7 @@ jobs:
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
         working-directory: pipeline
-        run: uv sync --locked --dev
+        run: uv sync --locked --dev --extra audio
       - name: Python tests and coverage
         working-directory: pipeline
         run: |
@@ -135,7 +135,7 @@ jobs:
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
         working-directory: pipeline
-        run: uv sync --locked --dev
+        run: uv sync --locked --dev --extra audio
       - name: Build Python package
         working-directory: pipeline
         run: uv build
