@@ -61,7 +61,7 @@ const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
     if (!watchDirectory) return undefined;
     const interval = window.setInterval(() => {
       void bridge.pollWatcherEvents().then((events) => {
-        events.forEach(applyWatcherEvent);
+        events.forEach((event) => applyWatcherEvent(event));
       });
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);

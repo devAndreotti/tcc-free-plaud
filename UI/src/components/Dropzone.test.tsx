@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Dropzone from './Dropzone';
 
@@ -27,6 +27,7 @@ const buildDataTransfer = (files: File[]) => ({
 describe('Dropzone', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   beforeEach(() => {
@@ -64,5 +65,39 @@ describe('Dropzone', () => {
 
     fireEvent.dragLeave(region);
     expect(region.className).not.toContain('dropzone--active');
+  });
+
+  it('consulta eventos do watcher e dispara toast de sucesso', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    bridgeMock.pollWatcherEvents.mockResolvedValue([
+      {
+        ingestion_id: 'ing-1',
+        correlation_id: 'corr-1',
+        source_path: 'C:\\Vault\\nota.md',
+        source_type: 'markdown',
+        detected_media_type: null,
+        status: 'success',
+        size_bytes: 10,
+        content_sha256: null,
+        error_code: null,
+        message: null,
+        warnings: [],
+        created_at: '2026-05-26T10:00:00+00:00',
+      },
+    ]);
+    const onToast = vi.fn();
+
+    render(<Dropzone watchDirectory="C:\\Vault" onToast={onToast} />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    await waitFor(() => {
+      expect(onToast).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'ing-1', status: 'success' })
+      );
+    });
+    expect(screen.getByText('nota.md')).toBeTruthy();
   });
 });
