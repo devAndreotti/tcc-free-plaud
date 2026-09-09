@@ -30,6 +30,11 @@ class CorpusRuntime:
     pesada sem cruzar conexao SQLite entre threads.
     """
 
+    def get_audio_runtime(self):
+        from free_plaud.app.audio_service import audio_runtime
+
+        return audio_runtime(self._settings)
+
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings
         self._lock = Lock()
@@ -51,7 +56,9 @@ class CorpusRuntime:
         with self._lock:
             if self._embedder is not None and self._embedder_key == key:
                 return self._embedder
-            self._embedder = get_embedder(settings.embedding_model, device=settings.embedding_device)
+            self._embedder = get_embedder(
+                settings.embedding_model, device=settings.embedding_device
+            )
             self._embedder_key = key
             self._warmed_key = None
             return self._embedder
@@ -62,7 +69,11 @@ class CorpusRuntime:
         key = (settings.embedding_model, settings.embedding_device)
         started_at = perf_counter()
         with self._lock:
-            if self._embedder is not None and self._embedder_key == key and self._warmed_key == key:
+            if (
+                self._embedder is not None
+                and self._embedder_key == key
+                and self._warmed_key == key
+            ):
                 return WarmupResult(
                     model_name=self._embedder.model_name,
                     device=settings.embedding_device,
@@ -70,10 +81,12 @@ class CorpusRuntime:
                     already_warm=True,
                 )
             if self._embedder is None or self._embedder_key != key:
-                self._embedder = get_embedder(settings.embedding_model, device=settings.embedding_device)
+                self._embedder = get_embedder(
+                    settings.embedding_model, device=settings.embedding_device
+                )
                 self._embedder_key = key
-            if settings.embedding_model.startswith('sentence-transformer:'):
-                self._embedder.embed(['free-plaud warmup'])
+            if settings.embedding_model.startswith("sentence-transformer:"):
+                self._embedder.embed(["free-plaud warmup"])
             self._warmed_key = key
             elapsed_ms = int((perf_counter() - started_at) * 1000)
             return WarmupResult(

@@ -29,7 +29,9 @@ tcc-free-plaud/
 ## 2. End-to-End Execution Pipeline
 
 1. **Multimodal Ingest & Normalization:**
-   - Raw audio (`.mp3`, `.wav`, `.m4a`) processed via `Transcriber` (Whisper CUDA / API) -> raw transcription text.
+   - Raw audio (`.mp3`, `.wav`, `.m4a`, `.ogg`) is decoded locally, continuously resampled to mono 16 kHz and segmented on an absolute sample timeline with Silero ONNX CPU VAD.
+   - Audio runtime owns lazy reusable Faster-Whisper and sherpa-onnx adapters. Whisper defaults to `pt`, auto CUDA/CPU; optional SenseVoice/Moonshine enforce supported languages. JSON records raw/cleaned text, original timestamps, model revision, effective device and warnings.
+   - Shared audio facade exposes model list/download/verify, file transcription and capture start/status/stop/cancel. `free-plaud ingest audio` consumes these operations. Completed recordings enter the local STT queue; `record --index` explicitly indexes the cleaned snapshot.
    - Textual and PDF documents parsed and sanitized (Obsidian frontmatter & wikilinks cleaned).
    - Text normalized for pt-BR diacritics and OCR noise -> structured into canonical `Note` Markdown with metadata.
 

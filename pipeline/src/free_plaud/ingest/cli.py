@@ -2,9 +2,13 @@ import typer
 from rich.console import Console
 
 from free_plaud.app.cli_paths import compose_path
+from free_plaud.ingest.audio_cli import app as audio_app
 from free_plaud.ingest.service import ingest_file
 
-app = typer.Typer(help="Comandos de ingestão de artefatos locais.", no_args_is_help=True)
+app = typer.Typer(
+    help="Comandos de ingestão de artefatos locais.", no_args_is_help=True
+)
+app.add_typer(audio_app, name="audio")
 console = Console()
 
 
@@ -23,6 +27,6 @@ def show(path_parts: list[str] = typer.Argument(..., metavar="PATH")) -> None:
     console.print(f"[bold]content_sha256[/bold]: {result.content_sha256}")
     preview = result.raw_text[:300] or "<vazio>"
     console.print(f"[bold]preview[/bold]: {preview}")
-    if result.status == 'failed':
+    if result.status == "failed":
         console.print(f"[bold red]error_code[/bold red]: {result.error_code}")
         raise typer.Exit(code=1)

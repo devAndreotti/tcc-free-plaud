@@ -34,7 +34,11 @@ The system exposes 4 cohesive interfaces sharing the exact same backend runtime:
 
 ### 3.2 Multimodal Ingestion & Note Structuring
 - **Audio Transcription Pipeline:**
-  - `Transcriber` protocol (`providers/transcribe.py`) supporting local Whisper models (`faster-whisper`, `torchaudio` with CUDA 12.8) and cloud STT APIs.
+  - `Transcriber.transcribe(source_path) -> str` remains compatible. The local audio runtime also returns raw/cleaned text, absolute segments, native word timestamps when available, model revision, effective device and cleaning decisions.
+  - Whisper small defaults to Portuguese (`pt`), automatic CUDA (`int8_float16`) with one CPU (`int8`) retry for GPU availability/memory errors. SenseVoice supports zh/en/ja/ko/yue and Moonshine tiny supports English, both through sherpa-onnx on CPU. Explicit unsupported languages/devices fail before recording. GGUF is catalog/download only.
+  - Microphone capture uses a bounded callback queue, streaming mono 16 kHz resampling and stateful Silero ONNX CPU VAD. Stop flushes trailing audio; cancel closes capture and prevents publication of transcription. Overflow/device/write failures are explicit.
+  - Downloads are explicit, revision-pinned and SHA-256 verified before atomic publication. Offline listing/inference performs no model download. Original recordings and JSON provenance remain under the ignored worktree results directory.
+  - Cleaning preserves ambiguous phrases, raw text and all timestamps. ONNX without alignment uses VAD segment bounds and no invented word times. Cleaned text feeds note normalization while raw transcription remains available.
   - Audio chunking and format normalization for `.mp3`, `.wav`, `.m4a`, and `.ogg`.
 - **Document Loaders & Sanitizers:**
   - PDF document loader (`pypdf`) with layout awareness.

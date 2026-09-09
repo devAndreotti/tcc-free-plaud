@@ -32,8 +32,18 @@ from free_plaud.providers.embed import get_embedder, validate_runtime_embedding_
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.storage.sqlite import get_all_notes, init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
+from free_plaud.tui.audio_actions import (  # noqa: F401 -- public shared facade
+    cancel_audio_capture,
+    download_voice_model,
+    get_audio_capture,
+    list_voice_models,
+    start_audio_capture,
+    stop_audio_capture,
+    transcribe_audio,
+    verify_voice_model,
+)
 
-AskStrategy = Literal['lexical', 'vector', 'hybrid']
+AskStrategy = Literal["lexical", "vector", "hybrid"]
 ProgressCallback = Callable[[CorpusIndexProgress], None]
 
 
@@ -46,8 +56,8 @@ def ask_corpus(
 ) -> AskResponse:
     cleaned_question = question.strip()
     if not cleaned_question:
-        raise ValueError('Pergunta vazia.')
-    if strategy not in {'lexical', 'vector', 'hybrid'}:
+        raise ValueError("Pergunta vazia.")
+    if strategy not in {"lexical", "vector", "hybrid"}:
         raise ValueError("strategy deve ser 'lexical', 'vector' ou 'hybrid'.")
 
     resolved_settings = settings or get_settings()
@@ -55,7 +65,7 @@ def ask_corpus(
     connection = init_sqlite(resolved_settings.sqlite_path)
     vector_store = None
     embedder = None
-    if strategy in {'vector', 'hybrid'}:
+    if strategy in {"vector", "hybrid"}:
         validate_runtime_embedding_model(resolved_settings.embedding_model)
         if runtime is not None:
             vector_store = runtime.get_vector_store()
@@ -65,7 +75,10 @@ def ask_corpus(
                 resolved_settings.vector_store_dir,
                 collection_name=resolved_settings.vector_collection_name,
             )
-            embedder = get_embedder(resolved_settings.embedding_model, device=resolved_settings.embedding_device)
+            embedder = get_embedder(
+                resolved_settings.embedding_model,
+                device=resolved_settings.embedding_device,
+            )
 
     try:
         return answer_corpus_with_citations(
@@ -106,20 +119,25 @@ def corpus_status_from_tui(*, settings: Settings | None = None) -> CorpusStatusR
 def _resolve_folder_path(folder_path: Path | str) -> Path:
     raw_path = str(folder_path).strip()
     if not raw_path:
-        raise ValueError('Informe uma pasta para indexar.')
+        raise ValueError("Informe uma pasta para indexar.")
 
     target = Path(raw_path).expanduser()
     if not target.exists():
-        raise FileNotFoundError(f'Pasta nao encontrada: {target}')
+        raise FileNotFoundError(f"Pasta nao encontrada: {target}")
     if not target.is_dir():
-        raise ValueError(f'Path precisa ser pasta: {target}')
+        raise ValueError(f"Path precisa ser pasta: {target}")
     return target
 
 
-def preflight_corpus_folder(folder_path: Path | str, *, recursive: bool | None = None) -> CorpusDiscoveryResult:
+def preflight_corpus_folder(
+    folder_path: Path | str, *, recursive: bool | None = None
+) -> CorpusDiscoveryResult:
     target = _resolve_folder_path(folder_path)
     settings = get_settings()
-    return discover_corpus_files(target, recursive=settings.corpus_recursive_default if recursive is None else recursive)
+    return discover_corpus_files(
+        target,
+        recursive=settings.corpus_recursive_default if recursive is None else recursive,
+    )
 
 
 def _failed_batch(path: Path, message: str) -> CorpusIndexBatchResult:
@@ -127,7 +145,7 @@ def _failed_batch(path: Path, message: str) -> CorpusIndexBatchResult:
     return CorpusIndexBatchResult(
         source_path=str(path),
         recursive=True,
-        status='failed',
+        status="failed",
         total_found=0,
         indexed_count=0,
         failed_count=0,
@@ -149,7 +167,9 @@ def index_corpus_folder(
 ) -> CorpusIndexBatchResult:
     target = _resolve_folder_path(folder_path)
     resolved_settings = settings or get_settings()
-    resolved_recursive = resolved_settings.corpus_recursive_default if recursive is None else recursive
+    resolved_recursive = (
+        resolved_settings.corpus_recursive_default if recursive is None else recursive
+    )
     ensure_runtime_dirs(resolved_settings)
     validate_runtime_embedding_model(resolved_settings.embedding_model)
     vector_store = runtime.get_vector_store() if runtime is not None else None
@@ -157,21 +177,21 @@ def index_corpus_folder(
     if runtime is not None:
         progress and progress(
             CorpusIndexProgress(
-                phase='warmup',
+                phase="warmup",
                 current_path=str(target),
                 commit_mode_requested=resolved_settings.corpus_commit_mode,
-                message=f'Aquecendo embeddings: {resolved_settings.embedding_model} device={resolved_settings.embedding_device}.',
+                message=f"Aquecendo embeddings: {resolved_settings.embedding_model} device={resolved_settings.embedding_device}.",
             )
         )
         warmup = runtime.warmup_embedder()
         embedder = runtime.get_embedder()
         progress and progress(
             CorpusIndexProgress(
-                phase='warmup',
+                phase="warmup",
                 current_path=str(target),
                 warmup_ms=warmup.elapsed_ms,
                 commit_mode_requested=resolved_settings.corpus_commit_mode,
-                message=f'Embeddings prontos em {warmup.elapsed_ms} ms.',
+                message=f"Embeddings prontos em {warmup.elapsed_ms} ms.",
             )
         )
 
@@ -188,7 +208,9 @@ def index_corpus_folder(
         )
         if result.index_result is not None:
             return result.index_result
-        return _failed_batch(target, result.message or result.error_code or 'Rebuild failed.')
+        return _failed_batch(
+            target, result.message or result.error_code or "Rebuild failed."
+        )
 
     return index_corpus_path(
         target,
@@ -207,8 +229,8 @@ def reset_corpus_from_tui(
     settings: Settings | None = None,
     runtime: CorpusRuntime | None = None,
 ) -> CorpusResetResult:
-    if confirm.strip() != 'LIMPAR':
-        raise ValueError('Digite LIMPAR para confirmar reset do corpus.')
+    if confirm.strip() != "LIMPAR":
+        raise ValueError("Digite LIMPAR para confirmar reset do corpus.")
     result = reset_corpus(settings=settings or get_settings(), dry_run=False)
     if runtime is not None:
         runtime.clear_vector_store()
@@ -225,18 +247,22 @@ def compare_suite_from_tui(
     ensure_runtime_dirs(resolved_settings)
     target = Path(suite_path).expanduser()
     if not target.exists():
-        raise FileNotFoundError(f'Suite nao encontrada: {target}')
+        raise FileNotFoundError(f"Suite nao encontrada: {target}")
     validate_runtime_embedding_model(resolved_settings.embedding_model)
 
     suite = load_benchmark_suite(target)
     connection = init_sqlite(resolved_settings.sqlite_path)
     vector_store = LocalVectorStore(
-        resolved_settings.results_dir / 'benchmark_compare' / suite.suite_name,
-        collection_name=f'{suite.suite_name}_compare',
+        resolved_settings.results_dir / "benchmark_compare" / suite.suite_name,
+        collection_name=f"{suite.suite_name}_compare",
     )
-    embedder = runtime.get_embedder() if runtime is not None else get_embedder(
-        resolved_settings.embedding_model,
-        device=resolved_settings.embedding_device,
+    embedder = (
+        runtime.get_embedder()
+        if runtime is not None
+        else get_embedder(
+            resolved_settings.embedding_model,
+            device=resolved_settings.embedding_device,
+        )
     )
     try:
         return compare_benchmark_suite(

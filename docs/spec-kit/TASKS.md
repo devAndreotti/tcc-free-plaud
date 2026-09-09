@@ -22,11 +22,19 @@
 - [x] Define Transcriber protocol interface in `providers/transcribe.py`.
 - [x] Implement concrete Whisper integration (`torchaudio` CUDA 12.8 / `faster-whisper`) and audio chunking.
 - [x] Implement model discovery and runtime provider diagnostics (`providers/model_discovery.py`, `app/doctor.py`).
-- [ ] Implement live audio capture from microphone with 16kHz resampling and VAD (`Silero VAD` / `vad-rs` approach, como no Handy).
-- [ ] Add offline curated speech model catalog (`models_catalog.json` / GGUF & ONNX metadata com verificação SHA256 e download HF no padrão Handy).
-- [ ] Implement ONNX runtime / lightweight STT support (`Moonshine` / `SenseVoice`) alongside `faster-whisper`.
-- [ ] Implement audio post-processing and text cleaner (filler word removal, Whisper hallucination stripping, timestamp preservation).
-- [ ] Expand automated transcription fixture tests and evaluation datasets.
+- [x] Implementar captura de áudio ao vivo do microfone com resample 16 kHz e Silero VAD em `pipeline/src/free_plaud/ingest/audio_capture.py`.
+- [x] Criar catálogo offline `models_catalog.json` com metadados ONNX/GGUF, SHA-256 e download Hugging Face verificado.
+- [x] Implementar runtime ONNX leve para SenseVoice e Moonshine convivendo com Faster-Whisper.
+- [x] Implementar limpeza conservadora de áudio/transcrição, preservando original e timestamps.
+- [x] Expandir testes automatizados de áudio/VAD e fixtures de avaliação reproduzíveis em `pipeline/tests/test_audio_vad.py` e arquivos auxiliares.
+- [x] Atualizar as tarefas da Worktree 1 com evidências de implementação e Quality Gate local.
+
+Evidência local: 432 testes Python, 17 testes VAD pela raiz, 64 testes de
+scripts, 12 testes UI e 7 E2E passaram. Cobertura 89,5%; ratchet e Ruff passaram;
+doctor do Quality Gate 9/9. Inferência real em SenseVoice/Moonshine CPU e
+Whisper small CPU/CUDA. Microfone: 47.398 amostras mono/16 kHz, sem fala detectada.
+Avaliação FLEURS: 54 execuções. Detalhes e limitações em
+`docs/spec-kit/AUDIO_VALIDATION.md`. Entrega e checks finais: [PR #69](https://github.com/devAndreotti/tcc-free-plaud/pull/69).
 
 ---
 

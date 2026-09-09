@@ -11,6 +11,8 @@ class IngestedDocument(BaseModel):
     source_path: Path
     source_type: str = Field(description="Tipo lógico da origem, como txt, md ou pdf.")
     raw_text: str
+    cleaned_text: str | None = None
+    transcription_path: Path | None = None
 
 
 class IngestionResult(BaseModel):
@@ -21,7 +23,7 @@ class IngestionResult(BaseModel):
     source_path: Path
     source_type: str | None = None
     detected_media_type: str | None = None
-    status: Literal['success', 'failed']
+    status: Literal["success", "failed"]
     size_bytes: int = 0
     content_sha256: str | None = None
     raw_text: str = ""

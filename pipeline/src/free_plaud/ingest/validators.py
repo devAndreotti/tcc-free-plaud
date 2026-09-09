@@ -1,6 +1,7 @@
 from pathlib import Path
 
-SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
+AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg"}
+SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"} | AUDIO_EXTENSIONS
 
 
 def validate_source_path(path: Path) -> Path:

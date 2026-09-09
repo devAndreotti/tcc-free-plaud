@@ -471,3 +471,50 @@ O primeiro marco forte do backend é:
 > Receber um PDF, gerar uma nota Markdown estruturada, indexar no banco vetorial e responder uma pergunta com citação da nota.
 
 Se isso estiver funcionando com testes e script de benchmark simples, o projeto já saiu da fase conceitual.
+
+
+## Sprint 09 — captura e transcrição local
+
+A fachada `tui.actions` reexporta as operações de `tui.audio_actions`;
+`CorpusRuntime.get_audio_runtime()` fornece o mesmo runtime por diretório.
+Captura, download e transcrição não começam ao importar o aplicativo.
+
+`ingest/audio_capture.py` mantém callback limitado à cópia em fila limitada.
+Um worker converte mono float32, usa SoXR contínuo a 16 kHz e salva WAV PCM16.
+Silero ONNX CPU mantém estado e contadores absolutos: limiares 0,5/0,35, fala
+mínima 250 ms, silêncio 300 ms, margem 100 ms e cortes de até 30 segundos.
+Parada descarrega amostras pendentes; cancelamento fecha o dispositivo e worker.
+Falhas de dispositivo, fila e escrita são explícitas.
+
+`AudioRuntime` serializa inferência e reutiliza os adaptadores. Faster-Whisper
+small usa `pt`, CUDA int8_float16 ou CPU int8; auto permite um retry CPU em
+falha de GPU. SenseVoice (zh/en/ja/ko/yue) e Moonshine (en) usam sherpa-onnx
+CPU. Nenhum dos dois oferece português. GGUF permanece catálogo/download.
+O catálogo empacotado fixa revisão, licença, tamanho e SHA-256; download é
+explícito e publica o diretório apenas depois de validar todos os artefatos.
+
+Arquivos WAV/MP3/M4A/OGG entram no loader. JSON associado guarda áudio de
+origem, hash, modelo/revisão, texto bruto e limpo, decisões de limpeza,
+intervalos absolutos e tempos nativos de palavras quando disponíveis.
+Sem alinhamento, usa limites VAD sem criar tempos de palavras. A nota mantém
+texto bruto e normaliza o limpo. Gravações e resultados ficam no diretório
+ignorado `data/results/audio`; arquivos de origem não são sobrescritos.
+
+Comandos (em `pipeline`, após `uv sync --locked --extra audio --dev`):
+
+```powershell
+uv run free-plaud ingest audio models
+uv run free-plaud ingest audio download silero-vad
+uv run free-plaud ingest audio download whisper-small
+uv run free-plaud ingest audio verify whisper-small
+uv run free-plaud ingest audio transcribe caminho.wav --language pt
+uv run free-plaud ingest audio record --seconds 10
+uv run free-plaud ingest audio record --seconds 10 --index
+```
+
+Gravação parada entra na fila STT. `--index` solicita indexação do snapshot
+limpo associado ao JSON; a opção é explícita. Cancelamento durante inferência
+nativa é observado entre segmentos e antes de publicar o resultado.
+Avaliação WER/CER e tempo real fica em `benchmark/audio.py`; evidências e
+limitações em `docs/spec-kit/AUDIO_VALIDATION.md`. Watcher, dropzone e novas
+interfaces permanecem fora desta entrega.
