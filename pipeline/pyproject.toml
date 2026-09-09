@@ -28,6 +28,7 @@ gpu-cu128 = [
 
 [dependency-groups]
 dev = [
+  "pyinstaller>=6.22.2",
   "pytest>=8.3.0",
   "pytest-cov>=5.0.0",
   "ruff>=0.16.3",
