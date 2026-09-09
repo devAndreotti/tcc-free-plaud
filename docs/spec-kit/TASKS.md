@@ -24,3 +24,10 @@
 - [x] Implement 3D/2D force-directed interactive knowledge graph (`UI/src/components/ForceGraph.tsx`, `GraphPanel.tsx`).
 - [ ] Implement automated filesystem watcher daemon (`ingest/watcher.py`) for live folder sync.
 - [ ] Implement batch audio dropzone in Desktop UI with real-time transcription progress.
+
+## [CLAUDE] Worktree 3: TCC Academic Monograph & Research Synthesis
+- [x] Consolidar os resultados empíricos do Experimento 15 (MRR, Recall@k, latência) na monografia final em `docs/tcc/texto/TCC.md`.
+- [x] Inserir fundamentação matemática e experimental da fusão RRF com constante $k=60$ e pesos calibrados ($w_{lexical}=1.5$, $w_{vector}=1.0$).
+- [x] Responder formalmente e com embasamento quantitativo às perguntas de pesquisa (P1: vantagem híbrida, P2: chunking e lineage, P3: embeddings/LLM locais vs. nuvem).
+- [x] Revisar referências bibliográficas contra `docs/referencias_ia/` e `docs/tcc/apoio/revisao_bibliografica_rag_tcc.md`.
+- [x] Atualizar `docs/spec-kit/TASKS.md` marcando as caixas da Worktree 3 com `[x]`.
