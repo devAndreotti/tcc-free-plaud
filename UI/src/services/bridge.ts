@@ -27,6 +27,32 @@ export interface MarkdownNodeRaw {
   modified: string;
 }
 
+export interface WatcherStartResult {
+  ok: boolean;
+  active: boolean;
+  directory: string | null;
+}
+
+export interface WatcherStatus {
+  active: boolean;
+  directory: string | null;
+}
+
+export interface WatcherIngestionEvent {
+  ingestion_id: string;
+  correlation_id: string;
+  source_path: string;
+  source_type: string | null;
+  detected_media_type: string | null;
+  status: "success" | "failed";
+  size_bytes: number;
+  content_sha256: string | null;
+  error_code: string | null;
+  message: string | null;
+  warnings: string[];
+  created_at: string;
+}
+
 export interface IndexVaultResult {
   ok: boolean;
   status: string;
@@ -307,6 +333,18 @@ interface PythonApi {
   /** Indexa a pasta selecionada no corpus local do backend. */
   indexVault?: (folderPath: string) => Promise<IndexVaultResult>;
 
+  /** Inicia monitoramento continuo de uma pasta para auto-ingestao de novos arquivos. */
+  startWatcher?: (folderPath: string) => Promise<WatcherStartResult>;
+
+  /** Para o monitoramento continuo ativo. */
+  stopWatcher?: () => Promise<WatcherStartResult>;
+
+  /** Consulta se ha monitoramento ativo e qual pasta esta sendo observada. */
+  getWatcherStatus?: () => Promise<WatcherStatus>;
+
+  /** Drena eventos de ingestao capturados pelo watcher desde a ultima consulta. */
+  pollWatcherEvents?: () => Promise<WatcherIngestionEvent[]>;
+
   /** Inicia job assíncrono de indexação de pasta. */
   startIndexJob?: (folderPath: string, rebuild?: boolean) => Promise<IndexJobSnapshot>;
 
@@ -537,6 +575,9 @@ const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobS
 });
 
 // ─── Serviço de bridge exportado ─────────────────────────────────────────────
+let mockWatcherActive = false;
+let mockWatcherDirectory: string | null = null;
+
 export const bridge = {
   /**
    * Envia uma mensagem ao backend Python.
@@ -653,6 +694,40 @@ export const bridge = {
     }
     console.debug(`[Bridge Mock] cancelIndexJob: ${jobId}`);
     return mockIndexJob('cancelled');
+  },
+
+  startWatcher: async (folderPath: string): Promise<WatcherStartResult> => {
+    if (isDesktopApp && window.pywebview?.api.startWatcher) {
+      return window.pywebview.api.startWatcher(folderPath);
+    }
+    console.debug(`[Bridge Mock] startWatcher: ${folderPath}`);
+    mockWatcherActive = true;
+    mockWatcherDirectory = folderPath;
+    return { ok: true, active: true, directory: folderPath };
+  },
+
+  stopWatcher: async (): Promise<WatcherStartResult> => {
+    if (isDesktopApp && window.pywebview?.api.stopWatcher) {
+      return window.pywebview.api.stopWatcher();
+    }
+    console.debug("[Bridge Mock] stopWatcher");
+    mockWatcherActive = false;
+    mockWatcherDirectory = null;
+    return { ok: true, active: false, directory: null };
+  },
+
+  getWatcherStatus: async (): Promise<WatcherStatus> => {
+    if (isDesktopApp && window.pywebview?.api.getWatcherStatus) {
+      return window.pywebview.api.getWatcherStatus();
+    }
+    return { active: mockWatcherActive, directory: mockWatcherDirectory };
+  },
+
+  pollWatcherEvents: async (): Promise<WatcherIngestionEvent[]> => {
+    if (isDesktopApp && window.pywebview?.api.pollWatcherEvents) {
+      return window.pywebview.api.pollWatcherEvents();
+    }
+    return [];
   },
 
   getBackendSettings: async (): Promise<BackendSettings> => {

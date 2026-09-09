@@ -22,5 +22,5 @@
 - [x] Implement PyWebView native container (`UI/main.py`) with bidirectional Python-JS bridge.
 - [x] Implement React 19 + Tailwind CSS frontend with Chat, Note Browser, Settings Modal, and Benchmark Viewer.
 - [x] Implement 3D/2D force-directed interactive knowledge graph (`UI/src/components/ForceGraph.tsx`, `GraphPanel.tsx`).
-- [ ] Implement automated filesystem watcher daemon (`ingest/watcher.py`) for live folder sync.
-- [ ] Implement batch audio dropzone in Desktop UI with real-time transcription progress.
+- [x] Implement automated filesystem watcher daemon (`ingest/watcher.py`) for live folder sync.
+- [x] Implement batch audio dropzone in Desktop UI with real-time transcription progress.
