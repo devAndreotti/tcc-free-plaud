@@ -74,3 +74,7 @@ def tui() -> None:
 
     run_tui()
 
+
+
+if __name__ == "__main__":
+    app()
