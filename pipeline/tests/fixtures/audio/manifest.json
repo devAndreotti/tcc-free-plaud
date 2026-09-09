@@ -1,0 +1,76 @@
+{
+  "samples": [
+    {
+      "file": "pt_br-2350591635813132689.wav",
+      "dataset": "google/fleurs",
+      "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+      "config": "pt_br",
+      "split": "test",
+      "row_id": "1860",
+      "reference": "o gabinete do governador afirmou que 19 dos feridos eram agentes policiais",
+      "sha256": "e0176e96b882ef620e78d564f35688e8f71248c4ca184617a5ec66a47e16fca6",
+      "license": "CC-BY-4.0",
+      "source": "https://huggingface.co/datasets/google/fleurs"
+    },
+    {
+      "file": "pt_br-2932522176903992902.wav",
+      "dataset": "google/fleurs",
+      "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+      "config": "pt_br",
+      "split": "test",
+      "row_id": "1860",
+      "reference": "o gabinete do governador afirmou que 19 dos feridos eram agentes policiais",
+      "sha256": "383170febb463ea2525efaa98252adb74c8b0c30eb9b792ab0b2a63aa1d3326d",
+      "license": "CC-BY-4.0",
+      "source": "https://huggingface.co/datasets/google/fleurs"
+    },
+    {
+      "file": "pt_br-3120476782377592022.wav",
+      "dataset": "google/fleurs",
+      "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+      "config": "pt_br",
+      "split": "test",
+      "row_id": "1860",
+      "reference": "o gabinete do governador afirmou que 19 dos feridos eram agentes policiais",
+      "sha256": "6d2c4189af6d64981fdb4970fa0726280bb3d0f6b2b2ad991e39412187168194",
+      "license": "CC-BY-4.0",
+      "source": "https://huggingface.co/datasets/google/fleurs"
+    },
+    {
+      "file": "en_us-12741024238657315067.wav",
+      "dataset": "google/fleurs",
+      "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+      "config": "en_us",
+      "split": "test",
+      "row_id": "1980",
+      "reference": "unfortunately studying traffic flow is difficult because driver behavior cannot be predicted with one-hundred percent certainty",
+      "sha256": "3e76cc5728bfd7c24f1039b5c9a47e8d79c7f225605862e977833a4f79249bff",
+      "license": "CC-BY-4.0",
+      "source": "https://huggingface.co/datasets/google/fleurs"
+    },
+    {
+      "file": "en_us-621925716775998155.wav",
+      "dataset": "google/fleurs",
+      "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+      "config": "en_us",
+      "split": "test",
+      "row_id": "1914",
+      "reference": "twentieth century research has shown that there are two pools of genetic variation hidden and expressed",
+      "sha256": "cf4c405546467f94f1589e574bec7c07cfe2a709bdc40b65660ed24f74d13d60",
+      "license": "CC-BY-4.0",
+      "source": "https://huggingface.co/datasets/google/fleurs"
+    },
+    {
+      "file": "en_us-9055240296608129734.wav",
+      "dataset": "google/fleurs",
+      "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+      "config": "en_us",
+      "split": "test",
+      "row_id": "1980",
+      "reference": "unfortunately studying traffic flow is difficult because driver behavior cannot be predicted with one-hundred percent certainty",
+      "sha256": "bd5092d79fb9ebee7fee37e428ec3648d09f650f981cd3d2ba1040f06cb52b32",
+      "license": "CC-BY-4.0",
+      "source": "https://huggingface.co/datasets/google/fleurs"
+    }
+  ]
+}

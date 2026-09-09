@@ -24,3 +24,21 @@
 - [x] Implement 3D/2D force-directed interactive knowledge graph (`UI/src/components/ForceGraph.tsx`, `GraphPanel.tsx`).
 - [ ] Implement automated filesystem watcher daemon (`ingest/watcher.py`) for live folder sync.
 - [ ] Implement batch audio dropzone in Desktop UI with real-time transcription progress.
+
+## [CODEX] Worktree 1: Multimodal Audio, VAD & STT Pipeline
+
+Sprint 09 — `wt-audio`, branch `feat/audio-vad-stt-pipeline`.
+
+- [x] Implementar captura de áudio ao vivo do microfone com resample 16 kHz e Silero VAD em `pipeline/src/free_plaud/ingest/audio_capture.py`.
+- [x] Criar catálogo offline `models_catalog.json` com metadados ONNX/GGUF, SHA-256 e download Hugging Face verificado.
+- [x] Implementar runtime ONNX leve para SenseVoice e Moonshine convivendo com Faster-Whisper.
+- [x] Implementar limpeza conservadora de áudio/transcrição, preservando original e timestamps.
+- [x] Expandir testes automatizados de áudio/VAD e fixtures de avaliação reproduzíveis em `pipeline/tests/test_audio_vad.py` e arquivos auxiliares.
+- [ ] Concluir atualização das tarefas da Worktree 1 com Quality Gate final e evidências de entrega.
+
+Evidência parcial: 406 testes Python, 17 testes VAD após correção de cortes,
+6 testes adicionais de integração e 64 testes de scripts passaram. Inferência
+real validada em SenseVoice/Moonshine CPU e Whisper small CPU/CUDA. Captura real
+de 3 segundos produziu 47.398 amostras mono/16 kHz, sem fala detectada. Avaliação
+FLEURS: 54 execuções nos três modos. Resultados e limitações em
+`docs/spec-kit/AUDIO_VALIDATION.md`. Gate final, PR/CI e merge ainda pendentes.
