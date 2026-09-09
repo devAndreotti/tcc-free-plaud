@@ -8,6 +8,9 @@ const bridgeMock = vi.hoisted(() => ({
   startIndexJob: vi.fn(),
   getIndexJob: vi.fn(),
   cancelIndexJob: vi.fn(),
+  startWatcher: vi.fn(),
+  stopWatcher: vi.fn(),
+  pollWatcherEvents: vi.fn(),
 }));
 
 vi.mock('../services/bridge', () => ({
@@ -60,11 +63,17 @@ describe('QueuePanel', () => {
     bridgeMock.startIndexJob.mockReset();
     bridgeMock.getIndexJob.mockReset();
     bridgeMock.cancelIndexJob.mockReset();
+    bridgeMock.startWatcher.mockReset();
+    bridgeMock.stopWatcher.mockReset();
+    bridgeMock.pollWatcherEvents.mockReset();
 
     bridgeMock.selectFolder.mockResolvedValue('C:\\Vault');
     bridgeMock.startIndexJob.mockResolvedValue(runningJob);
     bridgeMock.getIndexJob.mockResolvedValue(runningJob);
     bridgeMock.cancelIndexJob.mockResolvedValue({ ...runningJob, status: 'cancelled', cancel_requested: true });
+    bridgeMock.startWatcher.mockResolvedValue({ ok: true, active: true, directory: 'C:\\Vault' });
+    bridgeMock.stopWatcher.mockResolvedValue({ ok: true, active: false, directory: null });
+    bridgeMock.pollWatcherEvents.mockResolvedValue([]);
   });
 
   it('cria job e mostra progresso consultado do backend', async () => {
@@ -97,5 +106,24 @@ describe('QueuePanel', () => {
     await waitFor(() => {
       expect(bridgeMock.cancelIndexJob).toHaveBeenCalledWith('job-queue-1');
     });
+  });
+
+  it('liga e desliga o watcher de pasta', async () => {
+    const user = userEvent.setup();
+    render(<QueuePanel />);
+
+    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
+    await user.click(screen.getByRole('button', { name: 'Monitorar pasta' }));
+
+    await waitFor(() => {
+      expect(bridgeMock.startWatcher).toHaveBeenCalledWith('C:\\Vault');
+    });
+    expect(await screen.findByRole('button', { name: 'Parar monitoramento' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Parar monitoramento' }));
+    await waitFor(() => {
+      expect(bridgeMock.stopWatcher).toHaveBeenCalled();
+    });
+    expect(await screen.findByRole('button', { name: 'Monitorar pasta' })).toBeTruthy();
   });
 });

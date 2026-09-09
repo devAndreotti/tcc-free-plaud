@@ -68,9 +68,9 @@
 - **Worktree**: `../wt-watcher`
 - **Branch**: `feat/watcher-and-dropzone`
 - **Responsável / Perfil**: Agy (Automação e UI React)
-- [ ] Implement automated filesystem watcher daemon (`ingest/watcher.py`) for live folder sync.
-- [ ] Implement batch audio/document dropzone in Desktop UI with real-time transcription/indexing progress.
-- [ ] Add visual notifications/toasts when new notes are auto-ingested.
+- [x] Implement automated filesystem watcher daemon (`ingest/watcher.py`) for live folder sync.
+- [x] Implement batch audio/document dropzone in Desktop UI with real-time transcription/indexing progress.
+- [x] Add visual notifications/toasts when new notes are auto-ingested.
 
 ---
 
