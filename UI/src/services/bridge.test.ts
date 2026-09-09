@@ -27,3 +27,22 @@ describe('bridge watcher (mock mode)', () => {
     expect(await bridge.pollWatcherEvents()).toEqual([]);
   });
 });
+
+describe('isDesktopApp (lazy PyWebView detection)', () => {
+  afterEach(() => {
+    delete (window as unknown as { pywebview?: unknown }).pywebview;
+  });
+
+  it('falls back to mock when window.pywebview is absent', async () => {
+    expect(await bridge.selectFolder()).toContain('mock');
+  });
+
+  it('delegates to window.pywebview.api once it becomes available', async () => {
+    const selectFolder = () => Promise.resolve('C:\\RealVault');
+    (window as unknown as { pywebview: { api: { selectFolder: typeof selectFolder } } }).pywebview = {
+      api: { selectFolder },
+    };
+
+    expect(await bridge.selectFolder()).toBe('C:\\RealVault');
+  });
+});
