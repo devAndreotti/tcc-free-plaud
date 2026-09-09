@@ -25,9 +25,10 @@
 - [ ] Implement automated filesystem watcher daemon (`ingest/watcher.py`) for live folder sync.
 - [ ] Implement batch audio dropzone in Desktop UI with real-time transcription progress.
 
-## [CLAUDE] Worktree 3: TCC Academic Monograph & Research Synthesis
-- [x] Consolidar os resultados empíricos do Experimento 15 (MRR, Recall@k, latência) na monografia final em `docs/tcc/texto/TCC.md`.
-- [x] Inserir fundamentação matemática e experimental da fusão RRF com constante $k=60$ e pesos calibrados ($w_{lexical}=1.5$, $w_{vector}=1.0$).
-- [x] Responder formalmente e com embasamento quantitativo às perguntas de pesquisa (P1: vantagem híbrida, P2: chunking e lineage, P3: embeddings/LLM locais vs. nuvem).
-- [x] Revisar referências bibliográficas contra `docs/referencias_ia/` e `docs/tcc/apoio/revisao_bibliografica_rag_tcc.md`.
-- [x] Atualizar `docs/spec-kit/TASKS.md` marcando as caixas da Worktree 3 com `[x]`.
+## [CLAUDE] Worktree 2: Vector Optimization & TurboQuant Compression
+- [x] Avaliar e implementar compressao vetorial extrema estilo TurboQuant para embeddings locais SentenceTransformers antes de persistir em SQLite / ChromaDB.
+- [x] Criar o modulo de quantizacao vetorial em runtime `pipeline/src/free_plaud/providers/embed_compressor.py` para reduzir footprint de RAM e disco.
+- [x] Adaptar o salvamento e leitura de vetores comprimidos mantendo compatibilidade total com a busca hibrida RRF (k=60).
+- [x] Criar suite de benchmark comparativa em `pipeline/src/free_plaud/benchmark/` avaliando tradeoffs de MRR, Recall@k e latencia (float32 vs embeddings quantizados).
+- [x] Adicionar testes unitarios rigorosos em `pipeline/tests/test_embed_compressor.py`.
+- [x] Atualizar `docs/spec-kit/TASKS.md` marcando as caixas da Worktree 2 com `[x]`.
