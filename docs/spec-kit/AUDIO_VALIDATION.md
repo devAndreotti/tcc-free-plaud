@@ -68,4 +68,9 @@ The initial high-severity js-yaml audit failure was fixed upstream in main and
 integrated without changing UI dependencies in this PR. The repeated audit passed
 the high-severity threshold; three moderate Vitest-related findings remain.
 Python audit reported no known vulnerabilities. Docker gate is skipped because
-this repository has no Docker files. PR and CI/SonarCloud evidence remain pending.
+this repository has no Docker files.
+
+Delivery and authoritative final CI/SonarCloud status:
+[PR #69](https://github.com/devAndreotti/tcc-free-plaud/pull/69).
+Copilot reported a review quota limit and did not perform an automated review.
+The six required checks must pass on the final head before squash merge.

@@ -34,7 +34,7 @@ scripts, 12 testes UI e 7 E2E passaram. Cobertura 89,5%; ratchet e Ruff passaram
 doctor do Quality Gate 9/9. Inferência real em SenseVoice/Moonshine CPU e
 Whisper small CPU/CUDA. Microfone: 47.398 amostras mono/16 kHz, sem fala detectada.
 Avaliação FLEURS: 54 execuções. Detalhes e limitações em
-`docs/spec-kit/AUDIO_VALIDATION.md`. PR/CI/SonarCloud e merge ainda pendentes.
+`docs/spec-kit/AUDIO_VALIDATION.md`. Entrega e checks finais: [PR #69](https://github.com/devAndreotti/tcc-free-plaud/pull/69).
 
 ---
 
