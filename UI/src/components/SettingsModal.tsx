@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { XIcon } from './Icons';
+import Select from './Select';
 import { useVaultContext } from '../hooks/useVaultContext';
 import { bridge, type BackendSettings, type ModelDiscoveryResult, type SettingRow } from '../services/bridge';
 
@@ -236,32 +237,28 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
       </div>
 
       {row.options.length > 0 ? (
-        <select
-          className="settings-select settings-control-wide"
+        <Select
+          className="settings-control-wide"
           value={settingDrafts[row.key] ?? ''}
-          aria-label={row.label}
-          onChange={(event) =>
-            setSettingDrafts((prev) => ({ ...prev, [row.key]: event.target.value }))
+          options={row.options}
+          ariaLabel={row.label}
+          onChange={(value) =>
+            setSettingDrafts((prev) => ({ ...prev, [row.key]: value }))
           }
-        >
-          {row.options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        />
       ) : row.value_type === 'bool' ? (
-        <select
-          className="settings-select settings-control-wide"
+        <Select
+          className="settings-control-wide"
           value={settingDrafts[row.key] ?? 'false'}
-          aria-label={row.label}
-          onChange={(event) =>
-            setSettingDrafts((prev) => ({ ...prev, [row.key]: event.target.value }))
+          options={[
+            { value: 'true', label: 'Sim' },
+            { value: 'false', label: 'Não' },
+          ]}
+          ariaLabel={row.label}
+          onChange={(value) =>
+            setSettingDrafts((prev) => ({ ...prev, [row.key]: value }))
           }
-        >
-          <option value="true">Sim</option>
-          <option value="false">Não</option>
-        </select>
+        />
       ) : (
         <input
           type={row.value_type === 'int' || row.value_type === 'float' ? 'number' : 'text'}
