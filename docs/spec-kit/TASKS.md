@@ -57,10 +57,10 @@
 - **Worktree**: `../wt-e2e`
 - **Branch**: `test/playwright-e2e-parity`
 - **Responsável / Perfil**: Claude (Opus) (Testes E2E, contratos frontend-backend e segurança)
-- [ ] Run and validate Playwright E2E test suite (`UI/e2e/01-chat-rag.spec.ts` to `07-zero-state.spec.ts`) against Vite test server with mock IPC bridge.
-- [ ] Verify full parity and bidirectional persistence of settings across CLI (`terminal_settings.py`), TUI (`tui/app.py - SettingsPane`) and GUI (`SettingsModal.tsx` / `user_settings.json`).
-- [ ] Verify hot-reloading of embedding and LLM provider configurations across all three interfaces without application restart.
-- [ ] Execute adversarial Playwright UI test suite (XSS payload sanitization in Markdown/spans and 504 provider timeout handling).
+- [x] Run and validate Playwright E2E test suite (`UI/e2e/01-chat-rag.spec.ts` to `07-zero-state.spec.ts`) against Vite test server with mock IPC bridge.
+- [x] Verify full parity and bidirectional persistence of settings across CLI (`terminal_settings.py`), TUI (`tui/app.py - SettingsPane`) and GUI (`SettingsModal.tsx` / `user_settings.json`).
+- [x] Verify hot-reloading of embedding and LLM provider configurations across all three interfaces without application restart.
+- [x] Execute adversarial Playwright UI test suite (XSS payload sanitization in Markdown/spans and 504 provider timeout handling).
 
 ---
 
