@@ -30,25 +30,29 @@ class WatcherManager:
         path = Path(folder_path).expanduser()
         with self._lock:
             if self._watcher is not None:
-                return {'ok': False, 'active': True, 'directory': str(self._watcher.directory)}
+                return {
+                    "ok": False,
+                    "active": True,
+                    "directory": str(self._watcher.directory),
+                }
             watcher = VaultWatcher(path, on_ingested=self._on_ingested)
             watcher.start()
             self._watcher = watcher
-            return {'ok': True, 'active': True, 'directory': str(path)}
+            return {"ok": True, "active": True, "directory": str(path)}
 
     def stop(self) -> dict:
         with self._lock:
             if self._watcher is None:
-                return {'ok': True, 'active': False}
+                return {"ok": True, "active": False}
             self._watcher.stop()
             self._watcher = None
-            return {'ok': True, 'active': False}
+            return {"ok": True, "active": False}
 
     def status(self) -> dict:
         with self._lock:
             if self._watcher is None:
-                return {'active': False, 'directory': None}
-            return {'active': True, 'directory': str(self._watcher.directory)}
+                return {"active": False, "directory": None}
+            return {"active": True, "directory": str(self._watcher.directory)}
 
     def poll_events(self) -> list[IngestionResult]:
         with self._lock:
