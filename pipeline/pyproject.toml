@@ -13,6 +13,7 @@ dependencies = [
   "chromadb>=1.5.7",
   "sentence-transformers>=5.4.1",
   "textual>=8.2.7",
+  "watchdog>=6.0.0",
 ]
 
 [project.optional-dependencies]

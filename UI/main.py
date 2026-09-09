@@ -47,6 +47,7 @@ from free_plaud.providers.answer import test_answer_provider
 from free_plaud.providers.model_discovery import list_answer_models
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
+from free_plaud.ingest.watcher_manager import watcher_manager
 
 load_local_env()
 
@@ -289,6 +290,22 @@ class Api:
 
         print(f"[Backend] Vault escaneado: {len(nodes)} arquivo(s) .md encontrado(s)")
         return nodes
+
+    def startWatcher(self, folder_path: str) -> dict:
+        """Inicia monitoramento continuo da pasta para auto-ingestao de novos arquivos."""
+        return watcher_manager.start(folder_path)
+
+    def stopWatcher(self) -> dict:
+        """Para o monitoramento continuo ativo, se houver."""
+        return watcher_manager.stop()
+
+    def getWatcherStatus(self) -> dict:
+        """Retorna se ha monitoramento ativo e qual diretorio esta sendo observado."""
+        return watcher_manager.status()
+
+    def pollWatcherEvents(self) -> list:
+        """Drena e retorna eventos de ingestao capturados pelo watcher desde a ultima consulta."""
+        return [event.model_dump(mode="json") for event in watcher_manager.poll_events()]
 
     def saveVaultPath(self, path: str) -> bool:
         """

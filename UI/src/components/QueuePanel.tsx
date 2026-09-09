@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bridge, type IndexJobSnapshot } from '../services/bridge';
+import Dropzone, { type DropzoneToast } from './Dropzone';
+import ToastStack from './ToastStack';
 
 const isActiveJob = (snapshot: IndexJobSnapshot | null) => snapshot?.status === 'running';
 
@@ -16,6 +18,8 @@ const QueuePanel = () => {
   const [job, setJob] = useState<IndexJobSnapshot | null>(null);
   const [status, setStatus] = useState('Pronto.');
   const [isBusy, setIsBusy] = useState(false);
+  const [watcherActive, setWatcherActive] = useState(false);
+  const [toasts, setToasts] = useState<DropzoneToast[]>([]);
 
   const progressText = useMemo(() => {
     if (!job?.progress) return '0/0';
@@ -37,6 +41,25 @@ const QueuePanel = () => {
     }, 1000);
     return () => window.clearInterval(interval);
   }, [job, refreshJob]);
+
+  const toggleWatcher = async () => {
+    if (watcherActive) {
+      await bridge.stopWatcher();
+      setWatcherActive(false);
+      return;
+    }
+    if (!folderPath) return;
+    const result = await bridge.startWatcher(folderPath);
+    setWatcherActive(result.active);
+  };
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
+  const addToast = useCallback((toast: DropzoneToast) => {
+    setToasts((prev) => [...prev, toast]);
+  }, []);
 
   const chooseFolder = async () => {
     setIsBusy(true);
@@ -104,8 +127,13 @@ const QueuePanel = () => {
             <button type="button" className="queue-panel__button queue-panel__button--danger" onClick={cancelJob} disabled={isBusy || !isActiveJob(job)}>
               Cancelar
             </button>
+            <button type="button" className="queue-panel__button" onClick={toggleWatcher} disabled={!folderPath && !watcherActive}>
+              {watcherActive ? 'Parar monitoramento' : 'Monitorar pasta'}
+            </button>
           </div>
         </div>
+
+        <Dropzone watchDirectory={watcherActive ? folderPath : null} onToast={addToast} />
 
         <label className="queue-panel__path">
           <span>Pasta</span>
@@ -193,6 +221,7 @@ const QueuePanel = () => {
           <div className="queue-panel__empty">Nenhum job iniciado nesta sessão.</div>
         )}
       </section>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </main>
   );
 };
