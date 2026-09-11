@@ -171,6 +171,7 @@ const Select = ({ value, options, onChange, ariaLabel, id, className, disabled, 
               role="option"
               aria-selected={option.value === value}
               aria-disabled={option.disabled || undefined}
+              aria-label={option.label}
               className={`select__option${index === activeIndex ? ' select__option--active' : ''}${
                 option.disabled ? ' select__option--disabled' : ''
               }`}

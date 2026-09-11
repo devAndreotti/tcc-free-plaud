@@ -75,6 +75,38 @@ describe('ChatInput - gravação de áudio', () => {
     expect(await screen.findByText('Dispositivo de audio indisponivel.')).toBeTruthy();
   });
 
+  it('orienta a abrir Configurações → Voz quando o modelo de transcrição não está instalado', async () => {
+    const user = userEvent.setup();
+    bridgeMock.startAudioCapture.mockResolvedValue({
+      job_id: 'audio-missing-model',
+      status: 'recording',
+      source_path: 'C:\\audio-missing-model.wav',
+      samples_captured: 0,
+      error_code: null,
+      message: null,
+      result: null,
+    });
+    bridgeMock.stopAudioCapture.mockResolvedValue({
+      job_id: 'audio-missing-model',
+      status: 'failed',
+      source_path: 'C:\\audio-missing-model.wav',
+      samples_captured: 16000,
+      error_code: 'AUDIO_MODEL_NOT_READY',
+      message: 'Model whisper-small missing or corrupt; download/verify it explicitly.',
+      result: null,
+    });
+
+    render(<ChatInput onSendMessage={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: 'Gravar áudio' }));
+    expect(await screen.findByRole('button', { name: 'Parar gravação' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Parar gravação' }));
+
+    expect(
+      await screen.findByText('Modelo de transcrição não está instalado. Abra Configurações → Voz para baixá-lo.')
+    ).toBeTruthy();
+  });
+
   it('incrementa o timer de tempo decorrido durante a gravação', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup();

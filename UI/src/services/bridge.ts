@@ -127,6 +127,44 @@ export interface AudioJobSnapshot {
   result: AudioTranscriptionResult | null;
 }
 
+/** Arquivo hash-verificado que compõe um modelo de voz no catálogo. */
+export interface VoiceModelFile {
+  path: string;
+  size: number;
+  sha256: string;
+}
+
+/** Modelo de voz do catálogo, enriquecido com metadados de UI e estado instalado. */
+export interface VoiceModelInfo {
+  id: string;
+  engine: string;
+  format: string;
+  repo_id: string;
+  revision: string;
+  languages: string[];
+  license: string;
+  files: VoiceModelFile[];
+  installed: boolean;
+  size_bytes: number;
+  label: string;
+  description: string;
+  speed_tier: 'rapido' | 'medio' | 'lento' | null;
+  quality_tier: 'basica' | 'boa' | 'alta' | null;
+  recommended: boolean;
+  supports_auto_language: boolean;
+}
+
+/** Snapshot de um job de download de modelo de voz em background. */
+export interface VoiceModelDownloadSnapshot {
+  job_id: string;
+  model_id: string;
+  status: 'downloading' | 'verifying' | 'completed' | 'failed' | 'cancelled' | string;
+  bytes_completed: number;
+  bytes_total: number;
+  error_code: string | null;
+  message: string | null;
+}
+
 export interface BackendSettings {
   answer_provider: string;
   answer_model: string;
@@ -386,6 +424,18 @@ interface PythonApi {
   /** Cancela gravação ou transcrição em andamento. */
   cancelAudioCapture?: (jobId: string) => Promise<AudioJobSnapshot>;
 
+  /** Lista os modelos de voz do catálogo com metadados de UI e estado instalado. */
+  listVoiceModels?: () => Promise<VoiceModelInfo[]>;
+
+  /** Inicia o download em background de um modelo de voz. */
+  startVoiceModelDownload?: (modelId: string) => Promise<VoiceModelDownloadSnapshot>;
+
+  /** Consulta progresso/status de um job de download de modelo de voz. */
+  getVoiceModelDownload?: (jobId: string) => Promise<VoiceModelDownloadSnapshot>;
+
+  /** Cancela um download de modelo de voz em andamento. */
+  cancelVoiceModelDownload?: (jobId: string) => Promise<VoiceModelDownloadSnapshot>;
+
   /** Retorna resumo das configurações/backend para o modal. */
   getBackendSettings?: () => Promise<BackendSettings>;
 
@@ -620,6 +670,58 @@ const mockAudioJob = (status: AudioJobSnapshot['status'] = 'recording'): AudioJo
   } : null,
 });
 
+const MOCK_VOICE_MODELS: VoiceModelInfo[] = [
+  {
+    id: 'whisper-small',
+    engine: 'faster-whisper',
+    format: 'ctranslate2',
+    repo_id: 'Systran/faster-whisper-small',
+    revision: 'mock',
+    languages: ['pt', 'en', 'es', 'fr', 'de', 'it', 'ja', 'ko', 'zh', 'ru'],
+    license: 'MIT',
+    files: [{ path: 'model.bin', size: 483_546_902, sha256: 'mock' }],
+    installed: true,
+    size_bytes: 483_546_902,
+    label: 'Whisper Small',
+    description: 'Multilíngue, boa precisão geral.',
+    speed_tier: 'medio',
+    quality_tier: 'alta',
+    recommended: true,
+    supports_auto_language: true,
+  },
+  {
+    id: 'moonshine-tiny-en',
+    engine: 'moonshine',
+    format: 'onnx',
+    repo_id: 'csukuangfj/sherpa-onnx-moonshine-tiny-en-int8',
+    revision: 'mock',
+    languages: ['en'],
+    license: 'MIT',
+    files: [{ path: 'encode.int8.onnx', size: 18_249_187, sha256: 'mock' }],
+    installed: false,
+    size_bytes: 123_967_539,
+    label: 'Moonshine Tiny',
+    description: 'Só inglês, muito rápido e leve.',
+    speed_tier: 'rapido',
+    quality_tier: 'basica',
+    recommended: false,
+    supports_auto_language: false,
+  },
+];
+
+const mockVoiceModelDownload = (
+  status: VoiceModelDownloadSnapshot['status'] = 'downloading',
+  modelId = 'moonshine-tiny-en'
+): VoiceModelDownloadSnapshot => ({
+  job_id: 'dl-mock',
+  model_id: modelId,
+  status,
+  bytes_completed: status === 'downloading' ? 60_000_000 : 123_967_539,
+  bytes_total: 123_967_539,
+  error_code: null,
+  message: status === 'completed' ? 'Modelo baixado e verificado.' : null,
+});
+
 // ─── Serviço de bridge exportado ─────────────────────────────────────────────
 let mockWatcherActive = false;
 let mockWatcherDirectory: string | null = null;
@@ -774,6 +876,39 @@ export const bridge = {
     }
     console.debug(`[Bridge Mock] cancelAudioCapture: ${jobId}`);
     return mockAudioJob('cancelled');
+  },
+
+  listVoiceModels: async (): Promise<VoiceModelInfo[]> => {
+    if (isDesktopApp() && window.pywebview?.api.listVoiceModels) {
+      return window.pywebview.api.listVoiceModels();
+    }
+    console.debug('[Bridge Mock] listVoiceModels');
+    return MOCK_VOICE_MODELS;
+  },
+
+  startVoiceModelDownload: async (modelId: string): Promise<VoiceModelDownloadSnapshot> => {
+    if (isDesktopApp() && window.pywebview?.api.startVoiceModelDownload) {
+      return window.pywebview.api.startVoiceModelDownload(modelId);
+    }
+    console.debug(`[Bridge Mock] startVoiceModelDownload: ${modelId}`);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return mockVoiceModelDownload('downloading', modelId);
+  },
+
+  getVoiceModelDownload: async (jobId: string): Promise<VoiceModelDownloadSnapshot> => {
+    if (isDesktopApp() && window.pywebview?.api.getVoiceModelDownload) {
+      return window.pywebview.api.getVoiceModelDownload(jobId);
+    }
+    console.debug(`[Bridge Mock] getVoiceModelDownload: ${jobId}`);
+    return mockVoiceModelDownload('completed');
+  },
+
+  cancelVoiceModelDownload: async (jobId: string): Promise<VoiceModelDownloadSnapshot> => {
+    if (isDesktopApp() && window.pywebview?.api.cancelVoiceModelDownload) {
+      return window.pywebview.api.cancelVoiceModelDownload(jobId);
+    }
+    console.debug(`[Bridge Mock] cancelVoiceModelDownload: ${jobId}`);
+    return mockVoiceModelDownload('cancelled');
   },
 
   startWatcher: async (folderPath: string): Promise<WatcherStartResult> => {

@@ -31,6 +31,18 @@ def audio_jobs(settings: Settings | None = None):
     return _jobs((settings.results_dir / "audio").resolve())
 
 
+@lru_cache(maxsize=8)
+def _download_jobs(root: Path):
+    from free_plaud.ingest.download_jobs import DownloadJobManager
+
+    return DownloadJobManager(_runtime(root).store)
+
+
+def download_jobs(settings: Settings | None = None):
+    settings = settings or get_settings()
+    return _download_jobs((settings.results_dir / "audio").resolve())
+
+
 def audio_options(settings: Settings | None = None) -> AudioOptions:
     settings = settings or get_settings()
     return AudioOptions(

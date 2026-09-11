@@ -12,6 +12,21 @@ import { bridge, type AudioJobSnapshot } from '../services/bridge';
 const isAudioJobDone = (snapshot: AudioJobSnapshot) =>
   snapshot.status === 'completed' || snapshot.status === 'failed' || snapshot.status === 'cancelled';
 
+/**
+ * Traduz uma falha de transcrição em mensagem acionável. Quando o modelo de
+ * voz configurado ainda não foi baixado (AUDIO_MODEL_NOT_READY), orienta o
+ * usuário a ir em Configurações → Voz em vez de mostrar só o erro técnico cru.
+ */
+const describeAudioFailure = (errorCode: string | null, message: string | null): string => {
+  const looksLikeMissingModel =
+    errorCode === 'AUDIO_MODEL_NOT_READY' ||
+    (message?.toLowerCase().includes('missing or corrupt') ?? false);
+  if (looksLikeMissingModel) {
+    return 'Modelo de transcrição não está instalado. Abra Configurações → Voz para baixá-lo.';
+  }
+  return message ?? 'Falha ao transcrever áudio.';
+};
+
 // Props do componente de input de chat
 interface ChatInputProps {
   onSendMessage: (text: string, attachment?: File) => void;
@@ -69,7 +84,7 @@ const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
       setText((prev) => (prev.trim() ? `${prev.trim()} ${snapshot.result!.text}` : snapshot.result!.text));
       setMicError('');
     } else if (snapshot.status === 'failed') {
-      setMicError(snapshot.message ?? 'Falha ao transcrever áudio.');
+      setMicError(describeAudioFailure(snapshot.error_code, snapshot.message));
     }
   }, [stopPolling]);
 

@@ -49,8 +49,12 @@ from free_plaud.retrieval.models import AskResponse
 from free_plaud.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
 from free_plaud.tui.audio_actions import (
     cancel_audio_capture,
+    cancel_voice_model_download,
     get_audio_capture,
+    get_voice_model_download,
+    list_voice_models,
     start_audio_capture,
+    start_voice_model_download,
     stop_audio_capture,
 )
 from free_plaud.ingest.watcher_manager import watcher_manager
@@ -332,6 +336,22 @@ class Api:
     def cancelAudioCapture(self, job_id: str) -> dict:
         """Cancela gravacao ou transcricao em andamento."""
         return cancel_audio_capture(job_id).model_dump(mode='json')
+
+    def listVoiceModels(self) -> list[dict]:
+        """Lista os modelos de voz do catalogo com metadados de UI e estado instalado."""
+        return list_voice_models()
+
+    def startVoiceModelDownload(self, model_id: str) -> dict:
+        """Inicia o download em background de um modelo de voz e devolve o job_id."""
+        return start_voice_model_download(model_id).model_dump(mode='json')
+
+    def getVoiceModelDownload(self, job_id: str) -> dict:
+        """Consulta progresso/status de um job de download de modelo de voz."""
+        return get_voice_model_download(job_id).model_dump(mode='json')
+
+    def cancelVoiceModelDownload(self, job_id: str) -> dict:
+        """Cancela um download de modelo de voz em andamento."""
+        return cancel_voice_model_download(job_id).model_dump(mode='json')
 
     def saveVaultPath(self, path: str) -> bool:
         """

@@ -3,7 +3,14 @@ import { createPortal } from 'react-dom';
 import { XIcon } from './Icons';
 import Select from './Select';
 import { useVaultContext } from '../hooks/useVaultContext';
-import { bridge, type BackendSettings, type ModelDiscoveryResult, type SettingRow } from '../services/bridge';
+import {
+  bridge,
+  type BackendSettings,
+  type ModelDiscoveryResult,
+  type SettingRow,
+  type VoiceModelDownloadSnapshot,
+  type VoiceModelInfo,
+} from '../services/bridge';
 
 // Props do modal de configurações
 interface SettingsModalProps {
@@ -39,6 +46,9 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [isIndexingVault, setIsIndexingVault] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>('voz');
   const [operationStatus, setOperationStatus] = useState('');
+  const [voiceModels, setVoiceModels] = useState<VoiceModelInfo[]>([]);
+  const [downloadJob, setDownloadJob] = useState<VoiceModelDownloadSnapshot | null>(null);
+  const [downloadError, setDownloadError] = useState('');
 
   // Consome o contexto global do vault
   const { vaultPath, selectVault, isScanning } = useVaultContext();
@@ -75,6 +85,57 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
         console.error('[SettingsModal] Erro ao carregar settings do backend:', error);
       });
   }, [isOpen]);
+
+  // Carrega o catálogo de modelos de voz (com estado instalado) quando o modal abre.
+  useEffect(() => {
+    if (!isOpen) return;
+    bridge.listVoiceModels()
+      .then(setVoiceModels)
+      .catch((error) => {
+        console.error('[SettingsModal] Erro ao listar modelos de voz:', error);
+      });
+  }, [isOpen]);
+
+  const selectedVoiceModel = voiceModels.find((model) => model.id === settingDrafts.audio_model) ?? null;
+
+  // Faz polling de um job de download de modelo de voz até ele terminar.
+  useEffect(() => {
+    if (!downloadJob || !['downloading', 'verifying'].includes(downloadJob.status)) return undefined;
+    const jobId = downloadJob.job_id;
+    const interval = window.setInterval(() => {
+      bridge.getVoiceModelDownload(jobId)
+        .then((latest) => {
+          setDownloadJob(latest);
+          if (latest.status === 'completed') {
+            void bridge.listVoiceModels().then(setVoiceModels);
+          }
+        })
+        .catch((error) => {
+          console.error('[SettingsModal] Erro ao consultar download de modelo:', error);
+        });
+    }, 500);
+    return () => window.clearInterval(interval);
+  }, [downloadJob]);
+
+  const handleDownloadVoiceModel = async (modelId: string) => {
+    setDownloadError('');
+    try {
+      const started = await bridge.startVoiceModelDownload(modelId);
+      setDownloadJob(started);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Falha ao iniciar download do modelo.');
+    }
+  };
+
+  const handleCancelVoiceModelDownload = async () => {
+    if (!downloadJob) return;
+    try {
+      const cancelled = await bridge.cancelVoiceModelDownload(downloadJob.job_id);
+      setDownloadJob(cancelled);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Falha ao cancelar download do modelo.');
+    }
+  };
 
   // Chama o contexto para abrir o seletor e escanear automaticamente
   const handleSelectVault = async () => {
@@ -277,6 +338,8 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   if (!isOpen) return null;
 
   const audioRows = backendSettings?.settings_catalog.filter((row) => row.group === 'Áudio' && !row.secret) ?? [];
+  const audioModelRow = audioRows.find((row) => row.key === 'audio_model') ?? null;
+  const otherAudioRows = audioRows.filter((row) => row.key !== 'audio_model');
   const iaCatalogRows = backendSettings?.settings_catalog.filter((row) => IA_CATALOG_KEYS.includes(row.key) && !row.secret) ?? [];
   const advancedRows = backendSettings?.settings_catalog.filter(
     (row) => !row.secret && row.group !== 'Áudio' && !IA_CATALOG_KEYS.includes(row.key)
@@ -506,7 +569,98 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                 <h3 id="settings-voz" className="settings-section__title">
                   Voz
                 </h3>
-                {audioRows.map(renderSettingRow)}
+
+                <div className="settings-item settings-item--stacked">
+                  <div className="settings-item__info">
+                    <span className="settings-item__label">
+                      {audioModelRow?.label ?? 'Modelo de transcrição (voz)'}
+                    </span>
+                    <span className="settings-item__description">
+                      {audioModelRow?.description ?? 'Modelo local usado para transcrever o áudio gravado no chat.'}
+                      {audioModelRow?.recommended !== null && audioModelRow?.recommended !== undefined &&
+                        ` · recomendado: ${audioModelRow.recommended}`}
+                    </span>
+                  </div>
+
+                  <Select
+                    className="settings-control-wide"
+                    value={settingDrafts.audio_model ?? ''}
+                    ariaLabel={audioModelRow?.label ?? 'Modelo de transcrição (voz)'}
+                    options={
+                      voiceModels.length > 0
+                        ? voiceModels.map((model) => ({
+                            value: model.id,
+                            label: model.label,
+                            hint: model.installed
+                              ? 'instalado'
+                              : `${(model.size_bytes / (1024 * 1024)).toFixed(0)} MB`,
+                          }))
+                        : (audioModelRow?.options ?? [])
+                    }
+                    onChange={(value) => {
+                      setSettingDrafts((prev) => ({ ...prev, audio_model: value }));
+                      setDownloadJob(null);
+                      setDownloadError('');
+                    }}
+                  />
+
+                  {selectedVoiceModel && (
+                    <div className="settings-item settings-item--stacked" aria-live="polite">
+                      <span className="settings-inline-status">
+                        {selectedVoiceModel.description} · {selectedVoiceModel.speed_tier ?? '?'} ·{' '}
+                        {selectedVoiceModel.quality_tier ?? '?'} ·{' '}
+                        {(selectedVoiceModel.size_bytes / (1024 * 1024)).toFixed(0)} MB
+                      </span>
+
+                      {selectedVoiceModel.installed ? (
+                        <span className="settings-inline-status">Modelo instalado.</span>
+                      ) : downloadJob && downloadJob.model_id === selectedVoiceModel.id && !['completed', 'failed', 'cancelled'].includes(downloadJob.status) ? (
+                        <div className="settings-item settings-item--stacked">
+                          <span className="settings-inline-status">
+                            {downloadJob.status === 'verifying'
+                              ? 'Verificando arquivos baixados...'
+                              : `Baixando... ${(downloadJob.bytes_completed / (1024 * 1024)).toFixed(0)} / ${(downloadJob.bytes_total / (1024 * 1024)).toFixed(0)} MB`}
+                          </span>
+                          <div className="queue-panel__progress" role="progressbar" aria-label="Progresso do download">
+                            <div
+                              className="queue-panel__progress-bar"
+                              style={{
+                                width: `${downloadJob.bytes_total > 0 ? Math.min(100, (downloadJob.bytes_completed / downloadJob.bytes_total) * 100) : 0}%`,
+                              }}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className="vault-picker__btn"
+                            onClick={handleCancelVoiceModelDownload}
+                          >
+                            Cancelar download
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="settings-item settings-item--stacked">
+                          {downloadJob?.model_id === selectedVoiceModel.id && downloadJob.status === 'failed' && (
+                            <span className="settings-warning">
+                              {downloadJob.message ?? 'Falha ao baixar o modelo.'}
+                            </span>
+                          )}
+                          {downloadError && <span className="settings-warning">{downloadError}</span>}
+                          <button
+                            type="button"
+                            className="vault-picker__btn"
+                            onClick={() => handleDownloadVoiceModel(selectedVoiceModel.id)}
+                          >
+                            {downloadJob?.model_id === selectedVoiceModel.id && downloadJob.status === 'failed'
+                              ? 'Tentar novamente'
+                              : 'Baixar modelo'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {otherAudioRows.map(renderSettingRow)}
               </section>
             )}
 

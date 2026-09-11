@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsModal from './SettingsModal';
@@ -11,6 +11,10 @@ const bridgeMock = vi.hoisted(() => ({
   testAnswerProvider: vi.fn(),
   saveBackendSetting: vi.fn(),
   listAnswerModels: vi.fn(),
+  listVoiceModels: vi.fn(),
+  startVoiceModelDownload: vi.fn(),
+  getVoiceModelDownload: vi.fn(),
+  cancelVoiceModelDownload: vi.fn(),
 }));
 
 vi.mock('../services/bridge', () => ({
@@ -97,8 +101,13 @@ describe('SettingsModal', () => {
     bridgeMock.testAnswerProvider.mockReset();
     bridgeMock.saveBackendSetting.mockReset();
     bridgeMock.listAnswerModels.mockReset();
+    bridgeMock.listVoiceModels.mockReset();
+    bridgeMock.startVoiceModelDownload.mockReset();
+    bridgeMock.getVoiceModelDownload.mockReset();
+    bridgeMock.cancelVoiceModelDownload.mockReset();
 
     bridgeMock.getBackendSettings.mockResolvedValue(backendSettings);
+    bridgeMock.listVoiceModels.mockResolvedValue([]);
     bridgeMock.listAnswerModels.mockResolvedValue({
       provider: 'ollama',
       base_url: 'http://localhost:11434',
@@ -134,6 +143,100 @@ describe('SettingsModal', () => {
       expect((screen.getByLabelText('Modelo de resposta') as HTMLInputElement).value).toBe('mistral:7b');
     });
     expect(bridgeMock.saveBackendSetting).not.toHaveBeenCalled();
+  });
+
+  it('baixa modelo de voz nao instalado e reflete progresso ate completed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ delay: null });
+
+    const notInstalled = {
+      id: 'moonshine-tiny-en',
+      engine: 'moonshine',
+      format: 'onnx',
+      repo_id: 'org/moonshine',
+      revision: 'rev',
+      languages: ['en'],
+      license: 'MIT',
+      files: [{ path: 'model.onnx', size: 124_000_000, sha256: 'x' }],
+      installed: false,
+      size_bytes: 124_000_000,
+      label: 'Moonshine Tiny',
+      description: 'Só inglês, muito rápido e leve.',
+      speed_tier: 'rapido' as const,
+      quality_tier: 'basica' as const,
+      recommended: false,
+      supports_auto_language: false,
+    };
+    const whisperInstalled = {
+      id: 'whisper-small',
+      engine: 'faster-whisper',
+      format: 'ctranslate2',
+      repo_id: 'org/whisper',
+      revision: 'rev',
+      languages: ['pt', 'en'],
+      license: 'MIT',
+      files: [{ path: 'model.bin', size: 483_000_000, sha256: 'x' }],
+      installed: true,
+      size_bytes: 483_000_000,
+      label: 'Whisper Small',
+      description: 'Multilíngue, boa precisão geral.',
+      speed_tier: 'medio' as const,
+      quality_tier: 'alta' as const,
+      recommended: true,
+      supports_auto_language: true,
+    };
+    const moonshineInstalled = { ...notInstalled, installed: true };
+
+    bridgeMock.listVoiceModels
+      .mockResolvedValueOnce([whisperInstalled, notInstalled])
+      .mockResolvedValue([whisperInstalled, moonshineInstalled]);
+    bridgeMock.startVoiceModelDownload.mockResolvedValue({
+      job_id: 'dl-1',
+      model_id: 'moonshine-tiny-en',
+      status: 'downloading',
+      bytes_completed: 0,
+      bytes_total: 124_000_000,
+      error_code: null,
+      message: null,
+    });
+    bridgeMock.getVoiceModelDownload.mockResolvedValueOnce({
+      job_id: 'dl-1',
+      model_id: 'moonshine-tiny-en',
+      status: 'verifying',
+      bytes_completed: 124_000_000,
+      bytes_total: 124_000_000,
+      error_code: null,
+      message: null,
+    }).mockResolvedValue({
+      job_id: 'dl-1',
+      model_id: 'moonshine-tiny-en',
+      status: 'completed',
+      bytes_completed: 124_000_000,
+      bytes_total: 124_000_000,
+      error_code: null,
+      message: 'Modelo baixado e verificado.',
+    });
+
+    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+
+    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
+    await user.click(await screen.findByRole('option', { name: 'Moonshine Tiny' }));
+
+    expect(await screen.findByRole('button', { name: 'Baixar modelo' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Baixar modelo' }));
+    await waitFor(() => {
+      expect(bridgeMock.startVoiceModelDownload).toHaveBeenCalledWith('moonshine-tiny-en');
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    expect(await screen.findByText('Modelo instalado.')).toBeTruthy();
+
+    vi.useRealTimers();
   });
 
   it('mostra estado offline sem quebrar modal', async () => {
