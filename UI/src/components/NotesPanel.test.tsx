@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import NotesPanel from './NotesPanel';
+import NotesPanel, { __resetNotesCacheForTests } from './NotesPanel';
 
 const bridgeMock = vi.hoisted(() => ({
   listNotes: vi.fn(),
@@ -45,6 +45,7 @@ describe('NotesPanel', () => {
   });
 
   beforeEach(() => {
+    __resetNotesCacheForTests();
     bridgeMock.listNotes.mockReset();
     bridgeMock.getNoteDetail.mockReset();
     bridgeMock.deleteNote.mockReset();
@@ -96,5 +97,48 @@ describe('NotesPanel', () => {
     await waitFor(() => {
       expect(bridgeMock.deleteNote).toHaveBeenCalledWith('nota-alpha', 'APAGAR');
     });
+  });
+
+  it('mostra skeleton no primeiro load, sem cache', async () => {
+    let resolveList: (notes: (typeof noteSummary)[]) => void = () => {};
+    bridgeMock.listNotes.mockReturnValue(
+      new Promise((resolve) => {
+        resolveList = resolve;
+      })
+    );
+
+    render(<NotesPanel />);
+
+    expect(document.querySelectorAll('.skeleton-box').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Nota alpha')).toBeNull();
+
+    resolveList([noteSummary]);
+
+    expect((await screen.findAllByText('Nota alpha')).length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('.skeleton-box').length).toBe(0);
+  });
+
+  it('reusa o cache ao remontar, sem mostrar skeleton, e revalida em segundo plano', async () => {
+    const first = render(<NotesPanel />);
+    expect((await screen.findAllByText('Nota alpha')).length).toBeGreaterThan(0);
+    first.unmount();
+
+    bridgeMock.listNotes.mockClear();
+    let resolveSecond: (notes: (typeof noteSummary)[]) => void = () => {};
+    bridgeMock.listNotes.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSecond = resolve;
+      })
+    );
+
+    render(<NotesPanel />);
+
+    // Mostra o cache imediatamente - sem skeleton, sem tela vazia.
+    expect(screen.getByText('Nota alpha')).toBeTruthy();
+    expect(document.querySelectorAll('.skeleton-box').length).toBe(0);
+    expect(bridgeMock.listNotes).toHaveBeenCalledTimes(1);
+
+    resolveSecond([noteSummary]);
+    await waitFor(() => expect(screen.getByText('Nota alpha')).toBeTruthy());
   });
 });

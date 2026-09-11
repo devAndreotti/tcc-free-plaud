@@ -8,8 +8,22 @@ import {
   type NoteSummary,
 } from '../services/bridge';
 
+// Cache em variável de módulo (fora do componente): sobrevive à desmontagem
+// de NotesPanel quando o usuário troca de aba (App.tsx desmonta a view ao
+// trocar), evitando recarregar do zero e mostrar tela vazia toda vez que o
+// usuário volta para Notes.
+// ponytail: cache não sobrevive a fechar o processo - promover para
+// localStorage/Context se precisar persistir entre sessões do app.
+let notesCache: NoteSummary[] | null = null;
+
+/** Exportado só para os testes resetarem o cache de módulo entre casos. */
+// eslint-disable-next-line react-refresh/only-export-components -- helper de teste, não um componente.
+export const __resetNotesCacheForTests = () => {
+  notesCache = null;
+};
+
 const NotesPanel = () => {
-  const [notes, setNotes] = useState<NoteSummary[]>([]);
+  const [notes, setNotes] = useState<NoteSummary[]>(() => notesCache ?? []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<NoteDetail | null>(null);
   const [query, setQuery] = useState('');
@@ -18,6 +32,10 @@ const NotesPanel = () => {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [status, setStatus] = useState('Pronto.');
+
+  // Skeleton só no primeiro load real (sem cache) - com cache, a lista
+  // aparece imediatamente e a revalidação acontece em silêncio.
+  const showSkeleton = isLoadingList && notes.length === 0;
 
   const filteredNotes = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -29,11 +47,17 @@ const NotesPanel = () => {
   }, [notes, query]);
 
   const loadNotes = useCallback(async () => {
+    const hadCache = notesCache !== null;
     setIsLoadingList(true);
-    setStatus('Carregando notas indexadas...');
+    if (!hadCache) setStatus('Carregando notas indexadas...');
     try {
       const loaded = await bridge.listNotes();
-      setNotes(loaded);
+      // Evita re-render/flicker quando o resultado é idêntico ao já exibido.
+      const changed = JSON.stringify(loaded) !== JSON.stringify(notesCache);
+      notesCache = loaded;
+      if (changed) {
+        setNotes(loaded);
+      }
       setSelectedId((current) => {
         if (current && loaded.some((note) => note.note_id === current)) {
           return current;
@@ -149,26 +173,42 @@ const NotesPanel = () => {
         />
 
         <div className="notes-panel__items" aria-label="Notas">
-          {filteredNotes.map((note) => (
-            <button
-              key={note.note_id}
-              type="button"
-              className={`notes-panel__item ${selectedId === note.note_id ? 'notes-panel__item--active' : ''}`}
-              onClick={() => setSelectedId(note.note_id)}
-            >
-              <span className="notes-panel__item-icon">
-                <FileIcon size={15} />
-              </span>
-              <span className="notes-panel__item-body">
-                <span className="notes-panel__item-title">{note.title}</span>
-                <span className="notes-panel__item-path">{note.source_path}</span>
-              </span>
-              <span className="notes-panel__item-count">{note.chunk_count}</span>
-            </button>
-          ))}
+          {showSkeleton ? (
+            <div aria-hidden="true" aria-label="Carregando notas">
+              {[0, 1, 2, 3].map((key) => (
+                <div key={key} className="notes-panel__item">
+                  <span className="skeleton-box" />
+                  <span className="notes-panel__item-body">
+                    <span className="skeleton-box skeleton-box--name" />
+                    <span className="skeleton-box skeleton-box--path" />
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              {filteredNotes.map((note) => (
+                <button
+                  key={note.note_id}
+                  type="button"
+                  className={`notes-panel__item ${selectedId === note.note_id ? 'notes-panel__item--active' : ''}`}
+                  onClick={() => setSelectedId(note.note_id)}
+                >
+                  <span className="notes-panel__item-icon">
+                    <FileIcon size={15} />
+                  </span>
+                  <span className="notes-panel__item-body">
+                    <span className="notes-panel__item-title">{note.title}</span>
+                    <span className="notes-panel__item-path">{note.source_path}</span>
+                  </span>
+                  <span className="notes-panel__item-count">{note.chunk_count}</span>
+                </button>
+              ))}
 
-          {!isLoadingList && filteredNotes.length === 0 && (
-            <div className="notes-panel__empty">Nenhuma nota encontrada.</div>
+              {!isLoadingList && filteredNotes.length === 0 && (
+                <div className="notes-panel__empty">Nenhuma nota encontrada.</div>
+              )}
+            </>
           )}
         </div>
       </section>
