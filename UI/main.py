@@ -37,7 +37,7 @@ if PIPELINE_SRC.exists() and str(PIPELINE_SRC) not in sys.path:
 from free_plaud.app.config import get_settings
 from free_plaud.app.doctor import run_doctor
 from free_plaud.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
-from free_plaud.app.settings_catalog import save_catalog_setting, settings_catalog_payload
+from free_plaud.app.settings_catalog import save_catalog_setting, save_catalog_settings, settings_catalog_payload
 from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.benchmark.service import run_benchmark_compare
 from free_plaud.corpus.jobs import cancel_index_job, get_index_job, start_index_job
@@ -206,6 +206,11 @@ class Api:
         save_catalog_setting(key, value)
         self.runtime.clear()
         return {'ok': True}
+
+    def saveBackendSettings(self, values: dict) -> dict:
+        save_catalog_settings(values)
+        self.runtime.clear()
+        return self.getBackendSettings()
 
     def listNotes(self) -> list[dict]:
         return [note.model_dump(mode='json') for note in list_notes()]

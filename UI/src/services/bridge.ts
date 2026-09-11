@@ -152,6 +152,8 @@ export interface VoiceModelInfo {
   quality_tier: 'basica' | 'boa' | 'alta' | null;
   recommended: boolean;
   supports_auto_language: boolean;
+  /** false para componentes internos (ex.: VAD) — nao deve aparecer como opcao de modelo de transcricao. */
+  selectable: boolean;
 }
 
 /** Snapshot de um job de download de modelo de voz em background. */
@@ -208,6 +210,8 @@ export interface SettingRow {
   placeholder: string | null;
   warning: string | null;
   local_env_path: string | null;
+  min: number | null;
+  max: number | null;
 }
 
 export interface DoctorCheck {
@@ -463,6 +467,9 @@ interface PythonApi {
   /** Salva uma setting do catálogo canônico do backend. */
   saveBackendSetting?: (key: string, value: string | number | boolean | null) => Promise<{ ok: boolean }>;
 
+  /** Salva varios settings do catalogo numa unica escrita atomica; retorna o BackendSettings atualizado. */
+  saveBackendSettings?: (values: Record<string, string>) => Promise<BackendSettings>;
+
   /** Lista notas indexadas no corpus. */
   listNotes?: () => Promise<NoteSummary[]>;
 
@@ -513,9 +520,9 @@ const mockSendMessage = async (message: string): Promise<string> => {
 
 type MockSettingRow = Omit<
   SettingRow,
-  'storage' | 'options' | 'secret' | 'placeholder' | 'warning' | 'local_env_path'
+  'storage' | 'options' | 'secret' | 'placeholder' | 'warning' | 'local_env_path' | 'min' | 'max'
 > &
-  Partial<Pick<SettingRow, 'storage' | 'options' | 'placeholder' | 'warning' | 'local_env_path'>>;
+  Partial<Pick<SettingRow, 'storage' | 'options' | 'placeholder' | 'warning' | 'local_env_path' | 'min' | 'max'>>;
 
 const mockSettingRow = (row: MockSettingRow): SettingRow => ({
   storage: 'user_settings',
@@ -524,6 +531,8 @@ const mockSettingRow = (row: MockSettingRow): SettingRow => ({
   placeholder: null,
   warning: null,
   local_env_path: null,
+  min: null,
+  max: null,
   ...row,
 });
 
@@ -688,6 +697,7 @@ const MOCK_VOICE_MODELS: VoiceModelInfo[] = [
     quality_tier: 'alta',
     recommended: true,
     supports_auto_language: true,
+    selectable: true,
   },
   {
     id: 'moonshine-tiny-en',
@@ -706,6 +716,26 @@ const MOCK_VOICE_MODELS: VoiceModelInfo[] = [
     quality_tier: 'basica',
     recommended: false,
     supports_auto_language: false,
+    selectable: true,
+  },
+  {
+    id: 'silero-vad',
+    engine: 'silero',
+    format: 'onnx',
+    repo_id: 'snakers4/silero-vad',
+    revision: 'mock',
+    languages: [],
+    license: 'MIT',
+    files: [{ path: 'silero_vad.onnx', size: 1_802_437, sha256: 'mock' }],
+    installed: false,
+    size_bytes: 1_802_437,
+    label: 'Detector de fala (VAD)',
+    description: 'Componente interno usado para detectar trechos com fala antes de transcrever; necessário para gravar áudio.',
+    speed_tier: 'rapido',
+    quality_tier: 'alta',
+    recommended: false,
+    supports_auto_language: false,
+    selectable: false,
   },
 ];
 
@@ -1234,6 +1264,14 @@ export const bridge = {
     }
     console.debug(`[Bridge Mock] saveBackendSetting: ${key}=${String(value)}`);
     return { ok: true };
+  },
+
+  saveBackendSettings: async (values: Record<string, string>): Promise<BackendSettings> => {
+    if (isDesktopApp() && window.pywebview?.api.saveBackendSettings) {
+      return window.pywebview.api.saveBackendSettings(values);
+    }
+    console.debug('[Bridge Mock] saveBackendSettings:', values);
+    return bridge.getBackendSettings();
   },
 
   listNotes: async (): Promise<NoteSummary[]> => {

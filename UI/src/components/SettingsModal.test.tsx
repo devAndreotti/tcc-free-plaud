@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsModal from './SettingsModal';
@@ -127,6 +127,7 @@ const whisperModel = {
   quality_tier: 'alta' as const,
   recommended: true,
   supports_auto_language: true,
+  selectable: true,
 };
 
 const moonshineModel = {
@@ -146,6 +147,7 @@ const moonshineModel = {
   quality_tier: 'basica' as const,
   recommended: false,
   supports_auto_language: false,
+  selectable: true,
 };
 
 describe('SettingsModal', () => {
@@ -226,6 +228,7 @@ describe('SettingsModal', () => {
       quality_tier: 'basica' as const,
       recommended: false,
       supports_auto_language: false,
+      selectable: true,
     };
     const whisperInstalled = {
       id: 'whisper-small',
@@ -244,6 +247,7 @@ describe('SettingsModal', () => {
       quality_tier: 'alta' as const,
       recommended: true,
       supports_auto_language: true,
+      selectable: true,
     };
     const moonshineInstalled = { ...notInstalled, installed: true };
 
@@ -294,7 +298,77 @@ describe('SettingsModal', () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
 
-    expect(await screen.findByText('Modelo instalado.')).toBeTruthy();
+    expect(await screen.findByText('Instalado.')).toBeTruthy();
+
+    vi.useRealTimers();
+  });
+
+  it('baixa o componente silero-vad pela aba Voz sem oferece-lo como modelo de transcricao', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ delay: null });
+
+    const sileroVad = {
+      id: 'silero-vad',
+      engine: 'silero',
+      format: 'onnx',
+      repo_id: 'snakers4/silero-vad',
+      revision: 'rev',
+      languages: [],
+      license: 'MIT',
+      files: [{ path: 'silero_vad.onnx', size: 1_800_000, sha256: 'x' }],
+      installed: false,
+      size_bytes: 1_800_000,
+      label: 'Detector de fala (VAD)',
+      description: 'Componente interno usado para detectar trechos com fala antes de transcrever.',
+      speed_tier: 'rapido' as const,
+      quality_tier: 'alta' as const,
+      recommended: false,
+      supports_auto_language: false,
+      selectable: false,
+    };
+
+    bridgeMock.listVoiceModels
+      .mockResolvedValueOnce([whisperModel, sileroVad])
+      .mockResolvedValue([whisperModel, { ...sileroVad, installed: true }]);
+    bridgeMock.startVoiceModelDownload.mockResolvedValue({
+      job_id: 'dl-vad',
+      model_id: 'silero-vad',
+      status: 'downloading',
+      bytes_completed: 0,
+      bytes_total: 1_800_000,
+      error_code: null,
+      message: null,
+    });
+    bridgeMock.getVoiceModelDownload.mockResolvedValue({
+      job_id: 'dl-vad',
+      model_id: 'silero-vad',
+      status: 'completed',
+      bytes_completed: 1_800_000,
+      bytes_total: 1_800_000,
+      error_code: null,
+      message: 'Modelo baixado e verificado.',
+    });
+
+    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+
+    // silero-vad nunca aparece como opcao de modelo de transcricao.
+    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
+    expect(screen.queryByRole('option', { name: 'Detector de fala (VAD)' })).toBeNull();
+    await user.keyboard('{Escape}');
+
+    const vadSection = (await screen.findByText('Componente do sistema')).closest('div.settings-item') as HTMLElement;
+    await user.click(within(vadSection).getByRole('button', { name: 'Baixar modelo' }));
+
+    await waitFor(() => {
+      expect(bridgeMock.startVoiceModelDownload).toHaveBeenCalledWith('silero-vad');
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    expect(within(vadSection).queryByText('Instalado.')).toBeTruthy();
 
     vi.useRealTimers();
   });

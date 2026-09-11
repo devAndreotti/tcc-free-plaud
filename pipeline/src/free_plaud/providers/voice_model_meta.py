@@ -19,6 +19,9 @@ class VoiceModelUiMeta:
     # True apenas para engines que suportam deteccao automatica de idioma de
     # verdade (hoje so faster-whisper, via language=None). Ver providers/audio_engines.py.
     supports_auto_language: bool = False
+    # False para componentes internos (ex.: VAD) que aparecem na aba Voz para
+    # poder ser baixados, mas nunca devem ser oferecidos como modelo de transcricao.
+    selectable: bool = True
 
 
 VOICE_MODEL_UI_META: tuple[VoiceModelUiMeta, ...] = (
@@ -51,6 +54,14 @@ VOICE_MODEL_UI_META: tuple[VoiceModelUiMeta, ...] = (
         description="Variante quantizada; menor, precisao um pouco menor.",
         speed_tier="rapido",
         quality_tier="boa",
+    ),
+    VoiceModelUiMeta(
+        model_id="silero-vad",
+        label="Detector de fala (VAD)",
+        description="Componente interno usado para detectar trechos com fala antes de transcrever; necessario para gravar audio, nao e um modelo de transcricao.",
+        speed_tier="rapido",
+        quality_tier="alta",
+        selectable=False,
     ),
 )
 

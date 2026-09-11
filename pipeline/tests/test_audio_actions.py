@@ -10,12 +10,15 @@ def _settings(tmp_path: Path) -> Settings:
     return Settings(results_dir=tmp_path)
 
 
-def test_list_voice_models_filters_out_vad_model(tmp_path: Path) -> None:
+def test_list_voice_models_includes_vad_as_non_selectable(tmp_path: Path) -> None:
     models = list_voice_models(settings=_settings(tmp_path))
-    ids = {model['id'] for model in models}
+    by_id = {model['id']: model for model in models}
 
-    assert 'silero-vad' not in ids
-    assert 'whisper-small' in ids
+    assert 'whisper-small' in by_id
+    assert by_id['whisper-small']['selectable'] is True
+    assert 'silero-vad' in by_id
+    assert by_id['silero-vad']['selectable'] is False
+    assert by_id['silero-vad']['label'] == 'Detector de fala (VAD)'
 
 
 def test_list_voice_models_includes_ui_metadata(tmp_path: Path) -> None:

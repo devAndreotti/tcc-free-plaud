@@ -97,7 +97,9 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
       });
   }, [isOpen]);
 
-  const selectedVoiceModel = voiceModels.find((model) => model.id === settingDrafts.audio_model) ?? null;
+  const selectableVoiceModels = voiceModels.filter((model) => model.selectable);
+  const selectedVoiceModel = selectableVoiceModels.find((model) => model.id === settingDrafts.audio_model) ?? null;
+  const vadModel = voiceModels.find((model) => model.id === 'silero-vad') ?? null;
 
   // Faz polling de um job de download de modelo de voz até ele terminar.
   useEffect(() => {
@@ -191,12 +193,10 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     setIsSavingBackendSettings(true);
     try {
       const editableRows = backendSettings.settings_catalog.filter((row) => !row.secret);
-      await Promise.all(
-        editableRows.map((row) =>
-          bridge.saveBackendSetting(row.key, settingDrafts[row.key] ?? '')
-        )
+      const values = Object.fromEntries(
+        editableRows.map((row) => [row.key, settingDrafts[row.key] ?? ''])
       );
-      const settings = await bridge.getBackendSettings();
+      const settings = await bridge.saveBackendSettings(values);
       setBackendSettings(settings);
       setSettingDrafts(
         Object.fromEntries(
@@ -285,6 +285,46 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     setOperationStatus(`Modelo selecionado no draft: ${modelId}. Clique Salvar backend para gravar.`);
   };
 
+  // Estado de instalado/baixando/erro de UM modelo de voz - reusado tanto
+  // para o modelo de transcricao selecionado quanto para o VAD (componente
+  // interno, sempre necessario para gravar audio).
+  const renderVoiceModelDownloadStatus = (model: VoiceModelInfo) => (
+    <div className="settings-item settings-item--stacked" aria-live="polite">
+      {model.installed ? (
+        <span className="settings-inline-status">Instalado.</span>
+      ) : downloadJob && downloadJob.model_id === model.id && !['completed', 'failed', 'cancelled'].includes(downloadJob.status) ? (
+        <div className="settings-item settings-item--stacked">
+          <span className="settings-inline-status">
+            {downloadJob.status === 'verifying'
+              ? 'Verificando arquivos baixados...'
+              : `Baixando... ${(downloadJob.bytes_completed / (1024 * 1024)).toFixed(0)} / ${(downloadJob.bytes_total / (1024 * 1024)).toFixed(0)} MB`}
+          </span>
+          <div className="queue-panel__progress" role="progressbar" aria-label="Progresso do download">
+            <div
+              className="queue-panel__progress-bar"
+              style={{
+                width: `${downloadJob.bytes_total > 0 ? Math.min(100, (downloadJob.bytes_completed / downloadJob.bytes_total) * 100) : 0}%`,
+              }}
+            />
+          </div>
+          <button type="button" className="vault-picker__btn" onClick={handleCancelVoiceModelDownload}>
+            Cancelar download
+          </button>
+        </div>
+      ) : (
+        <div className="settings-item settings-item--stacked">
+          {downloadJob?.model_id === model.id && downloadJob.status === 'failed' && (
+            <span className="settings-warning">{downloadJob.message ?? 'Falha ao baixar o modelo.'}</span>
+          )}
+          {downloadError && downloadJob?.model_id === model.id && <span className="settings-warning">{downloadError}</span>}
+          <button type="button" className="vault-picker__btn" onClick={() => handleDownloadVoiceModel(model.id)}>
+            {downloadJob?.model_id === model.id && downloadJob.status === 'failed' ? 'Tentar novamente' : 'Baixar modelo'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   const renderSettingRow = (row: SettingRow, overrideOptions?: { value: string; label: string; disabled?: boolean }[]) => (
     <div key={row.key} className="settings-item settings-item--stacked">
       <div className="settings-item__info">
@@ -328,6 +368,9 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
           value={settingDrafts[row.key] ?? ''}
           placeholder={row.placeholder ?? ''}
           aria-label={row.label}
+          min={row.min ?? undefined}
+          max={row.max ?? undefined}
+          step={row.value_type === 'float' ? 'any' : undefined}
           onChange={(event) =>
             setSettingDrafts((prev) => ({ ...prev, [row.key]: event.target.value }))
           }
@@ -600,8 +643,8 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                     value={settingDrafts.audio_model ?? ''}
                     ariaLabel={audioModelRow?.label ?? 'Modelo de transcrição (voz)'}
                     options={
-                      voiceModels.length > 0
-                        ? voiceModels.map((model) => ({
+                      selectableVoiceModels.length > 0
+                        ? selectableVoiceModels.map((model) => ({
                             value: model.id,
                             label: model.label,
                             hint: model.installed
@@ -611,7 +654,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                         : (audioModelRow?.options ?? [])
                     }
                     onChange={(value) => {
-                      const nextModel = voiceModels.find((model) => model.id === value);
+                      const nextModel = selectableVoiceModels.find((model) => model.id === value);
                       setSettingDrafts((prev) => {
                         const next: Record<string, string> = { ...prev, audio_model: value };
                         // Se o idioma atual do draft nao existe mais no novo
@@ -642,57 +685,23 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                         {selectedVoiceModel.quality_tier ?? '?'} ·{' '}
                         {(selectedVoiceModel.size_bytes / (1024 * 1024)).toFixed(0)} MB
                       </span>
-
-                      {selectedVoiceModel.installed ? (
-                        <span className="settings-inline-status">Modelo instalado.</span>
-                      ) : downloadJob && downloadJob.model_id === selectedVoiceModel.id && !['completed', 'failed', 'cancelled'].includes(downloadJob.status) ? (
-                        <div className="settings-item settings-item--stacked">
-                          <span className="settings-inline-status">
-                            {downloadJob.status === 'verifying'
-                              ? 'Verificando arquivos baixados...'
-                              : `Baixando... ${(downloadJob.bytes_completed / (1024 * 1024)).toFixed(0)} / ${(downloadJob.bytes_total / (1024 * 1024)).toFixed(0)} MB`}
-                          </span>
-                          <div className="queue-panel__progress" role="progressbar" aria-label="Progresso do download">
-                            <div
-                              className="queue-panel__progress-bar"
-                              style={{
-                                width: `${downloadJob.bytes_total > 0 ? Math.min(100, (downloadJob.bytes_completed / downloadJob.bytes_total) * 100) : 0}%`,
-                              }}
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            className="vault-picker__btn"
-                            onClick={handleCancelVoiceModelDownload}
-                          >
-                            Cancelar download
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="settings-item settings-item--stacked">
-                          {downloadJob?.model_id === selectedVoiceModel.id && downloadJob.status === 'failed' && (
-                            <span className="settings-warning">
-                              {downloadJob.message ?? 'Falha ao baixar o modelo.'}
-                            </span>
-                          )}
-                          {downloadError && <span className="settings-warning">{downloadError}</span>}
-                          <button
-                            type="button"
-                            className="vault-picker__btn"
-                            onClick={() => handleDownloadVoiceModel(selectedVoiceModel.id)}
-                          >
-                            {downloadJob?.model_id === selectedVoiceModel.id && downloadJob.status === 'failed'
-                              ? 'Tentar novamente'
-                              : 'Baixar modelo'}
-                          </button>
-                        </div>
-                      )}
+                      {renderVoiceModelDownloadStatus(selectedVoiceModel)}
                     </div>
                   )}
                 </div>
 
                 {audioLanguageRow && renderSettingRow(audioLanguageRow, audioLanguageOptions)}
                 {otherAudioRows.map((row) => renderSettingRow(row))}
+
+                {vadModel && (
+                  <div className="settings-item settings-item--stacked">
+                    <div className="settings-item__info">
+                      <span className="settings-item__label">Componente do sistema</span>
+                      <span className="settings-item__description">{vadModel.description}</span>
+                    </div>
+                    {renderVoiceModelDownloadStatus(vadModel)}
+                  </div>
+                )}
               </section>
             )}
 

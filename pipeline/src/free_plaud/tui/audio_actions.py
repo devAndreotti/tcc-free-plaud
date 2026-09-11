@@ -40,8 +40,6 @@ def list_voice_models(*, settings: Settings | None = None) -> list[dict]:
     store = audio_runtime(settings).store
     result = []
     for model in store.catalog.values():
-        if model.engine == "silero":
-            continue  # modelo interno de VAD, nunca selecionavel pelo usuario
         meta = ui_meta_for(model.id)
         result.append(
             {
@@ -54,6 +52,7 @@ def list_voice_models(*, settings: Settings | None = None) -> list[dict]:
                 "quality_tier": meta.quality_tier if meta else None,
                 "recommended": meta.recommended if meta else False,
                 "supports_auto_language": meta.supports_auto_language if meta else False,
+                "selectable": meta.selectable if meta else True,
             }
         )
     return result

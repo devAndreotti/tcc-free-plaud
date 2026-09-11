@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from annotated_types import Ge, Le
+from pydantic import BaseModel, Field, ValidationError
 
 from free_plaud.app.config import Settings, get_settings, save_user_settings
 from free_plaud.app.local_env import (
@@ -10,6 +11,7 @@ from free_plaud.app.local_env import (
     save_answer_api_key,
 )
 from free_plaud.providers.audio_catalog import load_catalog
+from free_plaud.providers.voice_model_meta import ui_meta_for
 
 SettingValueType = Literal['string', 'int', 'float', 'bool', 'path', 'enum', 'secret']
 SettingStorage = Literal['user_settings', 'local_env']
@@ -269,6 +271,17 @@ def get_setting_spec(key: str) -> SettingSpec:
     raise KeyError(f'Setting desconhecida: {key}')
 
 
+def _numeric_bounds(key: str) -> tuple[float | None, float | None]:
+    """Limites ge/le ja declarados no proprio Settings (config.py) - unica
+    fonte de verdade, evita duplicar/desalinhar os ranges no catalogo."""
+    field = Settings.model_fields.get(key)
+    if field is None:
+        return None, None
+    minimum = next((m.ge for m in field.metadata if isinstance(m, Ge)), None)
+    maximum = next((m.le for m in field.metadata if isinstance(m, Le)), None)
+    return minimum, maximum
+
+
 def _setting_value(settings: Settings, spec: SettingSpec) -> Any:
     if spec.key == 'answer_api_key':
         return ''
@@ -290,6 +303,18 @@ def _warning_for(settings: Settings, spec: SettingSpec) -> str | None:
         return 'fake-hash é modelo de teste; use chroma-default ou sentence-transformer real.'
     if spec.key == 'embedding_device' and settings.embedding_model == 'chroma-default':
         return 'Device nao se aplica ao chroma-default.'
+    if spec.key == 'default_corpus_path' and settings.default_corpus_path is not None and not settings.default_corpus_path.is_dir():
+        return f'Pasta nao encontrada: {settings.default_corpus_path}'
+    if spec.key == 'audio_language':
+        model = load_catalog().get(settings.audio_model)
+        if model is not None and '*' not in model.languages:
+            language = settings.audio_language
+            if language == 'auto':
+                meta = ui_meta_for(settings.audio_model)
+                if not (meta and meta.supports_auto_language):
+                    return f'"{settings.audio_model}" não suporta detecção automática de idioma.'
+            elif language not in model.languages:
+                return f'"{settings.audio_model}" não suporta o idioma "{language}".'
     return None
 
 
@@ -297,6 +322,7 @@ def settings_catalog_payload(settings: Settings | None = None) -> list[dict[str,
     resolved = settings or get_settings()
     rows: list[dict[str, Any]] = []
     for index, spec in enumerate(SETTING_SPECS, start=1):
+        minimum, maximum = _numeric_bounds(spec.key) if spec.value_type in {'int', 'float'} else (None, None)
         rows.append(
             {
                 'index': index,
@@ -315,13 +341,15 @@ def settings_catalog_payload(settings: Settings | None = None) -> list[dict[str,
                 'placeholder': spec.placeholder,
                 'warning': _warning_for(resolved, spec),
                 'local_env_path': str(local_env_path_for(resolved)) if spec.storage == 'local_env' else None,
+                'min': minimum,
+                'max': maximum,
             }
         )
     return rows
 
 
 def parse_catalog_value(spec: SettingSpec, value: Any) -> Any:
-    if value is None or value == '':
+    if value is None or (isinstance(value, str) and value.strip() == ''):
         return None
     if spec.value_type in {'string', 'path', 'secret'}:
         return str(value).strip()
@@ -356,3 +384,38 @@ def save_catalog_setting(key: str, value: Any, *, settings: Settings | None = No
         save_answer_api_key('' if parsed is None else str(parsed), settings=settings)
         return
     save_user_settings({spec.key: parsed}, settings=settings)
+
+
+def save_catalog_settings(values: dict[str, Any], *, settings: Settings | None = None) -> Settings:
+    """Salva varias settings do catalogo numa unica leitura+escrita de
+    user_settings.json, em vez de uma chamada de save_user_settings por
+    chave. Isso existe porque N chamadas paralelas de save_catalog_setting
+    (uma por linha editavel do modal) fazem N ciclos concorrentes de
+    ler->mesclar->escrever no MESMO arquivo, sem lock e com escrita nao
+    atomica (Path.write_text trunca antes de escrever) - a race condition
+    classica de duas escritas se sobrepondo produz um arquivo vazio/
+    truncado. Uma unica chamada com todas as chaves elimina a concorrencia
+    na raiz, e valida o estado final combinado de uma vez so (util para
+    pares cruzados como default_chunk_size/default_chunk_overlap).
+    """
+    to_persist: dict[str, Any] = {}
+    for key, value in values.items():
+        spec = get_setting_spec(key)
+        try:
+            parsed = parse_catalog_value(spec, value)
+        except ValueError as exc:
+            raise ValueError(f'{key}: {exc}') from exc
+        if spec.storage == 'local_env':
+            if spec.key != 'answer_api_key':
+                raise ValueError(f'Setting local_env sem handler: {spec.key}')
+            save_answer_api_key('' if parsed is None else str(parsed), settings=settings)
+            continue
+        to_persist[spec.key] = parsed
+    if not to_persist:
+        return settings or get_settings()
+    try:
+        return save_user_settings(to_persist, settings=settings)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        field = '.'.join(str(loc) for loc in first['loc']) or 'configuração'
+        raise ValueError(f'{field}: {first["msg"]}') from exc
