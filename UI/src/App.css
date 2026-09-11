@@ -2256,7 +2256,7 @@
   line-height: 1.5;
 }
 
-/* Select estilizado */
+/* Base visual do trigger fechado do Select customizado (ver Select.tsx) */
 .settings-select {
   background: var(--bg-input);
   border: 1px solid var(--border-color);
@@ -2268,10 +2268,6 @@
   cursor: pointer;
   outline: none;
   transition: border-color var(--transition-fast);
-}
-
-.settings-select:focus {
-  border-color: var(--accent-blue);
 }
 
 /* ============================================================

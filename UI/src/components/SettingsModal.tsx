@@ -49,6 +49,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [voiceModels, setVoiceModels] = useState<VoiceModelInfo[]>([]);
   const [downloadJob, setDownloadJob] = useState<VoiceModelDownloadSnapshot | null>(null);
   const [downloadError, setDownloadError] = useState('');
+  const [theme, setTheme] = useState('dark');
 
   // Consome o contexto global do vault
   const { vaultPath, selectVault, isScanning } = useVaultContext();
@@ -749,15 +750,16 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                       </span>
                     </div>
                     <div className="settings-item__control">
-                      <select
+                      <Select
                         id="select-theme"
-                        className="settings-select"
-                        defaultValue="dark"
-                        aria-label="Selecionar tema"
-                      >
-                        <option value="dark">Escuro</option>
-                        <option value="light" disabled>Claro (em breve)</option>
-                      </select>
+                        value={theme}
+                        onChange={setTheme}
+                        ariaLabel="Selecionar tema"
+                        options={[
+                          { value: 'dark', label: 'Escuro' },
+                          { value: 'light', label: 'Claro (em breve)', disabled: true },
+                        ]}
+                      />
                     </div>
                   </div>
                 </section>
