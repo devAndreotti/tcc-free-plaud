@@ -25,6 +25,10 @@ class WhisperEngine:
         self.device = device
         self.warnings: list[str] = []
         self.model = None
+        # Preenchido apenas quando transcribe() roda com language="auto".
+        # ponytail: guarda so o ultimo idioma detectado entre regioes de VAD,
+        # nao um agregado - suficiente pro caso real de gravacao monolingue.
+        self.detected_language: str | None = None
 
     def _load(self) -> None:
         import ctranslate2
@@ -50,14 +54,18 @@ class WhisperEngine:
     def _decode(self, audio, language: str) -> list[TranscriptSegment]:
         if self.model is None:
             self._load()
-        segments, _ = self.model.transcribe(
+        # faster-whisper detecta o idioma automaticamente quando language=None.
+        lang_arg = None if language == "auto" else language
+        segments, info = self.model.transcribe(
             audio,
-            language=language,
+            language=lang_arg,
             beam_size=5,
             word_timestamps=True,
             vad_filter=False,
             condition_on_previous_text=False,
         )
+        if lang_arg is None:
+            self.detected_language = info.language
         return [
             TranscriptSegment(
                 start=max(0, segment.start),

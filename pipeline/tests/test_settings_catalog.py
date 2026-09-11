@@ -95,6 +95,16 @@ def test_save_catalog_setting_accepts_audio_fields(tmp_path: Path) -> None:
     assert payload['audio_device'] == 'cpu'
 
 
+def test_audio_language_options_come_from_catalog() -> None:
+    spec = get_setting_spec('audio_language')
+    values = {option.value for option in spec.options}
+
+    assert spec.value_type == 'enum'
+    assert 'auto' in values
+    # Idiomas reais suportados pelo whisper-small no catalogo (audio_catalog.py).
+    assert {'pt', 'en', 'es'} <= values
+
+
 def test_user_setting_fields_covers_all_catalog_specs() -> None:
     catalog_keys = {spec.key for spec in SETTING_SPECS if spec.storage == 'user_settings'}
     missing = catalog_keys - USER_SETTING_FIELDS

@@ -9,6 +9,7 @@ from free_plaud.app.local_env import (
     local_env_path_for,
     save_answer_api_key,
 )
+from free_plaud.providers.audio_catalog import load_catalog
 
 SettingValueType = Literal['string', 'int', 'float', 'bool', 'path', 'enum', 'secret']
 SettingStorage = Literal['user_settings', 'local_env']
@@ -32,6 +33,32 @@ class SettingSpec(BaseModel):
     recommended: str | int | float | bool | None = None
     secret: bool = False
     placeholder: str | None = None
+
+
+_LANGUAGE_LABELS = {
+    'pt': 'Português',
+    'en': 'Inglês',
+    'es': 'Espanhol',
+    'fr': 'Francês',
+    'de': 'Alemão',
+    'it': 'Italiano',
+    'ja': 'Japonês',
+    'ko': 'Coreano',
+    'zh': 'Chinês',
+    'ru': 'Russo',
+    'yue': 'Cantonês',
+}
+
+
+def _audio_language_options() -> list[SettingOption]:
+    """Opcoes de idioma derivadas do catalogo real de modelos de voz (fonte
+    unica de verdade - evita lista hardcoded divergindo do que os modelos
+    realmente suportam). "auto" so funciona de verdade com faster-whisper;
+    ver providers/audio_runtime.py."""
+    codes = sorted({lang for model in load_catalog().values() for lang in model.languages if lang != '*'})
+    options = [SettingOption(value='auto', label='Automático (detectar idioma)')]
+    options += [SettingOption(value=code, label=_LANGUAGE_LABELS.get(code, code.upper())) for code in codes]
+    return options
 
 
 SETTING_SPECS: tuple[SettingSpec, ...] = (
@@ -203,12 +230,12 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='audio_language',
         label='Idioma da transcrição',
-        description='Código de idioma passado ao modelo de voz (ex.: pt, en).',
+        description='Idioma usado pelo modelo de voz. "Automático" só funciona com modelos faster-whisper.',
         group='Áudio',
-        value_type='string',
+        value_type='enum',
         layer='simple',
+        options=_audio_language_options(),
         recommended='pt',
-        placeholder='pt',
     ),
     SettingSpec(
         key='audio_device',

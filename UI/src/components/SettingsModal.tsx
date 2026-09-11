@@ -284,7 +284,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     setOperationStatus(`Modelo selecionado no draft: ${modelId}. Clique Salvar backend para gravar.`);
   };
 
-  const renderSettingRow = (row: SettingRow) => (
+  const renderSettingRow = (row: SettingRow, overrideOptions?: { value: string; label: string; disabled?: boolean }[]) => (
     <div key={row.key} className="settings-item settings-item--stacked">
       <div className="settings-item__info">
         <span className="settings-item__label">{row.label}</span>
@@ -297,11 +297,11 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
         )}
       </div>
 
-      {row.options.length > 0 ? (
+      {(overrideOptions ?? row.options).length > 0 ? (
         <Select
           className="settings-control-wide"
           value={settingDrafts[row.key] ?? ''}
-          options={row.options}
+          options={overrideOptions ?? row.options}
           ariaLabel={row.label}
           onChange={(value) =>
             setSettingDrafts((prev) => ({ ...prev, [row.key]: value }))
@@ -339,7 +339,19 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
   const audioRows = backendSettings?.settings_catalog.filter((row) => row.group === 'Áudio' && !row.secret) ?? [];
   const audioModelRow = audioRows.find((row) => row.key === 'audio_model') ?? null;
-  const otherAudioRows = audioRows.filter((row) => row.key !== 'audio_model');
+  const audioLanguageRow = audioRows.find((row) => row.key === 'audio_language') ?? null;
+  const otherAudioRows = audioRows.filter((row) => row.key !== 'audio_model' && row.key !== 'audio_language');
+  // Idioma "auto" e codigos fora de model.languages nao fazem sentido para o
+  // modelo selecionado - desabilita em vez de deixar o usuario salvar uma
+  // combinacao que o backend vai rejeitar em runtime (audio_runtime.py).
+  const audioLanguageOptions = (audioLanguageRow?.options ?? []).map((option) => ({
+    ...option,
+    disabled: selectedVoiceModel
+      ? option.value === 'auto'
+        ? !selectedVoiceModel.supports_auto_language
+        : !selectedVoiceModel.languages.includes(option.value)
+      : false,
+  }));
   const iaCatalogRows = backendSettings?.settings_catalog.filter((row) => IA_CATALOG_KEYS.includes(row.key) && !row.secret) ?? [];
   const advancedRows = backendSettings?.settings_catalog.filter(
     (row) => !row.secret && row.group !== 'Áudio' && !IA_CATALOG_KEYS.includes(row.key)
@@ -560,7 +572,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                   )}
                 </div>
 
-                {iaCatalogRows.map(renderSettingRow)}
+                {iaCatalogRows.map((row) => renderSettingRow(row))}
               </section>
             )}
 
@@ -598,7 +610,25 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                         : (audioModelRow?.options ?? [])
                     }
                     onChange={(value) => {
-                      setSettingDrafts((prev) => ({ ...prev, audio_model: value }));
+                      const nextModel = voiceModels.find((model) => model.id === value);
+                      setSettingDrafts((prev) => {
+                        const next: Record<string, string> = { ...prev, audio_model: value };
+                        // Se o idioma atual do draft nao existe mais no novo
+                        // modelo (nem "auto"), corrige para o primeiro idioma
+                        // valido - so no draft, salvar continua manual.
+                        const currentLanguage = prev.audio_language;
+                        const stillValid = nextModel
+                          ? currentLanguage === 'auto'
+                            ? nextModel.supports_auto_language
+                            : nextModel.languages.includes(currentLanguage)
+                          : true;
+                        if (nextModel && !stillValid) {
+                          next.audio_language = nextModel.supports_auto_language
+                            ? 'auto'
+                            : (nextModel.languages[0] ?? currentLanguage);
+                        }
+                        return next;
+                      });
                       setDownloadJob(null);
                       setDownloadError('');
                     }}
@@ -660,7 +690,8 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                   )}
                 </div>
 
-                {otherAudioRows.map(renderSettingRow)}
+                {audioLanguageRow && renderSettingRow(audioLanguageRow, audioLanguageOptions)}
+                {otherAudioRows.map((row) => renderSettingRow(row))}
               </section>
             )}
 
@@ -698,7 +729,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                   <h3 id="settings-advanced" className="settings-section__title">
                     Avançado
                   </h3>
-                  {advancedRows.map(renderSettingRow)}
+                  {advancedRows.map((row) => renderSettingRow(row))}
                 </section>
               </>
             )}

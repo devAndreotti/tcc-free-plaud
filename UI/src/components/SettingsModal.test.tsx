@@ -85,7 +85,67 @@ const backendSettings = {
       warning: null,
       local_env_path: null,
     },
+    {
+      index: 3,
+      key: 'audio_language',
+      label: 'Idioma da transcrição',
+      description: 'Idioma usado pelo modelo de voz.',
+      group: 'Áudio',
+      value_type: 'enum',
+      layer: 'simple',
+      storage: 'user_settings',
+      value: 'pt',
+      display_value: 'pt',
+      options: [
+        { value: 'auto', label: 'Automático (detectar idioma)' },
+        { value: 'pt', label: 'Português' },
+        { value: 'en', label: 'Inglês' },
+      ],
+      recommended: 'pt',
+      secret: false,
+      placeholder: null,
+      warning: null,
+      local_env_path: null,
+    },
   ],
+};
+
+const whisperModel = {
+  id: 'whisper-small',
+  engine: 'faster-whisper',
+  format: 'ctranslate2',
+  repo_id: 'org/whisper',
+  revision: 'rev',
+  languages: ['pt', 'en'],
+  license: 'MIT',
+  files: [{ path: 'model.bin', size: 1000, sha256: 'x' }],
+  installed: true,
+  size_bytes: 1000,
+  label: 'Whisper Small',
+  description: 'Multilíngue, boa precisão geral.',
+  speed_tier: 'medio' as const,
+  quality_tier: 'alta' as const,
+  recommended: true,
+  supports_auto_language: true,
+};
+
+const moonshineModel = {
+  id: 'moonshine-tiny-en',
+  engine: 'moonshine',
+  format: 'onnx',
+  repo_id: 'org/moonshine',
+  revision: 'rev',
+  languages: ['en'],
+  license: 'MIT',
+  files: [{ path: 'model.onnx', size: 1000, sha256: 'x' }],
+  installed: true,
+  size_bytes: 1000,
+  label: 'Moonshine Tiny',
+  description: 'Só inglês, muito rápido e leve.',
+  speed_tier: 'rapido' as const,
+  quality_tier: 'basica' as const,
+  recommended: false,
+  supports_auto_language: false,
 };
 
 describe('SettingsModal', () => {
@@ -237,6 +297,44 @@ describe('SettingsModal', () => {
     expect(await screen.findByText('Modelo instalado.')).toBeTruthy();
 
     vi.useRealTimers();
+  });
+
+  it('desabilita idiomas nao suportados pelo modelo selecionado', async () => {
+    const user = userEvent.setup();
+    bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
+
+    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+
+    // Com Whisper Small selecionado (default do draft), todo idioma esta habilitado.
+    await user.click(screen.getByRole('combobox', { name: 'Idioma da transcrição' }));
+    expect(screen.getByRole('option', { name: 'Automático (detectar idioma)' }).getAttribute('aria-disabled')).toBeNull();
+    expect(screen.getByRole('option', { name: 'Português' }).getAttribute('aria-disabled')).toBeNull();
+    await user.keyboard('{Escape}');
+
+    // Troca para Moonshine Tiny (so ingles, sem auto-detect).
+    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
+    await user.click(await screen.findByRole('option', { name: 'Moonshine Tiny' }));
+
+    await user.click(screen.getByRole('combobox', { name: 'Idioma da transcrição' }));
+    expect(screen.getByRole('option', { name: 'Automático (detectar idioma)' }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('option', { name: 'Português' }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('option', { name: 'Inglês' }).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('corrige o idioma no draft ao trocar para um modelo que nao suporta o idioma atual', async () => {
+    const user = userEvent.setup();
+    bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
+
+    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+
+    // Draft comeca em "pt" (Whisper Small); trocar para Moonshine (so "en")
+    // deve corrigir o draft de idioma automaticamente para "en".
+    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
+    await user.click(await screen.findByRole('option', { name: 'Moonshine Tiny' }));
+
+    expect(screen.getByRole('combobox', { name: 'Idioma da transcrição' }).textContent).toBe('Inglês');
   });
 
   it('mostra estado offline sem quebrar modal', async () => {

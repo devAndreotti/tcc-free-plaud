@@ -43,7 +43,15 @@ class AudioRuntime:
                 "AUDIO_ENGINE_UNSUPPORTED",
                 "This model is catalogued but is not an executable STT engine.",
             )
-        if options.language not in model.languages:
+        if options.language == "auto":
+            # Deteccao automatica so existe de verdade via faster-whisper
+            # (language=None); outros engines exigem idioma explicito.
+            if model.engine != "faster-whisper":
+                raise AudioError(
+                    "AUDIO_LANGUAGE_UNSUPPORTED",
+                    f"{model.id} does not support automatic language detection.",
+                )
+        elif options.language not in model.languages:
             raise AudioError(
                 "AUDIO_LANGUAGE_UNSUPPORTED",
                 f"{model.id} does not support {options.language}.",
@@ -123,12 +131,13 @@ class AudioRuntime:
                 raise AudioError(
                     "AUDIO_SOURCE_CHANGED", "Audio changed during transcription."
                 )
+            detected_language = getattr(engine, "detected_language", None)
             result = TranscriptionResult(
                 source_path=source,
                 source_sha256=source_hash,
                 model_id=options.model_id,
                 model_revision=self.store.model(options.model_id).revision,
-                language=options.language,
+                language=detected_language if options.language == "auto" and detected_language else options.language,
                 device=engine.device if regions else "none",
                 duration_seconds=len(audio) / SAMPLE_RATE,
                 raw_text=" ".join(s.raw_text.strip() for s in segments).strip(),
