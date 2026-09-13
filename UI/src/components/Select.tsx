@@ -177,6 +177,12 @@ const Select = ({ value, options, onChange, ariaLabel, id, className, disabled, 
               }`}
               onMouseEnter={() => !option.disabled && setActiveIndex(index)}
               onClick={() => commit(index)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  commit(index);
+                }
+              }}
             >
               <span className="select__option-label">{option.label}</span>
               {option.hint && <span className="select__option-hint">{option.hint}</span>}
