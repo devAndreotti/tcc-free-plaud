@@ -41,3 +41,6 @@ test-results/
 playwright-report/
 
 UI/build/
+
+.claude/
+screenshots/
