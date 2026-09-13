@@ -86,19 +86,19 @@ UI/
 ## 5. Plano de Implementação em Fases
 
 ### Fase 1: Setup de Infraestrutura & Mock do Bridge
-- [ ] Instalar `@playwright/test` como devDependency em `UI/`.
-- [ ] Criar `UI/playwright.config.ts` com isolamento de portas e timeout estrito.
-- [ ] Implementar `UI/e2e/fixtures/pywebview-bridge-mock.ts` garantindo 100% de paridade com `Api` de `main.py`.
+- [x] Instalar `@playwright/test` como devDependency em `UI/`.
+- [x] Criar `UI/playwright.config.ts` com isolamento de portas e timeout estrito.
+- [x] Implementar `UI/e2e/fixtures/pywebview-bridge-mock.ts` garantindo 100% de paridade com `Api` de `main.py`.
 
 ### Fase 2: Page Objects & Suíte Funcional
-- [ ] Implementar `base-test.ts` e Page Objects (`ChatPage`, `NotesPage`, `BenchmarkPage`, `SettingsPage`).
-- [ ] Implementar testes de fluxo principal (`01-chat-rag.spec.ts`, `03-notes-corpus.spec.ts`, `04-benchmark-eval.spec.ts`).
+- [x] Implementar `base-test.ts` e Page Objects (`ChatPage`, `NotesPage`, `BenchmarkPage`, `SettingsPage`).
+- [x] Implementar testes de fluxo principal (`01-chat-rag.spec.ts`, `03-notes-corpus.spec.ts`, `04-benchmark-eval.spec.ts`).
 
 ### Fase 3: Suíte Adversarial & Resiliência
-- [ ] Implementar testes de sanitização contra XSS e injeção de tags em spans (`02-security-xss.spec.ts`).
-- [ ] Implementar testes de timeout do LLM e interrupção de indexação.
+- [x] Implementar testes de sanitização contra XSS e injeção de tags em spans (`02-security-xss.spec.ts`).
+- [x] Implementar testes de timeout do LLM e interrupção de indexação.
 
 ### Fase 4: Integração no CI & Quality Gate
-- [ ] Adicionar script `npm run test:e2e` e `npm run test:e2e:ci`.
-- [ ] Atualizar `.github/workflows/quality-gate.yml` com job de execução Playwright.
-- [ ] Validar compatibilidade do ratchet e `qg -Check`.
+- [x] Adicionar script `npm run test:e2e` e `npm run test:e2e:ci`.
+- [x] Atualizar `.github/workflows/quality-gate.yml` com job de execução Playwright.
+- [x] Validar compatibilidade do ratchet e `qg -Check`.
