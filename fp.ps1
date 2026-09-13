@@ -25,6 +25,7 @@ Comandos:
   doctor  executa diagnostico estruturado do ambiente
   bench   executa o benchmark experimental
   test    roda os testes do backend
+  release gera o executavel standalone desktop (.exe e .zip)
 
 Exemplos:
   .\fp.ps1 tui
@@ -82,6 +83,15 @@ switch ($Command.ToLowerInvariant()) {
     }
     'test' {
         Invoke-InPipeline 'uv' (@('run', 'pytest') + $Rest)
+    }
+    'release' {
+        Invoke-InPipeline 'uv' (@('run', '--extra', 'desktop', '--extra', 'audio', 'python', (Join-Path $Root 'scripts/build_desktop.py')) + $Rest)
+        $zipPath = Join-Path $Root 'AssistenteIA-windows-x64.zip'
+        $distFolder = Join-Path $UI 'dist/AssistenteIA'
+        if (Test-Path $distFolder) {
+            Compress-Archive -Path $distFolder -DestinationPath $zipPath -Force
+            Write-Host "[OK] Pacote compactado gerado: $zipPath" -ForegroundColor Green
+        }
     }
     { $_ -in @('help', '-h', '--help') } {
         Show-Help

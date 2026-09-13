@@ -17,6 +17,7 @@ Comandos:
   doctor  executa diagnostico estruturado do ambiente
   bench   executa o benchmark experimental
   test    roda os testes do backend
+  release gera o executavel standalone desktop (.exe e .zip)
 
 Exemplos:
   ./fp tui
@@ -52,6 +53,9 @@ case "$cmd" in
     ;;
   test)
     (cd "$PIPELINE" && uv run pytest "$@")
+    ;;
+  release)
+    (cd "$PIPELINE" && uv run --extra desktop --extra audio python "$ROOT/scripts/build_desktop.py" "$@")
     ;;
   help | -h | --help)
     show_help
