@@ -12,14 +12,11 @@ from free_plaud.app.local_env import (
 )
 from free_plaud.app.settings_specs import (
     SETTING_SPECS,
-    SettingLayer,
-    SettingOption,
     SettingSpec,
-    SettingStorage,
-    SettingValueType,
 )
 from free_plaud.providers.audio_catalog import load_catalog
 from free_plaud.providers.voice_model_meta import ui_meta_for
+
 
 def get_setting_spec(key: str) -> SettingSpec:
     for spec in SETTING_SPECS:

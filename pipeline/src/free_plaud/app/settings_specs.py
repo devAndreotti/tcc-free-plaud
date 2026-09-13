@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field
 
 from free_plaud.providers.audio_catalog import load_catalog
 
-
 SettingValueType = Literal['string', 'int', 'float', 'bool', 'path', 'enum', 'secret']
 SettingStorage = Literal['user_settings', 'local_env']
 SettingLayer = Literal['simple', 'advanced']
