@@ -1,167 +1,110 @@
 # free-plaud
 
-Sistema desktop local-first para captura multimodal, estruturação automática em Markdown e recuperação semântica de conhecimento pessoal em português brasileiro.
+Sistema desktop local-first para captura multimodal, estruturacao automatica em Markdown e recuperacao semantica de conhecimento pessoal em portugues brasileiro.
 
-## Status
+## Status do Projeto
 
-O repositório está em fase de fundação de TCC com scaffold inicial do backend já iniciado:
+O projeto concluiu integralmente seu ciclo de desenvolvimento e validacao experimental (Sprints 00 a 09):
 
-- problema de pesquisa definido
-- perguntas de pesquisa delimitadas
-- arquitetura alvo descrita
-- plano de arranque documentado
-- scaffold inicial do backend em Python criado
+- **Core RAG Hibrido Operacional:** Persistencia dupla em SQLite FTS5 (BM25) e ChromaDB (vetorial) com fusao Reciprocal Rank Fusion (RRF, $k=60$) e citacoes estritas por span (`start_char`, `end_char`) sem alucinacao.
+- **Captura e Transcricao de Audio Local:** Ingestao direta de microfone com Voice Activity Detection (Silero VAD ONNX) e modelos locais Whisper (`faster-whisper`), com download assincrono e selecao de idioma/auto-deteccao pela UI.
+- **Compressao Vetorial TurboQuant:** Quantizacao escalar int8 em tempo de execucao, reduzindo consumo de memoria de embeddings densos em ~75%.
+- **Quad-Interface Unificada:** 4 interfaces funcionais compartilhando o mesmo runtime do corpus:
+  1. CLI Typer (`free_plaud.cli`, `fp.ps1`)
+  2. Menu Terminal Numerado (Rich)
+  3. Textual TUI reativa (`free_plaud.tui.app`)
+  4. App Desktop Standalone (PyWebView + React 19 + TypeScript + Vite + Tailwind)
+- **Suite E2E & Ratchet de Cobertura:** Suíte completa de testes unitários e de integração com cobertura travada em **89.0%** no Quality Gate.
+- **Empacotamento Desktop Standalone:** Executavel Windows `.exe` standalone com Edge WebView2 gerado via PyInstaller.
 
-## Problema
+## Problema e Proposta
 
-Profissionais e estudantes capturam informação em áudio, imagem, PDF e texto, mas perdem boa parte desse conhecimento porque transformar esse material em notas pesquisáveis exige disciplina manual alta demais.
+Profissionais e estudantes capturam informacao em audio, imagem, PDF e texto, mas perdem boa parte desse conhecimento porque transformar esse material em notas pesquisaveis exige disciplina manual alta demais.
 
-O objetivo deste projeto é testar se um pipeline com:
+O `free-plaud` implementa um pipeline privado e soberano que:
+1. Ingesta fontes textuais (PDF, TXT, MD), vaults Obsidian e gravacoes de audio do microfone.
+2. Estrutura o conteudo automaticamente em notas Markdown canonicas com frontmatter rico.
+3. Indexa e fatia em chunks com preservacao de offsets de caracteres para rastreabilidade de citacao.
+4. Recupera e responde a perguntas em pt-BR via fusao hibrida RRF com comprovacao de fonte obrigatoria (ou abstencao estruturada com `no_answer` quando a evidencia for insuficiente).
 
-- processamento multimodal
-- estruturação automática em Markdown
-- embeddings vetoriais
-- RAG com citação obrigatória
+## Operacao Local Rapida
 
-é suficiente para reduzir essa fricção sem fine-tuning e sem infraestrutura de nuvem própria.
-
-## Perguntas centrais
-
-1. O pipeline produz notas úteis a partir de entradas reais em português brasileiro?
-2. Quais parâmetros de chunking e recuperação mais impactam a qualidade do AutoRAG?
-3. Qual modelo de embedding performa melhor nesse contexto?
-4. Opcionalmente: como qualidade e latência degradam com o crescimento do acervo?
-
-## Estratégia técnica atual
-
-O projeto foi deliberadamente quebrado em fases para reduzir risco:
-
-1. Backend e benchmark em Python primeiro
-2. Interface web local depois
-3. Casca desktop com Tauri apenas quando o núcleo experimental estiver estável
-
-Essa ordem prioriza a parte científica do TCC antes da parte cosmética do produto.
-
-## Operação local atual
-
-A partir da raiz do projeto, os três modos principais usam atalhos curtos:
+A partir da raiz do projeto, use os comandos rapidos no PowerShell:
 
 ```powershell
-.\fp.ps1 tui
-.\fp.ps1 menu
-.\fp.ps1 app
+.\fp.ps1 app      # Abre o App Desktop integrado (PyWebView + React 19)
+.\fp.ps1 tui      # Abre a interface de terminal Textual
+.\fp.ps1 menu     # Abre o menu interativo numerado no terminal
+.\fp.ps1 doctor   # Executa diagnostico estruturado do ambiente local
+.\fp.ps1 bench    # Executa a bateria de benchmark comparativo
+.\fp.ps1 test     # Roda a suite de testes automatizados
+.\fp.ps1 release  # Compila e gera o executavel standalone desktop (.exe e .zip)
 ```
 
-Em WSL/Git Bash, os mesmos modos ficam:
+No Linux / macOS / WSL (bash):
 
 ```bash
+./fp app
 ./fp tui
 ./fp menu
-./fp app
+./fp doctor
+./fp bench
+./fp test
+./fp release
 ```
 
-- `tui` abre a interface Textual.
-- `menu` abre o menu terminal numerado.
-- `app` gera o build do React e abre a UI integrada PyWebView com o backend real.
-
-Para desenvolver só o frontend mockado no navegador:
+Para desenvolvimento apenas do frontend com bridge mockada no navegador:
 
 ```powershell
 .\fp.ps1 front
 ```
 
-Segredos locais ficam em `.env` e não entram no Git. A chave de resposta generativa deve usar:
+## Segredos e Provedores de Resposta
+
+O `free-plaud` foi desenhado para privacidade total:
+- **Embeddings e Transcricao de Voz:** 100% locais (Hugging Face, faster-whisper, Silero VAD, CUDA 12 ou CPU).
+- **Provedores de LLM para Resposta:** Apontam para provedores locais (Ollama, LM Studio) ou remotos compativeis com OpenAI.
+
+Chaves de API ficam salvas exclusivamente em `pipeline/.env` (fora do Git):
 
 ```env
 FREE_PLAUD_ANSWER_API_KEY=sua-chave
 ```
 
-No TUI, no menu terminal e na UI desktop há opção para salvar essa chave em `pipeline/.env`.
-As configurações operacionais usam um catálogo único no backend, então TUI, menu terminal e UI
-desktop mostram os mesmos campos, descrições e valores.
+## Estrutura do Repositorio
 
-Modelo LLM local não é selecionado por pasta no free-plaud. O app aponta para um servidor local
-compatível com OpenAI, como Ollama ou LM Studio. A pasta selecionada na UI é o corpus/vault a ser
-indexado, não o diretório do modelo.
+```text
+free-plaud/
+├── pipeline/src/free_plaud/   # Core do backend (Python 3.12 via uv)
+│   ├── app/                   # Configuracoes Pydantic, catalogo, doctor e audio service
+│   ├── ingest/                # Extratores PDF/TXT/MD, cleaner Obsidian, watcher e downloads
+│   ├── notes/                 # Estruturador canonico, normalizador pt-BR e repositorio
+│   ├── retrieval/             # Chunking por offsets, BM25 FTS5, vetorial e fusao RRF
+│   ├── providers/             # Adapters Whisper, Silero VAD, TurboQuant e LLMs
+│   ├── storage/               # SQLite FTS5 relacional e ChromaDB vetorial
+│   ├── corpus/                # CorpusRuntime unificado, ask engine e jobs de fila
+│   ├── benchmark/             # Avaliador experimental (MRR, Recall@k, latencia)
+│   └── tui/                   # Aplicacao reativa Textual (Ask, Notes, Benchmark, Settings)
+├── UI/                        # Frontend React 19 + TypeScript + PyWebView
+│   ├── src/components/        # Chat, Fila, Notes, Benchmark, Select, Modal de Settings
+│   ├── e2e/                   # Suite de testes Playwright end-to-end
+│   └── main.py                # Entrypoint desktop PyWebView (Edge WebView2)
+├── docs/                      # Especificacoes tecnicas, arquitetura, experimentos e monografia
+│   ├── spec-kit/              # Especificacoes e planos de execucao auditados
+│   ├── experimentos/          # Experimentos empiricos (15 calibracao RRF)
+│   └── tcc/                   # Monografia (docs/tcc/texto/TCC.md) e slides (docs/tcc/slides/)
+├── Sprints/                   # Historico documental detalhado (Sprints 00 a 09)
+├── fp.ps1                     # Launcher canonico PowerShell
+└── fp                         # Launcher bash para Unix/WSL
+```
 
-## Stack sugerida para começar
+## Documentacao Principal
 
-- `Python 3.12`
-- `uv`
-- `Typer`
-- `Pydantic`
-- `SQLite`
-- `ChromaDB`
-- `Pytest`
-- `React + TypeScript + Vite + Tailwind` na fase de interface
-- `Tauri` apenas na fase de desktop shell
-
-## Documentação principal
-
-- Visão geral do TCC: [`docs/tcc/texto/TCC.md`](docs/tcc/texto/TCC.md)
-- Arquitetura do sistema: [`docs/arquitetura/Arquitetura.md`](docs/arquitetura/Arquitetura.md)
-- Backend: [`docs/arquitetura/Arquitetura_Backend.md`](docs/arquitetura/Arquitetura_Backend.md)
-- Frontend: [`docs/arquitetura/Arquitetura_Frontend.md`](docs/arquitetura/Arquitetura_Frontend.md)
-- Plano de arranque: [`docs/planejamento/Plano_de_Arranque.md`](docs/planejamento/Plano_de_Arranque.md)
-- Metodologia Akita + git: [`docs/planejamento/Metodologia_Akita_Git.md`](docs/planejamento/Metodologia_Akita_Git.md)
-- Perguntas que o trabalho precisa responder: [`docs/tcc/perguntas/Perguntas_a_Serem_Respondidas.md`](docs/tcc/perguntas/Perguntas_a_Serem_Respondidas.md)
-- Prep de defesa: [`docs/tcc/perguntas/Perguntas_do_TCC.md`](docs/tcc/perguntas/Perguntas_do_TCC.md)
-
-## Convenções do repositório
-
-- `main` deve refletir apenas estado estável
-- branches curtas por fatia funcional
-- um commit por decisão relevante
-- testes e documentação andam junto da implementação
-- arquitetura e escopo devem ser atualizados antes de expandir código
-
-## Roadmap inicial
-
-### Marco 0 - Fundamentos
-
-- consolidar docs
-- criar `CLAUDE.md`
-- acertar estratégia de branches e tags
-- definir baseline tecnológico
-
-### Marco 1 - Core RAG textual
-
-- ingestão de texto e PDF
-- estruturação em nota Markdown
-- chunking
-- embeddings
-- busca vetorial
-- resposta com citação
-
-### Marco 2 - Benchmark
-
-- datasets
-- MRR
-- Recall@k
-- latência
-- comparação de embeddings
-
-### Marco 3 - Multimodal
-
-- áudio
-- imagem
-- OCR
-
-### Marco 4 - Interface
-
-- fila
-- chat
-- benchmark
-- configurações
-
-### Marco 5 - Desktop
-
-- empacotamento com Tauri
-- observação de pasta
-- integração local
-
-## Observações
-
-- O backend experimental vive em `pipeline/`.
-- O repositório já possui um baseline inicial para CLI, configuração local e testes.
-- A pasta [`.agents/inspirations`](.agents/inspirations) foi reservada para a direção visual futura do app.
+- Monografia Academica do TCC: [`docs/tcc/texto/TCC.md`](docs/tcc/texto/TCC.md)
+- Slides da Apresentacao de Defesa: [`docs/tcc/slides/apresentacao_tcc.md`](docs/tcc/slides/apresentacao_tcc.md)
+- Arquitetura Geral do Sistema: [`docs/arquitetura/Arquitetura.md`](docs/arquitetura/Arquitetura.md)
+- Arquitetura de Backend: [`docs/arquitetura/Arquitetura_Backend.md`](docs/arquitetura/Arquitetura_Backend.md)
+- Arquitetura de Frontend: [`docs/arquitetura/Arquitetura_Frontend.md`](docs/arquitetura/Arquitetura_Frontend.md)
+- Stack Tecnologica e Bibliotecas: [`docs/arquitetura/TECNOLOGIAS_E_BIBLIOTECAS.md`](docs/arquitetura/TECNOLOGIAS_E_BIBLIOTECAS.md)
+- Experimento 15 (Calibracao RRF): [`docs/experimentos/15_calibracao_rrf_tcc.md`](docs/experimentos/15_calibracao_rrf_tcc.md)
+- Status das Sprints: [`Sprints/STATUS.md`](Sprints/STATUS.md)
