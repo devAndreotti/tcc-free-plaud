@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FileIcon, XIcon } from './Icons';
+import { FileIcon } from './Icons';
+import { NoteDetailView } from './NoteDetailView';
 import {
   bridge,
   type NoteDeleteResult,
@@ -215,82 +216,15 @@ const NotesPanel = () => {
 
       <section className="notes-panel__detail" aria-label="Detalhe da nota">
         {detail ? (
-          <>
-            <div className="notes-panel__detail-header">
-              <div>
-                <h2 className="notes-panel__detail-title">{detail.title}</h2>
-                <p className="notes-panel__detail-path">{detail.source_path}</p>
-              </div>
-              <div className="notes-panel__actions">
-                <button
-                  type="button"
-                  className="notes-panel__button"
-                  onClick={handleReindex}
-                  disabled={isMutating || isLoadingDetail}
-                >
-                  Reindexar
-                </button>
-                <button
-                  type="button"
-                  className="notes-panel__button notes-panel__button--danger"
-                  onClick={handleDelete}
-                  disabled={isMutating || isLoadingDetail}
-                >
-                  <XIcon size={12} />
-                  Apagar
-                </button>
-              </div>
-            </div>
-
-            <dl className="notes-panel__facts">
-              <div>
-                <dt>note_id</dt>
-                <dd>{detail.note_id}</dd>
-              </div>
-              <div>
-                <dt>tipo</dt>
-                <dd>{detail.source_type}</dd>
-              </div>
-              <div>
-                <dt>chunks</dt>
-                <dd>{detail.chunk_count}</dd>
-              </div>
-              <div>
-                <dt>criado</dt>
-                <dd>{detail.created_at}</dd>
-              </div>
-            </dl>
-
-            <div className="notes-panel__confirm">
-              <label htmlFor="note-delete-confirm">Confirmar exclusão</label>
-              <input
-                id="note-delete-confirm"
-                value={confirmation}
-                onChange={(event) => setConfirmation(event.target.value)}
-                placeholder="Digite APAGAR"
-              />
-            </div>
-
-            <div className="notes-panel__split">
-              <div className="notes-panel__markdown">
-                <h3>Markdown estruturado</h3>
-                <pre>{detail.structured_markdown}</pre>
-              </div>
-              <div className="notes-panel__chunks">
-                <h3>Chunks</h3>
-                {detail.chunks.map((chunk) => (
-                  <article key={chunk.chunk_id} className="notes-panel__chunk">
-                    <div className="notes-panel__chunk-head">
-                      <strong>#{chunk.chunk_index}</strong>
-                      <span>{chunk.token_count} tokens</span>
-                    </div>
-                    <code>{chunk.chunk_id}</code>
-                    <p>{chunk.snippet}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </>
+          <NoteDetailView
+            detail={detail}
+            isMutating={isMutating}
+            isLoadingDetail={isLoadingDetail}
+            confirmation={confirmation}
+            onConfirmationChange={setConfirmation}
+            onReindex={handleReindex}
+            onDelete={handleDelete}
+          />
         ) : (
           <div className="notes-panel__empty notes-panel__empty--detail">
             {isLoadingDetail ? 'Abrindo nota...' : 'Selecione uma nota indexada.'}
