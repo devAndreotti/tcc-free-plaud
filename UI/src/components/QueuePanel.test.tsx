@@ -172,6 +172,7 @@ describe('QueuePanel', () => {
     render(<Harness />);
 
     await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
+    await screen.findByDisplayValue('C:\\Vault');
     await user.click(screen.getByRole('button', { name: 'Indexar' }));
     await waitFor(() => {
       expect(bridgeMock.startIndexJob).toHaveBeenCalled();
