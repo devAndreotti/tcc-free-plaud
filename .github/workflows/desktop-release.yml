@@ -1,0 +1,57 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Release Desktop (.exe)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: UI/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: UI
+        run: npm ci
+
+      - name: Install Python dependencies (with desktop & audio)
+        working-directory: pipeline
+        run: uv sync --locked --extra desktop --extra audio
+
+      - name: Build Desktop Executable
+        run: uv run --project pipeline python scripts/build_desktop.py
+
+      - name: Zip Standalone Bundle
+        shell: powershell
+        run: |
+          Compress-Archive -Path "UI/dist/AssistenteIA" -DestinationPath "AssistenteIA-windows-x64.zip" -Force
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: AssistenteIA-windows-x64.zip
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true

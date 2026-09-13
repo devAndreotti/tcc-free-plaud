@@ -24,6 +24,7 @@ Estado atual do projeto:
 | 07 | concluida | benchmark reproduzivel | datasets, metricas (MRR, Recall@k) e runners |
 | 08.1 | concluida | contratos e camada de aplicacao para UI | schemas de bridge e adapters de servico |
 | 08.2 | concluida | integracao backend frontend | React 19 + PyWebView + Textual TUI |
+| 09 | concluida | captura de audio local e transcricao | Whisper (faster-whisper), VAD (Silero), download jobs e settings de voz |
 
 ## Ponto de parada real
 
