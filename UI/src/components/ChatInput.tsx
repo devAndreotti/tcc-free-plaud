@@ -1,11 +1,31 @@
 import {
+  useEffect,
   useRef,
   useState,
   useCallback,
   type KeyboardEvent,
   type ChangeEvent,
 } from 'react';
-import { PaperclipIcon, MicIcon, SendIcon, FileIcon, XIcon } from './Icons';
+import { PaperclipIcon, MicIcon, SendIcon, FileIcon, XIcon, LoaderIcon } from './Icons';
+import { bridge, type AudioJobSnapshot } from '../services/bridge';
+
+const isAudioJobDone = (snapshot: AudioJobSnapshot) =>
+  snapshot.status === 'completed' || snapshot.status === 'failed' || snapshot.status === 'cancelled';
+
+/**
+ * Traduz uma falha de transcrição em mensagem acionável. Quando o modelo de
+ * voz configurado ainda não foi baixado (AUDIO_MODEL_NOT_READY), orienta o
+ * usuário a ir em Configurações → Voz em vez de mostrar só o erro técnico cru.
+ */
+const describeAudioFailure = (errorCode: string | null, message: string | null): string => {
+  const looksLikeMissingModel =
+    errorCode === 'AUDIO_MODEL_NOT_READY' ||
+    (message?.toLowerCase().includes('missing or corrupt') ?? false);
+  if (looksLikeMissingModel) {
+    return 'Modelo de transcrição não está instalado. Abra Configurações → Voz para baixá-lo.';
+  }
+  return message ?? 'Falha ao transcrever áudio.';
+};
 
 // Props do componente de input de chat
 interface ChatInputProps {
@@ -16,10 +36,57 @@ interface ChatInputProps {
 const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
-  const [isMicActive, setIsMicActive] = useState(false);
+  const [micStatus, setMicStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
+  const [micError, setMicError] = useState('');
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioJobIdRef = useRef<string | null>(null);
+  const pollIntervalRef = useRef<number | null>(null);
+  const recordingIntervalRef = useRef<number | null>(null);
+
+  // Contador de tempo decorrido, visível ao lado do mic enquanto grava
+  useEffect(() => {
+    if (micStatus !== 'recording') {
+      if (recordingIntervalRef.current !== null) {
+        window.clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+      return undefined;
+    }
+    recordingIntervalRef.current = window.setInterval(() => {
+      setRecordingSeconds((seconds) => seconds + 1);
+    }, 1000);
+    return () => {
+      if (recordingIntervalRef.current !== null) {
+        window.clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+    };
+  }, [micStatus]);
+
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current !== null) {
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  // Garante que nenhum polling fica orfao se o componente desmontar em gravacao
+  useEffect(() => stopPolling, [stopPolling]);
+
+  const finishAudioJob = useCallback((snapshot: AudioJobSnapshot) => {
+    stopPolling();
+    audioJobIdRef.current = null;
+    setMicStatus('idle');
+    if (snapshot.status === 'completed' && snapshot.result?.text) {
+      setText((prev) => (prev.trim() ? `${prev.trim()} ${snapshot.result!.text}` : snapshot.result!.text));
+      setMicError('');
+    } else if (snapshot.status === 'failed') {
+      setMicError(describeAudioFailure(snapshot.error_code, snapshot.message));
+    }
+  }, [stopPolling]);
 
   // Ajusta a altura do textarea automaticamente conforme o conteúdo cresce
   const adjustTextareaHeight = useCallback(() => {
@@ -77,10 +144,66 @@ const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
     setAttachment(null);
   };
 
-  // Alterna estado do microfone (simulado)
-  const handleMicToggle = () => {
-    setIsMicActive((prev) => !prev);
+  // Inicia gravação do microfone padrão do sistema via backend Python
+  const handleStartRecording = async () => {
+    setMicError('');
+    try {
+      const job = await bridge.startAudioCapture();
+      audioJobIdRef.current = job.job_id;
+      setRecordingSeconds(0);
+      setMicStatus('recording');
+    } catch (error) {
+      setMicError(error instanceof Error ? error.message : 'Não foi possível acessar o microfone.');
+    }
   };
+
+  // Encerra a gravação e aguarda a transcrição local terminar
+  const handleStopRecording = async () => {
+    const jobId = audioJobIdRef.current;
+    if (!jobId) return;
+    setMicStatus('processing');
+    try {
+      const stopped = await bridge.stopAudioCapture(jobId);
+      if (isAudioJobDone(stopped)) {
+        finishAudioJob(stopped);
+        return;
+      }
+      pollIntervalRef.current = window.setInterval(async () => {
+        try {
+          const snapshot = await bridge.getAudioCapture(jobId);
+          if (isAudioJobDone(snapshot)) finishAudioJob(snapshot);
+        } catch (error) {
+          finishAudioJob({
+            job_id: jobId,
+            status: 'failed',
+            source_path: '',
+            samples_captured: 0,
+            error_code: null,
+            message: error instanceof Error ? error.message : 'Falha ao consultar transcrição.',
+            result: null,
+          });
+        }
+      }, 800);
+    } catch (error) {
+      finishAudioJob({
+        job_id: jobId,
+        status: 'failed',
+        source_path: '',
+        samples_captured: 0,
+        error_code: null,
+        message: error instanceof Error ? error.message : 'Falha ao encerrar gravação.',
+        result: null,
+      });
+    }
+  };
+
+  const handleMicToggle = () => {
+    if (micStatus === 'idle') void handleStartRecording();
+    else if (micStatus === 'recording') void handleStopRecording();
+  };
+
+  const formatRecordingTime = (totalSeconds: number) =>
+    `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
 
   const canSend = (text.trim().length > 0 || attachment !== null) && !isLoading;
 
@@ -149,18 +272,25 @@ const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
           />
         </div>
 
-        {/* Ações: microfone e enviar */}
+        {/* Ações: timer de gravação, microfone e enviar */}
         <div className="input-actions">
+          {micStatus === 'recording' && (
+            <span className="recording-timer" aria-hidden="true">
+              {formatRecordingTime(recordingSeconds)}
+            </span>
+          )}
+
           <button
             id="btn-mic"
             type="button"
-            className={`btn-mic ${isMicActive ? 'active' : ''}`}
-            aria-label={isMicActive ? 'Desativar microfone' : 'Ativar microfone'}
-            title={isMicActive ? 'Desativar microfone' : 'Ativar microfone'}
+            className={`btn-mic${micStatus === 'recording' ? ' btn-mic--recording' : ''}${micStatus === 'processing' ? ' btn-mic--processing' : ''}`}
+            aria-label={micStatus === 'recording' ? 'Parar gravação' : 'Gravar áudio'}
+            title={micStatus === 'recording' ? 'Parar gravação' : 'Gravar áudio'}
             onClick={handleMicToggle}
-            aria-pressed={isMicActive}
+            disabled={isLoading || micStatus === 'processing'}
+            aria-pressed={micStatus === 'recording'}
           >
-            <MicIcon size={18} />
+            {micStatus === 'processing' ? <LoaderIcon size={18} className="spin" /> : <MicIcon size={18} />}
           </button>
 
           <button
@@ -177,9 +307,18 @@ const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
         </div>
       </div>
 
-      {/* Aviso de rodapé */}
-      <p className="input-footer" aria-live="polite">
-        O Assistente IA pode cometer erros. Verifique informações importantes.
+      {/* Rodapé: status da gravação tem prioridade sobre o aviso padrão */}
+      <p
+        className={`input-footer${
+          micStatus === 'recording' ? ' input-footer--recording' :
+          micStatus === 'processing' ? ' input-footer--processing' :
+          micError ? ' input-footer--error' : ''
+        }`}
+        aria-live="polite"
+      >
+        {micStatus === 'recording' && 'Gravando… clique no microfone para parar.'}
+        {micStatus === 'processing' && 'Transcrevendo áudio localmente…'}
+        {micStatus === 'idle' && (micError || 'O Assistente IA pode cometer erros. Verifique informações importantes.')}
       </p>
     </section>
   );

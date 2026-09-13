@@ -116,7 +116,7 @@ const SendIcon = ({ size = 16 }: { size?: number }) => (
 );
 
 // Ícone de nó/grafo (compartilhar)
-const GraphIcon = ({ size = 14 }: { size?: number }) => (
+const GraphIcon = ({ size = 14, className = '' }: { size?: number; className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width={size}
@@ -127,6 +127,7 @@ const GraphIcon = ({ size = 14 }: { size?: number }) => (
     strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
+    className={className}
     aria-hidden="true"
   >
     <circle cx="18" cy="5" r="3" />
@@ -157,7 +158,7 @@ const UserIcon = ({ size = 16 }: { size?: number }) => (
 );
 
 // Ícone de arquivo
-const FileIcon = ({ size = 14 }: { size?: number }) => (
+const FileIcon = ({ size = 14, className = '' }: { size?: number; className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width={size}
@@ -168,6 +169,7 @@ const FileIcon = ({ size = 14 }: { size?: number }) => (
     strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
+    className={className}
     aria-hidden="true"
   >
     <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
@@ -213,7 +215,7 @@ const FolderIcon = ({ size = 18 }: { size?: number }) => (
 );
 
 // Ícone de relâmpago (Skills)
-const ZapIcon = ({ size = 18 }: { size?: number }) => (
+const ZapIcon = ({ size = 18, className = '' }: { size?: number; className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width={size}
@@ -224,6 +226,7 @@ const ZapIcon = ({ size = 18 }: { size?: number }) => (
     strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
+    className={className}
     aria-hidden="true"
   >
     <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
@@ -231,7 +234,7 @@ const ZapIcon = ({ size = 18 }: { size?: number }) => (
 );
 
 // Ícone de fila/lista de processamento
-const QueueIcon = ({ size = 18 }: { size?: number }) => (
+const QueueIcon = ({ size = 18, className = '' }: { size?: number; className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width={size}
@@ -242,6 +245,7 @@ const QueueIcon = ({ size = 18 }: { size?: number }) => (
     strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
+    className={className}
     aria-hidden="true"
   >
     <path d="M8 6h13" />
@@ -250,6 +254,146 @@ const QueueIcon = ({ size = 18 }: { size?: number }) => (
     <path d="M3 6h.01" />
     <path d="M3 12h.01" />
     <path d="M3 18h.01" />
+  </svg>
+);
+
+// Ícone de play (indexar)
+const PlayIcon = ({ size = 16 }: { size?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <polygon points="6 3 20 12 6 21 6 3" />
+  </svg>
+);
+
+// Ícone de stop (cancelar)
+const StopIcon = ({ size = 16 }: { size?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <rect x="5" y="5" width="14" height="14" rx="2" />
+  </svg>
+);
+
+// Ícone de olho (monitorar pasta)
+const EyeIcon = ({ size = 16 }: { size?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+// Ícone de relógio (ETA)
+const ClockIcon = ({ size = 16, className = '' }: { size?: number; className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
+
+// Ícone de alerta (últimos erros)
+const AlertTriangleIcon = ({ size = 16 }: { size?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+    <path d="M12 9v4" />
+    <path d="M12 17h.01" />
+  </svg>
+);
+
+// Ícone de loader (transcrevendo)
+const LoaderIcon = ({ size = 18, className = '' }: { size?: number; className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M12 2v4" />
+    <path d="m16.2 7.8 2.9-2.9" />
+    <path d="M18 12h4" />
+    <path d="m16.2 16.2 2.9 2.9" />
+    <path d="M12 18v4" />
+    <path d="m4.9 19.1 2.9-2.9" />
+    <path d="M2 12h4" />
+    <path d="m4.9 4.9 2.9 2.9" />
+  </svg>
+);
+
+// Ícone de seta pra baixo (trigger do Select customizado)
+const ChevronDownIcon = ({ size = 16, className = '' }: { size?: number; className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="m6 9 6 6 6-6" />
   </svg>
 );
 
@@ -267,4 +411,11 @@ export {
   FolderIcon,
   ZapIcon,
   QueueIcon,
+  PlayIcon,
+  StopIcon,
+  EyeIcon,
+  ClockIcon,
+  AlertTriangleIcon,
+  LoaderIcon,
+  ChevronDownIcon,
 };

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsModal from './SettingsModal';
@@ -11,6 +11,10 @@ const bridgeMock = vi.hoisted(() => ({
   testAnswerProvider: vi.fn(),
   saveBackendSetting: vi.fn(),
   listAnswerModels: vi.fn(),
+  listVoiceModels: vi.fn(),
+  startVoiceModelDownload: vi.fn(),
+  getVoiceModelDownload: vi.fn(),
+  cancelVoiceModelDownload: vi.fn(),
 }));
 
 vi.mock('../services/bridge', () => ({
@@ -63,7 +67,87 @@ const backendSettings = {
       warning: null,
       local_env_path: null,
     },
+    {
+      index: 2,
+      key: 'audio_model',
+      label: 'Modelo de transcrição (voz)',
+      description: 'Modelo local usado para transcrever o áudio gravado no chat.',
+      group: 'Áudio',
+      value_type: 'enum',
+      layer: 'simple',
+      storage: 'user_settings',
+      value: 'whisper-small',
+      display_value: 'whisper-small',
+      options: [{ value: 'whisper-small', label: 'Whisper Small (multilíngue)' }],
+      recommended: 'whisper-small',
+      secret: false,
+      placeholder: null,
+      warning: null,
+      local_env_path: null,
+    },
+    {
+      index: 3,
+      key: 'audio_language',
+      label: 'Idioma da transcrição',
+      description: 'Idioma usado pelo modelo de voz.',
+      group: 'Áudio',
+      value_type: 'enum',
+      layer: 'simple',
+      storage: 'user_settings',
+      value: 'pt',
+      display_value: 'pt',
+      options: [
+        { value: 'auto', label: 'Automático (detectar idioma)' },
+        { value: 'pt', label: 'Português' },
+        { value: 'en', label: 'Inglês' },
+      ],
+      recommended: 'pt',
+      secret: false,
+      placeholder: null,
+      warning: null,
+      local_env_path: null,
+    },
   ],
+};
+
+const whisperModel = {
+  id: 'whisper-small',
+  engine: 'faster-whisper',
+  format: 'ctranslate2',
+  repo_id: 'org/whisper',
+  revision: 'rev',
+  languages: ['pt', 'en'],
+  license: 'MIT',
+  files: [{ path: 'model.bin', size: 1000, sha256: 'x' }],
+  installed: true,
+  size_bytes: 1000,
+  label: 'Whisper Small',
+  description: 'Multilíngue, boa precisão geral.',
+  speed_tier: 'medio' as const,
+  quality_tier: 'alta' as const,
+  recommended: true,
+  supports_auto_language: true,
+  selectable: true,
+};
+
+const moonshineModel = {
+  id: 'moonshine-tiny-en',
+  engine: 'moonshine',
+  format: 'onnx',
+  repo_id: 'org/moonshine',
+  revision: 'rev',
+  languages: ['en'],
+  license: 'MIT',
+  files: [{ path: 'model.onnx', size: 1000, sha256: 'x' }],
+  installed: true,
+  size_bytes: 1000,
+  label: 'Moonshine Tiny',
+  description: 'Só inglês, muito rápido e leve.',
+  speed_tier: 'rapido' as const,
+  quality_tier: 'basica' as const,
+  recommended: false,
+  supports_auto_language: false,
+  selectable: true,
 };
 
 describe('SettingsModal', () => {
@@ -79,8 +163,13 @@ describe('SettingsModal', () => {
     bridgeMock.testAnswerProvider.mockReset();
     bridgeMock.saveBackendSetting.mockReset();
     bridgeMock.listAnswerModels.mockReset();
+    bridgeMock.listVoiceModels.mockReset();
+    bridgeMock.startVoiceModelDownload.mockReset();
+    bridgeMock.getVoiceModelDownload.mockReset();
+    bridgeMock.cancelVoiceModelDownload.mockReset();
 
     bridgeMock.getBackendSettings.mockResolvedValue(backendSettings);
+    bridgeMock.listVoiceModels.mockResolvedValue([]);
     bridgeMock.listAnswerModels.mockResolvedValue({
       provider: 'ollama',
       base_url: 'http://localhost:11434',
@@ -95,10 +184,18 @@ describe('SettingsModal', () => {
     });
   });
 
+  it('abre por padrão na aba Voz com os campos de transcrição', async () => {
+    render(<SettingsModal isOpen onClose={vi.fn()} />);
+
+    expect(await screen.findByLabelText('Modelo de transcrição (voz)')).toBeTruthy();
+    expect(screen.queryByLabelText('Modelo de resposta')).toBeNull();
+  });
+
   it('lista modelos e preenche draft de answer_model ao clicar', async () => {
     const user = userEvent.setup();
     render(<SettingsModal isOpen onClose={vi.fn()} />);
 
+    await user.click(screen.getByRole('button', { name: 'IA' }));
     await screen.findByLabelText('Modelo de resposta');
     await user.click(screen.getByRole('button', { name: 'Listar modelos' }));
     await screen.findByText('mistral:7b');
@@ -108,6 +205,210 @@ describe('SettingsModal', () => {
       expect((screen.getByLabelText('Modelo de resposta') as HTMLInputElement).value).toBe('mistral:7b');
     });
     expect(bridgeMock.saveBackendSetting).not.toHaveBeenCalled();
+  });
+
+  it('baixa modelo de voz nao instalado e reflete progresso ate completed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ delay: null });
+
+    const notInstalled = {
+      id: 'moonshine-tiny-en',
+      engine: 'moonshine',
+      format: 'onnx',
+      repo_id: 'org/moonshine',
+      revision: 'rev',
+      languages: ['en'],
+      license: 'MIT',
+      files: [{ path: 'model.onnx', size: 124_000_000, sha256: 'x' }],
+      installed: false,
+      size_bytes: 124_000_000,
+      label: 'Moonshine Tiny',
+      description: 'Só inglês, muito rápido e leve.',
+      speed_tier: 'rapido' as const,
+      quality_tier: 'basica' as const,
+      recommended: false,
+      supports_auto_language: false,
+      selectable: true,
+    };
+    const whisperInstalled = {
+      id: 'whisper-small',
+      engine: 'faster-whisper',
+      format: 'ctranslate2',
+      repo_id: 'org/whisper',
+      revision: 'rev',
+      languages: ['pt', 'en'],
+      license: 'MIT',
+      files: [{ path: 'model.bin', size: 483_000_000, sha256: 'x' }],
+      installed: true,
+      size_bytes: 483_000_000,
+      label: 'Whisper Small',
+      description: 'Multilíngue, boa precisão geral.',
+      speed_tier: 'medio' as const,
+      quality_tier: 'alta' as const,
+      recommended: true,
+      supports_auto_language: true,
+      selectable: true,
+    };
+    const moonshineInstalled = { ...notInstalled, installed: true };
+
+    bridgeMock.listVoiceModels
+      .mockResolvedValueOnce([whisperInstalled, notInstalled])
+      .mockResolvedValue([whisperInstalled, moonshineInstalled]);
+    bridgeMock.startVoiceModelDownload.mockResolvedValue({
+      job_id: 'dl-1',
+      model_id: 'moonshine-tiny-en',
+      status: 'downloading',
+      bytes_completed: 0,
+      bytes_total: 124_000_000,
+      error_code: null,
+      message: null,
+    });
+    bridgeMock.getVoiceModelDownload.mockResolvedValueOnce({
+      job_id: 'dl-1',
+      model_id: 'moonshine-tiny-en',
+      status: 'verifying',
+      bytes_completed: 124_000_000,
+      bytes_total: 124_000_000,
+      error_code: null,
+      message: null,
+    }).mockResolvedValue({
+      job_id: 'dl-1',
+      model_id: 'moonshine-tiny-en',
+      status: 'completed',
+      bytes_completed: 124_000_000,
+      bytes_total: 124_000_000,
+      error_code: null,
+      message: 'Modelo baixado e verificado.',
+    });
+
+    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+
+    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
+    await user.click(await screen.findByRole('option', { name: 'Moonshine Tiny' }));
+
+    expect(await screen.findByRole('button', { name: 'Baixar modelo' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Baixar modelo' }));
+    await waitFor(() => {
+      expect(bridgeMock.startVoiceModelDownload).toHaveBeenCalledWith('moonshine-tiny-en');
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    expect(await screen.findByText('Instalado.')).toBeTruthy();
+
+    vi.useRealTimers();
+  });
+
+  it('baixa o componente silero-vad pela aba Voz sem oferece-lo como modelo de transcricao', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ delay: null });
+
+    const sileroVad = {
+      id: 'silero-vad',
+      engine: 'silero',
+      format: 'onnx',
+      repo_id: 'snakers4/silero-vad',
+      revision: 'rev',
+      languages: [],
+      license: 'MIT',
+      files: [{ path: 'silero_vad.onnx', size: 1_800_000, sha256: 'x' }],
+      installed: false,
+      size_bytes: 1_800_000,
+      label: 'Detector de fala (VAD)',
+      description: 'Componente interno usado para detectar trechos com fala antes de transcrever.',
+      speed_tier: 'rapido' as const,
+      quality_tier: 'alta' as const,
+      recommended: false,
+      supports_auto_language: false,
+      selectable: false,
+    };
+
+    bridgeMock.listVoiceModels
+      .mockResolvedValueOnce([whisperModel, sileroVad])
+      .mockResolvedValue([whisperModel, { ...sileroVad, installed: true }]);
+    bridgeMock.startVoiceModelDownload.mockResolvedValue({
+      job_id: 'dl-vad',
+      model_id: 'silero-vad',
+      status: 'downloading',
+      bytes_completed: 0,
+      bytes_total: 1_800_000,
+      error_code: null,
+      message: null,
+    });
+    bridgeMock.getVoiceModelDownload.mockResolvedValue({
+      job_id: 'dl-vad',
+      model_id: 'silero-vad',
+      status: 'completed',
+      bytes_completed: 1_800_000,
+      bytes_total: 1_800_000,
+      error_code: null,
+      message: 'Modelo baixado e verificado.',
+    });
+
+    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+
+    // silero-vad nunca aparece como opcao de modelo de transcricao.
+    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
+    expect(screen.queryByRole('option', { name: 'Detector de fala (VAD)' })).toBeNull();
+    await user.keyboard('{Escape}');
+
+    const vadSection = (await screen.findByText('Componente do sistema')).closest('div.settings-item') as HTMLElement;
+    await user.click(within(vadSection).getByRole('button', { name: 'Baixar modelo' }));
+
+    await waitFor(() => {
+      expect(bridgeMock.startVoiceModelDownload).toHaveBeenCalledWith('silero-vad');
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    expect(within(vadSection).queryByText('Instalado.')).toBeTruthy();
+
+    vi.useRealTimers();
+  });
+
+  it('desabilita idiomas nao suportados pelo modelo selecionado', async () => {
+    const user = userEvent.setup();
+    bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
+
+    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+
+    // Com Whisper Small selecionado (default do draft), todo idioma esta habilitado.
+    await user.click(screen.getByRole('combobox', { name: 'Idioma da transcrição' }));
+    expect(screen.getByRole('option', { name: 'Automático (detectar idioma)' }).getAttribute('aria-disabled')).toBeNull();
+    expect(screen.getByRole('option', { name: 'Português' }).getAttribute('aria-disabled')).toBeNull();
+    await user.keyboard('{Escape}');
+
+    // Troca para Moonshine Tiny (so ingles, sem auto-detect).
+    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
+    await user.click(await screen.findByRole('option', { name: 'Moonshine Tiny' }));
+
+    await user.click(screen.getByRole('combobox', { name: 'Idioma da transcrição' }));
+    expect(screen.getByRole('option', { name: 'Automático (detectar idioma)' }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('option', { name: 'Português' }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('option', { name: 'Inglês' }).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('corrige o idioma no draft ao trocar para um modelo que nao suporta o idioma atual', async () => {
+    const user = userEvent.setup();
+    bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
+
+    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+
+    // Draft comeca em "pt" (Whisper Small); trocar para Moonshine (so "en")
+    // deve corrigir o draft de idioma automaticamente para "en".
+    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
+    await user.click(await screen.findByRole('option', { name: 'Moonshine Tiny' }));
+
+    expect(screen.getByRole('combobox', { name: 'Idioma da transcrição' }).textContent).toBe('Inglês');
   });
 
   it('mostra estado offline sem quebrar modal', async () => {
@@ -124,6 +425,7 @@ describe('SettingsModal', () => {
 
     render(<SettingsModal isOpen onClose={vi.fn()} />);
 
+    await user.click(screen.getByRole('button', { name: 'IA' }));
     await screen.findByLabelText('Modelo de resposta');
     await user.click(screen.getByRole('button', { name: 'Listar modelos' }));
 

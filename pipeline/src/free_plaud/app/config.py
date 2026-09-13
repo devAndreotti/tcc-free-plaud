@@ -30,6 +30,9 @@ USER_SETTING_FIELDS = {
     "answer_temperature",
     "answer_timeout_seconds",
     "answer_max_tokens",
+    "audio_model",
+    "audio_language",
+    "audio_device",
 }
 
 

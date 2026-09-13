@@ -76,6 +76,10 @@ class ModelStore:
     def __init__(self, root: Path, catalog: dict[str, VoiceModel] | None = None):
         self.root = Path(root).resolve()
         self.catalog = load_catalog() if catalog is None else catalog
+        # Cache de verify() por modelo: (assinatura mtime/size dos arquivos) -> resultado.
+        # Sem TTL - os arquivos so mudam via download()+rename atomico do proprio
+        # processo, entao mtime/size mudam exatamente quando o conteudo muda.
+        self._verify_cache: dict[str, tuple[tuple[tuple[int, int], ...], bool]] = {}
 
     def model(self, model_id: str) -> VoiceModel:
         if model_id not in self.catalog:
@@ -99,8 +103,29 @@ class ModelStore:
                 return False
         return True
 
+    def _file_signature(self, directory: Path, model: VoiceModel) -> tuple[tuple[int, int], ...] | None:
+        signature = []
+        for item in model.files:
+            try:
+                stat = (directory / item.path).stat()
+            except OSError:
+                return None
+            signature.append((stat.st_mtime_ns, stat.st_size))
+        return tuple(signature)
+
     def verify(self, model_id: str) -> bool:
-        return self._valid(self.directory(model_id), self.model(model_id))
+        directory = self.directory(model_id)
+        model = self.model(model_id)
+        signature = self._file_signature(directory, model)
+        if signature is None:
+            self._verify_cache.pop(model_id, None)
+            return False
+        cached = self._verify_cache.get(model_id)
+        if cached is not None and cached[0] == signature:
+            return cached[1]
+        result = self._valid(directory, model)
+        self._verify_cache[model_id] = (signature, result)
+        return result
 
     def require(self, model_id: str) -> Path:
         if not self.verify(model_id):

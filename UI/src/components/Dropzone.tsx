@@ -121,8 +121,9 @@ const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
       role="region"
       aria-label="Área de arrastar e soltar arquivos"
     >
+      <FileIcon size={22} className="dropzone__icon" />
       <p className="dropzone__hint">
-        Arraste áudios, PDFs ou TXTs aqui para indexação em lote.
+        Arraste áudios, PDFs ou TXTs aqui, ou clique para selecionar.
       </p>
 
       {files.length > 0 && (

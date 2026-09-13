@@ -84,6 +84,38 @@ def test_whisper_adapter_lazy_load_and_cpu_fallback(monkeypatch, tmp_path):
         WhisperEngine(tmp_path, "cuda").transcribe(np.ones(16000), "pt")
 
 
+def test_whisper_adapter_auto_language_detects_and_records_result(monkeypatch, tmp_path):
+    class Model:
+        def __init__(self, path, **kwargs):
+            pass
+
+        def transcribe(self, audio, **kwargs):
+            assert kwargs["language"] is None
+            word = SimpleNamespace(start=0, end=0.5, word="Hello", probability=0.9)
+            segments = iter(
+                [
+                    SimpleNamespace(
+                        start=0,
+                        end=1,
+                        text="Hello",
+                        words=[word],
+                        no_speech_prob=0.01,
+                        avg_logprob=-0.1,
+                    )
+                ]
+            )
+            info = SimpleNamespace(language="en")
+            return segments, info
+
+    monkeypatch.setattr("faster_whisper.WhisperModel", Model)
+    engine = WhisperEngine(tmp_path, "cpu")
+    assert engine.detected_language is None
+
+    engine.transcribe(np.ones(16000), "auto")
+
+    assert engine.detected_language == "en"
+
+
 @pytest.mark.parametrize(
     "kind,method", [("sensevoice", "from_sense_voice"), ("moonshine", "from_moonshine")]
 )
@@ -163,3 +195,17 @@ def test_runtime_refuses_unsupported_models_and_languages_before_download(tmp_pa
             runtime._engine(options)
     with pytest.raises(AudioError):
         runtime.transcribe_result(tmp_path / "missing.wav")
+
+
+def test_runtime_rejects_auto_language_for_non_whisper_engines(tmp_path):
+    runtime = AudioRuntime(tmp_path)
+    with pytest.raises(AudioError, match="automatic language detection"):
+        runtime._engine(AudioOptions(model_id="sensevoice-small", language="auto"))
+
+
+def test_runtime_accepts_auto_language_for_whisper_model_before_download(tmp_path):
+    runtime = AudioRuntime(tmp_path)
+    # Falha por modelo nao baixado (require()), nao por idioma - prova que a
+    # validacao de "auto" passou e o fluxo chegou ate a checagem de arquivos.
+    with pytest.raises(AudioError, match="missing or corrupt"):
+        runtime._engine(AudioOptions(model_id="whisper-small", language="auto"))

@@ -15,6 +15,7 @@ import BenchmarkPanel from './components/BenchmarkPanel';
 import QueuePanel from './components/QueuePanel';
 import { bridge } from './services/bridge';
 import { VaultProvider } from './contexts/VaultContext';
+import { QueueProvider } from './contexts/QueueContext';
 
 // Gera ID único para mensagens e abas
 const generateId = () =>
@@ -177,88 +178,90 @@ function App() {
 
   return (
     <VaultProvider>
-      {/* Layout raiz: sidebar à esquerda + coluna de conteúdo à direita */}
-      <div className="app" id="app-root">
-        {/* Barra lateral esquerda */}
-        <Sidebar
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onNewTab={handleNewTab}
-          onOpenNotes={() => setWorkspaceView('notes')}
-          onOpenBenchmark={() => setWorkspaceView('benchmark')}
-          onOpenQueue={() => setWorkspaceView('queue')}
-          activeView={workspaceView}
-        />
-
-        {/* Coluna de conteúdo principal (tab bar + view) */}
-        <div className="app__content">
-          {/* Barra de abas */}
-          <Header
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onSelectTab={handleSelectTab}
-            onCloseTab={handleCloseTab}
-            isSettingsOpen={isSettingsOpen}
-            onCloseSettings={() => setIsSettingsOpen(false)}
-            isGraphPanelOpen={isGraphPanelOpen}
-            onToggleGraphPanel={handleToggleGraphPanel}
+      <QueueProvider>
+        {/* Layout raiz: sidebar à esquerda + coluna de conteúdo à direita */}
+        <div className="app" id="app-root">
+          {/* Barra lateral esquerda */}
+          <Sidebar
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onNewTab={handleNewTab}
+            onOpenNotes={() => setWorkspaceView('notes')}
+            onOpenBenchmark={() => setWorkspaceView('benchmark')}
+            onOpenQueue={() => setWorkspaceView('queue')}
+            activeView={workspaceView}
           />
 
-          {/* View ativa conforme a aba selecionada */}
-          {workspaceView === 'notes' && <NotesPanel />}
+          {/* Coluna de conteúdo principal (tab bar + view) */}
+          <div className="app__content">
+            {/* Barra de abas */}
+            <Header
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelectTab={handleSelectTab}
+              onCloseTab={handleCloseTab}
+              isSettingsOpen={isSettingsOpen}
+              onCloseSettings={() => setIsSettingsOpen(false)}
+              isGraphPanelOpen={isGraphPanelOpen}
+              onToggleGraphPanel={handleToggleGraphPanel}
+            />
 
-          {workspaceView === 'benchmark' && <BenchmarkPanel />}
+            {/* View ativa conforme a aba selecionada */}
+            {workspaceView === 'notes' && <NotesPanel />}
 
-          {workspaceView === 'queue' && <QueuePanel />}
+            {workspaceView === 'benchmark' && <BenchmarkPanel />}
 
-          {workspaceView === 'chat' && activeTab?.type === 'chat' && (
-            <main
-              className="main"
-              id={`tabpanel-${activeTab.id}`}
-              role="tabpanel"
-              aria-labelledby={`tab-${activeTab.id}`}
-            >
-              {/* Lista de mensagens da aba ativa, ou tela de boas-vindas */}
-              {hasMessages ? (
-                <div
-                  className="messages-area"
-                  role="log"
-                  aria-label="Histórico de mensagens"
-                  aria-live="polite"
-                >
-                  {activeMessages.map((message) => (
-                    <MessageBubble key={message.id} message={message} />
-                  ))}
+            {workspaceView === 'queue' && <QueuePanel />}
 
-                  {/* Indicador de digitação da aba ativa */}
-                  {isTyping && <TypingIndicator />}
+            {workspaceView === 'chat' && activeTab?.type === 'chat' && (
+              <main
+                className="main"
+                id={`tabpanel-${activeTab.id}`}
+                role="tabpanel"
+                aria-labelledby={`tab-${activeTab.id}`}
+              >
+                {/* Lista de mensagens da aba ativa, ou tela de boas-vindas */}
+                {hasMessages ? (
+                  <div
+                    className="messages-area"
+                    role="log"
+                    aria-label="Histórico de mensagens"
+                    aria-live="polite"
+                  >
+                    {activeMessages.map((message) => (
+                      <MessageBubble key={message.id} message={message} />
+                    ))}
 
-                  {/* Âncora de scroll para o final */}
-                  <div ref={messagesEndRef} aria-hidden="true" />
+                    {/* Indicador de digitação da aba ativa */}
+                    {isTyping && <TypingIndicator />}
+
+                    {/* Âncora de scroll para o final */}
+                    <div ref={messagesEndRef} aria-hidden="true" />
+                  </div>
+                ) : (
+                  <WelcomeScreen />
+                )}
+              </main>
+            )}
+
+            {/* Estado vazio: nenhuma aba aberta */}
+            {workspaceView === 'chat' && !activeTab && (
+              <main className="main main--empty" id="main-content">
+                <div className="empty-state">
+                  <p className="empty-state__text">Nenhuma aba aberta.</p>
                 </div>
-              ) : (
-                <WelcomeScreen />
-              )}
-            </main>
-          )}
+              </main>
+            )}
 
-          {/* Estado vazio: nenhuma aba aberta */}
-          {workspaceView === 'chat' && !activeTab && (
-            <main className="main main--empty" id="main-content">
-              <div className="empty-state">
-                <p className="empty-state__text">Nenhuma aba aberta.</p>
-              </div>
-            </main>
-          )}
+            {/* Input de mensagem (visível apenas com aba de chat ativa) */}
+            {workspaceView === 'chat' && activeTab?.type === 'chat' && (
+              <ChatInput onSendMessage={handleSendMessage} isLoading={isTyping} />
+            )}
+          </div>
 
-          {/* Input de mensagem (visível apenas com aba de chat ativa) */}
-          {workspaceView === 'chat' && activeTab?.type === 'chat' && (
-            <ChatInput onSendMessage={handleSendMessage} isLoading={isTyping} />
-          )}
+          {/* Painel lateral de grafos — expande à direita do conteúdo */}
+          <GraphPanel isOpen={isGraphPanelOpen} onToggle={handleToggleGraphPanel} />
         </div>
-
-        {/* Painel lateral de grafos — expande à direita do conteúdo */}
-        <GraphPanel isOpen={isGraphPanelOpen} onToggle={handleToggleGraphPanel} />
-      </div>
+      </QueueProvider>
     </VaultProvider>
   );
 }

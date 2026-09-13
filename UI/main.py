@@ -37,7 +37,7 @@ if PIPELINE_SRC.exists() and str(PIPELINE_SRC) not in sys.path:
 from free_plaud.app.config import get_settings
 from free_plaud.app.doctor import run_doctor
 from free_plaud.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
-from free_plaud.app.settings_catalog import save_catalog_setting, settings_catalog_payload
+from free_plaud.app.settings_catalog import save_catalog_setting, save_catalog_settings, settings_catalog_payload
 from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.benchmark.service import run_benchmark_compare
 from free_plaud.corpus.jobs import cancel_index_job, get_index_job, start_index_job
@@ -47,6 +47,16 @@ from free_plaud.providers.answer import test_answer_provider
 from free_plaud.providers.model_discovery import list_answer_models
 from free_plaud.retrieval.models import AskResponse
 from free_plaud.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
+from free_plaud.tui.audio_actions import (
+    cancel_audio_capture,
+    cancel_voice_model_download,
+    get_audio_capture,
+    get_voice_model_download,
+    list_voice_models,
+    start_audio_capture,
+    start_voice_model_download,
+    stop_audio_capture,
+)
 from free_plaud.ingest.watcher_manager import watcher_manager
 
 load_local_env()
@@ -197,6 +207,11 @@ class Api:
         self.runtime.clear()
         return {'ok': True}
 
+    def saveBackendSettings(self, values: dict) -> dict:
+        save_catalog_settings(values)
+        self.runtime.clear()
+        return self.getBackendSettings()
+
     def listNotes(self) -> list[dict]:
         return [note.model_dump(mode='json') for note in list_notes()]
 
@@ -220,19 +235,31 @@ class Api:
     def runBenchmarkCompare(self, suite_path: str) -> dict:
         return run_benchmark_compare(Path(suite_path), runtime=self.runtime)
 
-    def selectBenchmarkSuite(self) -> str:
-        import tkinter as tk
-        from tkinter import filedialog
+    def _native_dialog(self, dialog_type, **kwargs) -> str:
+        """
+        Abre um dialogo nativo do proprio PyWebView (janela ja existente).
 
-        root = tk.Tk()
-        root.withdraw()
-        root.wm_attributes('-topmost', True)
-        path = filedialog.askopenfilename(
-            title='Selecionar suite.json',
-            filetypes=[('JSON', '*.json'), ('Todos os arquivos', '*.*')],
+        Usa `webview.windows[0].create_file_dialog` em vez de um `tkinter.Tk()`
+        paralelo: o Tkinter roda sua propria mainloop, que disputa a thread de
+        UI com o WebView2 e, dependendo do Tcl/Tk instalado, o seletor de pasta
+        (`askdirectory`) cai num fallback generico que lista arquivos junto das
+        pastas — o que aparentava "selecionar arquivo" em vez de pasta.
+
+        Returns:
+            Caminho escolhido, ou '' se o dialogo foi cancelado/indisponivel.
+        """
+        if webview is None or not webview.windows:
+            return ''
+        result = webview.windows[0].create_file_dialog(dialog_type, **kwargs)
+        return result[0] if result else ''
+
+    def selectBenchmarkSuite(self) -> str:
+        if webview is None:
+            return ''
+        return self._native_dialog(
+            webview.OPEN_DIALOG,
+            file_types=('Arquivos JSON (*.json)', 'Todos os arquivos (*.*)'),
         )
-        root.destroy()
-        return path or ''
 
     def selectFolder(self) -> str:
         """
@@ -241,19 +268,11 @@ class Api:
         Returns:
             Caminho absoluto da pasta selecionada, ou '' se o usuário cancelar.
         """
-        import tkinter as tk
-        from tkinter import filedialog
-
-        # Janela raiz oculta (necessária para o filedialog funcionar)
-        root = tk.Tk()
-        root.withdraw()
-        root.wm_attributes('-topmost', True)  # Garante que o diálogo aparece na frente
-
-        folder = filedialog.askdirectory(title="Selecionar pasta de destino (Vault)")
-        root.destroy()
-
+        if webview is None:
+            return ''
+        folder = self._native_dialog(webview.FOLDER_DIALOG)
         print(f"[Backend] Vault selecionado: {folder!r}")
-        return folder or ''
+        return folder
 
     def scanVault(self, folder_path: str) -> list:
         """
@@ -306,6 +325,38 @@ class Api:
     def pollWatcherEvents(self) -> list:
         """Drena e retorna eventos de ingestao capturados pelo watcher desde a ultima consulta."""
         return [event.model_dump(mode="json") for event in watcher_manager.poll_events()]
+
+    def startAudioCapture(self) -> dict:
+        """Inicia gravacao do microfone padrao do sistema e devolve o job_id."""
+        return start_audio_capture().model_dump(mode='json')
+
+    def getAudioCapture(self, job_id: str) -> dict:
+        """Consulta status/resultado de um job de gravacao+transcricao."""
+        return get_audio_capture(job_id).model_dump(mode='json')
+
+    def stopAudioCapture(self, job_id: str) -> dict:
+        """Encerra a gravacao e enfileira a transcricao local."""
+        return stop_audio_capture(job_id).model_dump(mode='json')
+
+    def cancelAudioCapture(self, job_id: str) -> dict:
+        """Cancela gravacao ou transcricao em andamento."""
+        return cancel_audio_capture(job_id).model_dump(mode='json')
+
+    def listVoiceModels(self) -> list[dict]:
+        """Lista os modelos de voz do catalogo com metadados de UI e estado instalado."""
+        return list_voice_models()
+
+    def startVoiceModelDownload(self, model_id: str) -> dict:
+        """Inicia o download em background de um modelo de voz e devolve o job_id."""
+        return start_voice_model_download(model_id).model_dump(mode='json')
+
+    def getVoiceModelDownload(self, job_id: str) -> dict:
+        """Consulta progresso/status de um job de download de modelo de voz."""
+        return get_voice_model_download(job_id).model_dump(mode='json')
+
+    def cancelVoiceModelDownload(self, job_id: str) -> dict:
+        """Cancela um download de modelo de voz em andamento."""
+        return cancel_voice_model_download(job_id).model_dump(mode='json')
 
     def saveVaultPath(self, path: str) -> bool:
         """

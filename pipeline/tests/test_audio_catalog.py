@@ -2,6 +2,7 @@ import hashlib
 
 import pytest
 
+import free_plaud.providers.audio_catalog as free_plaud_audio_catalog
 from free_plaud.providers.audio_catalog import (
     ModelFile,
     ModelStore,
@@ -100,6 +101,31 @@ def test_corrupt_or_interrupted_download_never_publishes(store, monkeypatch, tmp
 def test_paths_cannot_escape_model_cache(path):
     with pytest.raises(ValueError):
         ModelFile(path=path, size=1, sha256="a" * 64)
+
+
+def test_verify_caches_hash_by_mtime_and_size(store, monkeypatch, tmp_path):
+    cached = tmp_path / "download"
+    cached.write_bytes(b"verified model data")
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", lambda **kwargs: str(cached))
+    store.download("sample")
+
+    calls = []
+    real_file_hash = free_plaud_audio_catalog.file_hash
+    monkeypatch.setattr(
+        free_plaud_audio_catalog,
+        "file_hash",
+        lambda path: (calls.append(path), real_file_hash(path))[1],
+    )
+
+    assert store.verify("sample") is True
+    assert len(calls) == 1
+    assert store.verify("sample") is True
+    assert len(calls) == 1, "segunda chamada nao deveria recalcular o hash (mtime/size inalterados)"
+
+    directory = store.directory("sample")
+    (directory / "nested/model.onnx").write_bytes(b"x" * len(b"verified model data"))
+    assert store.verify("sample") is False
+    assert len(calls) == 2, "arquivo mudou (mtime novo) - deve recalcular o hash"
 
 
 def test_duplicate_catalog_file_rejected(store):
