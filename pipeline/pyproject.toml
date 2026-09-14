@@ -25,7 +25,7 @@ audio = [
   "huggingface-hub>=0.34,<2",
   "filelock>=3.18,<4",
   "faster-whisper>=1.2.1,<2",
-  "sherpa-onnx==1.13.7",
+  "sherpa-onnx==1.13.8",
   "sherpa-onnx-core==1.13.7",
 ]
 desktop = [
