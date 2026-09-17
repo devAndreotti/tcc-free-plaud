@@ -48,7 +48,7 @@ jobs:
           Compress-Archive -Path "UI/dist/AssistenteIA" -DestinationPath "AssistenteIA-windows-x64.zip" -Force
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: AssistenteIA-windows-x64.zip
           name: Release ${{ github.ref_name }}
