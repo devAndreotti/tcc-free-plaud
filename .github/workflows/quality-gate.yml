@@ -79,7 +79,7 @@ jobs:
 
   test:
     name: Tests & ratchet
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -125,7 +125,7 @@ jobs:
 
   build:
     name: Build & smoke
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -155,7 +155,7 @@ jobs:
 
   sonar:
     name: SonarCloud
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     needs: test
     steps:
       - uses: actions/checkout@v7
@@ -177,7 +177,7 @@ jobs:
 
   docker:
     name: Docker image gate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -196,7 +196,7 @@ jobs:
 
   report:
     name: PR report
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     needs: [security, lint, test, build, sonar, docker]
     if: always() && github.event_name == 'pull_request'
     permissions:
