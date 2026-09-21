@@ -16,7 +16,7 @@ permissions:
 jobs:
   security:
     name: Security audit
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -43,7 +43,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
