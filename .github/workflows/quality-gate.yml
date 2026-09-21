@@ -16,7 +16,7 @@ permissions:
 jobs:
   security:
     name: Security audit
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -25,7 +25,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
@@ -43,7 +43,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -52,7 +52,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
@@ -79,7 +79,7 @@ jobs:
 
   test:
     name: Tests & ratchet
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -90,7 +90,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
@@ -125,7 +125,7 @@ jobs:
 
   build:
     name: Build & smoke
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -134,7 +134,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
@@ -155,7 +155,7 @@ jobs:
 
   sonar:
     name: SonarCloud
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     needs: test
     steps:
       - uses: actions/checkout@v7
@@ -177,12 +177,12 @@ jobs:
 
   docker:
     name: Docker image gate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
       - name: Docker Image Doctor gate
         run: node scripts/docker-gate.cjs --project . --json
       - name: Upload Docker gate report
@@ -196,7 +196,7 @@ jobs:
 
   report:
     name: PR report
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ostg02, tcc]
     needs: [security, lint, test, build, sonar, docker]
     if: always() && github.event_name == 'pull_request'
     permissions:
@@ -206,7 +206,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
       - uses: actions/download-artifact@v8
         with:
           name: coverage-report
