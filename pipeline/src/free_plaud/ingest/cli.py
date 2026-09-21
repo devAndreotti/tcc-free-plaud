@@ -19,7 +19,7 @@ def show(path_parts: list[str] = typer.Argument(..., metavar="PATH")) -> None:
     result = ingest_file(path)
     console.print(f"[bold]ingestion_id[/bold]: {result.ingestion_id}")
     console.print(f"[bold]correlation_id[/bold]: {result.correlation_id}")
-    console.print(f"[bold]source[/bold]: {result.source_path}")
+    console.print(f"[bold]source[/bold]: {result.source_path}", soft_wrap=True)
     console.print(f"[bold]status[/bold]: {result.status}")
     console.print(f"[bold]source_type[/bold]: {result.source_type}")
     console.print(f"[bold]media_type[/bold]: {result.detected_media_type}")
