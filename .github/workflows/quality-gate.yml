@@ -25,7 +25,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
@@ -52,7 +52,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
@@ -90,7 +90,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
@@ -134,7 +134,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
@@ -182,7 +182,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
       - name: Docker Image Doctor gate
         run: node scripts/docker-gate.cjs --project . --json
       - name: Upload Docker gate report
@@ -206,7 +206,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
       - uses: actions/download-artifact@v8
         with:
           name: coverage-report
