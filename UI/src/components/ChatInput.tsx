@@ -6,8 +6,8 @@ import {
   type KeyboardEvent,
   type ChangeEvent,
 } from 'react';
-import { PaperclipIcon, MicIcon, SendIcon, FileIcon, XIcon, LoaderIcon } from './Icons';
-import { bridge, type AudioJobSnapshot } from '../services/bridge';
+import { PaperclipIcon, MicIcon, SendIcon, FileIcon, XIcon, LoaderIcon, ChevronDownIcon, CheckIcon } from './Icons';
+import { bridge, type AskStrategy, type AudioJobSnapshot } from '../services/bridge';
 
 const isAudioJobDone = (snapshot: AudioJobSnapshot) =>
   snapshot.status === 'completed' || snapshot.status === 'failed' || snapshot.status === 'cancelled';
@@ -31,9 +31,78 @@ const describeAudioFailure = (errorCode: string | null, message: string | null):
 interface ChatInputProps {
   onSendMessage: (text: string, attachment?: File) => void;
   isLoading?: boolean;
+  strategy?: AskStrategy;
+  onStrategyChange?: (strategy: AskStrategy) => void;
 }
 
-const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
+const STRATEGIES: { value: AskStrategy; label: string; hint: string }[] = [
+  { value: 'hybrid', label: 'Híbrida', hint: 'Palavra-chave e significado combinados.' },
+  { value: 'vector', label: 'Vetorial', hint: 'Por significado, mesmo sem as palavras exatas.' },
+  { value: 'lexical', label: 'Lexical', hint: 'Só palavras exatas (FTS5). A mais rápida.' },
+];
+
+const StrategyPicker = ({ value, onChange }: { value: AskStrategy; onChange: (s: AskStrategy) => void }) => {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (event: MouseEvent) => {
+      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const current = STRATEGIES.find((s) => s.value === value) ?? STRATEGIES[0];
+  return (
+    <div className="strategy" ref={wrapRef}>
+      <button
+        type="button"
+        className="strategy__chip"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Estratégia de busca: ${current.label}`}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        {current.label}
+        <ChevronDownIcon size={13} />
+      </button>
+      {open && (
+        <div className="strategy__menu" role="menu" aria-label="Estratégia de busca">
+          {STRATEGIES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={option.value === value}
+              className="strategy__item"
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+            >
+              <CheckIcon size={15} />
+              <span>
+                {option.label}
+                <small>{option.hint}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ChatInput = ({ onSendMessage, isLoading = false, strategy, onStrategyChange }: ChatInputProps) => {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
   const [micStatus, setMicStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
@@ -209,7 +278,11 @@ const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
 
   return (
     <section className="input-area" aria-label="Área de entrada de mensagem">
-      <div className="input-container" role="form" aria-label="Formulário de chat">
+      <div
+        className={`composer${micStatus !== 'idle' ? ' composer--recording' : ''}`}
+        role="form"
+        aria-label="Formulário de chat"
+      >
         {/* Input oculto para seleção de arquivo */}
         <input
           ref={fileInputRef}
@@ -221,61 +294,60 @@ const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
           accept="*/*"
         />
 
-        {/* Botão de anexar */}
-        <button
-          id="btn-attach"
-          type="button"
-          className="btn-attach"
-          aria-label="Anexar arquivo"
-          title="Anexar arquivo"
-          onClick={handleAttachClick}
-          disabled={isLoading}
-        >
-          <PaperclipIcon size={18} />
-        </button>
-
-        {/* Área de composição */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {/* Preview do arquivo anexado */}
-          {attachment && (
-            <div className="attachment-preview" aria-label={`Arquivo anexado: ${attachment.name}`}>
-              <div className="attachment-preview__icon" aria-hidden="true">
-                <FileIcon size={14} />
-              </div>
-              <span className="attachment-preview__name" title={attachment.name}>
-                {attachment.name}
-              </span>
-              <button
-                type="button"
-                className="attachment-preview__remove"
-                aria-label="Remover arquivo anexado"
-                onClick={handleRemoveAttachment}
-              >
-                <XIcon size={12} />
-              </button>
+        {/* Preview do arquivo anexado */}
+        {attachment && (
+          <div className="attachment-preview" aria-label={`Arquivo anexado: ${attachment.name}`}>
+            <div className="attachment-preview__icon" aria-hidden="true">
+              <FileIcon size={14} />
             </div>
-          )}
+            <span className="attachment-preview__name" title={attachment.name}>
+              {attachment.name}
+            </span>
+            <button
+              type="button"
+              className="attachment-preview__remove"
+              aria-label="Remover arquivo anexado"
+              onClick={handleRemoveAttachment}
+            >
+              <XIcon size={12} />
+            </button>
+          </div>
+        )}
 
-          {/* Campo de texto */}
-          <textarea
-            ref={textareaRef}
-            id="chat-textarea"
-            className="chat-input"
-            placeholder="Digite sua mensagem..."
-            value={text}
-            onChange={handleTextChange}
-            onKeyDown={handleKeyDown}
-            rows={1}
-            aria-label="Campo de mensagem"
-            aria-multiline="true"
+        <textarea
+          ref={textareaRef}
+          id="chat-textarea"
+          className="chat-input"
+          placeholder="Pergunte ao seu vault…"
+          value={text}
+          onChange={handleTextChange}
+          onKeyDown={handleKeyDown}
+          rows={2}
+          aria-label="Campo de mensagem"
+          aria-multiline="true"
+          disabled={isLoading}
+        />
+
+        <div className="composer__row">
+          <button
+            id="btn-attach"
+            type="button"
+            className="composer__icon"
+            aria-label="Anexar arquivo"
+            title="Anexar arquivo"
+            onClick={handleAttachClick}
             disabled={isLoading}
-          />
-        </div>
+          >
+            <PaperclipIcon size={17} />
+          </button>
 
-        {/* Ações: timer de gravação, microfone e enviar */}
-        <div className="input-actions">
+          {strategy && onStrategyChange && <StrategyPicker value={strategy} onChange={onStrategyChange} />}
+
+          <span className="composer__grow" />
+
           {micStatus === 'recording' && (
-            <span className="recording-timer" aria-hidden="true">
+            <span className="recording-timer mono" aria-hidden="true">
+              <span className="recording-timer__dot" />
               {formatRecordingTime(recordingSeconds)}
             </span>
           )}
@@ -283,14 +355,14 @@ const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
           <button
             id="btn-mic"
             type="button"
-            className={`btn-mic${micStatus === 'recording' ? ' btn-mic--recording' : ''}${micStatus === 'processing' ? ' btn-mic--processing' : ''}`}
+            className={`composer__icon btn-mic${micStatus === 'recording' ? ' btn-mic--recording' : ''}${micStatus === 'processing' ? ' btn-mic--processing' : ''}`}
             aria-label={micStatus === 'recording' ? 'Parar gravação' : 'Gravar áudio'}
             title={micStatus === 'recording' ? 'Parar gravação' : 'Gravar áudio'}
             onClick={handleMicToggle}
             disabled={isLoading || micStatus === 'processing'}
             aria-pressed={micStatus === 'recording'}
           >
-            {micStatus === 'processing' ? <LoaderIcon size={18} className="spin" /> : <MicIcon size={18} />}
+            {micStatus === 'processing' ? <LoaderIcon size={17} className="spin" /> : <MicIcon size={17} />}
           </button>
 
           <button
@@ -298,11 +370,11 @@ const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
             type="button"
             className="btn-send"
             aria-label="Enviar mensagem"
-            title="Enviar mensagem (Enter)"
+            title="Enviar (Enter)"
             onClick={handleSend}
             disabled={!canSend}
           >
-            <SendIcon size={16} />
+            <SendIcon size={15} />
           </button>
         </div>
       </div>
@@ -318,7 +390,7 @@ const ChatInput = ({ onSendMessage, isLoading = false }: ChatInputProps) => {
       >
         {micStatus === 'recording' && 'Gravando… clique no microfone para parar.'}
         {micStatus === 'processing' && 'Transcrevendo áudio localmente…'}
-        {micStatus === 'idle' && (micError || 'O Assistente IA pode cometer erros. Verifique informações importantes.')}
+        {micStatus === 'idle' && (micError || 'Respostas usam só o que está indexado no vault. Enter envia, Shift+Enter quebra a linha.')}
       </p>
     </section>
   );

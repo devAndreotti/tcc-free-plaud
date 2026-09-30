@@ -14,7 +14,7 @@ import GraphPanel from './components/GraphPanel';
 import NotesPanel from './components/NotesPanel';
 import BenchmarkPanel from './components/BenchmarkPanel';
 import QueuePanel from './components/QueuePanel';
-import { bridge } from './services/bridge';
+import { bridge, type AskStrategy } from './services/bridge';
 import { VaultProvider } from './contexts/VaultContext';
 import { QueueProvider } from './contexts/QueueContext';
 
@@ -62,6 +62,7 @@ function App() {
   }, []);
   const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('chat');
+  const [strategy, setStrategy] = useState<AskStrategy>('hybrid');
 
   // Alterna a visibilidade do painel lateral de grafos
   const handleToggleGraphPanel = useCallback(() => {
@@ -135,57 +136,69 @@ function App() {
     setWorkspaceView('chat');
   }, []);
 
+  const appendMessage = useCallback((tabId: string, message: MessageData) => {
+    setTabMessages((prev) => ({ ...prev, [tabId]: [...(prev[tabId] ?? []), message] }));
+  }, []);
+
+  // Pergunta ao corpus e anexa a resposta (estruturada, quando o backend a devolve)
+  const askInTab = useCallback(
+    async (tabId: string, text: string, askStrategy: AskStrategy) => {
+      setTabTyping((prev) => ({ ...prev, [tabId]: true }));
+      try {
+        const ask = await bridge.askCorpus(text, askStrategy);
+        appendMessage(tabId, {
+          id: `msg-${generateId()}`,
+          role: 'assistant',
+          content: ask.answer ?? '',
+          timestamp: new Date(),
+          ask,
+        });
+      } catch (error) {
+        // Exibe erro como mensagem do assistente para não travar a UI
+        appendMessage(tabId, {
+          id: `msg-${generateId()}`,
+          role: 'assistant',
+          content: 'Ocorreu um erro ao processar sua mensagem. Tente novamente.',
+          timestamp: new Date(),
+        });
+        console.error('[App] Erro ao chamar bridge.askCorpus:', error);
+      } finally {
+        setTabTyping((prev) => ({ ...prev, [tabId]: false }));
+      }
+    },
+    [appendMessage]
+  );
+
   // Envia mensagem na conversa da aba ativa
   const handleSendMessage = useCallback(
     async (text: string, attachment?: File) => {
       if (!activeTabId) return;
       if (!text.trim() && !attachment) return;
 
-      // Adiciona mensagem do usuário na aba ativa imediatamente
-      const userMessage: MessageData = {
+      appendMessage(activeTabId, {
         id: `msg-${generateId()}`,
         role: 'user',
         content: text || `[Arquivo: ${attachment?.name}]`,
         timestamp: new Date(),
-      };
-      setTabMessages((prev) => ({
-        ...prev,
-        [activeTabId]: [...(prev[activeTabId] ?? []), userMessage],
-      }));
-      setTabTyping((prev) => ({ ...prev, [activeTabId]: true }));
-
-      try {
-        // Chama o backend Python via bridge (ou mock em dev)
-        const response = await bridge.sendMessage(text, attachment?.name);
-
-        const assistantMessage: MessageData = {
-          id: `msg-${generateId()}`,
-          role: 'assistant',
-          content: response,
-          timestamp: new Date(),
-        };
-        setTabMessages((prev) => ({
-          ...prev,
-          [activeTabId]: [...(prev[activeTabId] ?? []), assistantMessage],
-        }));
-      } catch (error) {
-        // Exibe erro como mensagem do assistente para não travar a UI
-        const errorMessage: MessageData = {
-          id: `msg-${generateId()}`,
-          role: 'assistant',
-          content: 'Ocorreu um erro ao processar sua mensagem. Tente novamente.',
-          timestamp: new Date(),
-        };
-        setTabMessages((prev) => ({
-          ...prev,
-          [activeTabId]: [...(prev[activeTabId] ?? []), errorMessage],
-        }));
-        console.error('[App] Erro ao chamar bridge.sendMessage:', error);
-      } finally {
-        setTabTyping((prev) => ({ ...prev, [activeTabId]: false }));
-      }
+      });
+      // O nome da primeira pergunta vira o título da aba
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === activeTabId && tab.label === 'Nova Conversa' && text.trim()
+            ? { ...tab, label: text.trim().length > 32 ? `${text.trim().slice(0, 32)}…` : text.trim() }
+            : tab
+        )
+      );
+      await askInTab(activeTabId, text, strategy);
     },
-    [activeTabId]
+    [activeTabId, appendMessage, askInTab, strategy]
+  );
+
+  const handleRetry = useCallback(
+    (query: string, retryStrategy: AskStrategy) => {
+      if (activeTabId) void askInTab(activeTabId, query, retryStrategy);
+    },
+    [activeTabId, askInTab]
   );
 
   // Determina a aba ativa para renderizar a view correta
@@ -244,7 +257,7 @@ function App() {
                     aria-live="polite"
                   >
                     {activeMessages.map((message) => (
-                      <MessageBubble key={message.id} message={message} />
+                      <MessageBubble key={message.id} message={message} onRetry={handleRetry} />
                     ))}
 
                     {/* Indicador de digitação da aba ativa */}
@@ -270,7 +283,12 @@ function App() {
 
             {/* Input de mensagem (visível apenas com aba de chat ativa) */}
             {workspaceView === 'chat' && activeTab?.type === 'chat' && (
-              <ChatInput onSendMessage={handleSendMessage} isLoading={isTyping} />
+              <ChatInput
+                onSendMessage={handleSendMessage}
+                isLoading={isTyping}
+                strategy={strategy}
+                onStrategyChange={setStrategy}
+              />
             )}
           </div>
 

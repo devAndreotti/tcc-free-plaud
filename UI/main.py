@@ -63,6 +63,7 @@ load_local_env()
 
 # Caminho do arquivo de configuração persistido em appdata
 CONFIG_PATH = Path(os.environ.get('APPDATA', Path.home())) / 'Brainiac' / 'config.json'
+ASK_STRATEGIES = {'lexical', 'vector', 'hybrid'}
 
 
 class Api:
@@ -119,6 +120,17 @@ class Api:
         settings = get_settings()
         response = ask_corpus(message, settings.default_ask_strategy, runtime=self.runtime)
         return self._format_ask_response(response)
+
+    def askCorpus(self, message: str, strategy: str | None = None) -> dict:
+        """Pergunta ao corpus e devolve a resposta estruturada (afirmações, citações, limitações)."""
+        settings = get_settings()
+        resolved = strategy if strategy in ASK_STRATEGIES else settings.default_ask_strategy
+        response = ask_corpus(message, resolved, runtime=self.runtime)
+        payload = response.model_dump(mode='json', exclude={'debug'})
+        payload['strategy'] = resolved
+        payload['top_k'] = settings.retrieval_top_k
+        payload['answer_provider'] = settings.answer_provider
+        return payload
 
     def indexVault(self, folder_path: str) -> dict:
         """

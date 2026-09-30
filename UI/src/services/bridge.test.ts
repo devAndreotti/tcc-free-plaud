@@ -167,3 +167,33 @@ describe('isDesktopApp (lazy PyWebView detection)', () => {
     ]);
   });
 });
+
+describe('askCorpus', () => {
+  afterEach(() => {
+    delete (window as unknown as { pywebview?: unknown }).pywebview;
+  });
+
+  it('usa askCorpus do backend quando existe, repassando a estratégia', async () => {
+    const calls: unknown[][] = [];
+    (window as unknown as { pywebview: { api: unknown } }).pywebview = {
+      api: {
+        askCorpus: (...args: unknown[]) => {
+          calls.push(args);
+          return Promise.resolve({ query: 'q', status: 'answer', claims: [], citations: [] });
+        },
+      },
+    };
+    await bridge.askCorpus('q', 'lexical');
+    expect(calls).toEqual([['q', 'lexical']]);
+  });
+
+  it('cai para sendMessage quando o backend não tem askCorpus', async () => {
+    (window as unknown as { pywebview: { api: unknown } }).pywebview = {
+      api: { sendMessage: () => Promise.resolve('texto simples') },
+    };
+    const result = await bridge.askCorpus('q');
+    expect(result.answer).toBe('texto simples');
+    expect(result.claims).toEqual([]);
+    expect(result.no_answer).toBe(false);
+  });
+});

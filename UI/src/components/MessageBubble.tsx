@@ -1,4 +1,6 @@
-import { SparkleIcon, UserIcon } from './Icons';
+import { useMemo, useState } from 'react';
+import type { AskCitation, AskResult, AskStrategy } from '../services/bridge';
+import { AlertTriangleIcon, CopyIcon, SearchIcon } from './Icons';
 
 export type MessageRole = 'user' | 'assistant';
 
@@ -7,74 +9,265 @@ export interface MessageData {
   role: MessageRole;
   content: string;
   timestamp: Date;
+  /** Resposta estruturada do corpus, quando o backend a devolve. */
+  ask?: AskResult;
 }
 
 interface MessageBubbleProps {
   message: MessageData;
+  /** Pergunta de novo com outra estratégia (usado no estado "sem resposta"). */
+  onRetry?: (query: string, strategy: AskStrategy) => void;
 }
 
+const STRATEGY_LABEL: Record<string, string> = {
+  hybrid: 'híbrida',
+  vector: 'vetorial',
+  lexical: 'lexical',
+};
+
 export const TypingIndicator = () => (
-  <div className="message message--ai fade-in" role="status" aria-label="Assistente está digitando">
-    <div className="message__avatar message__avatar--ai" aria-hidden="true">
-      <SparkleIcon size={16} />
-    </div>
-    <div className="message__bubble message__bubble--ai">
-      <div className="typing-indicator">
-        <span className="typing-indicator__dot" />
-        <span className="typing-indicator__dot" />
-        <span className="typing-indicator__dot" />
-      </div>
+  <div className="msg msg--ai fade-in" role="status" aria-label="Buscando no vault">
+    <div className="msg__head">
+      <span className="msg__mark" aria-hidden="true">ep</span>
+      <span className="msg__searching">
+        <span className="msg__spinner" aria-hidden="true" />
+        Buscando no vault…
+      </span>
     </div>
   </div>
 );
 
 function renderFormattedContent(text: string) {
-  const lines = text.split('\n');
-  return lines.map((line, idx) => {
+  return text.split('\n').map((line, idx) => {
     if (line.startsWith('- ') || line.startsWith('* ')) {
-      return (
-        <div key={idx} className="pl-3 my-0.5 flex items-start gap-1.5">
-          <span className="text-slate-400 select-none">•</span>
-          <span>{line.substring(2)}</span>
-        </div>
-      );
+      return <div key={idx} className="msg__li">{line.substring(2)}</div>;
     }
-    if (line.startsWith('### ')) {
-      return <div key={idx} className="font-bold text-slate-200 mt-2 mb-1">{line.substring(4)}</div>;
-    }
-    if (line.startsWith('## ')) {
-      return <div key={idx} className="font-bold text-slate-100 mt-2.5 mb-1 text-base">{line.substring(3)}</div>;
-    }
-    if (line.startsWith('# ')) {
-      return <div key={idx} className="font-extrabold text-slate-50 mt-3 mb-1.5 text-lg">{line.substring(2)}</div>;
-    }
-    if (!line.trim()) {
-      return <div key={idx} className="h-2" />;
-    }
-    return <div key={idx} className="min-h-[1.25rem]">{line}</div>;
+    if (line.startsWith('### ')) return <div key={idx} className="msg__h3">{line.substring(4)}</div>;
+    if (line.startsWith('## ')) return <div key={idx} className="msg__h2">{line.substring(3)}</div>;
+    if (line.startsWith('# ')) return <div key={idx} className="msg__h1">{line.substring(2)}</div>;
+    if (!line.trim()) return <div key={idx} className="msg__gap" />;
+    return <div key={idx}>{line}</div>;
   });
 }
 
-const MessageBubble = ({ message }: MessageBubbleProps) => {
-  const isUser = message.role === 'user';
+const noteTitle = (citation: AskCitation) => {
+  const raw = citation.source_path ?? citation.note_id;
+  const base = raw.split(/[\\/]/).pop() ?? raw;
+  return base.replace(/\.(md|markdown|txt|pdf)$/i, '');
+};
+
+/** Numera as fontes na ordem em que aparecem e liga cada afirmação aos números. */
+function useSources(ask: AskResult) {
+  return useMemo(() => {
+    const order: AskCitation[] = [];
+    const indexOf = (c: AskCitation) => {
+      const found = order.findIndex((item) => item.chunk_id === c.chunk_id);
+      if (found >= 0) return found;
+      order.push(c);
+      return order.length - 1;
+    };
+    const claims = ask.claims.map((claim) => ({
+      ...claim,
+      refs: Array.from(new Set(claim.citations.map(indexOf))),
+    }));
+    ask.citations.forEach(indexOf);
+    const support = order.map((c) =>
+      ask.claims.some((claim) => claim.support_level === 'direct' && claim.citations.some((x) => x.chunk_id === c.chunk_id))
+        ? 'direct'
+        : 'partial'
+    );
+    return { claims, sources: order, support };
+  }, [ask]);
+}
+
+const AnswerMeta = ({ ask, copyText }: { ask: AskResult; copyText?: string }) => {
+  const [copied, setCopied] = useState(false);
+  const parts = [
+    ask.strategy ? STRATEGY_LABEL[ask.strategy] ?? ask.strategy : null,
+    ask.top_k ? `top-${ask.top_k}` : null,
+    ask.answer_provider ?? null,
+    ask.latency_ms ? `${ask.latency_ms} ms` : null,
+  ].filter(Boolean);
+
+  const copy = async () => {
+    if (!copyText) return;
+    try {
+      await navigator.clipboard.writeText(copyText);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  if (parts.length === 0 && !copyText) return null;
+  return (
+    <div className="msg__meta mono">
+      {parts.map((part, i) => (
+        <span key={i}>{i > 0 && <span className="msg__meta-sep">·</span>}{part}</span>
+      ))}
+      {copyText && (
+        <button type="button" className="msg__action" onClick={copy} aria-label="Copiar resposta com as fontes">
+          <CopyIcon size={14} />
+          <span>{copied ? 'Copiado' : 'Copiar'}</span>
+        </button>
+      )}
+    </div>
+  );
+};
+
+const NoAnswer = ({ ask, onRetry }: { ask: AskResult; onRetry?: MessageBubbleProps['onRetry'] }) => (
+  <div className="msg__none">
+    <span className="msg__none-icon" aria-hidden="true"><SearchIcon size={17} /></span>
+    <div>
+      <h4>Não encontrei isso no vault.</h4>
+      <p>
+        {ask.limitations[0] ??
+          'Nenhum trecho recuperado responde à pergunta com segurança. Se a informação estiver numa nota, reindexe a pasta dela ou cite o nome da nota na pergunta.'}
+      </p>
+      {ask.reason_for_no_answer && <div className="msg__why mono">motivo: {ask.reason_for_no_answer}</div>}
+      {onRetry && ask.strategy !== 'lexical' && (
+        <button type="button" className="msg__btn" onClick={() => onRetry(ask.query, 'lexical')}>
+          Buscar só por palavra-chave
+        </button>
+      )}
+    </div>
+  </div>
+);
+
+const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
+  const { claims, sources, support } = useSources(ask);
+  const [hl, setHl] = useState<number | null>(null);
+  const noteCount = new Set(sources.map((s) => s.note_id)).size;
+
+  const copyText = [
+    claims.length ? claims.map((c) => `${c.text} ${c.refs.map((r) => `[${r + 1}]`).join('')}`).join(' ') : ask.answer ?? '',
+    sources.length ? `\n\nFontes:\n${sources.map((s, i) => `[${i + 1}] ${s.source_path ?? s.note_id} (${s.char_start}–${s.char_end})`).join('\n')}` : '',
+  ].join('');
 
   return (
-    <article
-      className={`message ${isUser ? 'message--user' : ''} fade-in`}
-      aria-label={`Mensagem de ${isUser ? 'você' : 'Assistente IA'}`}
-    >
-      <div
-        className={`message__avatar ${isUser ? 'message__avatar--user' : 'message__avatar--ai'}`}
-        aria-hidden="true"
-      >
-        {isUser ? <UserIcon size={16} /> : <SparkleIcon size={16} />}
+    <>
+      <div className="msg__head">
+        <span className="msg__mark" aria-hidden="true">ep</span>
+        <b>Resposta</b>
+        {sources.length > 0 && (
+          <span className="msg__head-sub">
+            · a partir de {noteCount} {noteCount === 1 ? 'nota' : 'notas'}
+          </span>
+        )}
       </div>
 
-      <div
-        className={`message__bubble ${isUser ? 'message__bubble--user' : 'message__bubble--ai'}`}
-      >
-        {isUser ? message.content : renderFormattedContent(message.content)}
+      <div className="msg__answer">
+        {claims.length > 0
+          ? claims.map((claim, i) => (
+              <span key={i}>
+                <span
+                  className={`msg__claim${claim.support_level === 'partial' ? ' msg__claim--partial' : ''}${claim.refs.includes(hl ?? -1) ? ' is-hl' : ''}`}
+                >
+                  {claim.text}
+                </span>
+                {claim.refs.map((ref) => (
+                  <button
+                    key={ref}
+                    type="button"
+                    className={`msg__ref${hl === ref ? ' is-hl' : ''}`}
+                    aria-label={`Fonte ${ref + 1}${claim.support_level === 'partial' ? ', apoio parcial' : ''}`}
+                    onMouseEnter={() => setHl(ref)}
+                    onMouseLeave={() => setHl(null)}
+                    onFocus={() => setHl(ref)}
+                    onBlur={() => setHl(null)}
+                  >
+                    {ref + 1}
+                  </button>
+                ))}{' '}
+              </span>
+            ))
+          : renderFormattedContent(ask.answer ?? '')}
       </div>
+
+      {claims.some((c) => c.support_level === 'partial') && (
+        <div className="msg__legend">
+          <span><i className="msg__legend-line" />apoio direto</span>
+          <span><i className="msg__legend-line msg__legend-line--dotted" />apoio parcial</span>
+        </div>
+      )}
+
+      {sources.length > 0 && (
+        <ol className="msg__sources" aria-label="Fontes">
+          {sources.map((source, i) => (
+            <li
+              key={source.chunk_id}
+              className={`msg__source${hl === i ? ' is-hl' : ''}`}
+              onMouseEnter={() => setHl(i)}
+              onMouseLeave={() => setHl(null)}
+            >
+              <span className="msg__source-n mono">{i + 1}</span>
+              <div className="msg__source-body">
+                <div className="msg__source-title">{noteTitle(source)}</div>
+                <div className="msg__source-path mono" title={source.chunk_id}>{source.source_path ?? source.note_id}</div>
+                <blockquote className="msg__source-quote">{source.snippet}</blockquote>
+                <div className="msg__source-meta mono">
+                  <span>v{source.note_version}</span>
+                  <span>{source.char_start}–{source.char_end}</span>
+                  {claims.length > 0 && (
+                    <span className={`msg__support msg__support--${support[i]}`}>
+                      {support[i] === 'direct' ? 'apoio direto' : 'apoio parcial'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {ask.limitations.length > 0 && (
+        <div className="msg__limits">
+          <AlertTriangleIcon size={15} />
+          <div>
+            <b>{ask.limitations.length === 1 ? 'Limitação' : 'Limitações'}</b>
+            {ask.limitations.map((item, i) => <p key={i}>{item}</p>)}
+          </div>
+        </div>
+      )}
+
+      <AnswerMeta ask={ask} copyText={copyText} />
+    </>
+  );
+};
+
+const MessageBubble = ({ message, onRetry }: MessageBubbleProps) => {
+  if (message.role === 'user') {
+    return (
+      <article className="msg msg--user fade-in" aria-label="Sua pergunta">
+        <div className="msg__bubble">{message.content}</div>
+      </article>
+    );
+  }
+
+  const { ask } = message;
+  return (
+    <article className="msg msg--ai fade-in" aria-label="Resposta">
+      {ask?.no_answer ? (
+        <>
+          <div className="msg__head">
+            <span className="msg__mark" aria-hidden="true">ep</span>
+            <b>Sem resposta</b>
+          </div>
+          <NoAnswer ask={ask} onRetry={onRetry} />
+          <AnswerMeta ask={ask} />
+        </>
+      ) : ask ? (
+        <StructuredAnswer ask={ask} />
+      ) : (
+        <>
+          <div className="msg__head">
+            <span className="msg__mark" aria-hidden="true">ep</span>
+            <b>Resposta</b>
+          </div>
+          <div className="msg__answer">{renderFormattedContent(message.content)}</div>
+        </>
+      )}
     </article>
   );
 };

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
 from free_plaud.providers.answer import AnswerProviderTestResult
 from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
-from free_plaud.retrieval.models import AskResponse, Citation, UsedSource
+from free_plaud.retrieval.models import AnswerClaim, AskResponse, Citation, UsedSource
 
 
 def _load_ui_main(monkeypatch):
@@ -64,6 +64,49 @@ def test_desktop_api_send_message_uses_real_corpus_ask(monkeypatch) -> None:
     assert "Fontes:" in text
     assert "vault/nota.md" in text
     assert "latencia_ms: 42" in text
+
+
+def test_desktop_api_ask_corpus_returns_structured_response(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    citation = Citation(
+        note_id="note-ui",
+        note_version=1,
+        chunk_id="chunk-ui",
+        snippet="Trecho usado na resposta.",
+        source_path="vault/nota.md",
+        char_start=10,
+        char_end=37,
+    )
+    response = AskResponse(
+        query="Pergunta?",
+        status="answer",
+        no_answer=False,
+        answer="Resposta gerada pelo corpus.",
+        claims=[AnswerClaim(text="Resposta gerada pelo corpus.", citations=[citation], support_level="partial")],
+        citations=[citation],
+        limitations=["Só uma fonte."],
+        latency_ms=42,
+    )
+    calls = []
+
+    def fake_ask(question, strategy, runtime):
+        calls.append(strategy)
+        return response
+
+    monkeypatch.setattr(module, "ask_corpus", fake_ask)
+    api = module.Api()
+
+    payload = api.askCorpus("Pergunta?", "lexical")
+    api.askCorpus("Pergunta?", "nao-existe")
+
+    assert calls[0] == "lexical"
+    assert calls[1] == module.get_settings().default_ask_strategy
+    assert payload["strategy"] == "lexical"
+    assert payload["claims"][0]["support_level"] == "partial"
+    assert payload["citations"][0]["char_start"] == 10
+    assert payload["limitations"] == ["Só uma fonte."]
+    assert payload["latency_ms"] == 42
+    assert "debug" not in payload
 
 
 def test_desktop_api_send_message_abstains_without_answer(monkeypatch) -> None:
