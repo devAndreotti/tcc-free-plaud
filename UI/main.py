@@ -40,6 +40,7 @@ from free_plaud.app.local_env import answer_api_key_is_configured, load_local_en
 from free_plaud.app.settings_catalog import save_catalog_setting, save_catalog_settings, settings_catalog_payload
 from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.benchmark.service import run_benchmark_compare
+from free_plaud.corpus.dropped import DroppedFileIndexer
 from free_plaud.corpus.jobs import cancel_index_job, get_index_job, start_index_job
 from free_plaud.corpus.runtime import CorpusRuntime
 from free_plaud.notes.service import delete_note, get_note_detail, list_notes, reindex_note
@@ -76,6 +77,12 @@ class Api:
 
     def __init__(self) -> None:
         self.runtime = CorpusRuntime()
+        self.dropped_files = DroppedFileIndexer(runtime=self.runtime)
+
+    def stage_dropped_files(self, event: dict) -> None:
+        """Handler Python do drop: só ele recebe o caminho completo (pywebviewFullPath)."""
+        files = (event.get('dataTransfer') or {}).get('files') or []
+        self.dropped_files.stage([f['pywebviewFullPath'] for f in files if f.get('pywebviewFullPath')])
 
     def _format_ask_response(self, response: AskResponse) -> str:
         if response.no_answer:
@@ -334,6 +341,14 @@ class Api:
         """Retorna se ha monitoramento ativo e qual diretorio esta sendo observado."""
         return watcher_manager.status()
 
+    def indexDroppedFiles(self, names: list[str]) -> dict:
+        """Indexa no corpus os arquivos soltos na área de soltar, identificados pelo nome."""
+        return self.dropped_files.enqueue(list(names)).model_dump(mode='json')
+
+    def pollDroppedFiles(self) -> list:
+        """Drena os resultados da indexação de arquivos soltos."""
+        return [event.model_dump(mode='json') for event in self.dropped_files.poll_events()]
+
     def pollWatcherEvents(self) -> list:
         """Drena e retorna eventos de ingestao capturados pelo watcher desde a ultima consulta."""
         return [event.model_dump(mode="json") for event in watcher_manager.poll_events()]
@@ -462,6 +477,14 @@ if __name__ == '__main__':
         text_select=False,   # Desativa seleção de texto como em apps nativos
         confirm_close=False,
     )
+
+    # Drop de arquivos: o pywebview só expõe o caminho completo a um handler Python.
+    from webview.dom import DOMEventHandler
+
+    def _bind_drop() -> None:
+        window.dom.document.events.drop += DOMEventHandler(api.stage_dropped_files, prevent_default=True)
+
+    window.events.loaded += _bind_drop
 
     # Inicia o loop de eventos do PyWebView
     # debug=True exibe DevTools (útil durante desenvolvimento)

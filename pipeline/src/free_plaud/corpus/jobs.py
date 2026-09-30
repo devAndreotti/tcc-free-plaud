@@ -15,6 +15,9 @@ from free_plaud.corpus.runtime import CorpusRuntime
 
 IndexJobStatus = str
 
+# Uma escrita no corpus por vez: o job de pasta e a fila de arquivos soltos compartilham esta trava.
+corpus_write_lock = Lock()
+
 
 class IndexJobAlreadyRunningError(RuntimeError):
     """Raised when the process already has an active indexing job."""
@@ -165,13 +168,14 @@ class IndexJobManager:
         result: CorpusIndexBatchResult | None = None
         started_at = datetime.now(UTC)
         try:
-            result = self._runner(
-                path,
-                progress=lambda event: self._update_progress(job_id, event),
-                cancel_token=self._jobs[job_id].cancel_token,
-                runtime=runtime,
-                rebuild=rebuild,
-            )
+            with corpus_write_lock:
+                result = self._runner(
+                    path,
+                    progress=lambda event: self._update_progress(job_id, event),
+                    cancel_token=self._jobs[job_id].cancel_token,
+                    runtime=runtime,
+                    rebuild=rebuild,
+                )
             status = result.status
             message = 'Indexacao finalizada.'
             error_code = None

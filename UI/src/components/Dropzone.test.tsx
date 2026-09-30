@@ -4,6 +4,8 @@ import Dropzone from './Dropzone';
 
 const bridgeMock = vi.hoisted(() => ({
   pollWatcherEvents: vi.fn(),
+  indexDroppedFiles: vi.fn(),
+  pollDroppedFiles: vi.fn(),
 }));
 
 vi.mock('../services/bridge', () => ({
@@ -33,6 +35,49 @@ describe('Dropzone', () => {
   beforeEach(() => {
     bridgeMock.pollWatcherEvents.mockReset();
     bridgeMock.pollWatcherEvents.mockResolvedValue([]);
+    bridgeMock.indexDroppedFiles.mockReset();
+    bridgeMock.indexDroppedFiles.mockImplementation((names: string[]) => Promise.resolve({ queued: names, missing: [] }));
+    bridgeMock.pollDroppedFiles.mockReset();
+    bridgeMock.pollDroppedFiles.mockResolvedValue([]);
+  });
+
+  it('pede a indexação do arquivo solto e mostra o resultado do backend', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const onToast = vi.fn();
+    render(<Dropzone onToast={onToast} />);
+    const region = screen.getByRole('region', { name: 'Área de arrastar e soltar arquivos' });
+
+    fireEvent.drop(region, buildDataTransfer([buildFile('nota.md')]));
+
+    expect(screen.getByText('indexando')).toBeTruthy();
+    expect(bridgeMock.indexDroppedFiles).toHaveBeenCalledWith(['nota.md']);
+
+    bridgeMock.pollDroppedFiles.mockResolvedValueOnce([
+      { name: 'nota.md', source_path: 'C:/Vault/nota.md', status: 'indexed', chunks: 4, error_code: null, message: null },
+    ]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    await waitFor(() => expect(screen.getByText('indexado')).toBeTruthy());
+    expect(onToast).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'success', message: 'nota.md entrou no corpus (4 chunks).' })
+    );
+  });
+
+  it('marca falha quando o caminho nunca chega ao backend', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    bridgeMock.indexDroppedFiles.mockImplementation((names: string[]) => Promise.resolve({ queued: [], missing: names }));
+    render(<Dropzone />);
+    const region = screen.getByRole('region', { name: 'Área de arrastar e soltar arquivos' });
+
+    fireEvent.drop(region, buildDataTransfer([buildFile('nota.md')]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    await waitFor(() => expect(screen.getByText('falhou')).toBeTruthy());
+    expect(bridgeMock.indexDroppedFiles).toHaveBeenCalledTimes(6);
   });
 
   it('lista apenas arquivos com extensão aceita ao soltar', () => {

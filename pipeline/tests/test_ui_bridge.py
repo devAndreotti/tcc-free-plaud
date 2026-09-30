@@ -535,3 +535,35 @@ def test_desktop_api_runs_benchmark_compare(monkeypatch) -> None:
     assert result["comparison_id"] == "cmp-ui"
     assert result["json_report_path"].endswith("cmp-ui.json")
     assert result["settings_snapshot"]["embedding_device"] == "cpu"
+
+
+def test_desktop_api_indexes_dropped_files(monkeypatch, tmp_path: Path) -> None:
+    module = _load_ui_main(monkeypatch)
+    api = module.Api()
+    indexed: list[str] = []
+
+    def runner(path: Path):
+        from free_plaud.corpus.models import CorpusIndexBatchResult, CorpusIndexResult
+
+        indexed.append(path.name)
+        return CorpusIndexBatchResult(
+            source_path=str(path),
+            recursive=False,
+            status="success",
+            total_found=1,
+            indexed_count=1,
+            failed_count=0,
+            skipped_count=0,
+            results=[CorpusIndexResult(source_path=str(path), status="success", chunks_indexed=2)],
+        )
+
+    api.dropped_files = module.DroppedFileIndexer(runner=runner)
+    api.stage_dropped_files(
+        {"dataTransfer": {"files": [{"name": "nota.md", "pywebviewFullPath": str(tmp_path / "nota.md")}, {"name": "sem-caminho.md"}]}}
+    )
+
+    assert api.indexDroppedFiles(["nota.md", "sem-caminho.md"]) == {"queued": ["nota.md"], "missing": ["sem-caminho.md"]}
+    api.dropped_files.join()
+    events = api.pollDroppedFiles()
+    assert indexed == ["nota.md"]
+    assert events[0]["status"] == "indexed" and events[0]["chunks"] == 2

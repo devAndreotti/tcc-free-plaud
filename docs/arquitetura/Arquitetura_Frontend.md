@@ -206,6 +206,11 @@ Na evolução atual, a UI React dentro do PyWebView deixa de responder apenas mo
   progresso. Mostra as etapas (descoberta, leitura, embedding, gravação, commit), uma barra por
   resultado (indexadas, inalteradas, com falha, ignoradas), taxa, ETA, modo de commit e tempo por
   etapa, além das falhas com código. Também solicita cancelamento cooperativo
+- arquivos soltos na área de soltar da Fila entram no corpus um a um. O WebView não expõe o
+  caminho do arquivo ao JS: um handler de `drop` registrado no Python (`UI/main.py`) guarda o
+  caminho, e a área de soltar pede `indexDroppedFiles(nomes)`. Só é indexado o que caiu nela. A
+  fila (`free_plaud/corpus/dropped.py`) divide com o job de pasta a trava de escrita no corpus, e
+  a UI consulta `pollDroppedFiles` até cada arquivo terminar (indexado, sem mudança ou falhou)
 - o chat chama `askCorpus(message, strategy)`, que devolve o `AskResponse` estruturado: afirmações
   com apoio direto ou parcial, citações com faixa de caracteres, limitações, estratégia, top-k,
   provedor e latência. Cada afirmação ganha nota de rodapé ligada à fonte, e "sem resposta" mostra
