@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { readThemeChoice, saveThemeChoice, type ThemeChoice } from '../theme';
 import { createPortal } from 'react-dom';
 import { XIcon } from './Icons';
 import Select from './Select';
@@ -49,7 +50,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [voiceModels, setVoiceModels] = useState<VoiceModelInfo[]>([]);
   const [downloadJob, setDownloadJob] = useState<VoiceModelDownloadSnapshot | null>(null);
   const [downloadError, setDownloadError] = useState('');
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice);
 
   // Consome o contexto global do vault
   const { vaultPath, selectVault, isScanning } = useVaultContext();
@@ -762,11 +763,16 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                       <Select
                         id="select-theme"
                         value={theme}
-                        onChange={setTheme}
+                        onChange={(value) => {
+                          const choice = value as ThemeChoice;
+                          setTheme(choice);
+                          saveThemeChoice(choice);
+                        }}
                         ariaLabel="Selecionar tema"
                         options={[
                           { value: 'dark', label: 'Escuro' },
-                          { value: 'light', label: 'Claro (em breve)', disabled: true },
+                          { value: 'light', label: 'Claro' },
+                          { value: 'system', label: 'Seguir o sistema' },
                         ]}
                       />
                     </div>
