@@ -239,7 +239,7 @@ function App() {
 
             {workspaceView === 'benchmark' && <BenchmarkPanel />}
 
-            {workspaceView === 'queue' && <QueuePanel />}
+            {workspaceView === 'queue' && <QueuePanel onOpenSettings={openSettings} />}
 
             {workspaceView === 'chat' && activeTab?.type === 'chat' && (
               <main
