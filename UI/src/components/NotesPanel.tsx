@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FileIcon } from './Icons';
+import { FolderIcon, NoteIcon, PdfIcon, SearchIcon, WaveIcon } from './Icons';
 import { NoteDetailView } from './NoteDetailView';
+import { commonRoot, formatDate, relativeParts, typeLabel } from '../lib/notes';
 import {
   bridge,
   type NoteDeleteResult,
@@ -23,34 +24,57 @@ export const __resetNotesCacheForTests = () => {
   notesCache = null;
 };
 
+// O backend confirma exclusão por texto; a UI pede a confirmação no próprio popover.
+const DELETE_CONFIRMATION = 'APAGAR';
+
+const TypeIcon = ({ type }: { type: string | null | undefined }) => {
+  const t = (type ?? '').toLowerCase();
+  if (t === 'pdf') return <PdfIcon size={15} />;
+  if (t === 'audio' || t === 'wav' || t === 'm4a' || t === 'mp3') return <WaveIcon size={15} />;
+  return <NoteIcon size={15} />;
+};
+
 const NotesPanel = () => {
   const [notes, setNotes] = useState<NoteSummary[]>(() => notesCache ?? []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<NoteDetail | null>(null);
   const [query, setQuery] = useState('');
-  const [confirmation, setConfirmation] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
-  const [status, setStatus] = useState('Pronto.');
+  const [status, setStatus] = useState('');
 
   // Skeleton só no primeiro load real (sem cache) - com cache, a lista
   // aparece imediatamente e a revalidação acontece em silêncio.
   const showSkeleton = isLoadingList && notes.length === 0;
 
-  const filteredNotes = useMemo(() => {
+  const root = useMemo(() => commonRoot(notes.map((note) => note.source_path ?? '')), [notes]);
+  const types = useMemo(
+    () => Array.from(new Set(notes.map((note) => note.source_type).filter(Boolean))) as string[],
+    [notes]
+  );
+
+  const groups = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return notes;
-    return notes.filter((note) => {
-      const haystack = `${note.note_id} ${note.title} ${note.source_path} ${note.tags.join(' ')}`.toLowerCase();
+    const filtered = notes.filter((note) => {
+      if (typeFilter !== 'all' && note.source_type !== typeFilter) return false;
+      if (!term) return true;
+      const haystack = `${note.note_id} ${note.title} ${note.source_path ?? ''} ${(note.tags ?? []).join(' ')}`.toLowerCase();
       return haystack.includes(term);
     });
-  }, [notes, query]);
+    const byFolder = new Map<string, NoteSummary[]>();
+    filtered.forEach((note) => {
+      const folder = relativeParts(note.source_path, root).slice(0, -1).join('/') || 'Raiz do vault';
+      byFolder.set(folder, [...(byFolder.get(folder) ?? []), note]);
+    });
+    return Array.from(byFolder.entries()).sort(([a], [b]) => a.localeCompare(b, 'pt-BR'));
+  }, [notes, query, typeFilter, root]);
+
+  const visibleCount = groups.reduce((sum, [, items]) => sum + items.length, 0);
 
   const loadNotes = useCallback(async () => {
-    const hadCache = notesCache !== null;
     setIsLoadingList(true);
-    if (!hadCache) setStatus('Carregando notas indexadas...');
     try {
       const loaded = await bridge.listNotes();
       // Evita re-render/flicker quando o resultado é idêntico ao já exibido.
@@ -65,7 +89,6 @@ const NotesPanel = () => {
         }
         return loaded[0]?.note_id ?? null;
       });
-      setStatus(`${loaded.length} nota(s) indexada(s).`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Falha ao carregar notas.');
     } finally {
@@ -88,19 +111,14 @@ const NotesPanel = () => {
       setIsLoadingDetail(true);
       try {
         const loaded = await bridge.getNoteDetail(selectedId);
-        if (!cancelled) {
-          setDetail(loaded);
-          setConfirmation('');
-        }
+        if (!cancelled) setDetail(loaded);
       } catch (error) {
         if (!cancelled) {
           setDetail(null);
           setStatus(error instanceof Error ? error.message : 'Falha ao abrir nota.');
         }
       } finally {
-        if (!cancelled) {
-          setIsLoadingDetail(false);
-        }
+        if (!cancelled) setIsLoadingDetail(false);
       }
     };
 
@@ -113,14 +131,14 @@ const NotesPanel = () => {
   const handleDelete = async () => {
     if (!detail) return;
     setIsMutating(true);
-    setStatus('Removendo nota do corpus...');
+    setStatus('Removendo nota do corpus…');
     try {
-      const result: NoteDeleteResult = await bridge.deleteNote(detail.note_id, confirmation);
+      const result: NoteDeleteResult = await bridge.deleteNote(detail.note_id, DELETE_CONFIRMATION);
       if (!result.ok) {
-        setStatus(result.message ?? 'Confirmação necessária.');
+        setStatus(result.message ?? 'Não foi possível remover a nota.');
         return;
       }
-      setStatus(`Nota removida. Vetores apagados: ${result.deleted_vectors ?? 0}.`);
+      setStatus(`“${detail.title}” removida do corpus · ${result.deleted_vectors ?? 0} vetores apagados.`);
       setDetail(null);
       setSelectedId(null);
       await loadNotes();
@@ -134,10 +152,10 @@ const NotesPanel = () => {
   const handleReindex = async () => {
     if (!detail) return;
     setIsMutating(true);
-    setStatus('Reindexando nota...');
+    setStatus('Reindexando nota…');
     try {
       const result: NoteReindexResult = await bridge.reindexNote(detail.note_id);
-      setStatus(`${result.status}: ${result.chunks_indexed} chunk(s). ${result.message ?? ''}`.trim());
+      setStatus(`Nota reindexada · ${result.chunks_indexed} ${result.chunks_indexed === 1 ? 'chunk' : 'chunks'}. ${result.message ?? ''}`.trim());
       await loadNotes();
       setSelectedId(detail.note_id);
     } catch (error) {
@@ -148,38 +166,46 @@ const NotesPanel = () => {
   };
 
   return (
-    <main className="main notes-panel" id="notes-panel">
-      <section className="notes-panel__list" aria-label="Notas indexadas">
-        <div className="notes-panel__toolbar">
-          <div>
-            <h1 className="notes-panel__title">Notes</h1>
-            <p className="notes-panel__meta">{notes.length} nota(s) no corpus</p>
-          </div>
-          <button
-            type="button"
-            className="notes-panel__button"
-            onClick={loadNotes}
-            disabled={isLoadingList}
-          >
-            Atualizar
-          </button>
+    <main className="main notes" id="notes-panel">
+      <section className="notes__list" aria-label="Notas indexadas">
+        <div className="notes__head">
+          <h1>Notas</h1>
+          <span className="mono">{notes.length.toLocaleString('pt-BR')} no corpus</span>
         </div>
 
-        <input
-          className="notes-panel__search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Filtrar por título, caminho ou id"
-          aria-label="Filtrar notas"
-        />
+        <label className="notes__search">
+          <SearchIcon size={15} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar título, pasta ou tag"
+            aria-label="Filtrar notas"
+          />
+        </label>
 
-        <div className="notes-panel__items" aria-label="Notas">
+        {types.length > 1 && (
+          <div className="notes__filters" role="group" aria-label="Filtrar por tipo">
+            {['all', ...types].map((type) => (
+              <button
+                key={type}
+                type="button"
+                className="notes__chip"
+                aria-pressed={typeFilter === type}
+                onClick={() => setTypeFilter(type)}
+              >
+                {type === 'all' ? 'Todas' : typeLabel(type)}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="notes__items" aria-label="Notas">
           {showSkeleton ? (
-            <div aria-hidden="true" aria-label="Carregando notas">
-              {[0, 1, 2, 3].map((key) => (
-                <div key={key} className="notes-panel__item">
-                  <span className="skeleton-box" />
-                  <span className="notes-panel__item-body">
+            <div aria-hidden="true">
+              {[0, 1, 2, 3, 4].map((key) => (
+                <div key={key} className="notes__item notes__item--skeleton">
+                  <span className="skeleton-box skeleton-box--icon" />
+                  <span className="notes__item-body">
                     <span className="skeleton-box skeleton-box--name" />
                     <span className="skeleton-box skeleton-box--path" />
                   </span>
@@ -188,52 +214,69 @@ const NotesPanel = () => {
             </div>
           ) : (
             <>
-              {filteredNotes.map((note) => (
-                <button
-                  key={note.note_id}
-                  type="button"
-                  className={`notes-panel__item ${selectedId === note.note_id ? 'notes-panel__item--active' : ''}`}
-                  onClick={() => setSelectedId(note.note_id)}
-                >
-                  <span className="notes-panel__item-icon">
-                    <FileIcon size={15} />
-                  </span>
-                  <span className="notes-panel__item-body">
-                    <span className="notes-panel__item-title">{note.title}</span>
-                    <span className="notes-panel__item-path">{note.source_path}</span>
-                  </span>
-                  <span className="notes-panel__item-count">{note.chunk_count}</span>
-                </button>
+              {groups.map(([folder, items]) => (
+                <div key={folder} className="notes__group">
+                  <h2 className="notes__group-title mono">
+                    <FolderIcon size={12} />
+                    {folder}
+                  </h2>
+                  {items.map((note) => {
+                    const active = selectedId === note.note_id;
+                    const date = formatDate(note.created_at, false);
+                    return (
+                      <button
+                        key={note.note_id ?? note.title}
+                        type="button"
+                        className={`notes__item${active ? ' notes__item--active' : ''}`}
+                        aria-current={active ? 'true' : undefined}
+                        onClick={() => setSelectedId(note.note_id)}
+                      >
+                        <TypeIcon type={note.source_type} />
+                        <span className="notes__item-body">
+                          <span className="notes__item-title">{note.title}</span>
+                          <span className="notes__item-meta">
+                            {note.chunk_count ?? 0} {note.chunk_count === 1 ? 'chunk' : 'chunks'}
+                            {date && ` · ${date}`}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               ))}
 
-              {!isLoadingList && filteredNotes.length === 0 && (
-                <div className="notes-panel__empty">Nenhuma nota encontrada.</div>
+              {!isLoadingList && visibleCount === 0 && (
+                <div className="notes__empty">
+                  {notes.length === 0 ? 'Nenhuma nota indexada ainda. Indexe uma pasta na Fila.' : 'Nenhuma nota com esse filtro.'}
+                </div>
               )}
             </>
           )}
         </div>
       </section>
 
-      <section className="notes-panel__detail" aria-label="Detalhe da nota">
+      <section className="notes__detail" aria-label="Detalhe da nota">
         {detail ? (
           <NoteDetailView
+            key={detail.note_id}
             detail={detail}
+            crumbs={relativeParts(detail.source_path, root)}
             isMutating={isMutating}
             isLoadingDetail={isLoadingDetail}
-            confirmation={confirmation}
-            onConfirmationChange={setConfirmation}
             onReindex={handleReindex}
             onDelete={handleDelete}
           />
         ) : (
-          <div className="notes-panel__empty notes-panel__empty--detail">
-            {isLoadingDetail ? 'Abrindo nota...' : 'Selecione uma nota indexada.'}
+          <div className="notes__empty notes__empty--detail">
+            {isLoadingDetail ? 'Abrindo nota…' : 'Selecione uma nota para ler.'}
           </div>
         )}
 
-        <div className="notes-panel__status" role="status">
-          {status}
-        </div>
+        {status && (
+          <div className="notes__status" role="status">
+            {status}
+          </div>
+        )}
       </section>
     </main>
   );
