@@ -1,5 +1,5 @@
-import { XIcon } from './Icons';
-import SettingsModal from './SettingsModal';
+import { PlusIcon, XIcon } from './Icons';
+import SettingsModal, { type SettingsTab } from './SettingsModal';
 
 // Dados de uma aba aberta
 export interface Tab {
@@ -14,7 +14,9 @@ interface HeaderProps {
   activeTabId: string | null;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
+  onNewTab: () => void;
   isSettingsOpen: boolean;
+  settingsTab?: SettingsTab;
   onCloseSettings: () => void;
   isGraphPanelOpen: boolean;
   onToggleGraphPanel: () => void;
@@ -66,7 +68,9 @@ const Header = ({
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onNewTab,
   isSettingsOpen,
+  settingsTab,
   onCloseSettings,
   isGraphPanelOpen,
   onToggleGraphPanel,
@@ -113,6 +117,17 @@ const Header = ({
           })}
         </div>
 
+        <button
+          type="button"
+          id="btn-new-tab"
+          className="tab-bar__new"
+          aria-label="Nova conversa"
+          title="Nova conversa"
+          onClick={onNewTab}
+        >
+          <PlusIcon size={15} />
+        </button>
+
         {/* Área vazia após as abas — droppable / espaço livre */}
         <div className="tab-bar__spacer" aria-hidden="true" />
 
@@ -137,6 +152,7 @@ const Header = ({
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={onCloseSettings}
+        initialTab={settingsTab}
       />
     </>
   );

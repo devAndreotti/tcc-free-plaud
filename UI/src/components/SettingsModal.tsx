@@ -17,12 +17,14 @@ import {
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Seção aberta ao abrir o modal (ex.: vinda do flyout da sidebar). */
+  initialTab?: SettingsTab;
 }
 
 // Chaves do catálogo que pertencem à aba IA (o resto de layer não-secreto vai para Avançado)
 const IA_CATALOG_KEYS = ['answer_provider', 'answer_model', 'answer_base_url'];
 
-type SettingsTab = 'geral' | 'vault' | 'ia' | 'voz' | 'avancado' | 'aparencia';
+export type SettingsTab = 'geral' | 'vault' | 'ia' | 'voz' | 'avancado' | 'aparencia';
 
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: 'geral', label: 'Geral' },
@@ -33,7 +35,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: 'aparencia', label: 'Aparência' },
 ];
 
-const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
+const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const [apiKey, setApiKey] = useState('');
   const [backendSettings, setBackendSettings] = useState<BackendSettings | null>(null);
@@ -51,6 +53,10 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [downloadJob, setDownloadJob] = useState<VoiceModelDownloadSnapshot | null>(null);
   const [downloadError, setDownloadError] = useState('');
   const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice);
+
+  useEffect(() => {
+    if (isOpen && initialTab) setActiveTab(initialTab);
+  }, [isOpen, initialTab]);
 
   // Consome o contexto global do vault
   const { vaultPath, selectVault, isScanning } = useVaultContext();
