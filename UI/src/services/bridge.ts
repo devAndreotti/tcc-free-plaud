@@ -357,6 +357,42 @@ export interface BenchmarkCompareResult {
   settings_snapshot: BenchmarkSettingsSnapshot | null;
 }
 
+export type AskStrategy = 'hybrid' | 'vector' | 'lexical';
+
+/** Trecho do corpus que sustenta uma resposta (retrieval/models.py: Citation). */
+export interface AskCitation {
+  note_id: string;
+  note_version: number;
+  chunk_id: string;
+  snippet: string;
+  source_path: string | null;
+  char_start: number;
+  char_end: number;
+}
+
+/** Afirmação da resposta com as citações que a apoiam, direta ou parcialmente. */
+export interface AskClaim {
+  text: string;
+  citations: AskCitation[];
+  support_level: 'direct' | 'partial';
+}
+
+/** Resposta estruturada do ask (AskResponse + estratégia, top-k e provedor usados). */
+export interface AskResult {
+  query: string;
+  status: 'answer' | 'no_answer';
+  no_answer: boolean;
+  answer: string | null;
+  claims: AskClaim[];
+  citations: AskCitation[];
+  limitations: string[];
+  reason_for_no_answer: string | null;
+  latency_ms: number;
+  strategy?: string;
+  top_k?: number;
+  answer_provider?: string;
+}
+
 interface PythonApi {
   /**
    * Envia mensagem do usuário para o backend Python.
@@ -365,6 +401,9 @@ interface PythonApi {
    * @returns         Resposta gerada pelo backend
    */
   sendMessage: (message: string, attachment?: string) => Promise<string>;
+
+  /** Pergunta ao corpus e devolve a resposta estruturada, com citações por afirmação. */
+  askCorpus?: (message: string, strategy?: AskStrategy) => Promise<AskResult>;
 
   /**
    * Abre o seletor nativo de pasta do sistema operacional.
@@ -506,6 +545,71 @@ const MOCK_RESPONSES = [
 ];
 
 let mockIndex = 0;
+
+const plainAskResult = (query: string, text: string): AskResult => ({
+  query,
+  status: 'answer',
+  no_answer: false,
+  answer: text,
+  claims: [],
+  citations: [],
+  limitations: [],
+  reason_for_no_answer: null,
+  latency_ms: 0,
+});
+
+const MOCK_CITATIONS: AskCitation[] = [
+  {
+    note_id: 'arquitetura--3f9a1c',
+    note_version: 1,
+    chunk_id: 'arquitetura--3f9a1c::v1::ofs-000680-001480::9a41',
+    snippet: 'O id de um chunk junta o id da nota, a versão e o deslocamento no texto.',
+    source_path: 'Projetos/free-plaud/Arquitetura do índice.md',
+    char_start: 680,
+    char_end: 1480,
+  },
+  {
+    note_id: 'arquitetura--3f9a1c',
+    note_version: 1,
+    chunk_id: 'arquitetura--3f9a1c::v1::ofs-001360-002160::77c0',
+    snippet: 'Se o hash não mudou desde a última indexação, a nota entra como inalterada.',
+    source_path: 'Projetos/free-plaud/Arquitetura do índice.md',
+    char_start: 1360,
+    char_end: 2160,
+  },
+  {
+    note_id: 'pipeline--b21e07',
+    note_version: 2,
+    chunk_id: 'pipeline--b21e07::v2::ofs-000000-000800::1c3d',
+    snippet: 'Notas alteradas voltam para a fila e passam de novo pelo chunking.',
+    source_path: 'Projetos/free-plaud/Pipeline de ingestão.md',
+    char_start: 0,
+    char_end: 800,
+  },
+];
+
+const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'): Promise<AskResult> => {
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  const [c1, c2, c3] = MOCK_CITATIONS;
+  return {
+    query: message,
+    status: 'answer',
+    no_answer: false,
+    answer: '(mock) Resposta de exemplo montada a partir de três trechos.',
+    claims: [
+      { text: '(mock) Cada nota indexada guarda uma versão, e o id de cada chunk carrega essa versão.', citations: [c1], support_level: 'direct' },
+      { text: 'Na indexação seguinte, o conteúdo é comparado pelo hash: se não mudou, a nota entra como inalterada.', citations: [c2], support_level: 'direct' },
+      { text: 'Quando o hash muda, a nota volta para a fila e é quebrada em chunks de novo.', citations: [c3], support_level: 'partial' },
+    ],
+    citations: MOCK_CITATIONS,
+    limitations: ['As fontes não dizem o que acontece com vetores já gravados se a reindexação for interrompida.'],
+    reason_for_no_answer: null,
+    latency_ms: 700,
+    strategy,
+    top_k: 5,
+    answer_provider: 'extractive',
+  };
+};
 
 const mockSendMessage = async (message: string): Promise<string> => {
   // Simula delay de rede/processamento
@@ -772,6 +876,17 @@ export const bridge = {
     }
     // Desenvolvimento: usa mock local
     return mockSendMessage(message);
+  },
+
+  askCorpus: async (message: string, strategy?: AskStrategy): Promise<AskResult> => {
+    if (isDesktopApp() && window.pywebview?.api.askCorpus) {
+      return window.pywebview.api.askCorpus(message, strategy);
+    }
+    // Backend antigo (ou mocks de E2E) só expõem sendMessage: vira resposta sem citações.
+    if (isDesktopApp() && window.pywebview?.api.sendMessage) {
+      return plainAskResult(message, await window.pywebview.api.sendMessage(message));
+    }
+    return mockAskCorpus(message, strategy);
   },
 
   /**
