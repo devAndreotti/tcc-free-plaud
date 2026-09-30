@@ -128,6 +128,8 @@ A interface desktop segue a linha "instrumento de pesquisa": feita para ler e ve
 - **Tema claro e escuro** reais: `:root` é o escuro e `:root[data-theme="light"]` redefine só os tokens. A escolha (Escuro, Claro ou Sistema) é salva em `localStorage` e aplicada antes do primeiro render (`UI/src/theme.ts`).
 - **Tipografia com papéis**: IBM Plex Sans na interface, Source Serif 4 na leitura (respostas e notas) e IBM Plex Mono nos dados (ids de chunk, ms, métricas). Sem rede, cada pilha cai para fontes do sistema.
 - **Sidebar**: recolhida (64 px, ícones com tooltip) ou expandida (232 px, rótulos), com Ctrl+B. Todos os botões da coluna compartilham o mesmo formato. Configurações fica logo abaixo da navegação; recolhida, abre as seções ao passar o mouse. O rodapé mostra a saúde do corpus (Doctor) e o vault monitorado.
+- **Grafo** desenhado em canvas com as cores lidas dos tokens do tema, e redesenhado quando o tema muda. Sem cores fixas nem brilho.
+- **Configurações › Vault** só escolhe a pasta que alimenta o grafo e mostra o tamanho do corpus. Indexar fica na Fila: o botão "Indexar na Fila" leva a pasta escolhida para lá.
 - **Primitivas CSS** compartilhadas (`.btn`, `.switch`, `.popover`, `.pill`, `.card`, `.data-table`, `.page-head`) entre Notas, Fila, Benchmark e Configurações.
 
 ### Como chegar na direção visual

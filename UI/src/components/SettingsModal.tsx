@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { readThemeChoice, saveThemeChoice, type ThemeChoice } from '../theme';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangleIcon,
   CheckCircleIcon,
+  ChevronRightIcon,
   CodeIcon,
   ContrastIcon,
   DownloadIcon,
@@ -17,6 +18,7 @@ import {
 } from './Icons';
 import Select from './Select';
 import { useVaultContext } from '../hooks/useVaultContext';
+import { QueueContext } from '../contexts/QueueContextObject';
 import {
   bridge,
   type BackendSettings,
@@ -32,10 +34,15 @@ interface SettingsModalProps {
   onClose: () => void;
   /** Seção aberta ao abrir o modal (ex.: vinda do flyout da sidebar). */
   initialTab?: SettingsTab;
+  /** Fecha o modal e abre a tela Fila (a indexação mora lá). */
+  onOpenQueue?: () => void;
 }
 
 // Chaves do catálogo que pertencem à aba IA (o resto de layer não-secreto vai para Avançado)
 const IA_CATALOG_KEYS = ['answer_provider', 'answer_model', 'answer_base_url'];
+
+// Chaves de preset que não são editáveis e por isso não estão no catálogo.
+const PRESET_KEY_LABELS: Record<string, string> = { embedding_model: 'Modelo de embedding' };
 
 export type SettingsTab = 'geral' | 'vault' | 'ia' | 'voz' | 'avancado' | 'aparencia';
 
@@ -75,7 +82,7 @@ const draftsFrom = (settings: BackendSettings) =>
       .map((row) => [row.key, row.value === null ? '' : String(row.value)])
   );
 
-const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
+const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const [apiKey, setApiKey] = useState('');
   const [backendSettings, setBackendSettings] = useState<BackendSettings | null>(null);
@@ -86,7 +93,6 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
   const [isTestingProvider, setIsTestingProvider] = useState(false);
   const [isListingModels, setIsListingModels] = useState(false);
   const [modelDiscovery, setModelDiscovery] = useState<ModelDiscoveryResult | null>(null);
-  const [isIndexingVault, setIsIndexingVault] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>('voz');
   const [operationStatus, setOperationStatus] = useState('');
   const [voiceModels, setVoiceModels] = useState<VoiceModelInfo[]>([]);
@@ -101,6 +107,8 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
   // Consome o contexto global do vault
   const { vaultPath, selectVault, isScanning } = useVaultContext();
   const isSelectingVault = isScanning;
+  // Opcional: sem QueueProvider (testes), o link só navega.
+  const queue = useContext(QueueContext);
 
   // Fecha o modal ao pressionar Escape
   useEffect(() => {
@@ -231,30 +239,9 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
     await selectVault();
   };
 
-  const handleIndexVault = async () => {
-    if (!vaultPath || isIndexingVault) return;
-    setIsIndexingVault(true);
-    setOperationStatus('Indexando corpus...');
-    try {
-      const result = await bridge.indexVault(vaultPath);
-      setOperationStatus(
-        `Indexação: ${result.status} | encontrados=${result.total_found} | indexados=${result.indexed_count} | inalterados=${result.unchanged_count} | falhas=${result.failed_count}`
-      );
-      const settings = await bridge.getBackendSettings();
-      setBackendSettings(settings);
-      setSettingDrafts(
-        Object.fromEntries(
-          settings.settings_catalog
-            .filter((row) => !row.secret)
-            .map((row) => [row.key, row.value === null ? '' : String(row.value)])
-        )
-      );
-    } catch (error) {
-      console.error('[SettingsModal] Erro ao indexar vault:', error);
-      setOperationStatus('Erro ao indexar corpus.');
-    } finally {
-      setIsIndexingVault(false);
-    }
+  const handleOpenQueue = () => {
+    if (queue && !queue.folderPath && vaultPath) queue.setFolderPath(vaultPath);
+    onOpenQueue?.();
   };
 
   const handleSaveApiKey = async () => {
@@ -490,6 +477,8 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
         : !selectedVoiceModel.languages.includes(option.value)
       : false,
   }));
+  const catalogLabel = (key: string) =>
+    backendSettings?.settings_catalog.find((row) => row.key === key)?.label ?? PRESET_KEY_LABELS[key] ?? key;
   const iaCatalogRows = backendSettings?.settings_catalog.filter((row) => IA_CATALOG_KEYS.includes(row.key) && !row.secret) ?? [];
   const advancedRows = backendSettings?.settings_catalog.filter(
     (row) => !row.secret && row.group !== 'Áudio' && !IA_CATALOG_KEYS.includes(row.key)
@@ -608,47 +597,55 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
                   Vault
                 </h3>
 
-                <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                <div className="settings-item settings-item--stacked">
                   <div className="settings-item__info">
-                    <span className="settings-item__label">Pasta de destino</span>
+                    <span className="settings-item__label">Pasta do vault</span>
                     <span className="settings-item__description">
-                      Diretório onde os arquivos gerados serão salvos
+                      Alimenta o painel de grafo. Indexar no corpus é feito na Fila.
                     </span>
                   </div>
 
-                  {/* Campo de caminho + botão de seleção */}
-                  <div className="vault-picker" role="group" aria-label="Selecionar pasta de destino">
+                  <div className="vault-picker" role="group" aria-label="Selecionar pasta do vault">
                     <input
                       id="input-vault-path"
                       type="text"
-                      className="vault-picker__input"
+                      className="vault-picker__input mono"
                       value={vaultPath}
                       placeholder="Nenhuma pasta selecionada"
                       readOnly
-                      aria-label="Caminho da pasta de destino"
+                      aria-label="Caminho da pasta do vault"
                       title={vaultPath || 'Nenhuma pasta selecionada'}
                     />
                     <button
                       id="btn-select-vault"
                       type="button"
-                      className="vault-picker__btn"
+                      className="btn"
                       onClick={handleSelectVault}
                       disabled={isSelectingVault}
-                      aria-label="Selecionar pasta de destino"
+                      aria-label="Selecionar pasta do vault"
                     >
                       {isSelectingVault ? 'Selecionando…' : 'Selecionar'}
                     </button>
-                    <button
-                      id="btn-index-vault"
-                      type="button"
-                      className="vault-picker__btn"
-                      onClick={handleIndexVault}
-                      disabled={!vaultPath || isIndexingVault}
-                      aria-label="Indexar corpus"
-                    >
-                      {isIndexingVault ? 'Indexando…' : 'Indexar'}
-                    </button>
                   </div>
+                </div>
+
+                <div className="vault-queue">
+                  <div>
+                    <b>Corpus indexado</b>
+                    <span className="mono">
+                      {(backendSettings?.notes_count ?? 0).toLocaleString('pt-BR')} notas ·{' '}
+                      {(backendSettings?.sqlite_chunks_count ?? 0).toLocaleString('pt-BR')} chunks
+                    </span>
+                  </div>
+                  <button
+                    id="btn-open-queue"
+                    type="button"
+                    className="btn"
+                    onClick={handleOpenQueue}
+                  >
+                    Indexar na Fila
+                    <ChevronRightIcon size={14} />
+                  </button>
                 </div>
               </section>
             )}
@@ -680,7 +677,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
                     <button
                       id="btn-save-api-key"
                       type="button"
-                      className="vault-picker__btn"
+                      className="btn"
                       onClick={handleSaveApiKey}
                       disabled={isSavingApiKey}
                       aria-label="Salvar API key"
@@ -690,7 +687,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
                     <button
                       id="btn-test-provider"
                       type="button"
-                      className="vault-picker__btn"
+                      className="btn"
                       onClick={handleTestProvider}
                       disabled={isTestingProvider}
                       aria-label="Testar provider"
@@ -700,7 +697,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
                     <button
                       id="btn-list-models"
                       type="button"
-                      className="vault-picker__btn"
+                      className="btn"
                       onClick={handleListModels}
                       disabled={isListingModels}
                       aria-label="Listar modelos"
@@ -723,7 +720,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
                             <li key={model.id} className="settings-model-list__item">
                               <button
                                 type="button"
-                                className="vault-picker__btn settings-model-option"
+                                className="btn btn--sm settings-model-option"
                                 onClick={() => handleSelectModel(model.id)}
                                 aria-label={`Selecionar ${model.label}`}
                               >
@@ -849,13 +846,18 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
                       <div className="settings-item__info">
                         <span className="settings-item__label">{preset.label}</span>
                         <span className="settings-item__description">{preset.description}</span>
-                        <span className="settings-inline-status">
-                          {Object.entries(preset.values).map(([key, value]) => `${key}=${String(value)}`).join(' · ')}
-                        </span>
+                        <dl className="preset__values">
+                          {Object.entries(preset.values).map(([key, value]) => (
+                            <div key={key}>
+                              <dt>{catalogLabel(key)}</dt>
+                              <dd className="mono">{String(value)}</dd>
+                            </div>
+                          ))}
+                        </dl>
                       </div>
                       <button
                         type="button"
-                        className="vault-picker__btn settings-save-wide"
+                        className="btn btn--sm preset__apply"
                         onClick={() => handleApplyPreset(preset.key)}
                         disabled={Boolean(applyingPreset)}
                         aria-label={`Aplicar preset ${preset.label}`}
@@ -920,9 +922,9 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
 
                   <div className="settings-item">
                     <div className="settings-item__info">
-                      <span className="settings-item__label">Assistente IA</span>
+                      <span className="settings-item__label">Evil Plaud</span>
                       <span className="settings-item__description">
-                        Interface de chat com inteligência artificial
+                        Perguntas sobre o seu vault, respondidas só com as notas indexadas e com a fonte de cada afirmação.
                       </span>
                     </div>
                     <span className="settings-badge">v0.1.0</span>
