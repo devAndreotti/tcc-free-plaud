@@ -282,10 +282,9 @@ describe('SettingsModal', () => {
     });
 
     render(<SettingsModal isOpen onClose={vi.fn()} />);
-    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+    await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
-    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
-    await user.click(await screen.findByRole('option', { name: 'Moonshine Tiny' }));
+    await user.click(screen.getByRole('radio', { name: 'Moonshine Tiny' }));
 
     expect(await screen.findByRole('button', { name: 'Baixar modelo' })).toBeTruthy();
 
@@ -298,7 +297,8 @@ describe('SettingsModal', () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
 
-    expect(await screen.findByText('Instalado.')).toBeTruthy();
+    const moonshineCard = screen.getByRole('radio', { name: 'Moonshine Tiny' });
+    await waitFor(() => expect(within(moonshineCard).queryByText('Instalado.')).toBeTruthy());
 
     vi.useRealTimers();
   });
@@ -350,12 +350,10 @@ describe('SettingsModal', () => {
     });
 
     render(<SettingsModal isOpen onClose={vi.fn()} />);
-    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+    await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     // silero-vad nunca aparece como opcao de modelo de transcricao.
-    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
-    expect(screen.queryByRole('option', { name: 'Detector de fala (VAD)' })).toBeNull();
-    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('radio', { name: 'Detector de fala (VAD)' })).toBeNull();
 
     const vadSection = (await screen.findByText('Componente do sistema')).closest('div.settings-item') as HTMLElement;
     await user.click(within(vadSection).getByRole('button', { name: 'Baixar modelo' }));
@@ -378,7 +376,7 @@ describe('SettingsModal', () => {
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
 
     render(<SettingsModal isOpen onClose={vi.fn()} />);
-    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+    await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     // Com Whisper Small selecionado (default do draft), todo idioma esta habilitado.
     // O campo de idioma depende de listVoiceModels, que resolve depois do campo de modelo.
@@ -388,8 +386,7 @@ describe('SettingsModal', () => {
     await user.keyboard('{Escape}');
 
     // Troca para Moonshine Tiny (so ingles, sem auto-detect).
-    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
-    await user.click(await screen.findByRole('option', { name: 'Moonshine Tiny' }));
+    await user.click(screen.getByRole('radio', { name: 'Moonshine Tiny' }));
 
     await user.click(screen.getByRole('combobox', { name: 'Idioma da transcrição' }));
     expect(screen.getByRole('option', { name: 'Automático (detectar idioma)' }).getAttribute('aria-disabled')).toBe('true');
@@ -402,14 +399,29 @@ describe('SettingsModal', () => {
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
 
     render(<SettingsModal isOpen onClose={vi.fn()} />);
-    await screen.findByRole('combobox', { name: 'Modelo de transcrição (voz)' });
+    await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     // Draft comeca em "pt" (Whisper Small); trocar para Moonshine (so "en")
     // deve corrigir o draft de idioma automaticamente para "en".
-    await user.click(screen.getByRole('combobox', { name: 'Modelo de transcrição (voz)' }));
-    await user.click(await screen.findByRole('option', { name: 'Moonshine Tiny' }));
+    await user.click(screen.getByRole('radio', { name: 'Moonshine Tiny' }));
 
     expect(screen.getByRole('combobox', { name: 'Idioma da transcrição' }).textContent).toBe('Inglês');
+  });
+
+  it('conta alterações pendentes e oferece Cancelar e Salvar no rodapé', async () => {
+    const user = userEvent.setup();
+    bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
+
+    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
+    expect(screen.getByText('Nenhuma alteração')).toBeTruthy();
+
+    await user.click(screen.getByRole('radio', { name: 'Moonshine Tiny' }));
+
+    // Modelo e idioma (corrigido para en) mudaram.
+    expect(screen.getByText('2 alterações não salvas')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Salvar configurações do backend' })).toBeTruthy();
   });
 
   it('mostra estado offline sem quebrar modal', async () => {

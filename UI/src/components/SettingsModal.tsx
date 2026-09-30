@@ -1,7 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { readThemeChoice, saveThemeChoice, type ThemeChoice } from '../theme';
 import { createPortal } from 'react-dom';
-import { XIcon } from './Icons';
+import {
+  AlertTriangleIcon,
+  CheckCircleIcon,
+  CodeIcon,
+  ContrastIcon,
+  DownloadIcon,
+  MicIcon,
+  RefreshIcon,
+  SlidersIcon,
+  StarsIcon,
+  VaultIcon,
+  XCircleIcon,
+  XIcon,
+} from './Icons';
 import Select from './Select';
 import { useVaultContext } from '../hooks/useVaultContext';
 import {
@@ -34,6 +47,33 @@ const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: 'avancado', label: 'Avançado' },
   { id: 'aparencia', label: 'Aparência' },
 ];
+
+const TAB_ICONS: Record<SettingsTab, ComponentType<{ size?: number }>> = {
+  geral: SlidersIcon,
+  vault: VaultIcon,
+  ia: StarsIcon,
+  voz: MicIcon,
+  avancado: CodeIcon,
+  aparencia: ContrastIcon,
+};
+
+const SPEED_LEVEL: Record<string, number> = { rapido: 3, medio: 2, lento: 1 };
+const QUALITY_LEVEL: Record<string, number> = { basica: 1, boa: 2, alta: 3 };
+
+const Meter = ({ level, label }: { level: number; label: string }) => (
+  <span className="meter" role="img" aria-label={`${label}: ${level} de 3`}>
+    {[1, 2, 3].map((i) => (
+      <i key={i} className={i <= level ? 'meter__on' : undefined} />
+    ))}
+  </span>
+);
+
+const draftsFrom = (settings: BackendSettings) =>
+  Object.fromEntries(
+    settings.settings_catalog
+      .filter((row) => !row.secret)
+      .map((row) => [row.key, row.value === null ? '' : String(row.value)])
+  );
 
 const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
@@ -76,23 +116,38 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
     if (isOpen) modalRef.current?.focus();
   }, [isOpen]);
 
+  const [isRunningDoctor, setIsRunningDoctor] = useState(false);
+
   useEffect(() => {
     if (!isOpen) return;
     bridge.getBackendSettings()
       .then((settings) => {
         setBackendSettings(settings);
-        setSettingDrafts(
-          Object.fromEntries(
-            settings.settings_catalog
-              .filter((row) => !row.secret)
-              .map((row) => [row.key, row.value === null ? '' : String(row.value)])
-          )
-        );
+        setSettingDrafts(draftsFrom(settings));
       })
       .catch((error) => {
         console.error('[SettingsModal] Erro ao carregar settings do backend:', error);
       });
   }, [isOpen]);
+
+  // Roda o Doctor de novo sem descartar o que o usuário já editou.
+  const handleRerunDoctor = async () => {
+    setIsRunningDoctor(true);
+    try {
+      const settings = await bridge.getBackendSettings();
+      setBackendSettings((prev) => (prev ? { ...prev, doctor: settings.doctor, notes_count: settings.notes_count, sqlite_chunks_count: settings.sqlite_chunks_count } : settings));
+    } catch (error) {
+      setOperationStatus(error instanceof Error ? error.message : 'Falha ao rodar o diagnóstico.');
+    } finally {
+      setIsRunningDoctor(false);
+    }
+  };
+
+  const pendingChanges = useMemo(() => {
+    if (!backendSettings) return 0;
+    const saved = draftsFrom(backendSettings);
+    return Object.keys(saved).filter((key) => (settingDrafts[key] ?? '') !== saved[key]).length;
+  }, [backendSettings, settingDrafts]);
 
   // Carrega o catálogo de modelos de voz (com estado instalado) quando o modal abre.
   useEffect(() => {
@@ -107,6 +162,30 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
   const selectableVoiceModels = voiceModels.filter((model) => model.selectable);
   const selectedVoiceModel = selectableVoiceModels.find((model) => model.id === settingDrafts.audio_model) ?? null;
   const vadModel = voiceModels.find((model) => model.id === 'silero-vad') ?? null;
+
+  const selectVoiceModel = (value: string) => {
+    const nextModel = selectableVoiceModels.find((model) => model.id === value);
+    setSettingDrafts((prev) => {
+      const next: Record<string, string> = { ...prev, audio_model: value };
+      // Se o idioma atual do draft nao existe mais no novo
+      // modelo (nem "auto"), corrige para o primeiro idioma
+      // valido - so no draft, salvar continua manual.
+      const currentLanguage = prev.audio_language;
+      const stillValid = nextModel
+        ? currentLanguage === 'auto'
+          ? nextModel.supports_auto_language
+          : nextModel.languages.includes(currentLanguage)
+        : true;
+      if (nextModel && !stillValid) {
+        next.audio_language = nextModel.supports_auto_language
+          ? 'auto'
+          : (nextModel.languages[0] ?? currentLanguage);
+      }
+      return next;
+    });
+    setDownloadJob(null);
+    setDownloadError('');
+  };
 
   // Faz polling de um job de download de modelo de voz até ele terminar.
   useEffect(() => {
@@ -295,42 +374,50 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
   // Estado de instalado/baixando/erro de UM modelo de voz - reusado tanto
   // para o modelo de transcricao selecionado quanto para o VAD (componente
   // interno, sempre necessario para gravar audio).
-  const renderVoiceModelDownloadStatus = (model: VoiceModelInfo) => (
-    <div className="settings-item settings-item--stacked" aria-live="polite">
-      {model.installed ? (
-        <span className="settings-inline-status">Instalado.</span>
-      ) : downloadJob && downloadJob.model_id === model.id && !['completed', 'failed', 'cancelled'].includes(downloadJob.status) ? (
-        <div className="settings-item settings-item--stacked">
-          <span className="settings-inline-status">
-            {downloadJob.status === 'verifying'
-              ? 'Verificando arquivos baixados...'
-              : `Baixando... ${(downloadJob.bytes_completed / (1024 * 1024)).toFixed(0)} / ${(downloadJob.bytes_total / (1024 * 1024)).toFixed(0)} MB`}
-          </span>
-          <div className="queue-panel__progress" role="progressbar" aria-label="Progresso do download">
-            <div
-              className="queue-panel__progress-bar"
-              style={{
-                width: `${downloadJob.bytes_total > 0 ? Math.min(100, (downloadJob.bytes_completed / downloadJob.bytes_total) * 100) : 0}%`,
-              }}
-            />
+  const renderVoiceModelDownloadStatus = (model: VoiceModelInfo) => {
+    const job = downloadJob && downloadJob.model_id === model.id ? downloadJob : null;
+    const inProgress = job && !['completed', 'failed', 'cancelled'].includes(job.status);
+    if (model.installed) {
+      return (
+        <div className="voice-dl" aria-live="polite">
+          <span className="voice-dl__ok"><CheckCircleIcon size={14} />Instalado.</span>
+          <span className="voice-dl__hash mono">SHA-256 ok</span>
+        </div>
+      );
+    }
+    if (job && inProgress) {
+      const percent = job.bytes_total > 0 ? Math.min(100, (job.bytes_completed / job.bytes_total) * 100) : 0;
+      return (
+        <div className="voice-dl voice-dl--progress" aria-live="polite">
+          <div className="voice-dl__bar" role="progressbar" aria-label="Progresso do download" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
+            <i style={{ width: `${percent}%` }} />
           </div>
-          <button type="button" className="vault-picker__btn" onClick={handleCancelVoiceModelDownload}>
-            Cancelar download
-          </button>
+          <div className="voice-dl__row mono">
+            <span>
+              {job.status === 'verifying'
+                ? 'verificando SHA-256…'
+                : `${(job.bytes_completed / (1024 * 1024)).toFixed(0)} / ${(job.bytes_total / (1024 * 1024)).toFixed(0)} MB`}
+            </span>
+            <button type="button" className="link-btn" onClick={handleCancelVoiceModelDownload}>
+              Cancelar download
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="settings-item settings-item--stacked">
-          {downloadJob?.model_id === model.id && downloadJob.status === 'failed' && (
-            <span className="settings-warning">{downloadJob.message ?? 'Falha ao baixar o modelo.'}</span>
-          )}
-          {downloadError && downloadJob?.model_id === model.id && <span className="settings-warning">{downloadError}</span>}
-          <button type="button" className="vault-picker__btn" onClick={() => handleDownloadVoiceModel(model.id)}>
-            {downloadJob?.model_id === model.id && downloadJob.status === 'failed' ? 'Tentar novamente' : 'Baixar modelo'}
-          </button>
-        </div>
-      )}
-    </div>
-  );
+      );
+    }
+    const failed = job?.status === 'failed';
+    return (
+      <div className="voice-dl" aria-live="polite">
+        {failed && <span className="settings-warning">{job?.message ?? 'Falha ao baixar o modelo.'}</span>}
+        {downloadError && job && <span className="settings-warning">{downloadError}</span>}
+        {!failed && <span className="voice-dl__muted">Não instalado</span>}
+        <button type="button" className="btn btn--sm" onClick={() => handleDownloadVoiceModel(model.id)}>
+          <DownloadIcon size={14} />
+          {failed ? 'Tentar novamente' : 'Baixar modelo'}
+        </button>
+      </div>
+    );
+  };
 
   const renderSettingRow = (row: SettingRow, overrideOptions?: { value: string; label: string; disabled?: boolean }[]) => (
     <div key={row.key} className="settings-item settings-item--stacked">
@@ -446,7 +533,14 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
                 aria-current={activeTab === tab.id ? 'page' : undefined}
                 onClick={() => setActiveTab(tab.id)}
               >
-                {tab.label}
+                {(() => {
+                  const TabIcon = TAB_ICONS[tab.id];
+                  return <TabIcon size={16} />;
+                })()}
+                <span>{tab.label}</span>
+                {tab.id === 'geral' && (backendSettings?.doctor?.error_count ?? 0) > 0 && (
+                  <span className="settings-nav__dot" aria-label="Diagnóstico com erro" />
+                )}
               </button>
             ))}
           </nav>
@@ -455,30 +549,50 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
             {activeTab === 'geral' && (
               <section className="settings-section" aria-labelledby="settings-doctor">
                 <h3 id="settings-doctor" className="settings-section__title">
-                  Doctor
+                  Diagnóstico
                 </h3>
-                {backendSettings ? (
-                  <div className="settings-item settings-item--stacked">
-                    <div className="settings-item__info">
-                      <span className="settings-item__label">
-                        status: {backendSettings.doctor?.status ?? 'indisponível'}
+                {backendSettings?.doctor ? (
+                  <>
+                    <div className={`doctor__summary doctor__summary--${backendSettings.doctor.status}`}>
+                      <span className="doctor__summary-icon" aria-hidden="true">
+                        {backendSettings.doctor.status === 'ok' ? <CheckCircleIcon size={17} /> : <AlertTriangleIcon size={17} />}
                       </span>
-                      <span className="settings-item__description">
-                        checks: {backendSettings.doctor?.ok_count ?? 0} ok · {backendSettings.doctor?.warning_count ?? 0} warning · {backendSettings.doctor?.error_count ?? 0} error · {backendSettings.doctor?.latency_ms ?? 0} ms
-                      </span>
+                      <div>
+                        <b>
+                          {backendSettings.doctor.error_count > 0
+                            ? `${backendSettings.doctor.error_count} ${backendSettings.doctor.error_count === 1 ? 'verificação com erro' : 'verificações com erro'}`
+                            : backendSettings.doctor.warning_count > 0
+                              ? `${backendSettings.doctor.warning_count} ${backendSettings.doctor.warning_count === 1 ? 'aviso' : 'avisos'}`
+                              : 'Tudo certo'}
+                        </b>
+                        <span className="mono">
+                          {backendSettings.doctor.ok_count} ok · {backendSettings.doctor.warning_count} {backendSettings.doctor.warning_count === 1 ? 'aviso' : 'avisos'} · {backendSettings.doctor.error_count} {backendSettings.doctor.error_count === 1 ? 'erro' : 'erros'} · {backendSettings.doctor.latency_ms} ms
+                        </span>
+                      </div>
+                      <button type="button" className="btn btn--sm" onClick={handleRerunDoctor} disabled={isRunningDoctor}>
+                        <RefreshIcon size={14} />
+                        {isRunningDoctor ? 'Verificando…' : 'Verificar de novo'}
+                      </button>
                     </div>
-                    {backendSettings.doctor?.checks.slice(0, 6).map((check) => (
-                      <span
-                        key={check.code}
-                        className={check.status === 'ok' ? 'settings-inline-status' : 'settings-warning'}
-                      >
-                        {check.code}: {check.status} - {check.message}
-                      </span>
-                    ))}
-                    <span className="settings-inline-status">
-                      corpus: {backendSettings.notes_count} notas · {backendSettings.sqlite_chunks_count} chunks
-                    </span>
-                  </div>
+                    <ul className="doctor__checks">
+                      {[...backendSettings.doctor.checks]
+                        .sort((a, b) => (a.status === 'ok' ? 1 : 0) - (b.status === 'ok' ? 1 : 0))
+                        .map((check) => (
+                          <li key={check.code} className={`doctor__check doctor__check--${check.status}`}>
+                            {check.status === 'ok' ? <CheckCircleIcon size={15} /> : check.status === 'warning' ? <AlertTriangleIcon size={15} /> : <XCircleIcon size={15} />}
+                            <div>
+                              <code>{check.code}</code>
+                              <span className="doctor__msg">{check.message}</span>
+                              {check.action && check.status !== 'ok' && <span className="doctor__action">{check.action}</span>}
+                            </div>
+                            {check.latency_ms != null && <span className="doctor__lat mono">{check.latency_ms} ms</span>}
+                          </li>
+                        ))}
+                    </ul>
+                    <p className="settings-inline-status">
+                      Corpus: {backendSettings.notes_count.toLocaleString('pt-BR')} notas · {backendSettings.sqlite_chunks_count.toLocaleString('pt-BR')} chunks no SQLite · {backendSettings.vector_chunks_count.toLocaleString('pt-BR')} vetores no Chroma
+                    </p>
+                  </>
                 ) : (
                   <div className="settings-item settings-item--stacked" aria-label="Carregando diagnóstico">
                     <div className="skeleton-box skeleton-box--path" />
@@ -645,55 +759,67 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
                     </span>
                   </div>
 
-                  <Select
-                    className="settings-control-wide"
-                    value={settingDrafts.audio_model ?? ''}
-                    ariaLabel={audioModelRow?.label ?? 'Modelo de transcrição (voz)'}
-                    options={
-                      selectableVoiceModels.length > 0
-                        ? selectableVoiceModels.map((model) => ({
-                            value: model.id,
-                            label: model.label,
-                            hint: model.installed
-                              ? 'instalado'
-                              : `${(model.size_bytes / (1024 * 1024)).toFixed(0)} MB`,
-                          }))
-                        : (audioModelRow?.options ?? [])
-                    }
-                    onChange={(value) => {
-                      const nextModel = selectableVoiceModels.find((model) => model.id === value);
-                      setSettingDrafts((prev) => {
-                        const next: Record<string, string> = { ...prev, audio_model: value };
-                        // Se o idioma atual do draft nao existe mais no novo
-                        // modelo (nem "auto"), corrige para o primeiro idioma
-                        // valido - so no draft, salvar continua manual.
-                        const currentLanguage = prev.audio_language;
-                        const stillValid = nextModel
-                          ? currentLanguage === 'auto'
-                            ? nextModel.supports_auto_language
-                            : nextModel.languages.includes(currentLanguage)
-                          : true;
-                        if (nextModel && !stillValid) {
-                          next.audio_language = nextModel.supports_auto_language
-                            ? 'auto'
-                            : (nextModel.languages[0] ?? currentLanguage);
-                        }
-                        return next;
-                      });
-                      setDownloadJob(null);
-                      setDownloadError('');
-                    }}
-                  />
-
-                  {selectedVoiceModel && (
-                    <div className="settings-item settings-item--stacked" aria-live="polite">
-                      <span className="settings-inline-status">
-                        {selectedVoiceModel.description} · {selectedVoiceModel.speed_tier ?? '?'} ·{' '}
-                        {selectedVoiceModel.quality_tier ?? '?'} ·{' '}
-                        {(selectedVoiceModel.size_bytes / (1024 * 1024)).toFixed(0)} MB
-                      </span>
-                      {renderVoiceModelDownloadStatus(selectedVoiceModel)}
+                  {selectableVoiceModels.length > 0 ? (
+                    <div className="voice-models" role="radiogroup" aria-label={audioModelRow?.label ?? 'Modelo de transcrição (voz)'}>
+                      {selectableVoiceModels.map((model) => {
+                        const checked = settingDrafts.audio_model === model.id;
+                        const autoLang = model.supports_auto_language;
+                        return (
+                          <div
+                            key={model.id}
+                            role="radio"
+                            aria-checked={checked}
+                            aria-label={model.label}
+                            tabIndex={0}
+                            className={`voice-model${checked ? ' voice-model--checked' : ''}`}
+                            onClick={() => selectVoiceModel(model.id)}
+                            onKeyDown={(event) => {
+                              if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                                event.preventDefault();
+                                selectVoiceModel(model.id);
+                              }
+                            }}
+                          >
+                            <span className="voice-model__radio" aria-hidden="true" />
+                            <span className="voice-model__name">{model.label}</span>
+                            <span className="voice-model__badges">
+                              {model.recommended && <span className="pill pill--accent">Recomendado</span>}
+                              {model.languages.length === 1 && <span className="pill">só {model.languages[0]}</span>}
+                            </span>
+                            <span className="voice-model__desc">{model.description}</span>
+                            <dl className="voice-model__specs">
+                              <dt>Tamanho</dt>
+                              <dd className="mono">{(model.size_bytes / (1024 * 1024)).toFixed(0)} MB</dd>
+                              <dt>Idiomas</dt>
+                              <dd className="mono">{model.languages.length}{autoLang ? ' + automático' : ''}</dd>
+                              {model.speed_tier && (
+                                <>
+                                  <dt>Velocidade</dt>
+                                  <dd><Meter level={SPEED_LEVEL[model.speed_tier] ?? 2} label="Velocidade" /></dd>
+                                </>
+                              )}
+                              {model.quality_tier && (
+                                <>
+                                  <dt>Qualidade</dt>
+                                  <dd><Meter level={QUALITY_LEVEL[model.quality_tier] ?? 2} label="Qualidade" /></dd>
+                                </>
+                              )}
+                            </dl>
+                            <div className="voice-model__foot" onClick={(event) => event.stopPropagation()}>
+                              {renderVoiceModelDownloadStatus(model)}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
+                  ) : (
+                    <Select
+                      className="settings-control-wide"
+                      value={settingDrafts.audio_model ?? ''}
+                      ariaLabel={audioModelRow?.label ?? 'Modelo de transcrição (voz)'}
+                      options={audioModelRow?.options ?? []}
+                      onChange={selectVoiceModel}
+                    />
                   )}
                 </div>
 
@@ -815,24 +941,31 @@ const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
 
         {/* Rodapé do modal */}
         <div className="modal__footer">
-          <button
-            id="btn-save-backend-settings"
-            type="button"
-            className="btn-modal-primary"
-            onClick={handleSaveBackendSettings}
-            disabled={!backendSettings || isSavingBackendSettings}
-            aria-label="Salvar configurações do backend"
-          >
-            {isSavingBackendSettings ? 'Salvando…' : 'Salvar configurações'}
-          </button>
-          <button
-            id="btn-settings-close"
-            type="button"
-            className="btn-modal-primary"
-            onClick={onClose}
-          >
-            Fechar
-          </button>
+          <span className="modal__pending" aria-live="polite">
+            {pendingChanges > 0 ? (
+              <>
+                <span className="modal__pending-dot" aria-hidden="true" />
+                {pendingChanges} {pendingChanges === 1 ? 'alteração não salva' : 'alterações não salvas'}
+              </>
+            ) : (
+              'Nenhuma alteração'
+            )}
+          </span>
+          <div className="modal__footer-actions">
+            <button id="btn-settings-close" type="button" className="btn btn--ghost" onClick={onClose}>
+              Cancelar
+            </button>
+            <button
+              id="btn-save-backend-settings"
+              type="button"
+              className="btn btn--primary"
+              onClick={handleSaveBackendSettings}
+              disabled={!backendSettings || isSavingBackendSettings}
+              aria-label="Salvar configurações do backend"
+            >
+              {isSavingBackendSettings ? 'Salvando…' : 'Salvar'}
+            </button>
+          </div>
         </div>
       </div>
     </div>,
