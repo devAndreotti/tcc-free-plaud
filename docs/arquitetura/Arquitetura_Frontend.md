@@ -120,6 +120,16 @@ O app precisa parecer:
 - gradientes aleatórios
 - UI mais sofisticada do que os dados que ela exibe
 
+### Direção implementada (UI v2)
+
+A interface desktop segue a linha "instrumento de pesquisa": feita para ler e verificar, não para parecer um app de IA.
+
+- **Tokens** em `UI/src/index.css`: grafite com leve viés violeta e um único acento violeta. Não há gradientes nem brilhos decorativos. Cores semânticas (`--ok`, `--warn`, `--err`) ficam separadas do acento. O `App.css` não usa cores literais, só tokens e `color-mix`.
+- **Tema claro e escuro** reais: `:root` é o escuro e `:root[data-theme="light"]` redefine só os tokens. A escolha (Escuro, Claro ou Sistema) é salva em `localStorage` e aplicada antes do primeiro render (`UI/src/theme.ts`).
+- **Tipografia com papéis**: IBM Plex Sans na interface, Source Serif 4 na leitura (respostas e notas) e IBM Plex Mono nos dados (ids de chunk, ms, métricas). Sem rede, cada pilha cai para fontes do sistema.
+- **Sidebar**: recolhida (64 px, ícones com tooltip) ou expandida (232 px, rótulos), com Ctrl+B. Todos os botões da coluna compartilham o mesmo formato. Configurações fica logo abaixo da navegação; recolhida, abre as seções ao passar o mouse. O rodapé mostra a saúde do corpus (Doctor) e o vault monitorado.
+- **Primitivas CSS** compartilhadas (`.btn`, `.switch`, `.popover`, `.pill`, `.card`, `.data-table`, `.page-head`) entre Notas, Fila, Benchmark e Configurações.
+
 ### Como chegar na direção visual
 
 Usar a pasta:
@@ -185,11 +195,22 @@ Na evolução atual, a UI React dentro do PyWebView deixa de responder apenas mo
 - o chat chama `corpus ask` real usando a estratégia padrão configurada
 - o modal de configurações salva `FREE_PLAUD_ANSWER_API_KEY` em `pipeline/.env`
 - a pasta selecionada no modal pode ser indexada no corpus local
-- a tela Notes lista notas indexadas, abre detalhe com Markdown estruturado e chunks,
-  apaga nota com confirmação textual e reindexa a partir do `source_path` persistido
-- a tela Fila inicia indexação de pasta como job em background por processo, consulta progresso,
-  calcula taxa/ETA a partir dos eventos do backend e solicita cancelamento cooperativo
-- respostas exibem texto, fontes e `latencia_ms` preservando quebras de linha
+- a tela Notes agrupa as notas pela pasta relativa ao vault e abre cada uma em modo leitura
+  (Markdown renderizado). O interruptor "Mostrar chunks" troca a leitura pelos trechos indexados,
+  com índice, tokens, faixa de caracteres e sobreposição. Apagar confirma num popover; o backend
+  mantém a confirmação textual, enviada pela UI só depois do clique. Reindexar parte do
+  `source_path` persistido
+- a tela Fila inicia indexação de pasta como job em background por processo e consulta o
+  progresso. Mostra as etapas (descoberta, leitura, embedding, gravação, commit), uma barra por
+  resultado (indexadas, inalteradas, com falha, ignoradas), taxa, ETA, modo de commit e tempo por
+  etapa, além das falhas com código. Também solicita cancelamento cooperativo
+- o chat chama `askCorpus(message, strategy)`, que devolve o `AskResponse` estruturado: afirmações
+  com apoio direto ou parcial, citações com faixa de caracteres, limitações, estratégia, top-k,
+  provedor e latência. Cada afirmação ganha nota de rodapé ligada à fonte, e "sem resposta" mostra
+  o motivo do backend. A estratégia (híbrida, vetorial ou lexical) é escolhida por pergunta. O
+  `sendMessage` em texto continua como fallback para backends antigos e para os mocks de E2E
+- o Benchmark abre com uma frase que responde qual estratégia usar (maior Recall@5, com desempate
+  por MRR e latência), destaca a melhor de cada coluna e desenha Recall@k com eixo de 0 a 1
 - settings de frontend, TUI e menu terminal passam a consumir o catálogo canônico de
   `free_plaud.app.settings_catalog`, evitando rótulos divergentes para `top_k`,
   `chunk_size`, `overlap`, provider, device e segredo local
