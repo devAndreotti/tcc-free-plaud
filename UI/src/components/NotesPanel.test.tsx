@@ -63,13 +63,19 @@ describe('NotesPanel', () => {
     });
   });
 
-  it('lista notas e abre detalhe com markdown e chunks', async () => {
+  it('lista notas e abre a nota em modo leitura, com chunks sob demanda', async () => {
+    const user = userEvent.setup();
     render(<NotesPanel />);
 
     expect((await screen.findAllByText('Nota alpha')).length).toBeGreaterThan(0);
-    expect(await screen.findByText('Markdown estruturado')).toBeTruthy();
-    expect(screen.getByText('# Nota alpha', { exact: false })).toBeTruthy();
-    expect(screen.getByText('nota-alpha::v1::0000')).toBeTruthy();
+    expect(await screen.findByText('Conteudo estruturado.')).toBeTruthy();
+    // O título do markdown não é repetido: já aparece como título da leitura.
+    expect(screen.queryByText('# Nota alpha', { exact: false })).toBeNull();
+
+    await user.click(screen.getByLabelText('Mostrar chunks'));
+
+    expect(screen.getByText('#0 · 4 tok')).toBeTruthy();
+    expect(screen.getByRole('list', { name: 'Chunks indexados' })).toBeTruthy();
   });
 
   it('mostra erro controlado quando listagem falha', async () => {
@@ -80,23 +86,42 @@ describe('NotesPanel', () => {
     expect(await screen.findByText('Falha DB')).toBeTruthy();
   });
 
-  it('executa reindex e delete com confirmacao textual', async () => {
+  it('reindexa e apaga com confirmação no popover, sem digitar nada', async () => {
     const user = userEvent.setup();
     render(<NotesPanel />);
 
-    await screen.findByText('Markdown estruturado');
+    await screen.findByText('Conteudo estruturado.');
     await user.click(screen.getByRole('button', { name: 'Reindexar' }));
 
     await waitFor(() => {
       expect(bridgeMock.reindexNote).toHaveBeenCalledWith('nota-alpha');
     });
 
-    await user.type(screen.getByLabelText('Confirmar exclusão'), 'APAGAR');
-    await user.click(screen.getByRole('button', { name: /Apagar/ }));
+    await user.click(screen.getByRole('button', { name: 'Mais ações' }));
+    await user.click(screen.getByRole('menuitem', { name: /Apagar do corpus/ }));
+
+    const dialog = screen.getByRole('alertdialog', { name: 'Apagar do corpus?' });
+    expect(dialog.textContent).toContain('O arquivo no vault não é alterado.');
+    expect(bridgeMock.deleteNote).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Apagar do corpus' }));
 
     await waitFor(() => {
       expect(bridgeMock.deleteNote).toHaveBeenCalledWith('nota-alpha', 'APAGAR');
     });
+  });
+
+  it('cancelar o popover não apaga nada', async () => {
+    const user = userEvent.setup();
+    render(<NotesPanel />);
+
+    await screen.findByText('Conteudo estruturado.');
+    await user.click(screen.getByRole('button', { name: 'Mais ações' }));
+    await user.click(screen.getByRole('menuitem', { name: /Apagar do corpus/ }));
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(bridgeMock.deleteNote).not.toHaveBeenCalled();
   });
 
   it('mostra skeleton no primeiro load, sem cache', async () => {
