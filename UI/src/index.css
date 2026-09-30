@@ -43,6 +43,11 @@
   --border-color: #2d2c35;
   --border-color-subtle: #221f28;
 
+  /* Séries de gráfico: mesma matiz do acento, do mais claro ao mais forte */
+  --series-1: #4d4388;
+  --series-2: #7a65d8;
+  --series-3: #b6a8fb;
+
   --tip-bg: #ecebf2;
   --tip-fg: #16151b;
   --scrim: rgba(6, 6, 10, 0.58);
@@ -115,6 +120,10 @@
 
   --border-color: #e1e0e8;
   --border-color-subtle: #eae9ef;
+
+  --series-1: #d4ccf6;
+  --series-2: #9d8aec;
+  --series-3: #5b43d6;
 
   --tip-bg: #19181e;
   --tip-fg: #ffffff;
