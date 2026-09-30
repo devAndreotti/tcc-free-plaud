@@ -60,6 +60,11 @@ function App() {
   const navigate = useCallback((view: WorkspaceView) => {
     setWorkspaceView(view);
   }, []);
+
+  const openQueueFromSettings = useCallback(() => {
+    closeSettings();
+    setWorkspaceView('queue');
+  }, [closeSettings]);
   const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('chat');
   const [strategy, setStrategy] = useState<AskStrategy>('hybrid');
@@ -223,13 +228,14 @@ function App() {
             {/* Barra de abas */}
             <Header
               tabs={tabs}
-              activeTabId={activeTabId}
+              activeTabId={workspaceView === 'chat' ? activeTabId : null}
               onSelectTab={handleSelectTab}
               onCloseTab={handleCloseTab}
               onNewTab={handleNewTab}
               isSettingsOpen={isSettingsOpen}
               settingsTab={settingsTab}
               onCloseSettings={closeSettings}
+              onOpenQueue={openQueueFromSettings}
               isGraphPanelOpen={isGraphPanelOpen}
               onToggleGraphPanel={handleToggleGraphPanel}
             />

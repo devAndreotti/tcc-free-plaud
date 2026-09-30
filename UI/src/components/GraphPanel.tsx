@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import ForceGraph from './ForceGraph';
+import { GraphIcon, XIcon } from './Icons';
 import { useVaultContext } from '../hooks/useVaultContext';
 
 // Props do painel lateral de grafos
@@ -7,28 +8,6 @@ interface GraphPanelProps {
   isOpen: boolean;
   onToggle: () => void;
 }
-
-// Ícone de grafo/rede (mesma definição do Header para não criar dependência circular)
-const GraphIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={14}
-    height={14}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <circle cx="18" cy="5" r="3" />
-    <circle cx="6" cy="12" r="3" />
-    <circle cx="18" cy="19" r="3" />
-    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-  </svg>
-);
 
 // Largura mínima e máxima permitidas ao redimensionar
 const MIN_WIDTH = 220;
@@ -107,16 +86,21 @@ const GraphPanel = ({ isOpen, onToggle }: GraphPanelProps) => {
 
       {/* Cabeçalho do painel — contém o botão de toggle (alinhado à tab bar) */}
       <div className="graph-panel__header">
+        <span className="graph-panel__title">
+          <GraphIcon size={14} />
+          Grafo
+          {nodes.length > 0 && <span className="graph-panel__count mono">{nodes.length}</span>}
+        </span>
         <button
           type="button"
-          className="graph-panel__toggle-btn"
+          className="btn-icon"
           onClick={onToggle}
           aria-label="Fechar painel de grafos"
           aria-expanded={isOpen}
           aria-controls="graph-panel"
+          title="Fechar"
         >
-          <GraphIcon />
-          <span>Grafos</span>
+          <XIcon size={14} />
         </button>
       </div>
 
