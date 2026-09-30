@@ -140,7 +140,7 @@ describe('QueuePanel', () => {
     bridgeMock.getIndexJob.mockResolvedValue({
       ...runningJob,
       last_errors: [
-        { source_path: 'Audio\aula-07.m4a', message: 'Modelo de voz não instalado.', error_code: 'AUDIO_MODEL_NOT_READY' },
+        { source_path: 'Audio/aula-07.m4a', message: 'Modelo de voz não instalado.', error_code: 'AUDIO_MODEL_NOT_READY' },
       ],
     });
     render(<QueueProvider><QueuePanel onOpenSettings={onOpenSettings} /></QueueProvider>);
