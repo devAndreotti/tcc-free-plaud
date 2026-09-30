@@ -83,16 +83,25 @@ describe('BenchmarkPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Selecionar suite' }));
     expect((screen.getByLabelText('suite.json') as HTMLInputElement).value).toBe('data/datasets/suite-ui.json');
 
-    await user.click(screen.getByRole('button', { name: 'Rodar compare' }));
+    await user.click(screen.getByRole('button', { name: 'Rodar comparação' }));
 
     await waitFor(() => {
       expect(bridgeMock.runBenchmarkCompare).toHaveBeenCalledWith('data/datasets/suite-ui.json');
     });
     expect(await screen.findByText('cmp-ui')).toBeTruthy();
-    expect(screen.getAllByText('hybrid').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Híbrida').length).toBeGreaterThan(0);
     expect(screen.getByText('data/results/cmp-ui.json')).toBeTruthy();
     expect(screen.getByText('fake-hash')).toBeTruthy();
-    expect(screen.getByText('Benchmark cmp-ui finalizado.')).toBeTruthy();
+    expect(screen.getByText('Comparação cmp-ui concluída.')).toBeTruthy();
+    // Empate em Recall@5 e MRR entre vetorial e híbrida: vence a de menor latência.
+    expect(
+      screen.getByText(
+        'A vetorial traz a fonte certa entre os 5 primeiros trechos em 100% das perguntas, 50 pontos acima da lexical, e custa 2 ms a mais por consulta.'
+      )
+    ).toBeTruthy();
+    // Melhor latência da coluna destacada.
+    expect(screen.getByText('3 ms').className).toBe('bench__best');
+    expect(screen.getByRole('img', { name: /Recall@3, @5 e @10/ })).toBeTruthy();
   });
 
   it('mostra erro e estado vazio quando compare falha', async () => {
@@ -101,7 +110,7 @@ describe('BenchmarkPanel', () => {
     render(<BenchmarkPanel />);
 
     await user.type(screen.getByLabelText('suite.json'), 'suite.json');
-    await user.click(screen.getByRole('button', { name: 'Rodar compare' }));
+    await user.click(screen.getByRole('button', { name: 'Rodar comparação' }));
 
     expect(await screen.findByText('Suite invalida')).toBeTruthy();
     expect(screen.getByText('Nenhum benchmark executado nesta sessão.')).toBeTruthy();
