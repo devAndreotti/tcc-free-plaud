@@ -52,6 +52,27 @@
   display: none; /* Chrome/Safari */
 }
 
+.tab-bar__new {
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.tab-bar__new:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
 /* Espaço após as abas para clique na área vazia */
 .tab-bar__spacer {
   flex: 1;
@@ -1737,278 +1758,470 @@
 }
 
 /* ============================================================
-   SIDEBAR (BARRA LATERAL)
+   SIDEBAR — recolhida (64px, só ícones) ou expandida (232px)
+   Todos os botões da coluna usam .sb__item: mesmo formato, mesmo estado.
    ============================================================ */
-.sidebar {
-  width: 68px;
+.sb {
+  width: 232px;
+  flex-shrink: 0;
   height: 100vh;
-  background-color: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background: var(--bg-secondary);
   border-right: 1px solid var(--border-color-subtle);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--spacing-sm) 0;
-  flex-shrink: 0;
-  z-index: 20;
-  gap: 0;
-}
-
-/* Logo na sidebar */
-.sidebar__logo {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: var(--spacing-xs);
-  flex-shrink: 0;
-  /* Reset de botão */
-  border: none;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-  border-radius: var(--radius-full);
-}
-
-.sidebar__logo-img {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
-  border-radius: var(--radius-full);
-  transition: filter var(--transition-base);
-}
-
-/* Glow intensificado ao pressionar a logo */
-.sidebar__logo:hover .sidebar__logo-img {
-  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--accent-blue) 100%, transparent));
-}
-
-/* Linha divisória horizontal */
-.sidebar__divider {
-  width: 36px;
-  height: 1px;
-  background: var(--border-color-subtle);
-  margin: var(--spacing-xs) 0 var(--spacing-sm);
-  flex-shrink: 0;
-}
-
-/* Área de navegação */
-.sidebar__nav {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-xs);
-  width: 100%;
-  padding: 0 var(--spacing-xs);
-}
-
-/* Botão de navegação da sidebar */
-.sidebar__nav-btn {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md);
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
   position: relative;
+  z-index: 30;
+  transition: width 220ms var(--ease);
 }
 
-.sidebar__nav-btn:hover {
-  background: var(--bg-surface);
-  color: var(--text-secondary);
+.sb--collapsed {
+  width: 64px;
 }
 
-/* Estado ativo do botão de navegação */
-.sidebar__nav-btn--active {
-  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
-  color: var(--accent-blue-light);
+.sb__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  margin-bottom: 10px;
 }
 
-.sidebar__nav-btn--active:hover {
-  background: color-mix(in srgb, var(--accent-blue) 18%, transparent);
-  color: var(--accent-blue-light);
+.sb--collapsed .sb__head {
+  flex-direction: column;
+  height: auto;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
-/* Indicador de ativo (barra esquerda) */
-.sidebar__nav-btn--active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
-  background: var(--accent-gradient);
-  border-radius: 0 var(--radius-full) var(--radius-full) 0;
-}
-
-.sidebar__nav-btn svg {
-  width: 20px;
-  height: 20px;
+.sb__mark {
+  width: 30px;
+  height: 30px;
+  margin-left: 5px;
+  border-radius: 8px;
+  background: var(--accent-blue);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font: italic 600 16px/1 var(--font-read);
+  letter-spacing: -0.02em;
   flex-shrink: 0;
-}
-
-/* Label textual abaixo do ícone */
-.sidebar__nav-label {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  line-height: 1;
-  color: inherit;
   user-select: none;
 }
 
-/* Empurra o hambúrguer para a base */
-.sidebar__spacer {
-  flex: 1;
+.sb--collapsed .sb__mark {
+  margin-left: 0;
 }
 
-/* Wrapper do hambúrguer na base */
-.sidebar__hamburger-wrapper {
+.sb__name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.sb__name small {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  letter-spacing: 0;
+}
+
+.sb__item {
   position: relative;
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 var(--spacing-xs) var(--spacing-xs);
-  flex-shrink: 0;
-}
-
-/* Botão hambúrguer na sidebar */
-.sidebar__hamburger {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md);
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.sidebar__hamburger:hover {
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-}
-
-.sidebar__hamburger.active {
-  background: var(--bg-surface);
-  color: var(--text-primary);
-}
-
-.sidebar__hamburger svg {
-  width: 20px;
-  height: 20px;
-}
-
-
-/* ============================================================
-   BOTÃO HAMBÚRGUER
-   ============================================================ */
-.hamburger-wrapper {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.btn-hamburger {
-  width: 36px;
   height: 36px;
-  border-radius: var(--radius-md);
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 11px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 500 13px var(--font-family);
+  text-align: left;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.sb__item svg {
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
 }
 
-.btn-hamburger:hover {
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-}
-
-.btn-hamburger.active {
-  background: var(--bg-surface);
-  color: var(--text-primary);
-}
-
-.btn-hamburger svg {
-  width: 20px;
-  height: 20px;
-}
-
-/* ============================================================
-   MENU DROPDOWN DO HAMBÚRGUER
-   ============================================================ */
-/* Abre para cima quando está dentro da sidebar (base da tela) */
-.hamburger-menu {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  min-width: 200px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  z-index: 100;
-  padding: var(--spacing-xs);
-  animation: fadeIn var(--transition-fast) forwards;
-}
-
-.hamburger-menu__item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  width: 100%;
-  padding: 9px var(--spacing-sm);
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  font-family: var(--font-family);
-  font-weight: 500;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  text-align: left;
-  transition: all var(--transition-fast);
-}
-
-.hamburger-menu__item:hover {
+.sb__item:hover {
   background: var(--bg-surface-hover);
   color: var(--text-primary);
 }
 
-.hamburger-menu__item-icon {
+.sb__item--active {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.sb__item--active > svg {
+  color: var(--accent-blue-light);
+}
+
+.sb__toggle {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  margin-left: auto;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.sb--collapsed .sb__item {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin-inline: auto;
+  justify-content: center;
+}
+
+.sb__label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sb__meta {
+  font-size: 11px;
+  color: var(--accent-blue-light);
+}
+
+.sb--collapsed .sb__label,
+.sb--collapsed .sb__meta,
+.sb--collapsed .sb__name {
+  display: none;
+}
+
+.sb__pip {
+  display: none;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-blue-light);
+  box-shadow: 0 0 0 2px var(--bg-secondary);
+}
+
+.sb--collapsed .sb__pip {
+  display: block;
+}
+
+.sb__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sb__sep {
+  height: 1px;
+  background: var(--border-color-subtle);
+  margin: 8px 6px;
+}
+
+.sb__spacer {
+  flex: 1;
+}
+
+/* Tooltip: só quando recolhida */
+.sb__tip {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translate(-3px, -50%);
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--tip-bg);
+  color: var(--tip-fg);
+  font: 500 12px/1 var(--font-family);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: var(--shadow-sm);
+  transition: opacity 120ms ease, transform 120ms var(--ease);
+  z-index: 60;
+}
+
+.sb__tip::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  background: var(--tip-bg);
+  transform: translateY(-50%) rotate(45deg);
+  border-radius: 1px;
+}
+
+.sb__tip small {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+.sb--collapsed .sb__tip {
+  display: flex;
+}
+
+.sb--collapsed .sb__item:hover > .sb__tip,
+.sb--collapsed .sb__item:focus-visible > .sb__tip,
+.sb--collapsed .sb__health:hover > .sb__tip,
+.sb--collapsed .sb__health:focus-visible > .sb__tip {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+/* Configurações: recolhida, o hover mostra as seções */
+.sb__settings {
+  position: relative;
+}
+
+.sb__flyout {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: -6px;
+  width: 232px;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-4px);
+  transition: opacity 140ms ease, transform 140ms var(--ease), visibility 140ms;
+  z-index: 70;
+}
+
+.sb__flyout::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 0;
+  width: 16px;
+  height: 60px;
+}
+
+.sb--collapsed .sb__settings:hover .sb__flyout,
+.sb--collapsed .sb__settings:focus-within .sb__flyout {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+
+.sb--collapsed .sb__settings:hover > .sb__item > .sb__tip,
+.sb--collapsed .sb__settings:focus-within > .sb__item > .sb__tip {
+  display: none;
+}
+
+.sb--collapsed .sb__settings:hover > .sb__item {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.sb__flyout-head {
+  padding: 6px 8px 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sb__fly-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-secondary);
+  font: 500 13px var(--font-family);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sb__fly-item svg {
+  color: var(--text-muted);
+}
+
+.sb__fly-item:hover,
+.sb__fly-item:focus-visible {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.sb__fly-item:hover svg {
+  color: var(--accent-blue-light);
+}
+
+.sb__fly-note {
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.sb__fly-note--error { color: var(--err); }
+.sb__fly-note--warning { color: var(--warn); }
+
+/* Rodapé: saúde do corpus (Doctor) e vault monitorado */
+.sb__health {
+  position: relative;
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-color-subtle);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.sb__health:hover {
+  border-color: var(--border-color);
+  background: var(--bg-surface);
+}
+
+.sb__health-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.sb__health-row b {
+  font-weight: 500;
+}
+
+.sb__health-state {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.sb__health--error .sb__health-state { color: var(--err); }
+.sb__health--warning .sb__health-state { color: var(--warn); }
+.sb__health--ok .sb__health-state { color: var(--ok); }
+
+.sb__health-sub {
+  padding-left: 15px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sb__health-vault {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.sb__health-vault svg {
   color: var(--text-muted);
   flex-shrink: 0;
 }
 
-.hamburger-menu__item:hover .hamburger-menu__item-icon {
-  color: var(--text-secondary);
+.sb__health-vault-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.hamburger-menu__item-label {
-  flex: 1;
+.sb__health-watch {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.sb__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.sb__health--ok .sb__health-row .sb__dot,
+.sb__dot--ok { background: var(--ok); }
+.sb__health--warning .sb__health-row .sb__dot { background: var(--warn); }
+.sb__health--error .sb__health-row .sb__dot { background: var(--err); }
+.sb__dot--off { background: var(--text-placeholder); }
+
+.sb__health-ring {
+  display: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  position: relative;
+}
+
+.sb__health-ring::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.sb__health--ok .sb__health-ring { border-color: var(--ok); }
+.sb__health--ok .sb__health-ring::after { background: var(--ok); }
+.sb__health--warning .sb__health-ring { border-color: var(--warn); }
+.sb__health--warning .sb__health-ring::after { background: var(--warn); }
+.sb__health--error .sb__health-ring { border-color: var(--err); }
+.sb__health--error .sb__health-ring::after { background: var(--err); }
+
+.sb--collapsed .sb__health {
+  width: 40px;
+  height: 40px;
+  margin-inline: auto;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-color: transparent;
+  background: transparent;
+}
+
+.sb--collapsed .sb__health:hover {
+  background: var(--bg-surface-hover);
+}
+
+.sb--collapsed .sb__health-ring {
+  display: block;
+}
+
+.sb--collapsed .sb__health-row,
+.sb--collapsed .sb__health-sub,
+.sb--collapsed .sb__health-vault {
+  display: none;
 }
 
 /* ============================================================

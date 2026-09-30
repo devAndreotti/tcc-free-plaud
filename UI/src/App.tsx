@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import './App.css';
 
 import Header, { type Tab } from './components/Header';
-import Sidebar from './components/Sidebar';
+import Sidebar, { type WorkspaceView } from './components/Sidebar';
+import type { SettingsTab } from './components/SettingsModal';
 import WelcomeScreen from './components/WelcomeScreen';
 import MessageBubble, {
   TypingIndicator,
@@ -30,7 +31,6 @@ const INITIAL_TAB: Tab = {
 
 // Estado de conversa vazia para reutilização
 const EMPTY_MESSAGES: MessageData[] = [];
-type WorkspaceView = 'chat' | 'notes' | 'benchmark' | 'queue';
 
 function App() {
   // Gerenciamento de abas
@@ -44,6 +44,22 @@ function App() {
   const [tabTyping, setTabTyping] = useState<Record<string, boolean>>({});
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
+  const [healthKey, setHealthKey] = useState(0);
+
+  const openSettings = useCallback((tab?: SettingsTab) => {
+    setSettingsTab(tab);
+    setIsSettingsOpen(true);
+  }, []);
+
+  const closeSettings = useCallback(() => {
+    setIsSettingsOpen(false);
+    setHealthKey((prev) => prev + 1);
+  }, []);
+
+  const navigate = useCallback((view: WorkspaceView) => {
+    setWorkspaceView(view);
+  }, []);
   const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('chat');
 
@@ -183,12 +199,10 @@ function App() {
         <div className="app" id="app-root">
           {/* Barra lateral esquerda */}
           <Sidebar
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onNewTab={handleNewTab}
-            onOpenNotes={() => setWorkspaceView('notes')}
-            onOpenBenchmark={() => setWorkspaceView('benchmark')}
-            onOpenQueue={() => setWorkspaceView('queue')}
             activeView={workspaceView}
+            onNavigate={navigate}
+            onOpenSettings={openSettings}
+            healthKey={healthKey}
           />
 
           {/* Coluna de conteúdo principal (tab bar + view) */}
@@ -199,8 +213,10 @@ function App() {
               activeTabId={activeTabId}
               onSelectTab={handleSelectTab}
               onCloseTab={handleCloseTab}
+              onNewTab={handleNewTab}
               isSettingsOpen={isSettingsOpen}
-              onCloseSettings={() => setIsSettingsOpen(false)}
+              settingsTab={settingsTab}
+              onCloseSettings={closeSettings}
               isGraphPanelOpen={isGraphPanelOpen}
               onToggleGraphPanel={handleToggleGraphPanel}
             />
