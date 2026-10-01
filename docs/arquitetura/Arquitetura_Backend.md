@@ -321,6 +321,18 @@ notas da suite iam para o SQLite principal sem vetores no Chroma principal: apar
 no chat, e o Doctor acusava corpus inconsistente. A rodada híbrida reaproveita os vetores que a
 vetorial acabou de gravar (mesmo chunk_id, mesmo embedder), o que não muda nenhuma métrica.
 
+Depois das rodadas por nota, a comparação faz a passada no corpus inteiro (`run_corpus_benchmark`):
+todas as notas da suite num corpus só, buscadas com `retrieve_corpus_hits`, a mesma busca do chat,
+sem filtro por nota e com profundidade 10 (com o top-k do chat, Recall@5 e @10 repetiriam o @3). Um
+trecho só é relevante se for da nota do caso. Cada pergunta passa também por
+`answer_corpus_with_citations` sem provedor gerativo, e as perguntas do `negative_dataset_path`
+da suite (category `negativa`) medem se o chat se abstém quando o corpus não tem a resposta. O
+resumo por estratégia traz MRR e Recall@5 com intervalo bootstrap de 95%, nDCG@10, latência p50/p95
+e a decisão de responder ou se abster. A passada por nota continua no relatório como teto.
+
+O `benchmark answer-eval` indexa a nota avaliada em `results/benchmark_compare/answer-eval/`, não
+no Chroma do corpus. O Chroma roda com `anonymized_telemetry=False`.
+
 - `experiment_id`
 - `dataset_name`
 - `embedding_model`
