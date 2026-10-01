@@ -30,7 +30,7 @@ jobs:
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
         working-directory: pipeline
-        run: uv sync --locked --dev --extra audio
+        run: uv sync --locked --dev --extra audio --extra cpu
       - name: Audit Python dependencies
         working-directory: pipeline
         run: uvx pip-audit --path .venv
@@ -57,7 +57,7 @@ jobs:
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
         working-directory: pipeline
-        run: uv sync --locked --dev --extra audio
+        run: uv sync --locked --dev --extra audio --extra cpu
       - name: Ruff
         working-directory: pipeline
         run: |
@@ -95,7 +95,7 @@ jobs:
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
         working-directory: pipeline
-        run: uv sync --locked --dev --extra audio
+        run: uv sync --locked --dev --extra audio --extra cpu
       - name: Install microphone runtime library
         run: |
           sudo apt-get update
@@ -139,7 +139,7 @@ jobs:
           cache-dependency-path: UI/package-lock.json
       - name: Install Python dependencies
         working-directory: pipeline
-        run: uv sync --locked --dev --extra audio
+        run: uv sync --locked --dev --extra audio --extra cpu
       - name: Build Python package
         working-directory: pipeline
         run: uv build
