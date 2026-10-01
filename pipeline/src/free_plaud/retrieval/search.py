@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from functools import lru_cache
 
 from free_plaud.providers.embed import Embedder
 from free_plaud.retrieval.models import Chunk, SearchHit
@@ -108,11 +109,13 @@ def _is_adjacent_short_anchor(tokens: list[str], index: int) -> bool:
     return any(len(neighbor) >= 4 and neighbor not in STOPWORDS for neighbor in neighbors)
 
 
+@lru_cache(maxsize=65536)
 def _strip_accents(text: str) -> str:
     normalized = unicodedata.normalize('NFKD', text)
     return ''.join(char for char in normalized if not unicodedata.combining(char))
 
 
+@lru_cache(maxsize=65536)
 def _stem_like(token: str) -> str:
     normalized = _strip_accents(token.lower())
     normalized = re.sub(r'[^0-9a-z_]+', '', normalized)
@@ -161,12 +164,22 @@ def _stem_matches(left: str, right: str) -> bool:
     return len(shorter) >= 4 and shorter in longer
 
 
+@lru_cache(maxsize=4096)
+def _text_stems(text: str) -> frozenset[str]:
+    # O mesmo chunk é comparado centenas de vezes por pergunta (busca + montagem das afirmações).
+    return frozenset(_stem_like(candidate) for candidate in TOKEN_PATTERN.findall(text.lower()))
+
+
 def match_terms_in_text(query_terms: list[str], text: str) -> tuple[list[str], float]:
     if not query_terms:
         return [], 0.0
-    haystack_stems = {_stem_like(candidate) for candidate in TOKEN_PATTERN.findall(text.lower())}
+    haystack_stems = _text_stems(text)
     query_stems = [(term, _stem_like(term)) for term in query_terms]
-    matched_terms = [term for term, stem in query_stems if any(_stem_matches(stem, candidate) for candidate in haystack_stems)]
+    matched_terms = [
+        term
+        for term, stem in query_stems
+        if stem in haystack_stems or any(_stem_matches(stem, candidate) for candidate in haystack_stems)
+    ]
     return matched_terms, len(matched_terms) / len(query_terms)
 
 

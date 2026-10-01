@@ -47,13 +47,39 @@ class ChromaDefaultEmbedder:
     """Wrapper fino para o embedding default local do ChromaDB."""
 
     def __init__(self) -> None:
+        from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import (
+            ONNXMiniLM_L6_V2,
+        )
+
         self.model_name = 'chroma-default'
-        self._embedding_function = embedding_functions.DefaultEmbeddingFunction()
+        # Mesmo modelo do DefaultEmbeddingFunction, mas reaproveitado: o Default do Chroma cria
+        # um ONNXMiniLM_L6_V2 novo a cada chamada e recarrega a sessão ONNX (~1,5 s) toda vez.
+        self._embedding_function = ONNXMiniLM_L6_V2()
+        self._query_function = None
+
+    def _single_text_function(self):
+        """Instância para um texto só (a pergunta), sem completar a entrada até 256 tokens.
+
+        Divide a sessão ONNX com a instância principal. A média do modelo usa a máscara de
+        atenção, então o vetor é idêntico e a inferência fica ~5x mais rápida. Só vale para um
+        texto por chamada: o Chroma tokeniza cada texto separado e o lote precisa de tamanho fixo.
+        """
+        if self._query_function is None:
+            from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import (
+                ONNXMiniLM_L6_V2,
+            )
+
+            query_function = ONNXMiniLM_L6_V2()
+            query_function.__dict__['model'] = self._embedding_function.model
+            query_function.tokenizer.enable_padding(pad_id=0, pad_token='[PAD]')
+            self._query_function = query_function
+        return self._query_function
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        embeddings = self._embedding_function(texts)
+        function = self._single_text_function() if len(texts) == 1 else self._embedding_function
+        embeddings = function(texts)
         return [list(map(float, embedding)) for embedding in embeddings]
 
 
