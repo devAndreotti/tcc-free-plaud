@@ -396,8 +396,12 @@ letras (responsavel / responsabilidade) e parte a parte em identificadores com `
 diz qual termo faltou. Os anchors nomeados ignoram a maiúscula da primeira palavra ("Quantos",
 "Quem") e as interrogativas são stopwords; a limpeza das afirmações mantém o `_` de
 identificadores; perguntas de comparação ("diferença entre X e Y") pedem uma afirmação por lado.
-No benchmark (39 positivas, 10 negativas, corpus inteiro), a decisão certa da híbrida foi de 76%
-para 94%: responde 97% das positivas (antes 82%) e se abstém em 80% das negativas (antes 50%).
+No benchmark do corpus inteiro, a híbrida responde 97% das 39 positivas (antes 82%). Nas
+negativas, a abstenção foi de 50% para 80% no lote usado no ajuste (`neg-*`, 10 perguntas) e de
+42% para 54% num lote escrito depois e medido sem ajuste (`neg2-*`, 24 perguntas). No lote novo, a
+regra pega todas as perguntas fora do domínio, mas só 7 de 18 quase-acertos (o assunto está no
+corpus, o fato perguntado não): o chat devolve uma frase do assunto sem o tipo de dado pedido
+(número, data, versão). Somando os 73, a decisão certa foi de 64% para 81%.
 
 Na evolução operacional do corpus, o backend também passa a expor `corpus status`, `corpus reset`
 e `corpus rebuild`. Esses comandos diagnosticam divergência SQLite/Chroma, limpam apenas notas,

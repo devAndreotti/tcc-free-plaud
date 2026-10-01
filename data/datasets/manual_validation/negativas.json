@@ -50,6 +50,126 @@
       "sample_id": "neg-10",
       "question": "Qual foi o orcamento aprovado para o projeto de migracao?",
       "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-01",
+      "question": "Quantas particoes tera cada topico do Kafka?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-02",
+      "question": "Qual e o e-mail da engenheira Fernanda Mota?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-03",
+      "question": "Qual e o salario do arquiteto de software previsto no contrato?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-04",
+      "question": "Qual o valor do aditivo contratual assinado em 2025?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-05",
+      "question": "Qual foi o MRR@10 do chunking semantico em textos juridicos?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-06",
+      "question": "Qual nota o artigo de chunking recebeu na revisao por pares do WBRIP?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-07",
+      "question": "Qual o tamanho em gigabytes da tabela eventos?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-08",
+      "question": "Quantos engenheiros participaram dos testes do Datadog?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-09",
+      "question": "Qual versao do dbt e usada no guia de modelagem de dados?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-10",
+      "question": "Qual versao do Python o bump2version exige?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-11",
+      "question": "Em que data o REDIS_TIMEOUT foi alterado em producao?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-12",
+      "question": "Quantos usuarios serao afetados pela janela de manutencao da migracao?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-13",
+      "question": "Qual o custo mensal estimado do Zabbix?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-14",
+      "question": "Qual e a politica de home office da empresa?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-15",
+      "question": "Quando acontece a festa de fim de ano da equipe?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-16",
+      "question": "Qual o limite do cartao corporativo dos engenheiros?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-17",
+      "question": "Como configurar o Terraform para criar o cluster Kafka?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-18",
+      "question": "Qual plano de saude e oferecido aos funcionarios?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-19",
+      "question": "Qual equipe vai migrar os microservicos legados e em qual data?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-20",
+      "question": "Quantos chamados criticos foram atendidos no primeiro mes do contrato?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-21",
+      "question": "Quanto tempo durou de fato o downtime da migracao do banco?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-22",
+      "question": "Qual e a taxa de erros do pipeline de ingestao em producao?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-23",
+      "question": "Quantos topicos do Kafka ja estao em producao hoje?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg2-24",
+      "question": "Como cada participante votou no comite de arquitetura?",
+      "category": "negativa"
     }
   ]
 }
