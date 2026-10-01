@@ -41,6 +41,7 @@ from free_plaud.app.local_env import answer_api_key_is_configured, load_local_en
 from free_plaud.app.settings_catalog import save_catalog_setting, save_catalog_settings, settings_catalog_payload
 from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from free_plaud.benchmark.service import run_benchmark_compare
+from free_plaud.corpus.ask import corpus_vocabulary_stems
 from free_plaud.corpus.dropped import DroppedFileIndexer
 from free_plaud.corpus.jobs import cancel_index_job, get_index_job, start_index_job
 from free_plaud.corpus.runtime import CorpusRuntime
@@ -48,6 +49,7 @@ from free_plaud.notes.service import delete_note, get_note_detail, list_notes, r
 from free_plaud.providers.answer import test_answer_provider
 from free_plaud.providers.model_discovery import list_answer_models
 from free_plaud.retrieval.models import AskResponse
+from free_plaud.storage.sqlite import init_sqlite
 from free_plaud.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
 from free_plaud.tui.audio_actions import (
     cancel_audio_capture,
@@ -81,10 +83,15 @@ class Api:
         self.dropped_files = DroppedFileIndexer(runtime=self.runtime)
 
     def _warmup(self) -> None:
-        """Abre o Chroma e carrega o modelo de embedding antes da primeira pergunta (~8 s a frio)."""
+        """Abre o Chroma, carrega o embedding e o vocabulário do corpus antes da primeira pergunta (~8 s a frio)."""
         try:
             self.runtime.get_vector_store()
             self.runtime.get_embedder().embed(['aquecimento'])
+            connection = init_sqlite(get_settings().sqlite_path)
+            try:
+                corpus_vocabulary_stems(connection)  # vocabulário do filtro de termos ausentes
+            finally:
+                connection.close()
         except Exception as exc:  # aquecer é otimização: se falhar, a primeira pergunta paga o custo
             print(f'[Backend] Aquecimento falhou: {exc}')
 

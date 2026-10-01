@@ -108,4 +108,17 @@ describe('MessageBubble com resposta estruturada', () => {
 
     expect(screen.queryByRole('button', { name: 'Buscar só por palavra-chave' })).toBeNull();
   });
+
+  it('diz qual termo da pergunta não está no corpus, sem oferecer palavra-chave', () => {
+    const limitation = 'A pergunta cita "senha", que não aparece em nenhuma nota do corpus.';
+    render(
+      <MessageBubble
+        message={answer({ status: 'no_answer', no_answer: true, answer: null, reason_for_no_answer: 'query_term_not_in_corpus', limitations: [limitation] })}
+        onRetry={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(limitation)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Buscar só por palavra-chave' })).toBeNull();
+  });
 });
