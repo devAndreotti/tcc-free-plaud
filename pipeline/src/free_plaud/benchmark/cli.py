@@ -19,7 +19,11 @@ from free_plaud.benchmark.reports import (
     export_benchmark_csv,
     export_benchmark_json,
 )
-from free_plaud.benchmark.runners import compare_benchmark_suite, run_benchmark
+from free_plaud.benchmark.runners import (
+    benchmark_compare_dir,
+    compare_benchmark_suite,
+    run_benchmark,
+)
 from free_plaud.benchmark.service import build_settings_snapshot
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.structurer import structure_document
@@ -183,11 +187,9 @@ def compare(
     except EmbeddingConfigurationError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from None
-    connection = init_sqlite(settings.sqlite_path)
-    vector_store = LocalVectorStore(
-        settings.results_dir / 'benchmark_compare' / suite.suite_name,
-        collection_name=f'{suite.suite_name}_compare',
-    )
+    compare_dir = benchmark_compare_dir(settings.results_dir, suite.suite_name)
+    connection = init_sqlite(compare_dir / 'benchmark.sqlite3')
+    vector_store = LocalVectorStore(compare_dir, collection_name=f'{suite.suite_name}_compare')
     embedder = get_embedder(resolved_embedding_model, device=settings.embedding_device)
 
     try:

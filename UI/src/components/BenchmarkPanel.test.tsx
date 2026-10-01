@@ -96,7 +96,7 @@ describe('BenchmarkPanel', () => {
     // Empate em Recall@5 e MRR entre vetorial e híbrida: vence a de menor latência.
     expect(
       screen.getByText(
-        'A vetorial traz a fonte certa entre os 5 primeiros trechos em 100% das perguntas, 50 pontos acima da lexical, e custa 2 ms a mais por consulta.'
+        'A vetorial e a híbrida trazem a fonte certa entre os 5 primeiros trechos em 100% das perguntas, 50 pontos acima da lexical; a vetorial desempata pela latência (5 ms por consulta, com o mesmo MRR).'
       )
     ).toBeTruthy();
     // Melhor latência da coluna destacada.

@@ -7,6 +7,7 @@ from free_plaud.app.paths import ensure_runtime_dirs
 from free_plaud.benchmark.datasets import load_benchmark_suite
 from free_plaud.benchmark.runners import (
     BenchmarkComparisonResult,
+    benchmark_compare_dir,
     compare_benchmark_suite,
 )
 from free_plaud.corpus.ask import answer_corpus_with_citations
@@ -251,11 +252,9 @@ def compare_suite_from_tui(
     validate_runtime_embedding_model(resolved_settings.embedding_model)
 
     suite = load_benchmark_suite(target)
-    connection = init_sqlite(resolved_settings.sqlite_path)
-    vector_store = LocalVectorStore(
-        resolved_settings.results_dir / "benchmark_compare" / suite.suite_name,
-        collection_name=f"{suite.suite_name}_compare",
-    )
+    compare_dir = benchmark_compare_dir(resolved_settings.results_dir, suite.suite_name)
+    connection = init_sqlite(compare_dir / "benchmark.sqlite3")
+    vector_store = LocalVectorStore(compare_dir, collection_name=f"{suite.suite_name}_compare")
     embedder = (
         runtime.get_embedder()
         if runtime is not None

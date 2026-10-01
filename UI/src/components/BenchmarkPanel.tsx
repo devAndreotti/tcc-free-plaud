@@ -31,8 +31,26 @@ function thesis(summaries: BenchmarkStrategySummary[]): string | null {
   );
   const best = ranked[0];
   const worst = ranked[ranked.length - 1];
+  const tied = ranked.filter((s) => s.recall_at_5 === best.recall_at_5);
+  if (tied.length > 1) {
+    // Empate no Recall@5: dizer quem empata e o que decidiu, em vez de anunciar uma vencedora.
+    const names = tied.map((s) => nameOf(s.strategy).lower);
+    const who =
+      tied.length === ranked.length
+        ? `As ${ranked.length === 3 ? 'três' : ranked.length} estratégias`
+        : `A ${names.slice(0, -1).join(', a ')} e a ${names[names.length - 1]}`;
+    const why =
+      best.mrr > tied[1].mrr
+        ? `pelo MRR (${fmt3(best.mrr)})`
+        : `pela latência (${ms(best.avg_query_latency_ms)} por consulta, com o mesmo MRR)`;
+    const gap =
+      tied.length < ranked.length
+        ? `, ${((best.recall_at_5 - worst.recall_at_5) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pontos acima da ${nameOf(worst.strategy).lower}`
+        : '';
+    return `${who} trazem a fonte certa entre os 5 primeiros trechos em ${pct(best.recall_at_5)}% das perguntas${gap}; a ${nameOf(best.strategy).lower} desempata ${why}.`;
+  }
   const head = `A ${nameOf(best.strategy).lower} traz a fonte certa entre os 5 primeiros trechos em ${pct(best.recall_at_5)}% das perguntas`;
-  if (ranked.length === 1 || worst.recall_at_5 === best.recall_at_5) return `${head}.`;
+  if (ranked.length === 1) return `${head}.`;
   const diff = (best.recall_at_5 - worst.recall_at_5) * 100;
   const latency = best.avg_query_latency_ms - worst.avg_query_latency_ms;
   const cost =
@@ -156,7 +174,7 @@ const BenchmarkPanel = () => {
       return;
     }
     setIsRunning(true);
-    setStatus('Rodando as três estratégias no mesmo conjunto de perguntas…');
+    setStatus('');
     try {
       const nextResult = await bridge.runBenchmarkCompare(resolvedSuite);
       setResult(nextResult);
@@ -280,6 +298,12 @@ const BenchmarkPanel = () => {
               <CopyPath format="CSV" path={result.csv_report_path} />
             </section>
           </>
+        ) : isRunning ? (
+          <div className="card queue__empty">
+            <div className="job__bar job__bar--indeterminate" role="status" aria-label="Rodando comparação" />
+            <p><b>Rodando lexical, vetorial e híbrida no mesmo conjunto de perguntas…</b></p>
+            <p>Cada documento da suite é indexado num corpus temporário antes das perguntas. Leva cerca de meio minuto.</p>
+          </div>
         ) : (
           <div className="card queue__empty">
             <p><b>Nenhum benchmark executado nesta sessão.</b></p>
