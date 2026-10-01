@@ -1,9 +1,14 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { readFileSync } from 'node:fs'
+
+// Versão do app vem do VERSION da raiz (mesma fonte do release desktop).
+const appVersion = readFileSync(new URL('../VERSION', import.meta.url), 'utf-8').trim()
 
 // Configuração do Vite para build desktop (PyWebView)
 export default defineConfig({
   plugins: [react()],
+  define: { __APP_VERSION__: JSON.stringify(appVersion) },
   base: './', // Caminhos relativos: necessário para carregar via file:// no PyWebView
   build: {
     outDir: 'dist',       // Pasta de saída do build

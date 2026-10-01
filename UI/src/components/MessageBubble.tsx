@@ -56,6 +56,12 @@ const noteTitle = (citation: AskCitation) => {
   return base.replace(/\.(md|markdown|txt|pdf)$/i, '');
 };
 
+/** Só as últimas pastas do caminho; o caminho completo fica no title. */
+const shortPath = (path: string) => {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts.length > 3 ? `…/${parts.slice(-3).join('/')}` : parts.join('/');
+};
+
 /** Numera as fontes na ordem em que aparecem e liga cada afirmação aos números. */
 function useSources(ask: AskResult) {
   return useMemo(() => {
@@ -116,17 +122,22 @@ const AnswerMeta = ({ ask, copyText }: { ask: AskResult; copyText?: string }) =>
   );
 };
 
+// Motivos em que buscar só por palavra-chave não muda nada: nenhuma busca achou trecho algum.
+const NO_LEXICAL_RETRY = new Set(['no_retrieval_hits', 'empty_corpus', 'query_without_content']);
+
 const NoAnswer = ({ ask, onRetry }: { ask: AskResult; onRetry?: MessageBubbleProps['onRetry'] }) => (
   <div className="msg__none">
     <span className="msg__none-icon" aria-hidden="true"><SearchIcon size={17} /></span>
     <div>
-      <h4>Não encontrei isso no vault.</h4>
+      <h4>{ask.reason_for_no_answer === 'empty_corpus' ? 'O corpus ainda está vazio.' : 'Não encontrei isso no vault.'}</h4>
       <p>
-        {ask.limitations[0] ??
-          'Nenhum trecho recuperado responde à pergunta com segurança. Se a informação estiver numa nota, reindexe a pasta dela ou cite o nome da nota na pergunta.'}
+        {ask.reason_for_no_answer === 'empty_corpus'
+          ? 'Indexe a pasta do vault na Fila; depois as perguntas são respondidas a partir das notas.'
+          : ask.limitations[0] ??
+            'Nenhum trecho recuperado responde à pergunta com segurança. Se a informação estiver numa nota, reindexe a pasta dela ou cite o nome da nota na pergunta.'}
       </p>
       {ask.reason_for_no_answer && <div className="msg__why mono">motivo: {ask.reason_for_no_answer}</div>}
-      {onRetry && ask.strategy !== 'lexical' && (
+      {onRetry && ask.strategy !== 'lexical' && !NO_LEXICAL_RETRY.has(ask.reason_for_no_answer ?? '') && (
         <button type="button" className="msg__btn" onClick={() => onRetry(ask.query, 'lexical')}>
           Buscar só por palavra-chave
         </button>
@@ -204,10 +215,12 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
               <span className="msg__source-n mono">{i + 1}</span>
               <div className="msg__source-body">
                 <div className="msg__source-title">{noteTitle(source)}</div>
-                <div className="msg__source-path mono" title={source.chunk_id}>{source.source_path ?? source.note_id}</div>
+                <div className="msg__source-path mono" title={source.source_path ?? source.note_id}>
+                  {source.source_path ? shortPath(source.source_path) : source.note_id}
+                </div>
                 <blockquote className="msg__source-quote">{source.snippet}</blockquote>
                 <div className="msg__source-meta mono">
-                  <span>v{source.note_version}</span>
+                  <span title="Versão da nota">v{source.note_version}</span>
                   <span>{source.char_start}–{source.char_end}</span>
                   {claims.length > 0 && (
                     <span className={`msg__support msg__support--${support[i]}`}>

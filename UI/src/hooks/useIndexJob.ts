@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { bridge, type IndexJobSnapshot } from '../services/bridge';
+import { notifyCorpusChanged } from './useCorpusHealth';
 
 export interface QueueState {
   folderPath: string;
@@ -33,14 +34,15 @@ export interface QueueState {
 export function useIndexJob(): QueueState {
   const [folderPath, setFolderPath] = useState('');
   const [job, setJob] = useState<IndexJobSnapshot | null>(null);
-  const [status, setStatus] = useState('Pronto.');
+  // Só avisos de ação e erros; o andamento do job aparece no próprio card.
+  const [status, setStatus] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [watcherActive, setWatcherActive] = useState(false);
 
   const refreshJob = useCallback(async (jobId: string) => {
     const latest = await bridge.getIndexJob(jobId);
     setJob(latest);
-    setStatus(latest.message ?? `Job ${latest.status}.`);
+    if (latest.status !== 'running') notifyCorpusChanged();
   }, []);
 
   // Polling do job ativo — sobrevive à desmontagem de QueuePanel porque
@@ -83,11 +85,10 @@ export function useIndexJob(): QueueState {
       return;
     }
     setIsBusy(true);
-    setStatus('Criando job de indexação...');
+    setStatus('');
     try {
       const created = await bridge.startIndexJob(folderPath.trim(), false);
       setJob(created);
-      setStatus(created.message ?? 'Job criado.');
       if (created.status === 'running') {
         void refreshJob(created.job_id);
       }
@@ -101,11 +102,10 @@ export function useIndexJob(): QueueState {
   const cancelJob = useCallback(async () => {
     if (!job) return;
     setIsBusy(true);
-    setStatus('Solicitando cancelamento...');
+    setStatus('');
     try {
       const cancelled = await bridge.cancelIndexJob(job.job_id);
       setJob(cancelled);
-      setStatus(cancelled.message ?? 'Cancelamento solicitado.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Falha ao cancelar job.');
     } finally {

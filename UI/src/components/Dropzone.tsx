@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import { bridge, type DroppedFileEvent, type WatcherIngestionEvent } from '../services/bridge';
 import { FileIcon, XIcon } from './Icons';
+import { notifyCorpusChanged } from '../hooks/useCorpusHealth';
 
 /** Extensões de arquivo aceitas pela dropzone (áudio, PDF, texto). */
 const ACCEPTED_EXTENSIONS = ['.wav', '.mp3', '.m4a', '.ogg', '.pdf', '.txt', '.md'];
@@ -126,6 +127,7 @@ const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
         return next;
       });
       onToast?.(dropToast(event));
+      if (event.status === 'indexed') notifyCorpusChanged();
     },
     [onToast]
   );
