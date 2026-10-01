@@ -34,7 +34,13 @@ STOPWORDS = {
     'por',
     'qual',
     'quais',
+    'quando',
+    'quanto',
+    'quanta',
+    'quantos',
+    'quantas',
     'que',
+    'quem',
     'se',
     'sem',
     'sua',
@@ -87,7 +93,9 @@ def extract_named_query_terms(query: str) -> list[str]:
         lowered = token.lower()
         if lowered in STOPWORDS:
             continue
-        is_named_token = len(token) > 3 and (token.isupper() or token[:1].isupper())
+        # Maiúscula no início da frase não indica nome; sigla em caixa alta, sim.
+        is_capitalized = token[:1].isupper() and index > 0
+        is_named_token = len(token) > 3 and (token.isupper() or is_capitalized)
         is_short_anchor = _is_adjacent_short_anchor(tokens, index)
         if is_named_token or is_short_anchor:
             if lowered in seen:
@@ -188,6 +196,29 @@ def match_terms_in_text(query_terms: list[str], text: str) -> tuple[list[str], f
         return [], 0.0
     matched_terms = [term for term in query_terms if _stem_in_text(_stem_like(term), text)]
     return matched_terms, len(matched_terms) / len(query_terms)
+
+
+def terms_missing_from_vocabulary(query_terms: list[str], vocabulary_stems: frozenset[str]) -> list[str]:
+    """Termos de conteúdo da pergunta que não casam com nenhuma palavra do corpus.
+
+    Usa a mesma regra de radical de `match_terms_in_text`. Termos de pouco sinal e radicais com
+    menos de 4 letras não contam: não dá para afirmar que estão ausentes.
+    """
+
+    def known(word: str) -> bool:
+        stem = _stem_like(word)
+        if word in LOW_SIGNAL_QUERY_TERMS or len(stem) < 4 or stem in vocabulary_stems:
+            return True
+        # Mesma raiz com outra terminação (responsavel / responsabilidade): 6 letras iniciais em comum.
+        # ponytail: heurística de morfologia; um stemmer de português (RSLP) resolveria melhor.
+        prefix = stem[:6] if len(stem) >= 6 else None
+        return any(
+            _stem_matches(stem, candidate) or (prefix is not None and candidate.startswith(prefix))
+            for candidate in vocabulary_stems
+        )
+
+    # O FTS quebra identificadores no _ (note_id vira note + id); compara parte por parte.
+    return [term for term in query_terms if not all(known(part) for part in term.split('_') if part)]
 
 
 def lexical_search_hits(query: str, chunks: list[Chunk], top_k: int = 5) -> list[SearchHit]:

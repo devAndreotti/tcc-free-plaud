@@ -96,7 +96,9 @@ def _collapse_whitespace(text: str) -> str:
 def _clean_claim_candidate(text: str) -> str:
     cleaned = text.replace('---', ' ')
     cleaned = re.sub(r'^[#>*`\-\s|]+', '', cleaned)
-    cleaned = re.sub(r'[`*_]+', '', cleaned)
+    cleaned = re.sub(r'[`*]+', '', cleaned)
+    # Só o _ de ênfase (_texto_); o de identificadores como REDIS_CONNECT_TIMEOUT fica.
+    cleaned = re.sub(r'(?<!\w)_+|_+(?!\w)', '', cleaned)
     cleaned = cleaned.strip(' -|:')
     return _collapse_whitespace(cleaned)
 
@@ -506,7 +508,9 @@ def _question_needs_multiple_claims(question: str) -> bool:
     )
     if clause_count >= 2:
         return True
-    return any(marker in lowered for marker in (' e qual ', ' e quais ', ', qual ', ', quais '))
+    # Comparação ("diferença entre X e Y", "X vs Y") pede uma afirmação para cada lado.
+    markers = (' e qual ', ' e quais ', ', qual ', ', quais ', 'diferenca entre', 'diferença entre', ' vs ', ' versus ')
+    return any(marker in lowered for marker in markers)
 
 
 def _rank_claim_candidates(chunk_text: str, question: str, query_terms: list[str]) -> list[tuple[tuple[int, ...], str]]:
