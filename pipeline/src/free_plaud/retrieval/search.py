@@ -160,8 +160,9 @@ def _stem_matches(left: str, right: str) -> bool:
         return False
     if left == right:
         return True
-    shorter, longer = sorted((left, right), key=len)
-    return len(shorter) >= 4 and shorter in longer
+    if len(left) > len(right):
+        left, right = right, left
+    return len(left) >= 4 and left in right
 
 
 @lru_cache(maxsize=4096)
@@ -170,16 +171,22 @@ def _text_stems(text: str) -> frozenset[str]:
     return frozenset(_stem_like(candidate) for candidate in TOKEN_PATTERN.findall(text.lower()))
 
 
+@lru_cache(maxsize=65536)
+def _stem_in_text(stem: str, text: str) -> bool:
+    # A busca e a montagem das afirmações repetem os mesmos pares termo/chunk; a varredura por
+    # substring era ~70% do tempo de uma consulta vetorial.
+    haystack_stems = _text_stems(text)
+    if stem in haystack_stems:
+        return True
+    if len(stem) < 4:  # _stem_matches exige 4+ caracteres no lado menor
+        return False
+    return any(_stem_matches(stem, candidate) for candidate in haystack_stems)
+
+
 def match_terms_in_text(query_terms: list[str], text: str) -> tuple[list[str], float]:
     if not query_terms:
         return [], 0.0
-    haystack_stems = _text_stems(text)
-    query_stems = [(term, _stem_like(term)) for term in query_terms]
-    matched_terms = [
-        term
-        for term, stem in query_stems
-        if stem in haystack_stems or any(_stem_matches(stem, candidate) for candidate in haystack_stems)
-    ]
+    matched_terms = [term for term in query_terms if _stem_in_text(_stem_like(term), text)]
     return matched_terms, len(matched_terms) / len(query_terms)
 
 
