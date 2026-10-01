@@ -452,7 +452,7 @@ def _commit_pending_items(
             commit_mode_resolved=commit_mode_resolved,
             batch_index=batch_index,
             batch_total=batch_total,
-            message=f'Embedando lote {batch_index}/{batch_total or 1}: {len(chunk_batch)} chunks.',
+            message=f'Gerando embeddings: lote {batch_index}/{batch_total or 1}, {len(chunk_batch)} chunks.',
         )
         chunks = [chunk for _, chunk in chunk_batch]
         embedding_started_at = perf_counter()
@@ -519,7 +519,7 @@ def _commit_pending_items(
                 embedding_model=embedder.model_name,
                 vector_collection_name=vector_store.collection_name,
                 vector_entries_count=0,
-                message='Document indexed successfully.',
+                message='Nota indexada.',
             )
         )
     writing_ms = int((perf_counter() - writing_started_at) * 1000)
@@ -1186,8 +1186,13 @@ def index_corpus_file(
     embedder: Embedder | None = None,
     chunk_size: int | None = None,
     overlap: int | None = None,
+    source_root: Path | None = None,
 ) -> CorpusIndexResult:
-    """Estrutura, persiste e indexa um arquivo no corpus local."""
+    """Estrutura, persiste e indexa um arquivo no corpus local.
+
+    `source_root` é a pasta-raiz do vault; ela entra no note_id, então reindexar uma nota
+    precisa da mesma raiz da indexação original para manter o id.
+    """
     resolved_settings = settings or get_settings()
     ensure_runtime_dirs(resolved_settings)
     source_path = Path(path).expanduser()
@@ -1210,7 +1215,7 @@ def index_corpus_file(
         if not document.raw_text.strip():
             raise ValueError('EMPTY_CONTENT')
 
-        note = structure_document(document)
+        note = structure_document(document, source_root=source_root)
         existing_hash = get_note_content_hash(resolved_connection, note.note_id)
         existing_chunk_ids = list_chunk_ids_for_note(resolved_connection, note.note_id)
         chunks_match_config = note_chunks_match_config(
@@ -1251,7 +1256,7 @@ def index_corpus_file(
             embedding_model=resolved_embedder.model_name,
             vector_collection_name=resolved_vector_store.collection_name,
             vector_entries_count=resolved_vector_store.count(),
-            message='Document indexed successfully.',
+            message='Nota indexada.',
         )
     except (FileNotFoundError, ValueError) as exc:
         return _failure_result(

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FolderIcon, NoteIcon, PdfIcon, SearchIcon, WaveIcon } from './Icons';
 import { NoteDetailView } from './NoteDetailView';
 import { commonRoot, formatDate, relativeParts, typeLabel } from '../lib/notes';
+import { notifyCorpusChanged } from '../hooks/useCorpusHealth';
 import {
   bridge,
   type NoteDeleteResult,
@@ -25,6 +26,7 @@ export const __resetNotesCacheForTests = () => {
 };
 
 // O backend confirma exclusão por texto; a UI pede a confirmação no próprio popover.
+const ROOT_GROUP = 'Raiz do vault';
 const DELETE_CONFIRMATION = 'APAGAR';
 
 const TypeIcon = ({ type }: { type: string | null | undefined }) => {
@@ -65,13 +67,17 @@ const NotesPanel = () => {
     });
     const byFolder = new Map<string, NoteSummary[]>();
     filtered.forEach((note) => {
-      const folder = relativeParts(note.source_path, root).slice(0, -1).join('/') || 'Raiz do vault';
+      const folder = relativeParts(note.source_path, root).slice(0, -1).join('/') || ROOT_GROUP;
       byFolder.set(folder, [...(byFolder.get(folder) ?? []), note]);
     });
-    return Array.from(byFolder.entries()).sort(([a], [b]) => a.localeCompare(b, 'pt-BR'));
+    return Array.from(byFolder.entries()).sort(([a], [b]) =>
+      a === ROOT_GROUP ? -1 : b === ROOT_GROUP ? 1 : a.localeCompare(b, 'pt-BR')
+    );
   }, [notes, query, typeFilter, root]);
 
   const visibleCount = groups.reduce((sum, [, items]) => sum + items.length, 0);
+  // Sem escolha do usuário, abre a primeira nota da lista como ela aparece na tela.
+  const activeId = selectedId ?? groups[0]?.[1][0]?.note_id ?? null;
 
   const loadNotes = useCallback(async () => {
     setIsLoadingList(true);
@@ -87,7 +93,7 @@ const NotesPanel = () => {
         if (current && loaded.some((note) => note.note_id === current)) {
           return current;
         }
-        return loaded[0]?.note_id ?? null;
+        return null;
       });
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Falha ao carregar notas.');
@@ -101,7 +107,7 @@ const NotesPanel = () => {
   }, [loadNotes]);
 
   useEffect(() => {
-    if (!selectedId) {
+    if (!activeId) {
       setDetail(null);
       return;
     }
@@ -110,7 +116,7 @@ const NotesPanel = () => {
     const loadDetail = async () => {
       setIsLoadingDetail(true);
       try {
-        const loaded = await bridge.getNoteDetail(selectedId);
+        const loaded = await bridge.getNoteDetail(activeId);
         if (!cancelled) setDetail(loaded);
       } catch (error) {
         if (!cancelled) {
@@ -126,7 +132,7 @@ const NotesPanel = () => {
     return () => {
       cancelled = true;
     };
-  }, [selectedId]);
+  }, [activeId]);
 
   const handleDelete = async () => {
     if (!detail) return;
@@ -141,6 +147,7 @@ const NotesPanel = () => {
       setStatus(`“${detail.title}” removida do corpus · ${result.deleted_vectors ?? 0} vetores apagados.`);
       setDetail(null);
       setSelectedId(null);
+      notifyCorpusChanged();
       await loadNotes();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Falha ao remover nota.');
@@ -157,7 +164,8 @@ const NotesPanel = () => {
       const result: NoteReindexResult = await bridge.reindexNote(detail.note_id);
       setStatus(`Nota reindexada · ${result.chunks_indexed} ${result.chunks_indexed === 1 ? 'chunk' : 'chunks'}. ${result.message ?? ''}`.trim());
       await loadNotes();
-      setSelectedId(detail.note_id);
+      setSelectedId(result.note_id ?? detail.note_id);
+      notifyCorpusChanged();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Falha ao reindexar nota.');
     } finally {
@@ -221,7 +229,7 @@ const NotesPanel = () => {
                     {folder}
                   </h2>
                   {items.map((note) => {
-                    const active = selectedId === note.note_id;
+                    const active = activeId === note.note_id;
                     const date = formatDate(note.created_at, false);
                     return (
                       <button
