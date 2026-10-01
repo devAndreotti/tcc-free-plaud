@@ -389,6 +389,16 @@ e no Chroma, permite `lexical`, `vector` e `hybrid`, e retorna o mesmo contrato 
 com `citations` e `used_sources` atravessando mais de uma nota quando a pergunta exige
 stitching distribuído. O `retrieval ask` continua single-file por compatibilidade experimental.
 
+Antes de buscar, o `corpus ask` se abstém com `query_term_not_in_corpus` quando um termo de
+conteúdo da pergunta não casa com nenhuma palavra do corpus (vocabulário do FTS via `fts5vocab`,
+em cache até a próxima indexação). Casa pela mesma regra de radical da busca, por raiz comum de 6
+letras (responsavel / responsabilidade) e parte a parte em identificadores com `_`. A limitação
+diz qual termo faltou. Os anchors nomeados ignoram a maiúscula da primeira palavra ("Quantos",
+"Quem") e as interrogativas são stopwords; a limpeza das afirmações mantém o `_` de
+identificadores; perguntas de comparação ("diferença entre X e Y") pedem uma afirmação por lado.
+No benchmark (39 positivas, 10 negativas, corpus inteiro), a decisão certa da híbrida foi de 76%
+para 94%: responde 97% das positivas (antes 82%) e se abstém em 80% das negativas (antes 50%).
+
 Na evolução operacional do corpus, o backend também passa a expor `corpus status`, `corpus reset`
 e `corpus rebuild`. Esses comandos diagnosticam divergência SQLite/Chroma, limpam apenas notas,
 chunks e a collection vetorial ativa mediante `--yes`, e reconstroem o acervo a partir de arquivo
