@@ -867,7 +867,7 @@ def answer_with_citations(
         if top_hit.score < min_vector_score or top_hit.term_coverage < min_vector_term_coverage:
             return _no_answer(
                 'insufficient_vector_evidence',
-                ['Os hits vetoriais recuperados nao apresentam evidencia lexical ou score suficiente para responder.'],
+                ['Os hits vetoriais recuperados não apresentam evidência lexical ou score suficiente para responder.'],
                 used_sources,
                 rejected_hits=hits,
             )
@@ -877,7 +877,7 @@ def answer_with_citations(
         if top_hit.term_coverage < min_hybrid_term_coverage and len(top_hit.matched_terms) < 1:
             return _no_answer(
                 'insufficient_hybrid_evidence',
-                ['Os hits hibridos recuperados nao apresentam evidencia lexical suficiente para responder com seguranca.'],
+                ['Os hits híbridos recuperados não apresentam evidência lexical suficiente para responder com segurança.'],
                 used_sources,
                 rejected_hits=hits,
             )
@@ -904,13 +904,13 @@ def answer_with_citations(
             reason = 'insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity'
             return _no_answer(
                 reason,
-                ['Os claims gerados nao trouxeram especificidade textual suficiente para responder com seguranca.'],
+                ['Os claims gerados não trouxeram especificidade textual suficiente para responder com segurança.'],
                 used_sources,
                 rejected_hits=hits,
             )
         return _no_answer(
             'insufficient_grounded_claims',
-            ['Os claims gerados nao mantiveram ancoragem textual suficiente com a pergunta.'],
+            ['Os claims gerados não mantiveram ancoragem textual suficiente com a pergunta.'],
             used_sources,
             rejected_hits=hits,
         )
@@ -920,7 +920,7 @@ def answer_with_citations(
         if named_coverage < 1.0:
             return _no_answer(
                 'missing_named_anchor',
-                ['A resposta nao sustentou os anchors nomeados presentes na pergunta.'],
+                ['A resposta não sustentou os anchors nomeados presentes na pergunta.'],
                 used_sources,
                 rejected_hits=hits,
             )
@@ -938,9 +938,9 @@ def answer_with_citations(
             return _no_answer(
                 reason,
                 [
-                    'A resposta vetorial recuperada ficou curta e pouco especifica para os termos da pergunta.'
+                    'A resposta vetorial recuperada ficou curta e pouco específica para os termos da pergunta.'
                     if strategy == 'vector'
-                    else 'A resposta hibrida recuperada ficou curta e pouco especifica para os termos da pergunta.'
+                    else 'A resposta híbrida recuperada ficou curta e pouco específica para os termos da pergunta.'
                 ],
                 used_sources=used_sources,
                 rejected_hits=hits,
@@ -949,7 +949,7 @@ def answer_with_citations(
     limitations: list[str] = []
     if any(claim.support_level == 'partial' for claim in claims):
         limitations.append(
-            'Parte da resposta depende de evidencia parcial recuperada por '
+            'Parte da resposta depende de evidência parcial recuperada por '
             + (
                 'busca vetorial.'
                 if strategy == 'vector'

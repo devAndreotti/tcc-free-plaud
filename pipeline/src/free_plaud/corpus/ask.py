@@ -244,7 +244,7 @@ def validate_generated_answer(
         return GeneratedAnswerValidation(
             action='no_answer',
             reason='generated_no_answer_sentinel',
-            limitations=['Provider generativo declarou que os contextos nao sustentam resposta.'],
+            limitations=['Provider generativo declarou que os contextos não sustentam resposta.'],
         )
     if _is_generic_generated_no_answer(cleaned_answer):
         return GeneratedAnswerValidation(
@@ -670,10 +670,10 @@ def answer_corpus_with_citations(
         )
 
     if not query_terms:
-        return _no_answer('query_without_content', ['A pergunta nao contem termos informativos suficientes para recuperacao.'], [])
+        return _no_answer('query_without_content', ['A pergunta não contém termos informativos suficientes para recuperação.'], [])
 
     if count_chunks(connection) == 0:
-        return _no_answer('empty_corpus', ['O corpus persistido ainda nao contem chunks indexados.'], [])
+        return _no_answer('empty_corpus', ['O corpus persistido ainda não contém chunks indexados.'], [])
 
     retrieval_started_at = perf_counter()
     valid_chunk_ids = list_chunk_ids(connection)
@@ -704,7 +704,7 @@ def answer_corpus_with_citations(
     if not hits:
         return _no_answer(
             'no_retrieval_hits',
-            _with_stale_limitations(['Nenhum chunk do corpus contem termos informativos suficientes da pergunta.']),
+            _with_stale_limitations(['Nenhum chunk do corpus contém termos informativos suficientes da pergunta.']),
             used_sources,
         )
 
@@ -721,7 +721,7 @@ def answer_corpus_with_citations(
         if top_hit.score < min_vector_score or top_hit.term_coverage < min_vector_term_coverage:
             return _no_answer(
                 'insufficient_vector_evidence',
-                _with_stale_limitations(['Os hits vetoriais recuperados nao apresentam evidencia lexical ou score suficiente.']),
+                _with_stale_limitations(['Os hits vetoriais recuperados não apresentam evidência lexical ou score suficiente.']),
                 used_sources,
                 rejected_hits=hits,
             )
@@ -731,7 +731,7 @@ def answer_corpus_with_citations(
         if top_hit.term_coverage < min_hybrid_term_coverage and len(top_hit.matched_terms) < 1:
             return _no_answer(
                 'insufficient_hybrid_evidence',
-                _with_stale_limitations(['Os hits hibridos recuperados nao apresentam evidencia lexical suficiente.']),
+                _with_stale_limitations(['Os hits híbridos recuperados não apresentam evidência lexical suficiente.']),
                 used_sources,
                 rejected_hits=hits,
             )
@@ -756,7 +756,7 @@ def answer_corpus_with_citations(
     if not claims or any(not claim.citations for claim in claims):
         return _no_answer(
             'citation_validation_failed',
-            _with_stale_limitations(['A evidencia foi recuperada, mas nao gerou claims citaveis de forma consistente.']),
+            _with_stale_limitations(['A evidência foi recuperada, mas não gerou claims citaveis de forma consistente.']),
             used_sources,
             rejected_hits=hits,
         )
@@ -766,13 +766,13 @@ def answer_corpus_with_citations(
             reason = 'insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity'
             return _no_answer(
                 reason,
-                _with_stale_limitations(['Os claims gerados nao trouxeram especificidade textual suficiente.']),
+                _with_stale_limitations(['Os claims gerados não trouxeram especificidade textual suficiente.']),
                 used_sources,
                 rejected_hits=hits,
             )
         return _no_answer(
             'insufficient_grounded_claims',
-            _with_stale_limitations(['Os claims gerados nao mantiveram ancoragem textual suficiente com a pergunta.']),
+            _with_stale_limitations(['Os claims gerados não mantiveram ancoragem textual suficiente com a pergunta.']),
             used_sources,
             rejected_hits=hits,
         )
@@ -782,7 +782,7 @@ def answer_corpus_with_citations(
         if named_coverage < 1.0:
             return _no_answer(
                 'missing_named_anchor',
-                _with_stale_limitations(['A resposta nao sustentou os anchors nomeados presentes na pergunta.']),
+                _with_stale_limitations(['A resposta não sustentou os anchors nomeados presentes na pergunta.']),
                 used_sources,
                 rejected_hits=hits,
             )
@@ -799,7 +799,7 @@ def answer_corpus_with_citations(
             reason = 'insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity'
             return _no_answer(
                 reason,
-                _with_stale_limitations(['A resposta recuperada ficou curta e pouco especifica para os termos da pergunta.']),
+                _with_stale_limitations(['A resposta recuperada ficou curta e pouco específica para os termos da pergunta.']),
                 used_sources,
                 rejected_hits=hits,
             )
@@ -807,11 +807,11 @@ def answer_corpus_with_citations(
     cited_sources = _summarize_corpus_sources(_hits_for_citations(hits, citations), note_lookup)
     limitations: list[str] = list(stale_limitations)
     if any(claim.support_level == 'partial' for claim in claims):
-        limitations.append('Parte da resposta depende de evidencia parcial recuperada.')
+        limitations.append('Parte da resposta depende de evidência parcial recuperada.')
     if len(citations) == 1:
-        limitations.append('A resposta se apoia em um unico chunk recuperado.')
+        limitations.append('A resposta se apoia em um único chunk recuperado.')
     if len(cited_sources) > 1:
-        limitations.append('A resposta combina evidencia de multiplos arquivos do corpus.')
+        limitations.append('A resposta combina evidência de multiplos arquivos do corpus.')
 
     if answer_provider is not None:
         try:

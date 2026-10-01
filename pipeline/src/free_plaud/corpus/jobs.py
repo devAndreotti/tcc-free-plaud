@@ -127,7 +127,7 @@ class IndexJobManager:
                 status='running',
                 source_path=str(path),
                 started_at=_now(),
-                message='Indexacao iniciada.',
+                message='Indexação iniciada.',
             )
             state = _JobState(snapshot=snapshot, cancel_token=CancellationToken())
             thread = Thread(target=self._run, args=(job_id, path, rebuild, runtime), name=f'index-job-{job_id}', daemon=True)
@@ -177,7 +177,7 @@ class IndexJobManager:
                     rebuild=rebuild,
                 )
             status = result.status
-            message = 'Indexacao finalizada.'
+            message = 'Indexação finalizada.'
             error_code = None
         except Exception as exc:
             status = 'failed'
