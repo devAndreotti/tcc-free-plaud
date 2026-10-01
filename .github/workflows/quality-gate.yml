@@ -13,6 +13,11 @@ concurrency:
 permissions:
   contents: read
 
+# Cada job faz `uv sync` com os extras certos (--extra cpu). Sem isto, o `uv run` seguinte
+# ressincroniza sem extras e troca o torch de CPU pelo do PyPI (com as bibliotecas CUDA).
+env:
+  UV_NO_SYNC: "1"
+
 jobs:
   security:
     name: Security audit
