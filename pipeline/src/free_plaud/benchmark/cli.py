@@ -149,7 +149,8 @@ def answer_eval(
         except EmbeddingConfigurationError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(code=1) from None
-        vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+        # A avaliação indexa a nota no store; o Chroma do corpus ficaria com vetores sem nota no SQLite.
+        vector_store = LocalVectorStore(benchmark_compare_dir(settings.results_dir, 'answer-eval'), collection_name='answer_eval')
         embedder = get_embedder(resolved_embedding_model, device=settings.embedding_device)
 
     report = evaluate_grounded_answers(
