@@ -10,6 +10,15 @@ from free_plaud.corpus.service import index_corpus_path
 from free_plaud.notes.metadata import build_note_id
 from free_plaud.notes.schemas import Note
 from free_plaud.retrieval.models import AnswerClaim, Chunk, Citation, SearchHit
+from free_plaud.retrieval.rag import (
+    _clean_claim_candidate,
+    _question_needs_multiple_claims,
+)
+from free_plaud.retrieval.search import (
+    _stem_like,
+    extract_named_query_terms,
+    terms_missing_from_vocabulary,
+)
 from free_plaud.storage.sqlite import init_sqlite, list_chunks
 from free_plaud.storage.vector import LocalVectorStore
 
@@ -488,6 +497,49 @@ def test_answer_corpus_debug_includes_provider_timings_and_identity(tmp_path: Pa
     assert response.debug.provider_model == 'fake-model'
 
 
+def test_answer_corpus_abstains_when_question_term_is_not_in_any_note(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    # "senha" não está em nota nenhuma; "broker" e "pipeline" achariam trechos parecidos.
+    missing = answer_corpus_with_citations(
+        'Qual a senha do broker do pipeline?', connection=connection, strategy='lexical', top_k=4
+    )
+    # "responsavel" é outra forma de "responsabilidade", que está no corpus.
+    paraphrase = answer_corpus_with_citations(
+        'Qual equipe ficou responsavel pelo runbook?', connection=connection, strategy='lexical', top_k=4
+    )
+
+    assert missing.reason_for_no_answer == 'query_term_not_in_corpus'
+    assert missing.limitations == ['A pergunta cita "senha", que não aparece em nenhuma nota do corpus.']
+    assert paraphrase.status == 'answer'
+    assert 'Plataforma' in (paraphrase.answer or '')
+
+
+def test_terms_missing_from_vocabulary_splits_identifiers_and_ignores_low_signal() -> None:
+    vocabulary = frozenset(_stem_like(word) for word in ['note', 'id', 'redis', 'connect', 'timeout', 'arquivo'])
+
+    assert terms_missing_from_vocabulary(['note_id', 'redis_connect_timeout', 'arquivo', 'foi'], vocabulary) == []
+    assert terms_missing_from_vocabulary(['splunk', 'arquivo'], vocabulary) == ['splunk']
+
+
+def test_named_query_terms_ignore_capitalized_question_word() -> None:
+    assert extract_named_query_terms('Quantos registros a tabela eventos atingiu?') == []
+    assert extract_named_query_terms('Quando o componente MAJOR muda?') == ['MAJOR']
+    assert extract_named_query_terms('Qual versao do Kubernetes roda?') == ['Kubernetes']
+
+
+def test_claim_cleaning_keeps_identifier_underscores_and_comparisons_ask_for_two_claims() -> None:
+    assert _clean_claim_candidate('Ver `REDIS_CONNECT_TIMEOUT` no _arquivo_ certo.') == (
+        'Ver REDIS_CONNECT_TIMEOUT no arquivo certo.'
+    )
+    assert _question_needs_multiple_claims('Qual a diferença entre CMD e ENTRYPOINT?')
+    assert not _question_needs_multiple_claims('Qual message broker foi adotado?')
+
+
 def test_answer_corpus_debug_no_answer_includes_reason_and_rejected_hits(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     root = tmp_path / 'corpus'
@@ -496,7 +548,7 @@ def test_answer_corpus_debug_no_answer_includes_reason_and_rejected_hits(tmp_pat
     index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
 
     response = answer_corpus_with_citations(
-        'Qual tecnologia mobile usa RabbitMQ?',
+        'Qual equipe usa o broker RabbitMQ?',
         connection=connection,
         strategy='lexical',
         top_k=4,
@@ -686,11 +738,11 @@ def test_answer_corpus_filters_stale_vector_hits_before_citations(tmp_path: Path
     _build_distributed_corpus(root)
     connection = init_sqlite(settings.sqlite_path)
     index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
-    stale = _chunk('stale-mobile-1', 'stale-mobile', 'Flutter e React Native sao tecnologias mobile dominadas.')
+    stale = _chunk('stale-filas-1', 'stale-filas', 'O runbook deve cobrir as filas de um corpus antigo.')
     vector_store = StubVectorStore([SearchHit(chunk=stale, score=0.99, strategy='vector')])
 
     response = answer_corpus_with_citations(
-        'Quais tecnologias mobile o candidato domina?',
+        'Quais filas o runbook deve cobrir?',
         connection=connection,
         vector_store=vector_store,  # type: ignore[arg-type]
         embedder=FakeEmbedder(),
@@ -701,7 +753,7 @@ def test_answer_corpus_filters_stale_vector_hits_before_citations(tmp_path: Path
     assert response.status == 'no_answer'
     assert response.no_answer is True
     assert response.citations == []
-    assert all(source.doc_id != 'stale-mobile' for source in response.used_sources)
+    assert all(source.doc_id != 'stale-filas' for source in response.used_sources)
     assert any('stale' in limitation.lower() or 'obsoleto' in limitation.lower() for limitation in response.limitations)
 
 
