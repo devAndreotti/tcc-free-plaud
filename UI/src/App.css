@@ -1324,6 +1324,30 @@
   font-weight: 500;
 }
 
+.bench__scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 0 16px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.bench__ci {
+  display: block;
+  margin-top: 2px;
+  font: 10.5px var(--font-mono);
+  color: var(--text-muted);
+}
+
+.bench__abstain-lead {
+  max-width: 70ch;
+  padding: 0 16px 12px;
+  font: 15px/1.5 var(--font-read);
+  color: var(--text-primary);
+}
+
 .bench__caption {
   padding: 10px 16px 14px;
   border-top: 1px solid var(--border-color-subtle);

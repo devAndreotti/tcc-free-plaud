@@ -359,8 +359,25 @@ export interface BenchmarkStrategySummary {
   recall_at_3: number;
   recall_at_5: number;
   recall_at_10: number;
+  ndcg_at_10?: number;
   duration_ms: number;
   avg_query_latency_ms: number;
+  p50_query_latency_ms?: number;
+  p95_query_latency_ms?: number;
+  /** Intervalo bootstrap de 95%: [inferior, superior]. */
+  mrr_ci?: [number, number] | null;
+  recall_at_5_ci?: [number, number] | null;
+  /** Só na passada no corpus (benchmark/metrics.py: abstention_metrics + answered_positive_rate). */
+  abstention?: Record<'accuracy' | 'precision' | 'recall' | 'f1' | 'support' | 'answered_positive_rate', number> | null;
+}
+
+/** Todas as notas da suite num corpus só, buscadas como o chat busca (runners.py: BenchmarkCorpusResult). */
+export interface BenchmarkCorpusResult {
+  note_count: number;
+  positive_count: number;
+  negative_count: number;
+  retrieval_depth: number;
+  summaries: Record<string, BenchmarkStrategySummary>;
 }
 
 export interface BenchmarkCompareResult {
@@ -368,6 +385,7 @@ export interface BenchmarkCompareResult {
   comparison_id: string;
   suite_name: string;
   summaries: Record<string, BenchmarkStrategySummary>;
+  corpus?: BenchmarkCorpusResult | null;
   json_report_path: string;
   csv_report_path: string;
   settings_snapshot: BenchmarkSettingsSnapshot | null;
@@ -731,6 +749,32 @@ const MOCK_BENCHMARK_RESULT: BenchmarkCompareResult = {
       recall_at_10: 1,
       duration_ms: 81,
       avg_query_latency_ms: 10,
+    },
+  },
+  corpus: {
+    note_count: 10,
+    positive_count: 39,
+    negative_count: 10,
+    retrieval_depth: 10,
+    summaries: {
+      lexical: {
+        strategy: 'lexical', case_count: 10, query_count: 39, mrr: 0.914, recall_at_3: 0.974, recall_at_5: 0.974,
+        recall_at_10: 1, ndcg_at_10: 0.934, duration_ms: 1912, avg_query_latency_ms: 7, p50_query_latency_ms: 6,
+        p95_query_latency_ms: 11, mrr_ci: [0.84, 0.97], recall_at_5_ci: [0.92, 1],
+        abstention: { accuracy: 0.86, precision: 1, recall: 0.3, f1: 0.46, support: 49, answered_positive_rate: 1 },
+      },
+      vector: {
+        strategy: 'vector', case_count: 10, query_count: 39, mrr: 0.936, recall_at_3: 1, recall_at_5: 1,
+        recall_at_10: 1, ndcg_at_10: 0.952, duration_ms: 6328, avg_query_latency_ms: 58, p50_query_latency_ms: 55,
+        p95_query_latency_ms: 86, mrr_ci: [0.88, 0.99], recall_at_5_ci: [1, 1],
+        abstention: { accuracy: 0.73, precision: 0.36, recall: 0.4, f1: 0.38, support: 49, answered_positive_rate: 0.82 },
+      },
+      hybrid: {
+        strategy: 'hybrid', case_count: 10, query_count: 39, mrr: 0.942, recall_at_3: 0.974, recall_at_5: 1,
+        recall_at_10: 1, ndcg_at_10: 0.956, duration_ms: 6033, avg_query_latency_ms: 50, p50_query_latency_ms: 48,
+        p95_query_latency_ms: 65, mrr_ci: [0.88, 0.99], recall_at_5_ci: [1, 1],
+        abstention: { accuracy: 0.76, precision: 0.42, recall: 0.5, f1: 0.45, support: 49, answered_positive_rate: 0.82 },
+      },
     },
   },
   json_report_path: 'data\\results\\cmp-mock.json',

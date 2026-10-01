@@ -104,6 +104,52 @@ describe('BenchmarkPanel', () => {
     expect(screen.getByRole('img', { name: /Recall@3, @5 e @10/ })).toBeTruthy();
   });
 
+  it('abre no corpus inteiro, com intervalo de confiança e abstenção, e troca para por documento', async () => {
+    const user = userEvent.setup();
+    const corpusSummary = (strategy: string, mrr: number, abstainRecall: number) => ({
+      ...benchmarkResult.summaries.lexical,
+      strategy,
+      case_count: 2,
+      query_count: 4,
+      mrr,
+      ndcg_at_10: mrr,
+      p50_query_latency_ms: 7,
+      p95_query_latency_ms: 12,
+      mrr_ci: [0.5, 1],
+      abstention: { accuracy: 0.8, precision: 1, recall: abstainRecall, f1: 0.5, support: 6, answered_positive_rate: 0.75 },
+    });
+    bridgeMock.runBenchmarkCompare.mockResolvedValueOnce({
+      ...benchmarkResult,
+      corpus: {
+        note_count: 2,
+        positive_count: 4,
+        negative_count: 2,
+        retrieval_depth: 10,
+        summaries: {
+          lexical: corpusSummary('lexical', 0.75, 0),
+          vector: corpusSummary('vector', 0.8, 0.5),
+          hybrid: corpusSummary('hybrid', 0.9, 0.5),
+        },
+      },
+    });
+    render(<BenchmarkPanel />);
+
+    await user.type(screen.getByLabelText('suite.json'), 'suite.json');
+    await user.click(screen.getByRole('button', { name: 'Rodar comparação' }));
+
+    expect(await screen.findByText('4 perguntas')).toBeTruthy();
+    expect(screen.getAllByText('0,50–1,00')).toHaveLength(3);
+    expect(
+      screen.getByText(
+        'Na híbrida, 1 de 2 perguntas sem resposta no corpus recebem uma resposta mesmo assim, e 25% das que têm resposta ficam sem ela.'
+      )
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Por documento' }));
+    expect(screen.getByText('2 perguntas')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Responder ou se abster' })).toBeNull();
+  });
+
   it('mostra erro e estado vazio quando compare falha', async () => {
     const user = userEvent.setup();
     bridgeMock.runBenchmarkCompare.mockRejectedValueOnce(new Error('Suite invalida'));
