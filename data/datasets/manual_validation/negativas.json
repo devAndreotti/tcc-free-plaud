@@ -1,0 +1,55 @@
+{
+  "dataset_name": "manual-validation-negativas",
+  "samples": [
+    {
+      "sample_id": "neg-01",
+      "question": "Qual foi o custo mensal estimado do Splunk?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg-02",
+      "question": "Qual versao do Kubernetes roda no cluster de producao?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg-03",
+      "question": "Qual e a senha do banco de dados de staging?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg-04",
+      "question": "Qual foi a receita anual da empresa em 2024?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg-05",
+      "question": "Qual e a taxa de juros do financiamento imobiliario?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg-06",
+      "question": "Como configurar o Redis Sentinel para failover automatico?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg-07",
+      "question": "Quantos dias de ferias cada colaborador tem por ano?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg-08",
+      "question": "Qual o salario medio da equipe de engenharia?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg-09",
+      "question": "Qual pipeline do Jenkins publica a imagem Docker?",
+      "category": "negativa"
+    },
+    {
+      "sample_id": "neg-10",
+      "question": "Qual foi o orcamento aprovado para o projeto de migracao?",
+      "category": "negativa"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "dataset_name": "manual-validation-09-nota-muito-curta",
+  "samples": [
+    {
+      "sample_id": "redis-01",
+      "question": "Qual o valor do REDIS_TIMEOUT em staging?",
+      "expected_note_id": "09-nota-muito-curta",
+      "expected_terms": [
+        "REDIS_TIMEOUT",
+        "30s"
+      ],
+      "expected_ref": "Lembrete"
+    },
+    {
+      "sample_id": "redis-02",
+      "question": "Em qual arquivo verificar a variavel REDIS_CONNECT_TIMEOUT?",
+      "expected_note_id": "09-nota-muito-curta",
+      "expected_terms": [
+        "REDIS_CONNECT_TIMEOUT",
+        ".env.production"
+      ],
+      "expected_ref": "Lembrete"
+    },
+    {
+      "sample_id": "redis-03",
+      "question": "Qual valor padrao de timeout pode estar configurado em producao?",
+      "expected_note_id": "09-nota-muito-curta",
+      "expected_terms": [
+        "valor padrão (5s)"
+      ],
+      "expected_ref": "Lembrete"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "dataset_name": "manual-validation-05-estudo-docker-fragmentado",
+  "samples": [
+    {
+      "sample_id": "docker-01",
+      "question": "Qual a diferenca entre CMD e ENTRYPOINT?",
+      "expected_note_id": "05-estudo-docker-fragmentado",
+      "expected_terms": [
+        "ENTRYPOINT: comando fixo"
+      ],
+      "expected_ref": "dúvida CMD vs ENTRYPOINT"
+    },
+    {
+      "sample_id": "docker-02",
+      "question": "Para que serve o multi-stage build?",
+      "expected_note_id": "05-estudo-docker-fragmentado",
+      "expected_terms": [
+        "multi-stage build",
+        "reduzir tamanho da imagem final"
+      ],
+      "expected_ref": "multi-stage build"
+    },
+    {
+      "sample_id": "docker-03",
+      "question": "Qual mecanismo cria a camada de escrita temporaria do container?",
+      "expected_note_id": "05-estudo-docker-fragmentado",
+      "expected_terms": [
+        "copy-on-write"
+      ],
+      "expected_ref": "trecho do livro"
+    },
+    {
+      "sample_id": "docker-04",
+      "question": "Qual tipo de volume fica em memoria e nao persiste?",
+      "expected_note_id": "05-estudo-docker-fragmentado",
+      "expected_terms": [
+        "tmpfs"
+      ],
+      "expected_ref": "volumes"
+    }
+  ]
+}

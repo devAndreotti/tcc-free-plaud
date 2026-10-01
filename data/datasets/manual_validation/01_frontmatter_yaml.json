@@ -1,0 +1,45 @@
+{
+  "dataset_name": "manual-validation-01-frontmatter-yaml",
+  "samples": [
+    {
+      "sample_id": "semver-01",
+      "question": "Quando o componente MAJOR deve ser incrementado?",
+      "expected_note_id": "01-frontmatter-yaml",
+      "expected_terms": [
+        "MAJOR",
+        "mudanças incompatíveis"
+      ],
+      "expected_ref": "1. O que é SemVer"
+    },
+    {
+      "sample_id": "semver-02",
+      "question": "Qual opcao de armazenar a versao e recomendada quando o pyproject.toml e a fonte da verdade?",
+      "expected_note_id": "01-frontmatter-yaml",
+      "expected_terms": [
+        "Opção C",
+        "fonte única de verdade"
+      ],
+      "expected_ref": "2.1 Onde armazenar a versão"
+    },
+    {
+      "sample_id": "semver-03",
+      "question": "Qual e o erro mais prejudicial ao versionar um pacote?",
+      "expected_note_id": "01-frontmatter-yaml",
+      "expected_terms": [
+        "breaking change",
+        "erro mais prejudicial"
+      ],
+      "expected_ref": "4. Erros Comuns"
+    },
+    {
+      "sample_id": "semver-04",
+      "question": "Quais ferramentas geram changelog automatico a partir dos commits?",
+      "expected_note_id": "01-frontmatter-yaml",
+      "expected_terms": [
+        "commitizen",
+        "git-cliff"
+      ],
+      "expected_ref": "3.2 Conventional Commits"
+    }
+  ]
+}

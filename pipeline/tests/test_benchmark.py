@@ -603,6 +603,71 @@ def test_compare_benchmark_suite_runs_lexical_vector_and_hybrid_strategies(tmp_p
     assert result.cases[0].hybrid.metrics['recall_at_3'] == 1.0
 
 
+def test_compare_benchmark_suite_measures_whole_corpus_and_abstention(tmp_path: Path) -> None:
+    documents = {
+        'kafka': '# Kafka\n\nO Apache Kafka foi adotado como broker padrao da plataforma de eventos.\n',
+        'redis': '# Redis\n\nO timeout do Redis em staging esta configurado para trinta segundos.\n',
+    }
+    cases = []
+    for name, text in documents.items():
+        (tmp_path / f'{name}.md').write_text(text, encoding='utf-8')
+        (tmp_path / f'{name}.json').write_text(
+            json.dumps(
+                {
+                    'dataset_name': name,
+                    'samples': [
+                        {
+                            'sample_id': f'{name}-1',
+                            'question': f'Qual a configuracao do {name}?',
+                            'expected_note_id': name,
+                            'expected_terms': [name.capitalize()],
+                        }
+                    ],
+                }
+            ),
+            encoding='utf-8',
+        )
+        cases.append({'case_id': name, 'document_path': f'{name}.md', 'dataset_path': f'{name}.json'})
+    (tmp_path / 'negativas.json').write_text(
+        json.dumps(
+            {
+                'dataset_name': 'negativas',
+                'samples': [{'sample_id': 'neg-1', 'question': 'Qual a receita anual do refeitorio?', 'category': 'negativa'}],
+            }
+        ),
+        encoding='utf-8',
+    )
+    suite_path = tmp_path / 'suite.json'
+    suite_path.write_text(
+        json.dumps({'suite_name': 'corpus-suite', 'cases': cases, 'negative_dataset_path': 'negativas.json'}),
+        encoding='utf-8',
+    )
+
+    result = compare_benchmark_suite(
+        load_benchmark_suite(suite_path),
+        workspace_dir=tmp_path,
+        connection=init_sqlite(tmp_path / 'results' / 'benchmark.sqlite3'),
+        top_k=3,
+        chunk_size=200,
+        overlap=20,
+        vector_store=LocalVectorStore(tmp_path / 'results' / 'vector_store', collection_name='corpus_suite'),
+        embedder=FakeEmbedder(),
+    )
+
+    assert result.corpus is not None
+    assert (result.corpus.note_count, result.corpus.positive_count, result.corpus.negative_count) == (2, 2, 1)
+    lexical = result.corpus.summaries['lexical']
+    assert lexical.query_count == 2  # as negativas não entram no MRR
+    assert lexical.mrr == 1.0
+    assert lexical.mrr_ci == [1.0, 1.0]
+    assert lexical.abstention is not None and lexical.abstention['support'] == 3.0
+    rows = {row.sample_id: row for row in result.corpus.queries['lexical']}
+    # Busca sem filtro por nota: o hit relevante tem de ser da nota do caso.
+    assert rows['redis-1'].retrieved[0]['note_id'] == 'redis'
+    assert rows['neg-1'].category == 'negativa'
+    assert rows['neg-1'].answered is False
+
+
 def test_benchmark_comparison_exports_settings_snapshot(tmp_path: Path) -> None:
     sample_file = tmp_path / 'benchmark.md'
     sample_file.write_text(
