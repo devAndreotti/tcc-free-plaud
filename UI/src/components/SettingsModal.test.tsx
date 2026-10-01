@@ -379,7 +379,8 @@ describe('SettingsModal', () => {
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     // Com Whisper Small selecionado (default do draft), todo idioma esta habilitado.
-    await user.click(screen.getByRole('combobox', { name: 'Idioma da transcrição' }));
+    // O campo de idioma depende de listVoiceModels, que resolve depois do campo de modelo.
+    await user.click(await screen.findByRole('combobox', { name: 'Idioma da transcrição' }));
     expect(screen.getByRole('option', { name: 'Automático (detectar idioma)' }).getAttribute('aria-disabled')).toBeNull();
     expect(screen.getByRole('option', { name: 'Português' }).getAttribute('aria-disabled')).toBeNull();
     await user.keyboard('{Escape}');
