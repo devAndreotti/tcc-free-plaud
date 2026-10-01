@@ -31,6 +31,11 @@ audio = [
 desktop = [
   "pywebview>=5.0",
 ]
+# torch vem pelo sentence-transformers; estes extras só escolhem o build.
+# cpu: CI e máquinas sem GPU NVIDIA. gpu-cu128: CUDA 12.8 (vários GB a mais).
+cpu = [
+  "torch>=2.11.0",
+]
 gpu-cu128 = [
   "torch>=2.11.0",
   "torchvision>=0.26.0",
@@ -67,17 +72,26 @@ testpaths = ["tests"]
 
 [tool.uv]
 package = true
+# O marker `extra == ...` não separa a resolução: o lock acabava com torch CUDA para todos.
+# Extras em conflito + `extra =` nas sources é a forma que o uv resolve em separado.
+conflicts = [[{ extra = "cpu" }, { extra = "gpu-cu128" }]]
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cu128", marker = "sys_platform != 'darwin' and extra == 'gpu-cu128'" },
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu128", extra = "gpu-cu128", marker = "sys_platform != 'darwin'" },
 ]
 torchvision = [
-  { index = "pytorch-cu128", marker = "sys_platform != 'darwin' and extra == 'gpu-cu128'" },
+  { index = "pytorch-cu128", extra = "gpu-cu128", marker = "sys_platform != 'darwin'" },
 ]
 torchaudio = [
-  { index = "pytorch-cu128", marker = "sys_platform != 'darwin' and extra == 'gpu-cu128'" },
+  { index = "pytorch-cu128", extra = "gpu-cu128", marker = "sys_platform != 'darwin'" },
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [[tool.uv.index]]
 name = "pytorch-cu128"
