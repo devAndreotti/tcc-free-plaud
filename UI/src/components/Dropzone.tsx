@@ -54,12 +54,6 @@ const dropToast = (event: DroppedFileEvent): DropzoneToast => ({
   message: dropMessage(event),
 });
 
-const STATUS_LABEL: Record<DropzoneFile['status'], { label: string; tone: string }> = {
-  pending: { label: 'aguardando', tone: '' },
-  indexed: { label: 'indexado', tone: ' pill--ok' },
-  failed: { label: 'falhou', tone: ' pill--err' },
-};
-
 /** Área de drag-and-drop em lote com progresso de indexação em tempo real. */
 const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
   const [isDragging, setIsDragging] = useState(false);
