@@ -43,15 +43,16 @@ const STATUS_LABEL: Record<DropzoneFile['status'], { label: string; tone: string
   failed: { label: 'falhou', tone: ' pill--err' },
 };
 
+const dropMessage = (event: DroppedFileEvent): string => {
+  if (event.status === 'indexed') return `${event.name} entrou no corpus (${event.chunks} chunks).`;
+  if (event.status === 'unchanged') return `${event.name} já estava indexado, sem mudança.`;
+  return `Falha ao indexar ${event.name}: ${event.message ?? 'erro desconhecido'}`;
+};
+
 const dropToast = (event: DroppedFileEvent): DropzoneToast => ({
   id: `drop-${event.name}-${Date.now()}`,
   status: event.status === 'failed' ? 'failed' : 'success',
-  message:
-    event.status === 'indexed'
-      ? `${event.name} entrou no corpus (${event.chunks} chunks).`
-      : event.status === 'unchanged'
-        ? `${event.name} já estava indexado, sem mudança.`
-        : `Falha ao indexar ${event.name}: ${event.message ?? 'erro desconhecido'}`,
+  message: dropMessage(event),
 });
 
 /** Área de drag-and-drop em lote com progresso de indexação em tempo real. */
@@ -137,7 +138,7 @@ const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
   useEffect(() => {
     if (!isIndexing) return undefined;
     const interval = window.setInterval(() => {
-      void bridge.pollDroppedFiles().then((events) => events.forEach(applyDropEvent));
+      void bridge.pollDroppedFiles().then((events) => events.forEach((event) => applyDropEvent(event)));
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, [isIndexing, applyDropEvent]);

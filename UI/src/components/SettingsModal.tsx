@@ -778,7 +778,10 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                             aria-label={model.label}
                             tabIndex={0}
                             className={`voice-model${checked ? ' voice-model--checked' : ''}`}
-                            onClick={() => selectVoiceModel(model.id)}
+                            onClick={(event) => {
+                              // Os botões de baixar/cancelar ficam no rodapé do cartão e não escolhem o modelo.
+                              if (!(event.target as HTMLElement).closest('.voice-model__foot')) selectVoiceModel(model.id);
+                            }}
                             onKeyDown={(event) => {
                               if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
                                 event.preventDefault();
@@ -811,7 +814,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                                 </>
                               )}
                             </dl>
-                            <div className="voice-model__foot" onClick={(event) => event.stopPropagation()}>
+                            <div className="voice-model__foot">
                               {renderVoiceModelDownloadStatus(model)}
                             </div>
                           </div>
