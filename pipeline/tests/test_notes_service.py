@@ -136,3 +136,24 @@ def test_reindex_note_uses_existing_source_path(tmp_path: Path) -> None:
     assert result.chunks_indexed >= 1
     detail = get_note_detail(note_id, settings=settings, connection=connection)
     assert 'Texto novo sobre benchmark' in detail.structured_markdown
+
+
+def test_reindex_note_keeps_note_id_from_folder_index(tmp_path: Path) -> None:
+    from free_plaud.corpus.service import index_corpus_path
+
+    settings = _settings(tmp_path)
+    vault = tmp_path / 'vault'
+    (vault / 'estudos').mkdir(parents=True)
+    source = vault / 'estudos' / 'nota.md'
+    source.write_text('# Nota\n\nTexto sobre filas e chunks.\n', encoding='utf-8')
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+    batch = index_corpus_path(vault, settings=settings, vector_store=vector_store, embedder=FakeEmbedder(), recursive=True)
+    note_id = batch.results[0].note_id
+    assert note_id and '--' in note_id  # id de pasta: slug + hash do caminho relativo
+
+    connection = connect_sqlite(settings.sqlite_path)
+    result = reindex_note(note_id, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+
+    assert result.note_id == note_id
+    assert result.status == 'unchanged'  # mesmo id + mesmo conteúdo: nada a refazer
+    assert count_notes(connection) == 1

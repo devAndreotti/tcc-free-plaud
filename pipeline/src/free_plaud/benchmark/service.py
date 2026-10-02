@@ -10,6 +10,7 @@ from free_plaud.benchmark.reports import (
 from free_plaud.benchmark.runners import (
     BenchmarkComparisonResult,
     BenchmarkSettingsSnapshot,
+    benchmark_compare_dir,
     compare_benchmark_suite,
 )
 from free_plaud.corpus.runtime import CorpusRuntime
@@ -60,12 +61,10 @@ def run_benchmark_compare(
     suite_file = _resolve_suite_path(Path(suite_path), resolved_settings)
     suite = load_benchmark_suite(suite_file)
     snapshot = build_settings_snapshot(resolved_settings)
-    connection = init_sqlite(resolved_settings.sqlite_path)
+    compare_dir = benchmark_compare_dir(resolved_settings.results_dir, suite.suite_name)
+    connection = init_sqlite(compare_dir / 'benchmark.sqlite3')
     try:
-        vector_store = LocalVectorStore(
-            resolved_settings.results_dir / 'benchmark_compare' / suite.suite_name,
-            collection_name=f'{suite.suite_name}_compare',
-        )
+        vector_store = LocalVectorStore(compare_dir, collection_name=f'{suite.suite_name}_compare')
         embedder = runtime.get_embedder() if runtime is not None else get_embedder(
             resolved_settings.embedding_model,
             device=resolved_settings.embedding_device,

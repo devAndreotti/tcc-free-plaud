@@ -54,11 +54,13 @@ def _audio_language_options() -> list[SettingOption]:
     return options
 
 
+AUDIO_GROUP = 'Áudio'
+
 SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='embedding_model',
         label='Modelo de embedding',
-        description='Modelo que transforma texto em vetores para busca semantica.',
+        description='Modelo que transforma texto em vetores para busca semântica.',
         group='Embeddings',
         value_type='string',
         recommended='sentence-transformer:sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
@@ -77,17 +79,17 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='default_ask_strategy',
         label='Estratégia padrão',
-        description='Busca usada por padrao ao perguntar ao corpus.',
+        description='Busca usada por padrão ao perguntar ao corpus.',
         group='Retrieval',
         value_type='enum',
         layer='simple',
-        options=[SettingOption(value='lexical', label='Lexical'), SettingOption(value='vector', label='Vector'), SettingOption(value='hybrid', label='Hybrid')],
+        options=[SettingOption(value='lexical', label='Lexical'), SettingOption(value='vector', label='Vetorial'), SettingOption(value='hybrid', label='Híbrida')],
         recommended='hybrid',
     ),
     SettingSpec(
         key='retrieval_top_k',
         label='Chunks por pergunta',
-        description='Quantos chunks o Ask recupera para montar evidencias e resposta.',
+        description='Quantos chunks o Ask recupera para montar evidências e resposta.',
         group='Retrieval',
         value_type='int',
         recommended=4,
@@ -111,7 +113,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='corpus_commit_mode',
         label='Modo de commit',
-        description='Quando a indexacao grava SQLite e Chroma.',
+        description='Quando a indexação grava SQLite e Chroma.',
         group='Corpus',
         value_type='enum',
         options=[SettingOption(value='auto', label='Auto'), SettingOption(value='atomic', label='Atomic'), SettingOption(value='microbatch', label='Microbatch')],
@@ -154,7 +156,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='answer_provider',
         label='Provedor de resposta',
-        description='Quem transforma evidencias recuperadas em resposta final.',
+        description='Quem transforma evidências recuperadas em resposta final.',
         group='LLM',
         value_type='enum',
         layer='simple',
@@ -189,7 +191,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='answer_timeout_seconds',
         label='Timeout da resposta',
-        description='Tempo maximo para aguardar o provider de resposta.',
+        description='Tempo máximo para aguardar o provider de resposta.',
         group='LLM',
         value_type='int',
         recommended=60,
@@ -209,7 +211,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         key='audio_model',
         label='Modelo de transcrição (voz)',
         description='Modelo local usado para transcrever o áudio gravado no chat.',
-        group='Áudio',
+        group=AUDIO_GROUP,
         value_type='enum',
         layer='simple',
         options=[
@@ -224,7 +226,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         key='audio_language',
         label='Idioma da transcrição',
         description='Idioma usado pelo modelo de voz. "Automático" só funciona com modelos faster-whisper.',
-        group='Áudio',
+        group=AUDIO_GROUP,
         value_type='enum',
         layer='simple',
         options=_audio_language_options(),
@@ -234,7 +236,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         key='audio_device',
         label='Device de transcrição',
         description='Onde roda o modelo de voz quando ele suporta device.',
-        group='Áudio',
+        group=AUDIO_GROUP,
         value_type='enum',
         layer='simple',
         options=[SettingOption(value='auto', label='Auto'), SettingOption(value='cpu', label='CPU'), SettingOption(value='cuda', label='CUDA')],
@@ -243,7 +245,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='answer_max_tokens',
         label='Max tokens da resposta',
-        description='Limite de tokens de saida do provider; vazio usa o default do modelo. Suba para modelos de reasoning que truncam.',
+        description='Limite de tokens de saída do provider; vazio usa o default do modelo. Suba para modelos de reasoning que truncam.',
         group='LLM',
         value_type='int',
         placeholder='vazio = default do modelo',

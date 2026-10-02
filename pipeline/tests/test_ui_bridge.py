@@ -558,7 +558,7 @@ def test_desktop_api_indexes_dropped_files(monkeypatch, tmp_path: Path) -> None:
         )
 
     api.dropped_files = module.DroppedFileIndexer(runner=runner)
-    api.stage_dropped_files(
+    api._stage_dropped_files(
         {"dataTransfer": {"files": [{"name": "nota.md", "pywebviewFullPath": str(tmp_path / "nota.md")}, {"name": "sem-caminho.md"}]}}
     )
 

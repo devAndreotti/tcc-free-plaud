@@ -218,8 +218,14 @@ def run_benchmark(
     hybrid_lexical_pool: int | None = None,
     hybrid_vector_pool: int | None = None,
     settings_snapshot: BenchmarkSettingsSnapshot | None = None,
+    reuse_vectors: bool = False,
 ) -> BenchmarkRunResult:
-    """Executa benchmark reproduzível sobre uma nota canônica."""
+    """Executa benchmark reproduzível sobre uma nota canônica.
+
+    `reuse_vectors` pula o embedding quando o store já tem estes chunks. O chunk_id inclui o
+    hash do texto e as posições, então ids iguais são textos iguais; só use quando o store foi
+    preenchido pelo mesmo embedder (como na comparação, que zera o store no início).
+    """
     started_at = datetime.now(UTC)
     started_perf = perf_counter()
 
@@ -228,7 +234,9 @@ def run_benchmark(
     elif strategy in {'vector', 'hybrid'}:
         if vector_store is None or embedder is None:
             raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector e strategy=hybrid.')
-        chunks = index_note_in_vector_store(note, vector_store, embedder, chunk_size=chunk_size, overlap=overlap)
+        chunks = index_note(note, chunk_size=chunk_size, overlap=overlap)
+        if not (reuse_vectors and vector_store.has_chunk_ids([chunk.chunk_id for chunk in chunks])):
+            chunks = index_note_in_vector_store(note, vector_store, embedder, chunk_size=chunk_size, overlap=overlap)
     else:
         raise ValueError("strategy deve ser 'lexical', 'vector' ou 'hybrid'.")
 
@@ -311,6 +319,16 @@ def run_benchmark(
     return run_result
 
 
+def benchmark_compare_dir(results_dir: Path, suite_name: str) -> Path:
+    """Pasta da comparação, com SQLite e Chroma próprios, separados do corpus do usuário.
+
+    O histórico (benchmark_queries) referencia notes e chunks, então as notas da suite moram no
+    mesmo banco do histórico. Usar o banco do corpus enchia Notas e o chat com os documentos da
+    suite e deixava chunks no SQLite sem vetor no Chroma (o Doctor acusava corpus inconsistente).
+    """
+    return results_dir / 'benchmark_compare' / suite_name
+
+
 def compare_benchmark_suite(
     suite: BenchmarkSuite,
     *,
@@ -385,6 +403,7 @@ def compare_benchmark_suite(
             hybrid_lexical_pool=hybrid_lexical_pool,
             hybrid_vector_pool=hybrid_vector_pool,
             settings_snapshot=settings_snapshot,
+            reuse_vectors=True,  # a rodada vetorial acabou de gravar estes mesmos chunks
         )
 
         lexical_runs.append(lexical_result)

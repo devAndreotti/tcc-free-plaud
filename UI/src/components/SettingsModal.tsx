@@ -44,6 +44,8 @@ const IA_CATALOG_KEYS = ['answer_provider', 'answer_model', 'answer_base_url'];
 // Chaves de preset que não são editáveis e por isso não estão no catálogo.
 const PRESET_KEY_LABELS: Record<string, string> = { embedding_model: 'Modelo de embedding' };
 
+const MODEL_STATUS: Record<string, string> = { offline: 'offline', unauthorized: 'sem autorização', error: 'erro' };
+
 export type SettingsTab = 'geral' | 'vault' | 'ia' | 'voz' | 'avancado' | 'aparencia';
 
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
@@ -278,7 +280,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
             .map((row) => [row.key, row.value === null ? '' : String(row.value)])
         )
       );
-      setOperationStatus('Configurações do backend salvas.');
+      setOperationStatus('Configurações salvas.');
     } catch (error) {
       console.error('[SettingsModal] Erro ao salvar settings do backend:', error);
       setOperationStatus(
@@ -309,7 +311,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     try {
       const result = await bridge.applySettingsPreset(presetKey);
       await refreshBackendSettings();
-      setOperationStatus(`Preset ${result.preset.key} aplicado.`);
+      setOperationStatus(`Preset ${result.preset.label} aplicado.`);
     } catch (error) {
       console.error('[SettingsModal] Erro ao aplicar preset:', error);
       setOperationStatus('Erro ao aplicar preset.');
@@ -324,7 +326,9 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     try {
       const result = await bridge.testAnswerProvider();
       setOperationStatus(
-        `Provider: ${result.provider} | status=${result.status} | latencia_ms=${result.latency_ms}${result.error ? ` | erro=${result.error}` : ''}`
+        result.error
+          ? `O teste do ${result.provider} falhou: ${result.error}`
+          : `${result.provider} respondeu em ${result.latency_ms} ms.`
       );
     } catch (error) {
       console.error('[SettingsModal] Erro ao testar provider:', error);
@@ -337,14 +341,10 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const handleListModels = async () => {
     if (isListingModels) return;
     setIsListingModels(true);
-    setOperationStatus('Listando modelos do provider...');
+    setOperationStatus('');
     try {
-      const result = await bridge.listAnswerModels();
-      setModelDiscovery(result);
-      const messageSuffix = result.message ? ` | ${result.message}` : '';
-      setOperationStatus(
-        `Modelos: ${result.status} | provider=${result.provider} | encontrados=${result.models.length} | latencia_ms=${result.latency_ms}${messageSuffix}`
-      );
+      // O resultado aparece logo abaixo dos botões; a barra de status fica para erros.
+      setModelDiscovery(await bridge.listAnswerModels());
     } catch (error) {
       console.error('[SettingsModal] Erro ao listar modelos:', error);
       setOperationStatus('Erro ao listar modelos.');
@@ -355,7 +355,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
 
   const handleSelectModel = (modelId: string) => {
     setSettingDrafts((prev) => ({ ...prev, answer_model: modelId }));
-    setOperationStatus(`Modelo selecionado no draft: ${modelId}. Clique Salvar backend para gravar.`);
+    setOperationStatus(`Modelo ${modelId} escolhido. Clique em Salvar para gravar.`);
   };
 
   // Estado de instalado/baixando/erro de UM modelo de voz - reusado tanto
@@ -479,6 +479,8 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   }));
   const catalogLabel = (key: string) =>
     backendSettings?.settings_catalog.find((row) => row.key === key)?.label ?? PRESET_KEY_LABELS[key] ?? key;
+  // Modelo, URL, API key, Testar e Listar só existem para provedores generativos.
+  const isGenerative = (settingDrafts.answer_provider || backendSettings?.answer_provider || 'extractive') !== 'extractive';
   const iaCatalogRows = backendSettings?.settings_catalog.filter((row) => IA_CATALOG_KEYS.includes(row.key) && !row.secret) ?? [];
   const advancedRows = backendSettings?.settings_catalog.filter(
     (row) => !row.secret && row.group !== 'Áudio' && !IA_CATALOG_KEYS.includes(row.key)
@@ -656,85 +658,92 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   IA
                 </h3>
 
-                <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-                  <div className="settings-item__info">
-                    <span className="settings-item__label">API key</span>
-                    <span className="settings-item__description">
-                      {backendSettings?.answer_api_key_configured ? 'Configurada' : 'Ausente'} · {backendSettings?.answer_provider ?? 'extractive'} · {backendSettings?.answer_model ?? 'modelo local'}
-                    </span>
-                  </div>
+                {iaCatalogRows.filter((row) => isGenerative || row.key === 'answer_provider').map((row) => renderSettingRow(row))}
 
-                  <div className="vault-picker" role="group" aria-label="Salvar API key local">
-                    <input
-                      id="input-api-key"
-                      type="password"
-                      className="vault-picker__input"
-                      value={apiKey}
-                      placeholder="FREE_PLAUD_ANSWER_API_KEY"
-                      aria-label="API key"
-                      onChange={(event) => setApiKey(event.target.value)}
-                    />
-                    <button
-                      id="btn-save-api-key"
-                      type="button"
-                      className="btn"
-                      onClick={handleSaveApiKey}
-                      disabled={isSavingApiKey}
-                      aria-label="Salvar API key"
-                    >
-                      {isSavingApiKey ? 'Salvando…' : 'Salvar'}
-                    </button>
-                    <button
-                      id="btn-test-provider"
-                      type="button"
-                      className="btn"
-                      onClick={handleTestProvider}
-                      disabled={isTestingProvider}
-                      aria-label="Testar provider"
-                    >
-                      {isTestingProvider ? 'Testando…' : 'Testar'}
-                    </button>
-                    <button
-                      id="btn-list-models"
-                      type="button"
-                      className="btn"
-                      onClick={handleListModels}
-                      disabled={isListingModels}
-                      aria-label="Listar modelos"
-                    >
-                      {isListingModels ? 'Listando…' : 'Listar modelos'}
-                    </button>
-                  </div>
-                  {modelDiscovery && (
-                    <div className="settings-item settings-item--stacked" aria-live="polite">
-                      <span className="settings-inline-status">
-                        modelos: {modelDiscovery.status} · {modelDiscovery.provider} · {modelDiscovery.latency_ms} ms
-                        {modelDiscovery.cached ? ' · cache' : ''}
+                {isGenerative ? (
+                    <div className="settings-item settings-item--stacked">
+                    <div className="settings-item__info">
+                      <span className="settings-item__label">API key</span>
+                      <span className="settings-item__description">
+                        {backendSettings?.answer_api_key_configured ? 'Configurada no .env local.' : 'Ausente.'} Teste o provedor ou liste os modelos dele.
                       </span>
-                      {modelDiscovery.message && (
-                        <span className="settings-warning">{modelDiscovery.message}</span>
-                      )}
-                      {modelDiscovery.models.length > 0 && (
-                        <ul className="settings-model-list" aria-label="Modelos encontrados">
-                          {modelDiscovery.models.map((model) => (
-                            <li key={model.id} className="settings-model-list__item">
-                              <button
-                                type="button"
-                                className="btn btn--sm settings-model-option"
-                                onClick={() => handleSelectModel(model.id)}
-                                aria-label={`Selecionar ${model.label}`}
-                              >
-                                {model.label}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
                     </div>
-                  )}
-                </div>
 
-                {iaCatalogRows.map((row) => renderSettingRow(row))}
+                    <div className="vault-picker" role="group" aria-label="Salvar API key local">
+                      <input
+                        id="input-api-key"
+                        type="password"
+                        className="vault-picker__input"
+                        value={apiKey}
+                        placeholder="FREE_PLAUD_ANSWER_API_KEY"
+                        aria-label="API key"
+                        onChange={(event) => setApiKey(event.target.value)}
+                      />
+                      <button
+                        id="btn-save-api-key"
+                        type="button"
+                        className="btn"
+                        onClick={handleSaveApiKey}
+                        disabled={isSavingApiKey}
+                        aria-label="Salvar API key"
+                      >
+                        {isSavingApiKey ? 'Salvando…' : 'Salvar'}
+                      </button>
+                      <button
+                        id="btn-test-provider"
+                        type="button"
+                        className="btn"
+                        onClick={handleTestProvider}
+                        disabled={isTestingProvider}
+                        aria-label="Testar provider"
+                      >
+                        {isTestingProvider ? 'Testando…' : 'Testar'}
+                      </button>
+                      <button
+                        id="btn-list-models"
+                        type="button"
+                        className="btn"
+                        onClick={handleListModels}
+                        disabled={isListingModels}
+                        aria-label="Listar modelos"
+                      >
+                        {isListingModels ? 'Listando…' : 'Listar modelos'}
+                      </button>
+                    </div>
+                    {modelDiscovery && (
+                      <div className="settings-item settings-item--stacked" aria-live="polite">
+                        <span className="settings-inline-status">
+                          {modelDiscovery.models.length} {modelDiscovery.models.length === 1 ? 'modelo' : 'modelos'} no{' '}
+                          {modelDiscovery.provider} · {modelDiscovery.latency_ms} ms{modelDiscovery.cached ? ' · em cache' : ''}
+                          {modelDiscovery.status !== 'ok' && ` · ${MODEL_STATUS[modelDiscovery.status] ?? modelDiscovery.status}`}
+                        </span>
+                        {modelDiscovery.message && (
+                          <span className="settings-warning">{modelDiscovery.message}</span>
+                        )}
+                        {modelDiscovery.models.length > 0 && (
+                          <ul className="settings-model-list" aria-label="Modelos encontrados">
+                            {modelDiscovery.models.map((model) => (
+                              <li key={model.id} className="settings-model-list__item">
+                                <button
+                                  type="button"
+                                  className="btn btn--sm settings-model-option"
+                                  onClick={() => handleSelectModel(model.id)}
+                                  aria-label={`Selecionar ${model.label}`}
+                                >
+                                  {model.label}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="settings-inline-status">
+                    O extractive responde só com trechos das notas: não usa LLM, modelo nem API key.
+                  </p>
+                )}
               </section>
             )}
 
@@ -930,7 +939,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                         Perguntas sobre o seu vault, respondidas só com as notas indexadas e com a fonte de cada afirmação.
                       </span>
                     </div>
-                    <span className="settings-badge">v0.1.0</span>
+                    <span className="settings-badge mono">v{__APP_VERSION__}</span>
                   </div>
                 </section>
               </>

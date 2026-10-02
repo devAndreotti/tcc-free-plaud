@@ -19,6 +19,7 @@ Integração atual:
 
 import os
 import sys
+import threading
 import json
 import uuid
 from datetime import datetime
@@ -79,7 +80,15 @@ class Api:
         self.runtime = CorpusRuntime()
         self.dropped_files = DroppedFileIndexer(runtime=self.runtime)
 
-    def stage_dropped_files(self, event: dict) -> None:
+    def _warmup(self) -> None:
+        """Abre o Chroma e carrega o modelo de embedding antes da primeira pergunta (~8 s a frio)."""
+        try:
+            self.runtime.get_vector_store()
+            self.runtime.get_embedder().embed(['aquecimento'])
+        except Exception as exc:  # aquecer é otimização: se falhar, a primeira pergunta paga o custo
+            print(f'[Backend] Aquecimento falhou: {exc}')
+
+    def _stage_dropped_files(self, event: dict) -> None:
         """Handler Python do drop: só ele recebe o caminho completo (pywebviewFullPath)."""
         files = (event.get('dataTransfer') or {}).get('files') or []
         self.dropped_files.stage([f['pywebviewFullPath'] for f in files if f.get('pywebviewFullPath')])
@@ -482,9 +491,10 @@ if __name__ == '__main__':
     from webview.dom import DOMEventHandler
 
     def _bind_drop() -> None:
-        window.dom.document.events.drop += DOMEventHandler(api.stage_dropped_files, prevent_default=True)
+        window.dom.document.events.drop += DOMEventHandler(api._stage_dropped_files, prevent_default=True)
 
     window.events.loaded += _bind_drop
+    threading.Thread(target=api._warmup, name='warmup', daemon=True).start()
 
     # Inicia o loop de eventos do PyWebView
     # debug=True exibe DevTools (útil durante desenvolvimento)

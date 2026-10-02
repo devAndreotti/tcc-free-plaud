@@ -742,6 +742,14 @@ def test_run_benchmark_compare_service_exports_structured_payload(tmp_path: Path
     assert payload['settings_snapshot']['embedding_model'] == 'fake-hash'
     assert Path(payload['json_report_path']).exists()
     assert Path(payload['csv_report_path']).exists()
+    # A suite roda num banco próprio: o corpus do usuário não ganha as notas dela.
+    corpus = init_sqlite(settings.sqlite_path)
+    try:
+        assert corpus.execute('SELECT COUNT(*) FROM notes').fetchone()[0] == 0
+    finally:
+        corpus.close()
+    assert (settings.results_dir / 'benchmark_compare' / 'service-suite' / 'benchmark.sqlite3').exists()
+
 
 
 def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, tmp_path: Path) -> None:

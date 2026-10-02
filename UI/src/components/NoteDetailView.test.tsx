@@ -4,7 +4,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { NoteDetail } from '../services/bridge';
 import { NoteDetailView } from './NoteDetailView';
 
+// Formato que o backend grava: frontmatter interno, Summary, Normalized Text (a nota) e Raw Text.
 const markdown = [
+  '---',
+  'note_id: ata--abc',
+  '---',
+  '## Summary',
+  'Resumo que não aparece na leitura.',
+  '## Normalized Text',
   '---',
   'title: Ata do comitê',
   'tags: [kafka, adr]',
@@ -25,6 +32,8 @@ const markdown = [
   'kafka-topics --create',
   '```',
   'Fim.',
+  '## Raw Text',
+  'Texto cru repetido.',
 ].join('\n');
 
 const detail = (overrides: Partial<NoteDetail> = {}): NoteDetail =>
@@ -68,7 +77,9 @@ describe('NoteDetailView', () => {
     renderView();
     const body = document.querySelector('.reader__body') as HTMLElement;
 
-    expect(within(body).getByText('tags').nextSibling?.textContent).toBe('[kafka, adr]');
+    expect(within(body).getByText('tags').nextSibling?.textContent).toBe('kafka, adr');
+    expect(within(body).queryByText('Resumo que não aparece na leitura.')).toBeNull();
+    expect(within(body).queryByText('Texto cru repetido.')).toBeNull();
     expect(within(body).getByText('vazio').nextSibling?.textContent).toBe('—');
     // O H1 igual ao título não se repete no corpo.
     expect(within(body).queryByRole('heading', { name: 'Ata do comitê' })).toBeNull();

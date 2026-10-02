@@ -112,7 +112,7 @@ const JobCard = ({ job, onCancel, busy, onOpenSettings }: {
 
       <div className="job__progress">
         <div className="job__big">
-          {processed.toLocaleString('pt-BR')}
+          {processed.toLocaleString('pt-BR')}{' '}
           <span>de {total.toLocaleString('pt-BR')} arquivos</span>
         </div>
         <span className="job__pct mono">{Math.round(percent)}%</span>

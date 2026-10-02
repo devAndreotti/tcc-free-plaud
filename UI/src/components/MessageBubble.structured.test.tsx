@@ -85,16 +85,56 @@ describe('MessageBubble com resposta estruturada', () => {
           status: 'no_answer',
           no_answer: true,
           answer: null,
-          reason_for_no_answer: 'no_retrieval_hits',
-          limitations: ['Nenhum chunk recuperado contém termos informativos suficientes da pergunta.'],
+          reason_for_no_answer: 'insufficient_hybrid_specificity',
+          limitations: ['Os hits híbridos recuperados não apresentam evidência lexical suficiente.'],
         })}
         onRetry={onRetry}
       />
     );
 
     expect(screen.getByText('Não encontrei isso no vault.')).toBeTruthy();
-    expect(screen.getByText('motivo: no_retrieval_hits')).toBeTruthy();
+    expect(screen.getByText('motivo: insufficient_hybrid_specificity')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Buscar só por palavra-chave' }));
     expect(onRetry).toHaveBeenCalledWith('Como funciona?', 'lexical');
+  });
+
+  it('não oferece palavra-chave quando nenhuma busca achou trecho algum', () => {
+    render(
+      <MessageBubble
+        message={answer({ status: 'no_answer', no_answer: true, answer: null, reason_for_no_answer: 'no_retrieval_hits', limitations: [] })}
+        onRetry={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: 'Buscar só por palavra-chave' })).toBeNull();
+  });
+
+  it('com o corpus vazio, manda indexar em vez de sugerir outra busca', () => {
+    render(
+      <MessageBubble
+        message={answer({ status: 'no_answer', no_answer: true, answer: null, reason_for_no_answer: 'empty_corpus', limitations: [] })}
+        onRetry={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('O corpus ainda está vazio.')).toBeTruthy();
+    expect(screen.getByText(/Indexe a pasta do vault na Fila/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Buscar só por palavra-chave' })).toBeNull();
+  });
+
+  it('encurta caminhos longos da fonte e usa o note_id quando não há caminho', () => {
+    const longa = cite(1, 'C:\\Users\\usuario\\vault\\projetos\\2025\\nota.md');
+    const semCaminho = { ...cite(2, ''), source_path: null } as unknown as AskCitation;
+    render(
+      <MessageBubble
+        message={answer({
+          claims: [{ text: 'Afirmação com duas fontes.', citations: [longa, semCaminho], support_level: 'direct' }],
+          citations: [longa, semCaminho],
+        })}
+      />
+    );
+
+    expect(screen.getByText('…/projetos/2025/nota.md')).toBeTruthy();
+    expect(screen.getByTitle('nota-2').textContent).toBe('nota-2');
   });
 });

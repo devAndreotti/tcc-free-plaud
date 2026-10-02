@@ -96,12 +96,54 @@ describe('BenchmarkPanel', () => {
     // Empate em Recall@5 e MRR entre vetorial e híbrida: vence a de menor latência.
     expect(
       screen.getByText(
-        'A vetorial traz a fonte certa entre os 5 primeiros trechos em 100% das perguntas, 50 pontos acima da lexical, e custa 2 ms a mais por consulta.'
+        'A vetorial e a híbrida trazem a fonte certa entre os 5 primeiros trechos em 100% das perguntas, 50 pontos acima da lexical; a vetorial desempata pela latência (5 ms por consulta, com o mesmo MRR).'
       )
     ).toBeTruthy();
     // Melhor latência da coluna destacada.
     expect(screen.getByText('3 ms').className).toBe('bench__best');
     expect(screen.getByRole('img', { name: /Recall@3, @5 e @10/ })).toBeTruthy();
+  });
+
+  const summary = (strategy: string, recall: number, mrr: number, latency: number) => ({
+    ...benchmarkResult.summaries.lexical,
+    strategy,
+    mrr,
+    recall_at_3: recall,
+    recall_at_5: recall,
+    recall_at_10: recall,
+    avg_query_latency_ms: latency,
+  });
+
+  it.each([
+    {
+      caso: 'empate de duas, decidido pelo MRR',
+      summaries: { lexical: summary('lexical', 0.5, 0.4, 3), vector: summary('vector', 1, 0.8, 5), hybrid: summary('hybrid', 1, 0.9, 6) },
+      frase: /^A híbrida e a vetorial .* 50 pontos acima da lexical; a híbrida desempata pelo MRR/,
+    },
+    {
+      caso: 'vencedora mais lenta',
+      summaries: { lexical: summary('lexical', 0.5, 0.5, 3), hybrid: summary('hybrid', 0.9, 0.9, 8) },
+      frase: /^A híbrida traz .* 40 pontos acima da lexical, e custa 5 ms a mais por consulta\.$/,
+    },
+    {
+      caso: 'vencedora mais rápida',
+      summaries: { lexical: summary('lexical', 0.9, 0.9, 3), vector: summary('vector', 0.6, 0.6, 7) },
+      frase: /^A lexical traz .* e ainda responde 4 ms mais rápido por consulta\.$/,
+    },
+    {
+      caso: 'uma estratégia só',
+      summaries: { hybrid: summary('hybrid', 0.75, 0.7, 4) },
+      frase: /^A híbrida traz a fonte certa entre os 5 primeiros trechos em 75% das perguntas\.$/,
+    },
+  ])('resume a comparação em uma frase: $caso', async ({ summaries, frase }) => {
+    const user = userEvent.setup();
+    bridgeMock.runBenchmarkCompare.mockResolvedValueOnce({ ...benchmarkResult, summaries });
+    render(<BenchmarkPanel />);
+
+    await user.type(screen.getByLabelText('suite.json'), 'suite.json');
+    await user.click(screen.getByRole('button', { name: 'Rodar comparação' }));
+
+    expect(await screen.findByText(frase)).toBeTruthy();
   });
 
   it('mostra erro e estado vazio quando compare falha', async () => {

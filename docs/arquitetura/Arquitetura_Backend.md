@@ -236,6 +236,11 @@ pastas diferentes, preservando estabilidade de reindexação dentro do mesmo vau
 de arquivo isolado, o ID legível baseado no nome do arquivo continua válido por compatibilidade
 operacional.
 
+Reindexar uma nota (`reindex_note`) mantém o `note_id`: a raiz da indexação original não é
+guardada, então ela é recuperada comparando o hash do caminho relativo com cada pasta acima do
+arquivo (`find_note_root`). Sem isso, reindexar trocava o id, refazia todos os embeddings e
+deixava a UI apontando para um id que não existia mais.
+
 ### Chunk
 
 - `chunk_id`
@@ -271,7 +276,13 @@ por uma base vetorial local real e persistente.
 
 Na evolução atual do backend:
 
-- o provider de embeddings aceita `chroma-default`
+- o provider de embeddings aceita `chroma-default`. O wrapper usa o `ONNXMiniLM_L6_V2` do Chroma
+  direto e reaproveita a instância: o `DefaultEmbeddingFunction` cria uma nova a cada chamada e
+  recarrega a sessão ONNX (~1,5 s por pergunta e por lote). Um texto só (a pergunta) usa uma
+  segunda instância, com a mesma sessão, que não completa a entrada até 256 tokens: o vetor é
+  idêntico e a inferência fica ~5x mais rápida
+- o app desktop aquece o Chroma e o embedder em segundo plano ao abrir, para a primeira
+  pergunta não pagar o carregamento
 - o provider também aceita modelos locais no formato `sentence-transformer:<model_name>`
 - o benchmark pode sobrescrever o `embedding_model` por CLI para comparações reproduzíveis
 
@@ -302,6 +313,13 @@ de validação cobrindo:
 - queries negativas, positivas e mistas equivalentes às do experimento `09`
 
 ### Execução de benchmark
+
+A comparação (`benchmark compare`, TUI e app) roda em `results/benchmark_compare/<suite>/`, com
+SQLite (`benchmark.sqlite3`) e Chroma próprios. O histórico (`benchmark_queries`) referencia
+notes e chunks, então as notas da suite ficam nesse banco, nunca no corpus do usuário. Antes, as
+notas da suite iam para o SQLite principal sem vetores no Chroma principal: apareciam em Notas e
+no chat, e o Doctor acusava corpus inconsistente. A rodada híbrida reaproveita os vetores que a
+vetorial acabou de gravar (mesmo chunk_id, mesmo embedder), o que não muda nenhuma métrica.
 
 - `experiment_id`
 - `dataset_name`

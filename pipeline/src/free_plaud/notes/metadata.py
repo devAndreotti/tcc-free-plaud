@@ -29,3 +29,14 @@ def build_note_id(path: Path, *, root_path: Path | None = None) -> str:
         return slug
     path_hash = sha256(_relative_path_key(path, root_path).encode('utf-8')).hexdigest()[:10]
     return f'{slug}--{path_hash}'
+
+
+def find_note_root(path: Path, note_id: str) -> Path | None:
+    """Recupera a pasta-raiz que gerou `note_id`, comparando o hash do caminho relativo."""
+    _, sep, path_hash = note_id.rpartition('--')
+    if not sep:
+        return None
+    for root in path.resolve().parents:
+        if len(path_hash) == 10 and sha256(_relative_path_key(path, root).encode('utf-8')).hexdigest().startswith(path_hash):
+            return root
+    return None
