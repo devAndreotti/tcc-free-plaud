@@ -31,7 +31,7 @@ export const TypingIndicator = () => (
       <span className="msg__mark" aria-hidden="true">ep</span>
       <span className="msg__searching">
         <span className="msg__spinner" aria-hidden="true" />
-        Buscando no vault…
+        <span>Buscando no vault…</span>
       </span>
     </div>
   </div>
@@ -114,7 +114,7 @@ const AnswerMeta = ({ ask, copyText }: { ask: AskResult; copyText?: string }) =>
   return (
     <div className="msg__meta mono">
       {parts.map((part, i) => (
-        <span key={i}>{i > 0 && <span className="msg__meta-sep">·</span>}{part}</span>
+        <span key={String(part)}>{i > 0 && <span className="msg__meta-sep">·</span>}{part}</span>
       ))}
       {copyText && (
         <button type="button" className="msg__action" onClick={copy} aria-label="Copiar resposta com as fontes">

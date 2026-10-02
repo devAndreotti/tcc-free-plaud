@@ -30,85 +30,112 @@ function renderInline(text: string): ReactNode[] {
  * Markdown de leitura: frontmatter, títulos, listas, citações, blocos de código e parágrafos.
  * ponytail: subconjunto do Markdown suficiente para notas do vault; tabelas e links viram texto.
  */
+interface MarkdownState {
+  out: ReactNode[];
+  para: string[];
+  list: { ordered: boolean; items: { key: string; text: string }[] } | null;
+  code: string[] | null;
+}
+
+/** Frontmatter do usuário vira uma lista de definição; devolve o resto das linhas. */
+function readFrontmatter(lines: string[]): { node: ReactNode | null; rest: string[] } {
+  const end = lines[0]?.trim() === '---' ? lines.indexOf('---', 1) : -1;
+  if (end <= 0) return { node: null, rest: lines };
+  const pairs = lines.slice(1, end).map((line) => line.split(/:(.*)/s)).filter((p) => p.length > 1 && p[0].trim());
+  const node = pairs.length ? (
+    <dl key="fm" className="reader__fm">
+      {pairs.map(([k, v]) => (
+        <div key={k}><dt>{k.trim()}</dt><dd>{v.trim().replace(/^\[(.*)\]$/, '$1') || '—'}</dd></div>
+      ))}
+    </dl>
+  ) : null;
+  return { node, rest: lines.slice(end + 1) };
+}
+
+function flushPara(s: MarkdownState) {
+  if (s.para.length) s.out.push(<p key={`p${s.out.length}`}>{renderInline(s.para.join(' '))}</p>);
+  s.para = [];
+}
+
+function flushList(s: MarkdownState) {
+  if (!s.list) return;
+  const items = s.list.items.map((item) => <li key={item.key}>{renderInline(item.text)}</li>);
+  s.out.push(s.list.ordered ? <ol key={`l${s.out.length}`}>{items}</ol> : <ul key={`l${s.out.length}`}>{items}</ul>);
+  s.list = null;
+}
+
+function flushBlocks(s: MarkdownState) {
+  flushPara(s);
+  flushList(s);
+}
+
+/** Dentro de um bloco de código, toda linha é literal até o ``` de fechamento. */
+function readCodeLine(s: MarkdownState, line: string, raw: string): boolean {
+  if (!s.code) return false;
+  if (line.startsWith('```')) {
+    s.out.push(<pre key={`c${s.out.length}`}><code>{s.code.join('\n')}</code></pre>);
+    s.code = null;
+  } else {
+    s.code.push(raw);
+  }
+  return true;
+}
+
+function readHeading(s: MarkdownState, line: string, title: string): boolean {
+  const heading = /^(#{1,4})\s(.*)$/.exec(line);
+  if (!heading) return false;
+  flushBlocks(s);
+  const text = heading[2].trim();
+  // O H1 igual ao título já está no cabeçalho do leitor.
+  if (heading[1].length === 1 && s.out.length <= 1 && text === title) return true;
+  const content = renderInline(text);
+  s.out.push(heading[1].length <= 2 ? <h2 key={`h${s.out.length}`}>{content}</h2> : <h3 key={`h${s.out.length}`}>{content}</h3>);
+  return true;
+}
+
+function readListItem(s: MarkdownState, line: string): boolean {
+  const bullet = /^\s*[-*]\s(.*)$/.exec(line);
+  const numbered = bullet ? null : /^\s*\d+[.)]\s(.*)$/.exec(line);
+  const match = bullet ?? numbered;
+  if (!match) return false;
+  flushPara(s);
+  const ordered = Boolean(numbered);
+  if (s.list?.ordered !== ordered) {
+    flushList(s);
+    s.list = { ordered, items: [] };
+  }
+  s.list!.items.push({ key: `li${s.list!.items.length}`, text: match[1].trim() });
+  return true;
+}
+
+function readQuote(s: MarkdownState, line: string): boolean {
+  if (!line.startsWith('>')) return false;
+  flushBlocks(s);
+  s.out.push(<blockquote key={`q${s.out.length}`}>{renderInline(line.replace(/^>\s?/, ''))}</blockquote>);
+  return true;
+}
+
 function renderMarkdown(source: string, title: string): ReactNode[] {
-  const out: ReactNode[] = [];
-  let lines = source.replace(/\r\n/g, '\n').split('\n');
-
-  if (lines[0]?.trim() === '---') {
-    const end = lines.indexOf('---', 1);
-    if (end > 0) {
-      const pairs = lines.slice(1, end).map((line) => line.split(/:(.*)/s)).filter((p) => p.length > 1 && p[0].trim());
-      if (pairs.length) {
-        out.push(
-          <dl key="fm" className="reader__fm">
-            {pairs.map(([k, v]) => (
-              <div key={k}><dt>{k.trim()}</dt><dd>{v.trim().replace(/^\[(.*)\]$/, '$1') || '—'}</dd></div>
-            ))}
-          </dl>
-        );
-      }
-      lines = lines.slice(end + 1);
-    }
-  }
-
-  let para: string[] = [];
-  let list: { ordered: boolean; items: { key: string; text: string }[] } | null = null;
-  let code: string[] | null = null;
-  const flushPara = () => {
-    if (para.length) out.push(<p key={`p${out.length}`}>{renderInline(para.join(' '))}</p>);
-    para = [];
-  };
-  const flushList = () => {
-    if (!list) return;
-    const items = list.items.map((item) => <li key={item.key}>{renderInline(item.text)}</li>);
-    out.push(list.ordered ? <ol key={`l${out.length}`}>{items}</ol> : <ul key={`l${out.length}`}>{items}</ul>);
-    list = null;
-  };
-
-  for (const raw of lines) {
+  const { node, rest } = readFrontmatter(source.replaceAll('\r\n', '\n').split('\n'));
+  const s: MarkdownState = { out: node ? [node] : [], para: [], list: null, code: null };
+  for (const raw of rest) {
     const line = raw.trimEnd();
-    if (code) {
-      if (line.startsWith('```')) {
-        out.push(<pre key={`c${out.length}`}><code>{code.join('\n')}</code></pre>);
-        code = null;
+    if (readCodeLine(s, line, raw)) continue;
+    if (line.startsWith('```')) {
+      flushBlocks(s);
+      s.code = [];
+    } else if (!readHeading(s, line, title) && !readListItem(s, line) && !readQuote(s, line)) {
+      if (line.trim()) {
+        flushList(s);
+        s.para.push(line.trim());
       } else {
-        code.push(raw);
+        flushBlocks(s);
       }
-      continue;
     }
-    if (line.startsWith('```')) { flushPara(); flushList(); code = []; continue; }
-    const heading = /^(#{1,4})\s(.*)$/.exec(line);
-    if (heading) {
-      flushPara(); flushList();
-      const text = heading[2].trim();
-      if (heading[1].length === 1 && out.length <= 1 && text === title) continue;
-      out.push(heading[1].length <= 2
-        ? <h2 key={`h${out.length}`}>{renderInline(text)}</h2>
-        : <h3 key={`h${out.length}`}>{renderInline(text)}</h3>);
-      continue;
-    }
-    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
-    const numbered = /^\s*\d+[.)]\s+(.*)$/.exec(line);
-    if (bullet || numbered) {
-      flushPara();
-      const ordered = Boolean(numbered);
-      if (!list || list.ordered !== ordered) { flushList(); list = { ordered, items: [] }; }
-      list.items.push({ key: `li${list.items.length}`, text: (bullet ?? numbered)![1] });
-      continue;
-    }
-    if (line.startsWith('>')) {
-      flushPara(); flushList();
-      out.push(<blockquote key={`q${out.length}`}>{renderInline(line.replace(/^>\s?/, ''))}</blockquote>);
-      continue;
-    }
-    if (!line.trim()) { flushPara(); flushList(); continue; }
-    flushList();
-    para.push(line.trim());
   }
-  if (code) out.push(<pre key={`c${out.length}`}><code>{(code as string[]).join('\n')}</code></pre>);
-  flushPara();
-  flushList();
-  return out;
+  if (s.code) s.out.push(<pre key={`c${s.out.length}`}><code>{s.code.join('\n')}</code></pre>);
+  flushBlocks(s);
+  return s.out;
 }
 
 /**
@@ -117,7 +144,7 @@ function renderMarkdown(source: string, title: string): ReactNode[] {
  * A leitura mostra só o texto normalizado; sem essa seção, o markdown sem o frontmatter interno.
  */
 function readableMarkdown(source: string): string {
-  const md = source.replace(/\r\n/g, '\n');
+  const md = source.replaceAll('\r\n', '\n');
   const body = md.startsWith('---\n') ? md.slice(md.indexOf('\n---', 4) + 4) : md;
   const start = body.search(/^## Normalized Text\s*$/m);
   if (start < 0) return body;
@@ -176,7 +203,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
               <ChevronRightIcon size={12} />
             </span>
           ))}
-          <b>{crumbs[crumbs.length - 1] ?? detail.title}</b>
+          <b>{crumbs.at(-1) ?? detail.title}</b>
           {copied && <span className="nd__copied">caminho copiado</span>}
         </nav>
 

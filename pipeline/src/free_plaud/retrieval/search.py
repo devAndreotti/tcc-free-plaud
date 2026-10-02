@@ -291,7 +291,7 @@ def _is_low_evidence_open_hit(
         return True
     if high_signal_term_count >= 3 and high_signal_match_count == 0:
         return True
-    return bool(named_terms_present and named_anchor_coverage == 0.0 and hit.term_coverage < 0.34)
+    return bool(named_terms_present and named_anchor_coverage <= 0.0 and hit.term_coverage < 0.34)
 
 
 def open_semantic_search(
