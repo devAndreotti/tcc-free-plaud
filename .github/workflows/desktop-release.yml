@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+# Cada job faz `uv sync` com os extras certos (--extra cpu). Sem isto, o `uv run` seguinte
+# ressincroniza sem extras e troca o torch de CPU pelo do PyPI (com as bibliotecas CUDA).
+env:
+  UV_NO_SYNC: "1"
+
 jobs:
   build-and-release:
     name: Build & Release Desktop (.exe)
@@ -37,7 +42,7 @@ jobs:
 
       - name: Install Python dependencies (with desktop & audio)
         working-directory: pipeline
-        run: uv sync --locked --extra desktop --extra audio
+        run: uv sync --locked --extra desktop --extra audio --extra cpu
 
       - name: Build Desktop Executable
         run: uv run --project pipeline python scripts/build_desktop.py

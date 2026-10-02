@@ -15,9 +15,13 @@ interface NoteDetailViewProps {
 
 /** `código` e **negrito** dentro de uma linha; o React escapa o resto. */
 function renderInline(text: string): ReactNode[] {
-  return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part, i) => {
-    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) return <code key={i}>{part.slice(1, -1)}</code>;
-    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) return <strong key={i}>{part.slice(2, -2)}</strong>;
+  // A chave é a posição do trecho na linha: o texto é estático, não se reordena.
+  let offset = 0;
+  return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part) => {
+    const key = `i${offset}`;
+    offset += part.length;
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) return <code key={key}>{part.slice(1, -1)}</code>;
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) return <strong key={key}>{part.slice(2, -2)}</strong>;
     return part;
   });
 }
@@ -37,8 +41,8 @@ function renderMarkdown(source: string, title: string): ReactNode[] {
       if (pairs.length) {
         out.push(
           <dl key="fm" className="reader__fm">
-            {pairs.map(([k, v], i) => (
-              <div key={i}><dt>{k.trim()}</dt><dd>{v.trim().replace(/^\[(.*)\]$/, '$1') || '—'}</dd></div>
+            {pairs.map(([k, v]) => (
+              <div key={k}><dt>{k.trim()}</dt><dd>{v.trim().replace(/^\[(.*)\]$/, '$1') || '—'}</dd></div>
             ))}
           </dl>
         );
@@ -48,7 +52,7 @@ function renderMarkdown(source: string, title: string): ReactNode[] {
   }
 
   let para: string[] = [];
-  let list: { ordered: boolean; items: string[] } | null = null;
+  let list: { ordered: boolean; items: { key: string; text: string }[] } | null = null;
   let code: string[] | null = null;
   const flushPara = () => {
     if (para.length) out.push(<p key={`p${out.length}`}>{renderInline(para.join(' '))}</p>);
@@ -56,7 +60,7 @@ function renderMarkdown(source: string, title: string): ReactNode[] {
   };
   const flushList = () => {
     if (!list) return;
-    const items = list.items.map((item, i) => <li key={i}>{renderInline(item)}</li>);
+    const items = list.items.map((item) => <li key={item.key}>{renderInline(item.text)}</li>);
     out.push(list.ordered ? <ol key={`l${out.length}`}>{items}</ol> : <ul key={`l${out.length}`}>{items}</ul>);
     list = null;
   };
@@ -73,7 +77,7 @@ function renderMarkdown(source: string, title: string): ReactNode[] {
       continue;
     }
     if (line.startsWith('```')) { flushPara(); flushList(); code = []; continue; }
-    const heading = /^(#{1,4})\s+(.*)$/.exec(line);
+    const heading = /^(#{1,4})\s(.*)$/.exec(line);
     if (heading) {
       flushPara(); flushList();
       const text = heading[2].trim();
@@ -89,7 +93,7 @@ function renderMarkdown(source: string, title: string): ReactNode[] {
       flushPara();
       const ordered = Boolean(numbered);
       if (!list || list.ordered !== ordered) { flushList(); list = { ordered, items: [] }; }
-      list.items.push((bullet ?? numbered)![1]);
+      list.items.push({ key: `li${list.items.length}`, text: (bullet ?? numbered)![1] });
       continue;
     }
     if (line.startsWith('>')) {
@@ -166,8 +170,8 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
     <>
       <div className="nd__bar">
         <nav className="nd__crumbs" aria-label="Local no vault">
-          {crumbs.slice(0, -1).map((part, i) => (
-            <span key={i} className="nd__crumb">
+          {crumbs.slice(0, -1).map((part, depth) => ({ part, path: crumbs.slice(0, depth + 1).join('/') })).map(({ part, path }) => (
+            <span key={path} className="nd__crumb">
               {part}
               <ChevronRightIcon size={12} />
             </span>
@@ -184,7 +188,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
               onChange={(event) => setShowChunks(event.target.checked)}
             />
             <span className="switch__track" aria-hidden="true" />
-            Mostrar chunks
+            <span>Mostrar chunks</span>
           </label>
           <span className="nd__vr" aria-hidden="true" />
           <button type="button" className="btn btn--sm" onClick={onReindex} disabled={busy}>

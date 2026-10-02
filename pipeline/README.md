@@ -77,7 +77,9 @@ FREE_PLAUD_EMBEDDING_DEVICE=cpu
 
 ## CUDA opcional
 
-CPU continua sendo o padrão. Para usar PyTorch CUDA 12.8 com `uv` sem voltar para build CPU no próximo `uv run`:
+CPU continua sendo o padrão. `uv sync --extra cpu` fixa o PyTorch de CPU (é o que o CI e o
+release usam). Os extras `cpu` e `gpu-cu128` são excludentes. Para usar PyTorch CUDA 12.8 com
+`uv` sem voltar para build CPU no próximo `uv run`:
 
 ```bash
 uv sync --extra gpu-cu128
