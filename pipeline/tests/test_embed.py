@@ -118,3 +118,22 @@ def test_get_embedder_rejects_unknown_model() -> None:
         assert 'nao suportado' in str(exc)
     else:
         raise AssertionError('Era esperado ValueError para embedding model nao suportado.')
+
+
+def test_chroma_default_single_text_matches_batch_and_reuses_session() -> None:
+    import os
+
+    import pytest
+    from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2
+
+    model_file = os.path.join(ONNXMiniLM_L6_V2.DOWNLOAD_PATH, ONNXMiniLM_L6_V2.EXTRACTED_FOLDER_NAME, 'model.onnx')
+    if not os.path.exists(model_file):
+        pytest.skip('modelo ONNX do Chroma não baixado nesta máquina')
+
+    embedder = ChromaDefaultEmbedder()
+    question = 'Quando foi a reunião do comitê de arquitetura?'
+    single = embedder.embed([question])[0]
+    batch = embedder.embed([question, 'outro texto qualquer'])[0]
+
+    assert max(abs(a - b) for a, b in zip(single, batch)) < 1e-5
+    assert embedder._single_text_function().model is embedder._embedding_function.model

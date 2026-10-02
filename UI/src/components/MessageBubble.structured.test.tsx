@@ -85,16 +85,27 @@ describe('MessageBubble com resposta estruturada', () => {
           status: 'no_answer',
           no_answer: true,
           answer: null,
-          reason_for_no_answer: 'no_retrieval_hits',
-          limitations: ['Nenhum chunk recuperado contém termos informativos suficientes da pergunta.'],
+          reason_for_no_answer: 'insufficient_hybrid_specificity',
+          limitations: ['Os hits híbridos recuperados não apresentam evidência lexical suficiente.'],
         })}
         onRetry={onRetry}
       />
     );
 
     expect(screen.getByText('Não encontrei isso no vault.')).toBeTruthy();
-    expect(screen.getByText('motivo: no_retrieval_hits')).toBeTruthy();
+    expect(screen.getByText('motivo: insufficient_hybrid_specificity')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Buscar só por palavra-chave' }));
     expect(onRetry).toHaveBeenCalledWith('Como funciona?', 'lexical');
+  });
+
+  it('não oferece palavra-chave quando nenhuma busca achou trecho algum', () => {
+    render(
+      <MessageBubble
+        message={answer({ status: 'no_answer', no_answer: true, answer: null, reason_for_no_answer: 'no_retrieval_hits', limitations: [] })}
+        onRetry={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: 'Buscar só por palavra-chave' })).toBeNull();
   });
 });

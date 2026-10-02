@@ -23,14 +23,14 @@ def _fts_status_to_check(status: str, count: int) -> DoctorCheck:
         return DoctorCheck(
             code='fts',
             status='error',
-            message='FTS5 indisponivel no SQLite atual.',
+            message='FTS5 indisponível no SQLite atual.',
             action='Verifique build do SQLite/Python usado pelo ambiente.',
             details={'fts_status': status, 'fts_chunks_count': count},
         )
     return DoctorCheck(
         code='fts',
         status='warning',
-        message=f'Indice lexical FTS esta {status}.',
+        message=f'Índice lexical FTS está {status}.',
         action='Reindexe ou reconstrua o corpus para sincronizar FTS.',
         details={'fts_status': status, 'fts_chunks_count': count},
     )

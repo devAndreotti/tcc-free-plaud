@@ -130,6 +130,9 @@ A interface desktop segue a linha "instrumento de pesquisa": feita para ler e ve
 - **Sidebar**: recolhida (64 px, ícones com tooltip) ou expandida (232 px, rótulos), com Ctrl+B. Todos os botões da coluna compartilham o mesmo formato. Configurações fica logo abaixo da navegação; recolhida, abre as seções ao passar o mouse. O rodapé mostra a saúde do corpus (Doctor) e o vault monitorado.
 - **Grafo** desenhado em canvas com as cores lidas dos tokens do tema, e redesenhado quando o tema muda. Sem cores fixas nem brilho.
 - **Configurações › Vault** só escolhe a pasta que alimenta o grafo e mostra o tamanho do corpus. Indexar fica na Fila: o botão "Indexar na Fila" leva a pasta escolhida para lá.
+- **Leitura de nota** mostra só a seção "Normalized Text" do `structured_markdown`; o frontmatter interno, o "Summary" (começo do texto) e o "Raw Text" (o texto de novo) ficam de fora. As propriedades da própria nota (tags, autor) aparecem como lista.
+- **Números do corpus** na sidebar se atualizam pelo evento `free-plaud:corpus-changed` (`notifyCorpusChanged`), disparado ao fim de um job, ao indexar um arquivo solto e ao apagar ou reindexar uma nota.
+- **Configurações › IA** mostra modelo, URL, API key, Testar e Listar só para provedores generativos; com o extractive, uma frase explica que ele não usa nada disso.
 - **Primitivas CSS** compartilhadas (`.btn`, `.switch`, `.popover`, `.pill`, `.card`, `.data-table`, `.page-head`) entre Notas, Fila, Benchmark e Configurações.
 
 ### Como chegar na direção visual

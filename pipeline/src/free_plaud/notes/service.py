@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from free_plaud.app.config import Settings, get_settings
 from free_plaud.app.paths import ensure_runtime_dirs
+from free_plaud.notes.metadata import find_note_root
 from free_plaud.providers.embed import Embedder
 from free_plaud.retrieval.models import Chunk
 from free_plaud.storage.sqlite import (
@@ -196,10 +197,11 @@ def reindex_note(
             connection=resolved_connection,
             vector_store=resolved_vector_store,
             embedder=resolved_embedder,
+            source_root=find_note_root(source_path, note_id),
         )
         return NoteReindexResult(
             ok=result.status in {'success', 'unchanged'},
-            note_id=note_id,
+            note_id=result.note_id or note_id,
             status=result.status,
             chunks_indexed=result.chunks_indexed,
             message=result.message,

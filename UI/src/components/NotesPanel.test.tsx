@@ -59,7 +59,7 @@ describe('NotesPanel', () => {
       note_id: 'nota-alpha',
       status: 'success',
       chunks_indexed: 1,
-      message: 'Document indexed successfully.',
+      message: 'Nota indexada.',
     });
   });
 

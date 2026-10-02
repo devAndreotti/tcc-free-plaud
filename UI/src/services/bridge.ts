@@ -771,7 +771,7 @@ const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobS
     commit_mode_resolved: 'microbatch',
     batch_index: status === 'running' ? 1 : 2,
     batch_total: 2,
-    message: status === 'running' ? 'Processando Introdução.md' : 'Indexacao finalizada.',
+    message: status === 'running' ? 'Processando Introdução.md' : 'Indexação finalizada.',
   },
   result: status === 'running' ? null : {
     ok: true,
@@ -783,7 +783,7 @@ const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobS
     skipped_count: 0,
   },
   error_code: null,
-  message: status === 'running' ? 'Processando Introdução.md' : 'Indexacao finalizada.',
+  message: status === 'running' ? 'Processando Introdução.md' : 'Indexação finalizada.',
   last_errors: [],
   cancel_requested: status === 'cancelled',
   files_per_second: 2.08,
@@ -1144,7 +1144,7 @@ export const bridge = {
       settings_presets: [
         {
           key: 'cpu_rapido',
-          label: 'CPU rapido',
+          label: 'CPU rápido',
           description: 'Notebook sem GPU dedicada; usa embeddings Chroma e busca hybrid.',
           values: {
             embedding_model: 'chroma-default',
@@ -1192,7 +1192,7 @@ export const bridge = {
           index: 2,
           key: 'answer_provider',
           label: 'Provedor de resposta',
-          description: 'Quem transforma evidencias recuperadas em resposta final.',
+          description: 'Quem transforma evidências recuperadas em resposta final.',
           group: 'LLM',
           value_type: 'enum',
           layer: 'simple',
@@ -1222,7 +1222,7 @@ export const bridge = {
           index: 4,
           key: 'retrieval_top_k',
           label: 'Chunks por pergunta',
-          description: 'Quantos chunks o Ask recupera para montar evidencias e resposta.',
+          description: 'Quantos chunks o Ask recupera para montar evidências e resposta.',
           group: 'Retrieval',
           value_type: 'int',
           layer: 'advanced',
@@ -1325,7 +1325,7 @@ export const bridge = {
     return [
       {
         key: 'cpu_rapido',
-        label: 'CPU rapido',
+        label: 'CPU rápido',
         description: 'Notebook sem GPU dedicada; usa embeddings Chroma e busca hybrid.',
         values: {
           embedding_model: 'chroma-default',

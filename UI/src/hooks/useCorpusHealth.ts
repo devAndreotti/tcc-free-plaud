@@ -9,9 +9,23 @@ export interface CorpusHealth {
   warningCount: number;
 }
 
-/** Resumo do corpus e do Doctor para a sidebar. Recarrega quando `refreshKey` muda. */
+const CORPUS_CHANGED = 'free-plaud:corpus-changed';
+
+/** Avisa quem mostra números do corpus (a sidebar) que algo foi indexado, reindexado ou apagado. */
+export function notifyCorpusChanged(): void {
+  window.dispatchEvent(new Event(CORPUS_CHANGED));
+}
+
+/** Resumo do corpus e do Doctor para a sidebar. Recarrega quando `refreshKey` muda ou o corpus avisa. */
 export function useCorpusHealth(refreshKey: unknown): CorpusHealth | null {
   const [health, setHealth] = useState<CorpusHealth | null>(null);
+  const [changes, setChanges] = useState(0);
+
+  useEffect(() => {
+    const onChange = () => setChanges((n) => n + 1);
+    window.addEventListener(CORPUS_CHANGED, onChange);
+    return () => window.removeEventListener(CORPUS_CHANGED, onChange);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +47,7 @@ export function useCorpusHealth(refreshKey: unknown): CorpusHealth | null {
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, changes]);
 
   return health;
 }

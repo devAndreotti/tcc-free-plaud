@@ -33,7 +33,7 @@ def _run_check(code: str, func: Callable[[], DoctorCheck]) -> DoctorCheck:
             code=code,
             status="error",
             message=f"Falha ao executar check: {type(exc).__name__}: {exc}",
-            action="Verifique logs, caminhos e dependencias locais.",
+            action="Verifique logs, caminhos e dependências locais.",
             latency_ms=_elapsed_ms(started_at),
         )
     check.latency_ms = _elapsed_ms(started_at)
@@ -45,7 +45,7 @@ def _embedding_model_check(settings: Settings) -> DoctorCheck:
         return DoctorCheck(
             code="settings.embedding_model",
             status="error",
-            message="fake-hash e modelo de teste e nao deve ser usado no app real.",
+            message="fake-hash é modelo de teste e não deve ser usado no app real.",
             action="Use chroma-default ou sentence-transformer:<modelo>.",
         )
     try:
@@ -63,7 +63,7 @@ def _embedding_model_check(settings: Settings) -> DoctorCheck:
     return DoctorCheck(
         code="settings.embedding_model",
         status="ok",
-        message=f"Modelo de embedding valido: {diagnostics.model_name}.",
+        message=f"Modelo de embedding válido: {diagnostics.model_name}.",
         details={"model_name": diagnostics.model_name},
     )
 
@@ -76,7 +76,7 @@ def _embedding_device_check(settings: Settings) -> DoctorCheck:
         return DoctorCheck(
             code="settings.embedding_device",
             status=status,
-            message="Device nao se aplica ao chroma-default.",
+            message="Device não se aplica ao chroma-default.",
             action="Use cpu/auto ou troque para sentence-transformer se quiser CUDA."
             if status == "warning"
             else None,
@@ -89,7 +89,7 @@ def _embedding_device_check(settings: Settings) -> DoctorCheck:
         return DoctorCheck(
             code="settings.embedding_device",
             status="warning",
-            message="Device nao foi avaliado porque o modelo de embedding nao e suportado.",
+            message="Device não foi avaliado porque o modelo de embedding não é suportado.",
             action="Corrija embedding_model primeiro.",
             details={"requested_device": settings.embedding_device},
         )
@@ -128,7 +128,7 @@ def _sqlite_check(
         return DoctorCheck(
             code="sqlite",
             status="ok",
-            message="SQLite acessivel e schema inicializavel.",
+            message="SQLite acessível e schema inicializável.",
             details={"sqlite_path": str(settings.sqlite_path)},
         )
     finally:
@@ -147,7 +147,7 @@ def _chroma_check(
     return DoctorCheck(
         code="chroma",
         status="ok",
-        message="Chroma acessivel.",
+        message="Chroma acessível.",
         details={
             "vector_store_dir": str(settings.vector_store_dir),
             "collection_name": resolved_vector_store.collection_name,
@@ -161,7 +161,7 @@ def _answer_provider_check(settings: Settings) -> DoctorCheck:
         return DoctorCheck(
             code="answer_provider",
             status="ok",
-            message="Provider extractive ativo; nao usa LLM externa.",
+            message="Provider extractive ativo; não usa LLM externa.",
             details={"answer_provider": settings.answer_provider},
         )
     if not settings.answer_model.strip():
@@ -192,7 +192,7 @@ def _api_key_check(settings: Settings) -> DoctorCheck:
         return DoctorCheck(
             code="api_key",
             status="ok",
-            message=f"Provider {settings.answer_provider} nao exige API key.",
+            message=f"Provider {settings.answer_provider} não exige API key.",
             details={"configured": configured, "required": False},
         )
     if configured:

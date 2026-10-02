@@ -23,7 +23,7 @@ def audio_checks(settings) -> list[DoctorCheck]:
             DoctorCheck(
                 code="audio.dependencies",
                 status="warning",
-                message="Optional audio dependencies missing: " + ", ".join(missing),
+                message="Faltam dependências opcionais de áudio: " + ", ".join(missing),
                 action="uv sync --extra audio",
             )
         ]
@@ -39,7 +39,7 @@ def audio_checks(settings) -> list[DoctorCheck]:
             DoctorCheck(
                 code="audio.models",
                 status="ok" if all(ready.values()) else "warning",
-                message="Audio model integrity checked.",
+                message="Integridade dos modelos de áudio verificada.",
                 details=ready,
                 action=None
                 if all(ready.values())
@@ -50,7 +50,7 @@ def audio_checks(settings) -> list[DoctorCheck]:
                 status="warning"
                 if settings.audio_device == "cuda" and not devices
                 else "ok",
-                message="CTranslate2 device availability; inference smoke test still required.",
+                message="Dispositivo do CTranslate2 disponível; falta um teste de inferência.",
                 details={"cuda_devices": devices, "requested": settings.audio_device},
             ),
         ]
@@ -59,6 +59,6 @@ def audio_checks(settings) -> list[DoctorCheck]:
             DoctorCheck(
                 code="audio.runtime",
                 status="error",
-                message=f"Audio diagnostics failed: {exc}",
+                message=f"Falha no diagnóstico de áudio: {exc}",
             )
         ]

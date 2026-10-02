@@ -42,7 +42,7 @@ function renderMarkdown(source: string, title: string): ReactNode[] {
         out.push(
           <dl key="fm" className="reader__fm">
             {pairs.map(([k, v]) => (
-              <div key={k}><dt>{k.trim()}</dt><dd>{v.trim() || '—'}</dd></div>
+              <div key={k}><dt>{k.trim()}</dt><dd>{v.trim().replace(/^\[(.*)\]$/, '$1') || '—'}</dd></div>
             ))}
           </dl>
         );
@@ -109,6 +109,21 @@ function renderMarkdown(source: string, title: string): ReactNode[] {
   flushPara();
   flushList();
   return out;
+}
+
+/**
+ * O backend guarda a nota como: frontmatter interno, "## Summary" (o começo do texto),
+ * "## Normalized Text" (a nota inteira) e "## Raw Text" (a nota inteira de novo).
+ * A leitura mostra só o texto normalizado; sem essa seção, o markdown sem o frontmatter interno.
+ */
+function readableMarkdown(source: string): string {
+  const md = source.replace(/\r\n/g, '\n');
+  const body = md.startsWith('---\n') ? md.slice(md.indexOf('\n---', 4) + 4) : md;
+  const start = body.search(/^## Normalized Text\s*$/m);
+  if (start < 0) return body;
+  const text = body.slice(body.indexOf('\n', start) + 1);
+  const end = text.search(/^## Raw Text\s*$/m);
+  return end < 0 ? text : text.slice(0, end);
 }
 
 export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, onReindex, onDelete }: NoteDetailViewProps) => {
@@ -257,7 +272,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
                 <span>indexada em {created}</span>
               </>
             )}
-            {(detail.tags ?? []).map((tag) => (
+            {(detail.tags ?? []).filter((tag) => tag !== detail.source_type).map((tag) => (
               <span key={tag} className="reader__tag mono">#{tag}</span>
             ))}
           </div>
@@ -279,7 +294,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
               })}
             </ol>
           ) : (
-            <div className="reader__body">{renderMarkdown(detail.structured_markdown ?? '', detail.title)}</div>
+            <div className="reader__body">{renderMarkdown(readableMarkdown(detail.structured_markdown ?? ''), detail.title)}</div>
           )}
         </article>
       </div>

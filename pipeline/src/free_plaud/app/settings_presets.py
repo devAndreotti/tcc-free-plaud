@@ -35,7 +35,7 @@ class SettingPresetApplyResult(SettingPresetPreview):
 SETTING_PRESETS: tuple[SettingPreset, ...] = (
     SettingPreset(
         key='cpu_rapido',
-        label='CPU rapido',
+        label='CPU rápido',
         description='Notebook sem GPU dedicada; usa embeddings Chroma e busca hybrid.',
         values={
             'embedding_model': 'chroma-default',
@@ -49,7 +49,7 @@ SETTING_PRESETS: tuple[SettingPreset, ...] = (
     SettingPreset(
         key='gpu_qualidade',
         label='GPU qualidade',
-        description='GPU NVIDIA com PyTorch CUDA instalado; usa Sentence Transformers multilingue.',
+        description='GPU NVIDIA com PyTorch CUDA instalado; usa Sentence Transformers multilíngue.',
         values={
             'embedding_model': 'sentence-transformer:sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
             'embedding_device': 'cuda',
@@ -59,7 +59,7 @@ SETTING_PRESETS: tuple[SettingPreset, ...] = (
     SettingPreset(
         key='vault_grande',
         label='Vault grande',
-        description='Obsidian grande; prioriza micro-lotes e progresso parcial perguntavel.',
+        description='Obsidian grande; prioriza micro-lotes e progresso parcial perguntável.',
         values={
             'corpus_commit_mode': 'microbatch',
             'corpus_embedding_batch_size': 64,
@@ -69,8 +69,8 @@ SETTING_PRESETS: tuple[SettingPreset, ...] = (
     ),
     SettingPreset(
         key='tcc_reprodutivel',
-        label='TCC reprodutivel',
-        description='Benchmark e resultados comparaveis com provider extractive.',
+        label='TCC reprodutível',
+        description='Benchmark e resultados comparáveis com provider extractive.',
         values={
             'default_ask_strategy': 'hybrid',
             'retrieval_top_k': 5,
