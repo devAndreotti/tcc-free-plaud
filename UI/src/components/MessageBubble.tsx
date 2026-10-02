@@ -38,15 +38,19 @@ export const TypingIndicator = () => (
 );
 
 function renderFormattedContent(text: string) {
-  return text.split('\n').map((line, idx) => {
+  // A chave é a posição da linha no texto: a mensagem é estática, não se reordena.
+  let offset = 0;
+  return text.split('\n').map((line) => {
+    const key = `l${offset}`;
+    offset += line.length + 1;
     if (line.startsWith('- ') || line.startsWith('* ')) {
-      return <div key={idx} className="msg__li">{line.substring(2)}</div>;
+      return <div key={key} className="msg__li">{line.substring(2)}</div>;
     }
-    if (line.startsWith('### ')) return <div key={idx} className="msg__h3">{line.substring(4)}</div>;
-    if (line.startsWith('## ')) return <div key={idx} className="msg__h2">{line.substring(3)}</div>;
-    if (line.startsWith('# ')) return <div key={idx} className="msg__h1">{line.substring(2)}</div>;
-    if (!line.trim()) return <div key={idx} className="msg__gap" />;
-    return <div key={idx}>{line}</div>;
+    if (line.startsWith('### ')) return <div key={key} className="msg__h3">{line.substring(4)}</div>;
+    if (line.startsWith('## ')) return <div key={key} className="msg__h2">{line.substring(3)}</div>;
+    if (line.startsWith('# ')) return <div key={key} className="msg__h1">{line.substring(2)}</div>;
+    if (!line.trim()) return <div key={key} className="msg__gap" />;
+    return <div key={key}>{line}</div>;
   });
 }
 
@@ -226,7 +230,7 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
           <AlertTriangleIcon size={15} />
           <div>
             <b>{ask.limitations.length === 1 ? 'Limitação' : 'Limitações'}</b>
-            {ask.limitations.map((item, i) => <p key={i}>{item}</p>)}
+            {ask.limitations.map((item) => <p key={item}>{item}</p>)}
           </div>
         </div>
       )}
