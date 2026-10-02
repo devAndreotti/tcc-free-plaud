@@ -54,6 +54,8 @@ def _audio_language_options() -> list[SettingOption]:
     return options
 
 
+AUDIO_GROUP = 'Áudio'
+
 SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='embedding_model',
@@ -209,7 +211,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         key='audio_model',
         label='Modelo de transcrição (voz)',
         description='Modelo local usado para transcrever o áudio gravado no chat.',
-        group='Áudio',
+        group=AUDIO_GROUP,
         value_type='enum',
         layer='simple',
         options=[
@@ -224,7 +226,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         key='audio_language',
         label='Idioma da transcrição',
         description='Idioma usado pelo modelo de voz. "Automático" só funciona com modelos faster-whisper.',
-        group='Áudio',
+        group=AUDIO_GROUP,
         value_type='enum',
         layer='simple',
         options=_audio_language_options(),
@@ -234,7 +236,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         key='audio_device',
         label='Device de transcrição',
         description='Onde roda o modelo de voz quando ele suporta device.',
-        group='Áudio',
+        group=AUDIO_GROUP,
         value_type='enum',
         layer='simple',
         options=[SettingOption(value='auto', label='Auto'), SettingOption(value='cpu', label='CPU'), SettingOption(value='cuda', label='CUDA')],

@@ -11,6 +11,9 @@ from free_plaud.providers import embed as embed_provider
 from free_plaud.storage.sqlite import init_sqlite
 from free_plaud.storage.vector import LocalVectorStore
 
+EMBEDDING_MODEL_CHECK = "settings.embedding_model"
+EMBEDDING_DEVICE_CHECK = "settings.embedding_device"
+
 
 def _elapsed_ms(started_at: float) -> int:
     return int((perf_counter() - started_at) * 1000)
@@ -43,7 +46,7 @@ def _run_check(code: str, func: Callable[[], DoctorCheck]) -> DoctorCheck:
 def _embedding_model_check(settings: Settings) -> DoctorCheck:
     if settings.embedding_model == "fake-hash":
         return DoctorCheck(
-            code="settings.embedding_model",
+            code=EMBEDDING_MODEL_CHECK,
             status="error",
             message="fake-hash é modelo de teste e não deve ser usado no app real.",
             action="Use chroma-default ou sentence-transformer:<modelo>.",
@@ -55,13 +58,13 @@ def _embedding_model_check(settings: Settings) -> DoctorCheck:
         )
     except ValueError as exc:
         return DoctorCheck(
-            code="settings.embedding_model",
+            code=EMBEDDING_MODEL_CHECK,
             status="error",
             message=str(exc),
             action="Corrija embedding_model nas settings.",
         )
     return DoctorCheck(
-        code="settings.embedding_model",
+        code=EMBEDDING_MODEL_CHECK,
         status="ok",
         message=f"Modelo de embedding válido: {diagnostics.model_name}.",
         details={"model_name": diagnostics.model_name},
@@ -74,7 +77,7 @@ def _embedding_device_check(settings: Settings) -> DoctorCheck:
             "warning" if settings.embedding_device == "cuda" else "ok"
         )
         return DoctorCheck(
-            code="settings.embedding_device",
+            code=EMBEDDING_DEVICE_CHECK,
             status=status,
             message="Device não se aplica ao chroma-default.",
             action="Use cpu/auto ou troque para sentence-transformer se quiser CUDA."
@@ -87,7 +90,7 @@ def _embedding_device_check(settings: Settings) -> DoctorCheck:
         )
     if not settings.embedding_model.startswith("sentence-transformer:"):
         return DoctorCheck(
-            code="settings.embedding_device",
+            code=EMBEDDING_DEVICE_CHECK,
             status="warning",
             message="Device não foi avaliado porque o modelo de embedding não é suportado.",
             action="Corrija embedding_model primeiro.",
@@ -100,14 +103,14 @@ def _embedding_device_check(settings: Settings) -> DoctorCheck:
         )
     except ValueError as exc:
         return DoctorCheck(
-            code="settings.embedding_device",
+            code=EMBEDDING_DEVICE_CHECK,
             status="error",
             message=str(exc),
             action="Instale PyTorch com CUDA ou selecione embedding_device=cpu/auto.",
             details={"requested_device": settings.embedding_device},
         )
     return DoctorCheck(
-        code="settings.embedding_device",
+        code=EMBEDDING_DEVICE_CHECK,
         status="ok",
         message=diagnostics.message,
         details={

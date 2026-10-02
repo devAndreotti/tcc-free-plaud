@@ -37,6 +37,6 @@ def find_note_root(path: Path, note_id: str) -> Path | None:
     if not sep:
         return None
     for root in path.resolve().parents:
-        if sha256(_relative_path_key(path, root).encode('utf-8')).hexdigest()[:10] == path_hash:
+        if len(path_hash) == 10 and sha256(_relative_path_key(path, root).encode('utf-8')).hexdigest().startswith(path_hash):
             return root
     return None
