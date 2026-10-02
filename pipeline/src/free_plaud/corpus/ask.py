@@ -559,7 +559,7 @@ def _build_corpus_claims(
     return claims
 
 
-def _retrieve_corpus_hits(
+def retrieve_corpus_hits(
     question: str,
     *,
     connection: sqlite3.Connection,
@@ -677,7 +677,7 @@ def answer_corpus_with_citations(
 
     retrieval_started_at = perf_counter()
     valid_chunk_ids = list_chunk_ids(connection)
-    raw_hits, stale_vector_hits_count = _retrieve_corpus_hits(
+    raw_hits, stale_vector_hits_count = retrieve_corpus_hits(
         question,
         connection=connection,
         valid_chunk_ids=valid_chunk_ids,

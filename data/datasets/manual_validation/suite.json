@@ -2,9 +2,34 @@
   "suite_name": "manual-validation-retrieval-suite",
   "cases": [
     {
+      "case_id": "case-01-semver",
+      "document_path": "samples/manual validetion/01_frontmatter_yaml.md",
+      "dataset_path": "data/datasets/manual_validation/01_frontmatter_yaml.json"
+    },
+    {
+      "case_id": "case-02-ingestao",
+      "document_path": "samples/manual validetion/02_codigo_grande_no_inicio.md",
+      "dataset_path": "data/datasets/manual_validation/02_codigo_grande_no_inicio.json"
+    },
+    {
+      "case_id": "case-03-migracao",
+      "document_path": "samples/manual validetion/03_tabela_checklist_headings.md",
+      "dataset_path": "data/datasets/manual_validation/03_tabela_checklist_headings.json"
+    },
+    {
       "case_id": "case-04-ata",
       "document_path": "samples/manual validetion/04_ata_metadados_longos.txt",
       "dataset_path": "data/datasets/manual_validation/04_ata_metadados_longos.json"
+    },
+    {
+      "case_id": "case-05-docker",
+      "document_path": "samples/manual validetion/05_estudo_docker_fragmentado.txt",
+      "dataset_path": "data/datasets/manual_validation/05_estudo_docker_fragmentado.json"
+    },
+    {
+      "case_id": "case-06-ocr",
+      "document_path": "samples/manual validetion/06_ocr_ruido_leve.txt",
+      "dataset_path": "data/datasets/manual_validation/06_ocr_ruido_leve.json"
     },
     {
       "case_id": "case-07-paper",
@@ -17,9 +42,15 @@
       "dataset_path": "data/datasets/manual_validation/08_pdf_problematico_contrato.json"
     },
     {
+      "case_id": "case-09-nota-curta",
+      "document_path": "samples/manual validetion/09_nota_muito_curta.md",
+      "dataset_path": "data/datasets/manual_validation/09_nota_muito_curta.json"
+    },
+    {
       "case_id": "case-10-modelagem",
       "document_path": "samples/manual validetion/10_documento_longo_modelagem_dados.md",
       "dataset_path": "data/datasets/manual_validation/10_documento_longo_modelagem_dados.json"
     }
-  ]
+  ],
+  "negative_dataset_path": "data/datasets/manual_validation/negativas.json"
 }

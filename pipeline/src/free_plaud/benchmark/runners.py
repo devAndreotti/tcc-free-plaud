@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from pathlib import Path
+from statistics import quantiles
 from time import perf_counter
 from typing import Literal
 from uuid import uuid4
@@ -13,10 +14,13 @@ from free_plaud.benchmark.datasets import (
     load_benchmark_dataset,
 )
 from free_plaud.benchmark.metrics import (
+    abstention_metrics,
+    bootstrap_ci,
     mean_reciprocal_rank,
     ndcg_at_k,
     recall_at_k_from_ranks,
 )
+from free_plaud.corpus.ask import answer_corpus_with_citations, retrieve_corpus_hits
 from free_plaud.ingest.loaders import load_document
 from free_plaud.notes.schemas import Note
 from free_plaud.notes.structurer import structure_document
@@ -35,12 +39,16 @@ from free_plaud.storage.models import BenchmarkQueryRecord, BenchmarkRunRecord
 from free_plaud.storage.sqlite import (
     insert_benchmark_query,
     insert_benchmark_run,
+    list_chunk_ids,
     replace_chunks_for_note,
     upsert_note,
 )
 from free_plaud.storage.vector import LocalVectorStore
 
 PIPELINE_VERSION = 'pipeline-0.7.0'
+STRATEGIES: tuple[Literal['lexical', 'vector', 'hybrid'], ...] = ('lexical', 'vector', 'hybrid')
+# A passada no corpus busca 10 trechos: com o top_k do chat (3), Recall@5 e @10 repetiriam o @3.
+CORPUS_RETRIEVAL_DEPTH = 10
 
 
 class BenchmarkSettingsSnapshot(BaseModel):
@@ -67,6 +75,9 @@ class BenchmarkQueryResult(BaseModel):
     hit_at_k: int
     reciprocal_rank: float
     latency_ms: int
+    category: str | None = None
+    # Só na passada no corpus: o chat (extrativo) respondeu ou se absteve.
+    answered: bool | None = None
 
 
 class BenchmarkRunResult(BaseModel):
@@ -99,6 +110,13 @@ class BenchmarkStrategySummary(BaseModel):
     ndcg_at_10: float
     duration_ms: int
     avg_query_latency_ms: float
+    p50_query_latency_ms: float = 0.0
+    p95_query_latency_ms: float = 0.0
+    # Intervalo bootstrap de 95% da média: [inferior, superior].
+    mrr_ci: list[float] | None = None
+    recall_at_5_ci: list[float] | None = None
+    # Decisão de responder/abster-se do chat; só na passada no corpus.
+    abstention: dict[str, float] | None = None
 
 
 class BenchmarkCaseComparisonResult(BaseModel):
@@ -112,6 +130,17 @@ class BenchmarkCaseComparisonResult(BaseModel):
     hybrid: BenchmarkRunResult
 
 
+class BenchmarkCorpusResult(BaseModel):
+    """Todas as notas da suite num corpus só, buscadas como o chat busca (sem filtro por nota)."""
+
+    note_count: int
+    positive_count: int
+    negative_count: int
+    retrieval_depth: int
+    summaries: dict[str, BenchmarkStrategySummary]
+    queries: dict[str, list[BenchmarkQueryResult]]
+
+
 class BenchmarkComparisonResult(BaseModel):
     comparison_id: str
     suite_name: str
@@ -123,6 +152,7 @@ class BenchmarkComparisonResult(BaseModel):
     settings_snapshot: BenchmarkSettingsSnapshot | None = None
     summaries: dict[str, BenchmarkStrategySummary]
     cases: list[BenchmarkCaseComparisonResult]
+    corpus: BenchmarkCorpusResult | None = None
     started_at: datetime
     finished_at: datetime
     duration_ms: int
@@ -183,20 +213,50 @@ def _run_query(sample: BenchmarkSample, hits: list[SearchHit], latency_ms: int) 
     )
 
 
-def _summarize_strategy(strategy: str, runs: list[BenchmarkRunResult]) -> BenchmarkStrategySummary:
-    ranks = [query.relevant_rank for run in runs for query in run.queries]
-    query_latencies = [query.latency_ms for run in runs for query in run.queries]
+def _percentile(values: list[int], percent: int) -> float:
+    if len(values) < 2:
+        return float(values[0]) if values else 0.0
+    return quantiles(values, n=100, method='inclusive')[percent - 1]
+
+
+def _ci(values: list[float]) -> list[float]:
+    interval = bootstrap_ci(values)
+    return [interval['lower'], interval['upper']]
+
+
+def _summarize_queries(
+    strategy: str,
+    queries: list[BenchmarkQueryResult],
+    *,
+    case_count: int,
+    duration_ms: int,
+) -> BenchmarkStrategySummary:
+    ranks = [query.relevant_rank for query in queries]
+    latencies = [query.latency_ms for query in queries]
     return BenchmarkStrategySummary(
         strategy=strategy,
-        case_count=len(runs),
+        case_count=case_count,
         query_count=len(ranks),
         mrr=mean_reciprocal_rank(ranks),
         recall_at_3=recall_at_k_from_ranks(ranks, 3),
         recall_at_5=recall_at_k_from_ranks(ranks, 5),
         recall_at_10=recall_at_k_from_ranks(ranks, 10),
         ndcg_at_10=ndcg_at_k(ranks, 10),
+        duration_ms=duration_ms,
+        avg_query_latency_ms=(sum(latencies) / len(latencies)) if latencies else 0.0,
+        p50_query_latency_ms=_percentile(latencies, 50),
+        p95_query_latency_ms=_percentile(latencies, 95),
+        mrr_ci=_ci([query.reciprocal_rank for query in queries]),
+        recall_at_5_ci=_ci([1.0 if rank is not None and rank <= 5 else 0.0 for rank in ranks]),
+    )
+
+
+def _summarize_strategy(strategy: str, runs: list[BenchmarkRunResult]) -> BenchmarkStrategySummary:
+    return _summarize_queries(
+        strategy,
+        [query for run in runs for query in run.queries],
+        case_count=len(runs),
         duration_ms=sum(run.duration_ms for run in runs),
-        avg_query_latency_ms=(sum(query_latencies) / len(query_latencies)) if query_latencies else 0.0,
     )
 
 
@@ -319,6 +379,102 @@ def run_benchmark(
     return run_result
 
 
+def run_corpus_benchmark(
+    cases: list[tuple[Note, BenchmarkDataset]],
+    negatives: list[BenchmarkSample],
+    *,
+    connection,
+    vector_store: LocalVectorStore,
+    embedder: Embedder,
+    top_k: int,
+) -> BenchmarkCorpusResult:
+    """Mede o cenário do chat: todas as notas num corpus só, sem filtro por nota.
+
+    Os rankings vêm de `retrieve_corpus_hits`, a mesma busca do chat, com profundidade 10. Um
+    trecho só conta como relevante se for da nota do caso, então outra nota com os mesmos termos
+    é erro. A decisão de responder ou se abster vem de `answer_corpus_with_citations` sem provedor
+    gerativo (extrativo, determinístico), e as negativas medem se o chat se abstém quando o corpus
+    não tem a resposta. Espera as notas já gravadas em `connection` e `vector_store`.
+    """
+    # ponytail: notas de uma versão antiga da suite seguem no SQLite da comparação como distratoras
+    # na busca lexical; limpar o banco por rodada se a suite passar a perder casos com frequência.
+    valid_chunk_ids = list_chunk_ids(connection)
+    labeled = [
+        (sample.model_copy(update={'expected_note_id': sample.expected_note_id or note.note_id}), False)
+        for note, dataset in cases
+        for sample in dataset.samples
+    ] + [(sample, True) for sample in negatives]
+
+    summaries: dict[str, BenchmarkStrategySummary] = {}
+    queries_by_strategy: dict[str, list[BenchmarkQueryResult]] = {}
+    for strategy in STRATEGIES:
+        started = perf_counter()
+        positives: list[BenchmarkQueryResult] = []
+        rows: list[BenchmarkQueryResult] = []
+        predicted_abstain: list[bool] = []
+        gold_abstain: list[bool] = []
+        for sample, is_negative in labeled:
+            query_started = perf_counter()
+            hits, _ = retrieve_corpus_hits(
+                sample.question,
+                connection=connection,
+                valid_chunk_ids=valid_chunk_ids,
+                top_k=CORPUS_RETRIEVAL_DEPTH,
+                strategy=strategy,
+                vector_store=vector_store,
+                embedder=embedder,
+            )
+            latency_ms = int((perf_counter() - query_started) * 1000)
+            response = answer_corpus_with_citations(
+                sample.question,
+                connection=connection,
+                vector_store=vector_store,
+                embedder=embedder,
+                strategy=strategy,
+                top_k=top_k,
+            )
+            answered = not response.no_answer
+            if is_negative:
+                row = BenchmarkQueryResult(
+                    sample_id=sample.sample_id,
+                    question=sample.question,
+                    retrieved=_retrieved_payload(hits),
+                    hit_at_k=0,
+                    reciprocal_rank=0.0,
+                    latency_ms=latency_ms,
+                )
+            else:
+                row = _run_query(sample, hits, latency_ms)
+                positives.append(row)
+            row.category = 'negativa' if is_negative else sample.category
+            row.answered = answered
+            rows.append(row)
+            predicted_abstain.append(not answered)
+            gold_abstain.append(is_negative)
+
+        summary = _summarize_queries(
+            strategy,
+            positives,
+            case_count=len(cases),
+            duration_ms=int((perf_counter() - started) * 1000),
+        )
+        summary.abstention = abstention_metrics(predicted_abstain, gold_abstain)
+        summary.abstention['answered_positive_rate'] = (
+            sum(1 for row in positives if row.answered) / len(positives) if positives else 0.0
+        )
+        summaries[strategy] = summary
+        queries_by_strategy[strategy] = rows
+
+    return BenchmarkCorpusResult(
+        note_count=len(cases),
+        positive_count=sum(1 for _, is_negative in labeled if not is_negative),
+        negative_count=len(negatives),
+        retrieval_depth=CORPUS_RETRIEVAL_DEPTH,
+        summaries=summaries,
+        queries=queries_by_strategy,
+    )
+
+
 def benchmark_compare_dir(results_dir: Path, suite_name: str) -> Path:
     """Pasta da comparação, com SQLite e Chroma próprios, separados do corpus do usuário.
 
@@ -355,12 +511,14 @@ def compare_benchmark_suite(
     lexical_runs: list[BenchmarkRunResult] = []
     vector_runs: list[BenchmarkRunResult] = []
     hybrid_runs: list[BenchmarkRunResult] = []
+    corpus_cases: list[tuple[Note, BenchmarkDataset]] = []
 
     for case in suite.cases:
         document_path = workspace_dir / case.document_path
         dataset_path = workspace_dir / case.dataset_path
         note = structure_document(load_document(document_path))
         dataset = load_benchmark_dataset(dataset_path)
+        corpus_cases.append((note, dataset))
 
         lexical_result = run_benchmark(
             note,
@@ -422,6 +580,22 @@ def compare_benchmark_suite(
             )
         )
 
+    corpus = None
+    if connection is not None:  # as rodadas por nota acabaram de gravar todas as notas no SQLite e no Chroma
+        negatives = (
+            load_benchmark_dataset(workspace_dir / suite.negative_dataset_path).samples
+            if suite.negative_dataset_path
+            else []
+        )
+        corpus = run_corpus_benchmark(
+            corpus_cases,
+            negatives,
+            connection=connection,
+            vector_store=vector_store,
+            embedder=embedder,
+            top_k=top_k,
+        )
+
     finished_at = datetime.now(UTC)
     duration_ms = int((perf_counter() - started_perf) * 1000)
     return BenchmarkComparisonResult(
@@ -445,6 +619,7 @@ def compare_benchmark_suite(
             'hybrid': _summarize_strategy('hybrid', hybrid_runs),
         },
         cases=case_results,
+        corpus=corpus,
         started_at=started_at,
         finished_at=finished_at,
         duration_ms=duration_ms,

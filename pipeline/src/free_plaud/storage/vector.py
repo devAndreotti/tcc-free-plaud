@@ -2,6 +2,7 @@ from pathlib import Path
 
 import chromadb
 from chromadb.api.models.Collection import Collection
+from chromadb.config import Settings as ChromaSettings
 from chromadb.errors import NotFoundError
 
 from free_plaud.retrieval.models import Chunk, SearchHit
@@ -37,7 +38,10 @@ class LocalVectorStore:
         self.base_dir = base_dir
         self.collection_name = collection_name
         self.base_dir.mkdir(parents=True, exist_ok=True)
-        self._client = chromadb.PersistentClient(path=str(self.base_dir))
+        # Telemetria anônima do Chroma vem ligada por padrão; o app é local e não manda nada para fora.
+        self._client = chromadb.PersistentClient(
+            path=str(self.base_dir), settings=ChromaSettings(anonymized_telemetry=False)
+        )
 
     def _collection(self) -> Collection:
         return self._client.get_or_create_collection(

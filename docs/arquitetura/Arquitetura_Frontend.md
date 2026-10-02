@@ -220,7 +220,10 @@ Na evolução atual, a UI React dentro do PyWebView deixa de responder apenas mo
   o motivo do backend. A estratégia (híbrida, vetorial ou lexical) é escolhida por pergunta. O
   `sendMessage` em texto continua como fallback para backends antigos e para os mocks de E2E
 - o Benchmark abre com uma frase que responde qual estratégia usar (maior Recall@5, com desempate
-  por MRR e latência), destaca a melhor de cada coluna e desenha Recall@k com eixo de 0 a 1
+  por MRR e latência), destaca a melhor de cada coluna e desenha Recall@k com eixo de 0 a 1.
+  Abre no escopo "Corpus inteiro" (a busca do chat sobre todas as notas da suite), com intervalo de
+  confiança sob o MRR, nDCG@10, latência p50/p95 e o cartão "Responder ou se abster"; "Por
+  documento" mostra a busca restrita à nota de cada pergunta
 - settings de frontend, TUI e menu terminal passam a consumir o catálogo canônico de
   `free_plaud.app.settings_catalog`, evitando rótulos divergentes para `top_k`,
   `chunk_size`, `overlap`, provider, device e segredo local

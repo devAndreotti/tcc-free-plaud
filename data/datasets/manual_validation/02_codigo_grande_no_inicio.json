@@ -1,0 +1,43 @@
+{
+  "dataset_name": "manual-validation-02-codigo-grande-no-inicio",
+  "samples": [
+    {
+      "sample_id": "ingest-01",
+      "question": "Quantos bytes do arquivo sao usados para calcular o file_hash?",
+      "expected_note_id": "02-codigo-grande-no-inicio",
+      "expected_terms": [
+        "primeiros 1.024 bytes"
+      ],
+      "expected_ref": "Texto após o código"
+    },
+    {
+      "sample_id": "ingest-02",
+      "question": "Por que o note_id nao usa o nome do arquivo?",
+      "expected_note_id": "02-codigo-grande-no-inicio",
+      "expected_terms": [
+        "renomear um arquivo",
+        "referências externas"
+      ],
+      "expected_ref": "Por que o note_id não usa o nome do arquivo"
+    },
+    {
+      "sample_id": "ingest-03",
+      "question": "O que acontece quando dois arquivos tem conteudo identico?",
+      "expected_note_id": "02-codigo-grande-no-inicio",
+      "expected_terms": [
+        "conteúdo idêntico",
+        "deduplicação automática"
+      ],
+      "expected_ref": "Por que o note_id não usa o nome do arquivo"
+    },
+    {
+      "sample_id": "ingest-04",
+      "question": "Qual biblioteca detecta o encoding do arquivo?",
+      "expected_note_id": "02-codigo-grande-no-inicio",
+      "expected_terms": [
+        "chardet.detect"
+      ],
+      "expected_ref": "Código: detect_encoding"
+    }
+  ]
+}

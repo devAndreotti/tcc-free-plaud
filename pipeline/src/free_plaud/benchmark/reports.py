@@ -129,4 +129,23 @@ def export_benchmark_comparison_csv(result: BenchmarkComparisonResult, path: Pat
                         **settings_snapshot,
                     }
                 )
+        if result.corpus is not None:  # uma linha por estratégia na busca sobre o corpus inteiro
+            for strategy, summary in result.corpus.summaries.items():
+                writer.writerow(
+                    {
+                        'comparison_id': result.comparison_id,
+                        'suite_name': result.suite_name,
+                        'case_id': 'corpus',
+                        'strategy': strategy,
+                        'query_count': summary.query_count,
+                        'mrr': summary.mrr,
+                        'recall_at_3': summary.recall_at_3,
+                        'recall_at_5': summary.recall_at_5,
+                        'recall_at_10': summary.recall_at_10,
+                        'ndcg_at_10': summary.ndcg_at_10,
+                        'duration_ms': summary.duration_ms,
+                        'avg_query_latency_ms': summary.avg_query_latency_ms,
+                        **settings_snapshot,
+                    }
+                )
     return path

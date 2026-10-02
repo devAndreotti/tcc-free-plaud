@@ -39,6 +39,8 @@ class BenchmarkSuite(BaseModel):
 
     suite_name: str
     cases: list[BenchmarkSuiteCase]
+    # Perguntas sem resposta em nenhum documento (category 'negativa'): o chat deveria se abster.
+    negative_dataset_path: Path | None = None
 
 
 def load_benchmark_dataset(path: Path) -> BenchmarkDataset:
