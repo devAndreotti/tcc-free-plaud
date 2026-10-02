@@ -165,3 +165,30 @@ describe('ChatInput - gravação de áudio', () => {
     await screen.findByRole('button', { name: 'Gravar áudio' });
   });
 });
+
+describe('ChatInput - estratégia de busca', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('troca a estratégia pelo menu e fecha com Esc ou clique fora', async () => {
+    const user = userEvent.setup();
+    const onStrategyChange = vi.fn();
+    render(<ChatInput onSendMessage={vi.fn()} strategy="hybrid" onStrategyChange={onStrategyChange} />);
+
+    const chip = screen.getByRole('button', { name: 'Estratégia de busca: Híbrida' });
+    await user.click(chip);
+    expect(screen.getByRole('menuitemradio', { name: /Híbrida/ }).getAttribute('aria-checked')).toBe('true');
+    await user.click(screen.getByRole('menuitemradio', { name: /Vetorial/ }));
+    expect(onStrategyChange).toHaveBeenCalledWith('vector');
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    await user.click(chip);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    await user.click(chip);
+    await user.click(document.body);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+});

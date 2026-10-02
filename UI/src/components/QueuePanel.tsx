@@ -265,7 +265,7 @@ const QueuePanel = ({ onOpenSettings }: QueuePanelProps) => {
               disabled={!folderPath && !watcherActive}
             />
             <span className="switch__track" aria-hidden="true" />
-            Monitorar pasta
+            <span>Monitorar pasta</span>
           </label>
         </div>
       </header>
