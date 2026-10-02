@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
-import { bridge, type WatcherIngestionEvent } from '../services/bridge';
+import { bridge, type DroppedFileEvent, type WatcherIngestionEvent } from '../services/bridge';
 import { FileIcon, XIcon } from './Icons';
 
 /** Extensões de arquivo aceitas pela dropzone (áudio, PDF, texto). */
@@ -11,7 +11,7 @@ const isAccepted = (fileName: string) =>
 interface DropzoneFile {
   id: string;
   name: string;
-  status: 'pending' | 'indexed' | 'failed';
+  status: 'indexing' | 'indexed' | 'unchanged' | 'failed';
   message: string | null;
 }
 
@@ -30,12 +30,29 @@ interface DropzoneProps {
 }
 
 const POLL_INTERVAL_MS = 1500;
+// O caminho do arquivo chega ao Python por outro canal, um instante depois do drop no JS.
+const ENQUEUE_RETRIES = 5;
+const ENQUEUE_RETRY_MS = 300;
+const NO_PATH_MESSAGE = 'O caminho do arquivo não chegou ao backend. Soltar para indexar só funciona no app desktop.';
 
 const STATUS_LABEL: Record<DropzoneFile['status'], { label: string; tone: string }> = {
-  pending: { label: 'aguardando', tone: '' },
+  indexing: { label: 'indexando', tone: ' pill--accent' },
   indexed: { label: 'indexado', tone: ' pill--ok' },
+  unchanged: { label: 'sem mudança', tone: '' },
   failed: { label: 'falhou', tone: ' pill--err' },
 };
+
+const dropMessage = (event: DroppedFileEvent): string => {
+  if (event.status === 'indexed') return `${event.name} entrou no corpus (${event.chunks} chunks).`;
+  if (event.status === 'unchanged') return `${event.name} já estava indexado, sem mudança.`;
+  return `Falha ao indexar ${event.name}: ${event.message ?? 'erro desconhecido'}`;
+};
+
+const dropToast = (event: DroppedFileEvent): DropzoneToast => ({
+  id: `drop-${event.name}-${Date.now()}`,
+  status: event.status === 'failed' ? 'failed' : 'success',
+  message: dropMessage(event),
+});
 
 /** Área de drag-and-drop em lote com progresso de indexação em tempo real. */
 const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
@@ -73,19 +90,74 @@ const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
     return () => window.clearInterval(interval);
   }, [watchDirectory, applyWatcherEvent]);
 
-  const addDroppedFiles = useCallback((fileList: FileList) => {
-    const accepted = Array.from(fileList).filter((file) => isAccepted(file.name));
-    if (accepted.length === 0) return;
-    setFiles((prev) => [
-      ...accepted.map((file) => ({
-        id: `${file.name}-${file.size}-${Date.now()}`,
-        name: file.name,
-        status: 'pending' as const,
-        message: null,
-      })),
-      ...prev,
-    ]);
+  const markFailed = useCallback((names: string[], message: string) => {
+    setFiles((prev) =>
+      prev.map((file) =>
+        file.status === 'indexing' && names.includes(file.name) ? { ...file, status: 'failed', message } : file
+      )
+    );
   }, []);
+
+  const requestIndexing = useCallback(
+    async (names: string[]): Promise<void> => {
+      let pending = names;
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          ({ missing: pending } = await bridge.indexDroppedFiles(pending));
+        } catch (error) {
+          markFailed(pending, error instanceof Error ? error.message : 'Falha ao pedir a indexação.');
+          return;
+        }
+        if (pending.length === 0) return;
+        if (attempt === ENQUEUE_RETRIES) break;
+        await new Promise((resolve) => window.setTimeout(resolve, ENQUEUE_RETRY_MS));
+      }
+      markFailed(pending, NO_PATH_MESSAGE);
+    },
+    [markFailed]
+  );
+
+  const applyDropEvent = useCallback(
+    (event: DroppedFileEvent) => {
+      setFiles((prev) => {
+        const index = prev.findIndex((file) => file.status === 'indexing' && file.name === event.name);
+        if (index < 0) return prev;
+        const next = [...prev];
+        next[index] = { ...next[index], status: event.status, message: event.message };
+        return next;
+      });
+      onToast?.(dropToast(event));
+    },
+    [onToast]
+  );
+
+  const isIndexing = files.some((file) => file.status === 'indexing');
+
+  useEffect(() => {
+    if (!isIndexing) return undefined;
+    const interval = window.setInterval(() => {
+      void bridge.pollDroppedFiles().then((events) => events.forEach((event) => applyDropEvent(event)));
+    }, POLL_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [isIndexing, applyDropEvent]);
+
+  const addDroppedFiles = useCallback(
+    (fileList: FileList) => {
+      const accepted = Array.from(fileList).filter((file) => isAccepted(file.name));
+      if (accepted.length === 0) return;
+      setFiles((prev) => [
+        ...accepted.map((file) => ({
+          id: `${file.name}-${file.size}-${Date.now()}`,
+          name: file.name,
+          status: 'indexing' as const,
+          message: null,
+        })),
+        ...prev,
+      ]);
+      void requestIndexing(accepted.map((file) => file.name));
+    },
+    [requestIndexing]
+  );
 
   const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -130,8 +202,8 @@ const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
       <div className="dropzone__head">
         <FileIcon size={18} className="dropzone__icon" />
         <p className="dropzone__hint">
-          <b>Arraste áudios, PDFs ou textos aqui</b>
-          <span>Com "Monitorar pasta" ligado, o que o watcher indexar aparece nesta lista.</span>
+          <b>Arraste áudios, PDFs ou textos aqui para indexar</b>
+          <span>Cada arquivo entra no corpus sem ser copiado nem alterado.</span>
         </p>
       </div>
 

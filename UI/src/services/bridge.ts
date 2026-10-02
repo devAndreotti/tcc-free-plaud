@@ -40,6 +40,22 @@ export interface WatcherStatus {
   directory: string | null;
 }
 
+/** Resultado da indexação de um arquivo solto na área de soltar da Fila. */
+export interface DroppedFileEvent {
+  name: string;
+  source_path: string;
+  status: 'indexed' | 'unchanged' | 'failed';
+  chunks: number;
+  error_code: string | null;
+  message: string | null;
+}
+
+/** Quais nomes entraram na fila e quais ainda não tinham caminho conhecido pelo backend. */
+export interface DroppedFilesEnqueueResult {
+  queued: string[];
+  missing: string[];
+}
+
 export interface WatcherIngestionEvent {
   ingestion_id: string;
   correlation_id: string;
@@ -445,6 +461,12 @@ interface PythonApi {
 
   /** Drena eventos de ingestao capturados pelo watcher desde a ultima consulta. */
   pollWatcherEvents?: () => Promise<WatcherIngestionEvent[]>;
+
+  /** Indexa no corpus os arquivos soltos na área de soltar (pelo nome; o caminho fica no Python). */
+  indexDroppedFiles?: (names: string[]) => Promise<DroppedFilesEnqueueResult>;
+
+  /** Drena os resultados da indexação de arquivos soltos. */
+  pollDroppedFiles?: () => Promise<DroppedFileEvent[]>;
 
   /** Inicia job assíncrono de indexação de pasta. */
   startIndexJob?: (folderPath: string, rebuild?: boolean) => Promise<IndexJobSnapshot>;
@@ -1086,6 +1108,21 @@ export const bridge = {
   pollWatcherEvents: async (): Promise<WatcherIngestionEvent[]> => {
     if (isDesktopApp() && window.pywebview?.api.pollWatcherEvents) {
       return window.pywebview.api.pollWatcherEvents();
+    }
+    return [];
+  },
+
+  indexDroppedFiles: async (names: string[]): Promise<DroppedFilesEnqueueResult> => {
+    if (isDesktopApp() && window.pywebview?.api.indexDroppedFiles) {
+      return window.pywebview.api.indexDroppedFiles(names);
+    }
+    // Fora do app desktop o navegador não expõe o caminho do arquivo.
+    return { queued: [], missing: names };
+  },
+
+  pollDroppedFiles: async (): Promise<DroppedFileEvent[]> => {
+    if (isDesktopApp() && window.pywebview?.api.pollDroppedFiles) {
+      return window.pywebview.api.pollDroppedFiles();
     }
     return [];
   },

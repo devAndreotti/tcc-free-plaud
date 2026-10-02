@@ -109,6 +109,8 @@ describe('isDesktopApp (lazy PyWebView detection)', () => {
     await bridge.stopWatcher();
     await bridge.getWatcherStatus();
     await bridge.pollWatcherEvents();
+    await bridge.indexDroppedFiles(['nota.md']);
+    await bridge.pollDroppedFiles();
     await bridge.getBackendSettings();
     await bridge.getDoctor();
     await bridge.listSettingsPresets();
@@ -148,6 +150,8 @@ describe('isDesktopApp (lazy PyWebView detection)', () => {
       'stopWatcher',
       'getWatcherStatus',
       'pollWatcherEvents',
+      'indexDroppedFiles',
+      'pollDroppedFiles',
       'getBackendSettings',
       'getDoctor',
       'listSettingsPresets',
