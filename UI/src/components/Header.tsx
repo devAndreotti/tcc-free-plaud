@@ -1,5 +1,5 @@
-import { XIcon } from './Icons';
-import SettingsModal from './SettingsModal';
+import { GraphIcon, PlusIcon, XIcon } from './Icons';
+import SettingsModal, { type SettingsTab } from './SettingsModal';
 
 // Dados de uma aba aberta
 export interface Tab {
@@ -14,8 +14,11 @@ interface HeaderProps {
   activeTabId: string | null;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
+  onNewTab: () => void;
   isSettingsOpen: boolean;
+  settingsTab?: SettingsTab;
   onCloseSettings: () => void;
+  onOpenQueue: () => void;
   isGraphPanelOpen: boolean;
   onToggleGraphPanel: () => void;
 }
@@ -38,36 +41,17 @@ const ChatTabIcon = () => (
   </svg>
 );
 
-// Ícone de grafo/rede para o botão fixo
-const GraphIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={14}
-    height={14}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <circle cx="18" cy="5" r="3" />
-    <circle cx="6" cy="12" r="3" />
-    <circle cx="18" cy="19" r="3" />
-    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-  </svg>
-);
-
 // Cabeçalho da aplicação — barra de abas ao estilo editor/browser
 const Header = ({
   tabs,
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onNewTab,
   isSettingsOpen,
+  settingsTab,
   onCloseSettings,
+  onOpenQueue,
   isGraphPanelOpen,
   onToggleGraphPanel,
 }: HeaderProps) => {
@@ -113,6 +97,17 @@ const Header = ({
           })}
         </div>
 
+        <button
+          type="button"
+          id="btn-new-tab"
+          className="tab-bar__new"
+          aria-label="Nova conversa"
+          title="Nova conversa"
+          onClick={onNewTab}
+        >
+          <PlusIcon size={15} />
+        </button>
+
         {/* Área vazia após as abas — droppable / espaço livre */}
         <div className="tab-bar__spacer" aria-hidden="true" />
 
@@ -127,7 +122,7 @@ const Header = ({
             aria-controls="graph-panel"
             onClick={onToggleGraphPanel}
           >
-            <GraphIcon />
+            <GraphIcon size={14} />
             <span>Grafos</span>
           </button>
         )}
@@ -137,6 +132,8 @@ const Header = ({
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={onCloseSettings}
+        initialTab={settingsTab}
+        onOpenQueue={onOpenQueue}
       />
     </>
   );

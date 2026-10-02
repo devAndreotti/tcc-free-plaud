@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { DropzoneToast } from './Dropzone';
+import { CheckCircleIcon, XCircleIcon, XIcon } from './Icons';
 
 const AUTO_DISMISS_MS = 4000;
 
@@ -24,14 +25,15 @@ const ToastStack = ({ toasts, onDismiss }: ToastStackProps) => {
     <div className="toast-stack" role="status" aria-live="polite">
       {toasts.map((toast) => (
         <div key={toast.id} className={`toast toast--${toast.status}`}>
+          {toast.status === 'success' ? <CheckCircleIcon size={15} /> : <XCircleIcon size={15} />}
           <span className="toast__message">{toast.message}</span>
           <button
             type="button"
-            className="toast__close"
+            className="btn-icon toast__close"
             onClick={() => onDismiss(toast.id)}
             aria-label="Fechar notificação"
           >
-            ×
+            <XIcon size={12} />
           </button>
         </div>
       ))}

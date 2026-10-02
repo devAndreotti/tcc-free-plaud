@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { MarkdownNode } from '../hooks/useVault';
+import { GraphIcon } from './Icons';
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
@@ -38,11 +39,17 @@ const CENTER_PULL   = 0.011;
 const EDGE_REST_LEN = 85;
 const MAX_ITER      = 280;
 
-const COLOR_BG    = '#1a1a1f';
-const COLOR_EDGE  = 'rgba(180,180,180,0.22)';
-const COLOR_NODE  = 'rgba(210,210,215,0.88)';
-const COLOR_HUB   = '#4ade80';
-const COLOR_HOVER = '#a78bfa';
+// Cores vêm dos tokens do tema (index.css); o fundo é o do próprio painel.
+function themeColors(el: Element) {
+  const css = getComputedStyle(el);
+  const v = (name: string) => css.getPropertyValue(name).trim();
+  return {
+    edge: v('--border-color'),
+    node: v('--text-muted'),
+    hub: v('--text-secondary'),
+    hover: v('--accent-blue-light'),
+  };
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -176,8 +183,7 @@ const ForceGraph = ({ vaultNodes }: ForceGraphProps) => {
 
     // Limpa em pixels físicos
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = COLOR_BG;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const colors = themeColors(canvas);
 
     // Todo desenho em pixels lógicos
     ctx.save();
@@ -188,7 +194,7 @@ const ForceGraph = ({ vaultNodes }: ForceGraphProps) => {
     const map = new Map(nodes.map((n) => [n.id, n]));
 
     // Arestas
-    ctx.strokeStyle = COLOR_EDGE;
+    ctx.strokeStyle = colors.edge;
     ctx.lineWidth   = 0.9 / cam.scale;
     for (const e of edges) {
       const a = map.get(e.source), b = map.get(e.target);
@@ -208,12 +214,8 @@ const ForceGraph = ({ vaultNodes }: ForceGraphProps) => {
       ctx.beginPath();
       ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
 
-      if (isHovered)     { ctx.fillStyle = COLOR_HOVER; ctx.shadowColor = COLOR_HOVER; ctx.shadowBlur = 14 / cam.scale; }
-      else if (isHub)    { ctx.fillStyle = COLOR_HUB;   ctx.shadowColor = COLOR_HUB;   ctx.shadowBlur = 9  / cam.scale; }
-      else               { ctx.fillStyle = COLOR_NODE;  ctx.shadowBlur = 0; }
-
+      ctx.fillStyle = isHovered ? colors.hover : isHub ? colors.hub : colors.node;
       ctx.fill();
-      ctx.shadowBlur = 0;
     }
 
     ctx.restore();
@@ -277,6 +279,13 @@ const ForceGraph = ({ vaultNodes }: ForceGraphProps) => {
 
   // ── Reconstrói quando vaultNodes muda (sem esperar resize) ─────────────
   useEffect(() => { rebuild(); }, [rebuild]);
+
+  // ── Redesenha quando o tema troca (as cores vêm dos tokens) ────────────
+  useEffect(() => {
+    const mo = new MutationObserver(() => draw());
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => mo.disconnect();
+  }, [draw]);
 
   // ── Coordenadas canvas → mundo ──────────────────────────────────────────
   const toWorld = useCallback((cx: number, cy: number) => {
@@ -349,7 +358,9 @@ const ForceGraph = ({ vaultNodes }: ForceGraphProps) => {
   if (vaultNodes.length === 0) {
     return (
       <div className="force-graph force-graph--empty">
-        <span className="force-graph__empty-msg">Nenhuma nota no Vault.</span>
+        <GraphIcon size={20} />
+        <b>Nenhuma nota no grafo</b>
+        <span className="force-graph__empty-msg">Indexe uma pasta na Fila para ver as notas e as pastas que as ligam.</span>
       </div>
     );
   }

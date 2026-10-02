@@ -1,5 +1,6 @@
-/* Importa fonte Inter do Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* Fontes: interface (Plex Sans), leitura (Source Serif 4), dados (Plex Mono).
+   Sem rede, cai para as fontes do sistema declaradas em cada pilha. */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap');
 
 /* Reset e variáveis globais */
 *, *::before, *::after {
@@ -8,42 +9,52 @@
   padding: 0;
 }
 
+/* Tema escuro (padrão). Grafite com leve viés violeta; um único acento. */
 :root {
-  /* Paleta de cores principal */
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #111111;
-  --bg-surface: #1a1a1a;
-  --bg-surface-hover: #222222;
-  --bg-input: #1e1e1e;
-  --bg-input-border: #2a2a2a;
+  --bg-primary: #141319;
+  --bg-secondary: #101015;
+  --bg-panel: #17161c;
+  --bg-surface: #1d1c23;
+  --bg-surface-hover: #25242c;
+  --bg-input: #1d1c23;
+  --bg-input-border: #2d2c35;
 
-  /* Cores de acento — roxo como cor principal */
-  --accent-blue: #7c3aed;
-  --accent-blue-hover: #6d28d9;
-  --accent-blue-light: #a78bfa;
-  --accent-gradient: linear-gradient(135deg, #5b21b6 0%, #7c3aed 50%, #a78bfa 100%);
+  /* Acento: --accent-blue preenche botões; --accent-blue-light colore texto e ícones.
+     Os nomes antigos foram mantidos para não reescrever o App.css inteiro. */
+  --accent-blue: #6d54e0;
+  --accent-blue-hover: #5f47d4;
+  --accent-blue-light: #a590f6;
+  --accent-soft: color-mix(in srgb, var(--accent-blue-light) 13%, transparent);
+  --mark: color-mix(in srgb, var(--accent-blue-light) 24%, transparent);
 
-  /* Vermelho de gravação — distinto do roxo de acento, usado só no estado "gravando" */
+  --ok: #5ccf96;
+  --warn: #e6b659;
+  --err: #f07b69;
+  --err-strong: #d9503b;
   --rec-red: #ef4444;
   --rec-red-light: #fca5a5;
 
-  /* Cores de texto */
-  --text-primary: #ffffff;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --text-placeholder: #52525b;
+  --text-primary: #ecebf2;
+  --text-secondary: #aeacb9;
+  --text-muted: #777583;
+  --text-placeholder: #5f5d69;
 
-  /* Bordas */
-  --border-color: #27272a;
-  --border-color-subtle: #1f1f1f;
+  --border-color: #2d2c35;
+  --border-color-subtle: #221f28;
 
-  /* Sombras */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 20px rgba(124, 58, 237, 0.2);
+  /* Séries de gráfico: mesma matiz do acento, do mais claro ao mais forte */
+  --series-1: #4d4388;
+  --series-2: #7a65d8;
+  --series-3: #b6a8fb;
 
-  /* Espaçamentos */
+  --tip-bg: #ecebf2;
+  --tip-fg: #16151b;
+  --scrim: rgba(6, 6, 10, 0.58);
+
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 10px 24px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 40px -8px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.35);
+
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
@@ -51,28 +62,76 @@
   --spacing-xl: 32px;
   --spacing-2xl: 48px;
 
-  /* Bordas arredondadas */
   --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* Transições */
   --transition-fast: 150ms ease;
-  --transition-base: 250ms ease;
+  --transition-base: 220ms ease;
   --transition-slow: 400ms ease;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 
-  /* Tipografia */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-read: 'Source Serif 4', 'Iowan Old Style', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
   --font-size-xs: 11px;
   --font-size-sm: 13px;
-  --font-size-base: 15px;
-  --font-size-md: 16px;
-  --font-size-lg: 18px;
-  --font-size-xl: 22px;
-  --font-size-2xl: 28px;
-  --font-size-3xl: 36px;
+  --font-size-base: 14px;
+  --font-size-md: 15px;
+  --font-size-lg: 17px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 26px;
+  --font-size-3xl: 32px;
+
+  color-scheme: dark;
+}
+
+/* Tema claro: mesmo acento, com contraste próprio (não é inversão automática). */
+:root[data-theme="light"] {
+  --bg-primary: #fbfbfc;
+  --bg-secondary: #f3f2f6;
+  --bg-panel: #f7f6f9;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #efeef3;
+  --bg-input: #ffffff;
+  --bg-input-border: #e1e0e8;
+
+  --accent-blue: #5b43d6;
+  --accent-blue-hover: #4e37c4;
+  --accent-blue-light: #5b43d6;
+  --accent-soft: color-mix(in srgb, #5b43d6 9%, transparent);
+  --mark: color-mix(in srgb, #5b43d6 15%, transparent);
+
+  --ok: #1d8f5a;
+  --warn: #a8720c;
+  --err: #c2412d;
+  --err-strong: #c2412d;
+  --rec-red: #d42f2f;
+  --rec-red-light: #c2412d;
+
+  --text-primary: #17161c;
+  --text-secondary: #53515e;
+  --text-muted: #8a8895;
+  --text-placeholder: #a3a1ad;
+
+  --border-color: #e1e0e8;
+  --border-color-subtle: #eae9ef;
+
+  --series-1: #d4ccf6;
+  --series-2: #9d8aec;
+  --series-3: #5b43d6;
+
+  --tip-bg: #19181e;
+  --tip-fg: #ffffff;
+  --scrim: rgba(22, 20, 32, 0.28);
+
+  --shadow-sm: 0 1px 3px rgba(20, 18, 30, 0.10);
+  --shadow-md: 0 8px 20px -8px rgba(20, 18, 30, 0.16);
+  --shadow-lg: 0 18px 40px -10px rgba(20, 18, 30, 0.18), 0 1px 2px rgba(20, 18, 30, 0.06);
+
+  color-scheme: light;
 }
 
 html, body {
@@ -122,16 +181,6 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(124, 58, 237, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(124, 58, 237, 0.6); }
-}
-
-@keyframes pulse-glow-red {
-  0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.35); }
-  50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.65); }
-}
-
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
@@ -159,4 +208,23 @@ html, body {
 
 .slide-up {
   animation: slideUp 0.4s ease forwards;
+}
+
+/* Foco visível e dados tabulares — usados em toda a interface */
+:focus-visible {
+  outline: 2px solid var(--accent-blue-light);
+  outline-offset: 2px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

@@ -1,22 +1,12 @@
-// Tela de boas-vindas exibida quando não há mensagens
-const WelcomeScreen = () => {
-  return (
-    <div className="welcome-screen" role="main" aria-label="Tela inicial do assistente">
-      {/* Logo central animada */}
-      <div className="welcome-screen__icon" aria-hidden="true">
-        <img
-          src="./brain-logo.png"
-          alt="Logo Assistente IA"
-          className="welcome-screen__logo-img"
-        />
-      </div>
-
-      {/* Título principal */}
-      <h1 className="welcome-screen__heading">
-        Como posso ajudar você hoje?
-      </h1>
-    </div>
-  );
-};
+// Tela inicial exibida quando a conversa ainda não tem mensagens
+const WelcomeScreen = () => (
+  <div className="welcome" role="main" aria-label="Tela inicial">
+    <span className="welcome__mark" aria-hidden="true">ep</span>
+    <h1 className="welcome__title">Pergunte ao seu vault</h1>
+    <p className="welcome__lede">
+      As respostas vêm só das notas indexadas, e cada afirmação aponta para o trecho que a sustenta.
+    </p>
+  </div>
+);
 
 export default WelcomeScreen;

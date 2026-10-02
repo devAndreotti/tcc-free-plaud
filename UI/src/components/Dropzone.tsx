@@ -31,6 +31,12 @@ interface DropzoneProps {
 
 const POLL_INTERVAL_MS = 1500;
 
+const STATUS_LABEL: Record<DropzoneFile['status'], { label: string; tone: string }> = {
+  pending: { label: 'aguardando', tone: '' },
+  indexed: { label: 'indexado', tone: ' pill--ok' },
+  failed: { label: 'falhou', tone: ' pill--err' },
+};
+
 /** Área de drag-and-drop em lote com progresso de indexação em tempo real. */
 const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
   const [isDragging, setIsDragging] = useState(false);
@@ -121,21 +127,24 @@ const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
       role="region"
       aria-label="Área de arrastar e soltar arquivos"
     >
-      <FileIcon size={22} className="dropzone__icon" />
-      <p className="dropzone__hint">
-        Arraste áudios, PDFs ou TXTs aqui, ou clique para selecionar.
-      </p>
+      <div className="dropzone__head">
+        <FileIcon size={18} className="dropzone__icon" />
+        <p className="dropzone__hint">
+          <b>Arraste áudios, PDFs ou textos aqui</b>
+          <span>Com "Monitorar pasta" ligado, o que o watcher indexar aparece nesta lista.</span>
+        </p>
+      </div>
 
       {files.length > 0 && (
         <ul className="dropzone__list" aria-label="Arquivos soltos">
           {files.map((file) => (
             <li key={file.id} className={`dropzone__item dropzone__item--${file.status}`}>
               <FileIcon />
-              <span className="dropzone__item-name">{file.name}</span>
-              <span className="dropzone__item-status">{file.status}</span>
+              <span className="dropzone__item-name" title={file.message ?? undefined}>{file.name}</span>
+              <span className={`pill${STATUS_LABEL[file.status].tone}`}>{STATUS_LABEL[file.status].label}</span>
               <button
                 type="button"
-                className="dropzone__item-remove"
+                className="btn-icon dropzone__item-remove"
                 onClick={() => removeFile(file.id)}
                 aria-label={`Remover ${file.name}`}
               >

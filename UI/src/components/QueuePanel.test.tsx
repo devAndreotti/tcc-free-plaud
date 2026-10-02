@@ -93,9 +93,12 @@ describe('QueuePanel', () => {
     });
 
     expect(await screen.findByText('job-queue-1')).toBeTruthy();
-    expect(screen.getByText('embedding')).toBeTruthy();
-    expect(screen.getByText('1/3')).toBeTruthy();
-    expect(screen.getByText('10.00 arquivos/s')).toBeTruthy();
+    // Etapa atual marcada, com o lote do embedding.
+    expect(screen.getByText('Embedding').closest('li')?.getAttribute('aria-current')).toBe('step');
+    expect(screen.getByText('lote 1 de 2')).toBeTruthy();
+    expect(screen.getByText('de 3 arquivos')).toBeTruthy();
+    expect(screen.getByText('10,0')).toBeTruthy();
+    expect(screen.getByText('auto → microbatch')).toBeTruthy();
     expect(screen.getByRole('progressbar', { name: 'Progresso do job' }).getAttribute('aria-valuenow')).toBe('33');
   });
 
@@ -131,23 +134,45 @@ describe('QueuePanel', () => {
     expect(screen.getByText('Encoding inválido.')).toBeTruthy();
   });
 
+  it('falha de modelo de voz leva direto para Configurações › Voz', async () => {
+    const user = userEvent.setup();
+    const onOpenSettings = vi.fn();
+    bridgeMock.getIndexJob.mockResolvedValue({
+      ...runningJob,
+      last_errors: [
+        { source_path: 'Audio/aula-07.m4a', message: 'Modelo de voz não instalado.', error_code: 'AUDIO_MODEL_NOT_READY' },
+      ],
+    });
+    render(<QueueProvider><QueuePanel onOpenSettings={onOpenSettings} /></QueueProvider>);
+
+    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
+    await user.click(screen.getByRole('button', { name: 'Indexar' }));
+    await user.click(await screen.findByRole('button', { name: 'Abrir Voz' }));
+
+    expect(onOpenSettings).toHaveBeenCalledWith('voz');
+  });
+
   it('liga e desliga o watcher de pasta', async () => {
     const user = userEvent.setup();
     renderQueuePanel();
 
     await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
-    await user.click(screen.getByRole('button', { name: 'Monitorar pasta' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Monitorar pasta' }));
 
     await waitFor(() => {
       expect(bridgeMock.startWatcher).toHaveBeenCalledWith('C:\\Vault');
     });
-    expect(await screen.findByRole('button', { name: 'Parar monitoramento' })).toBeTruthy();
+    await waitFor(() => {
+      expect((screen.getByRole('checkbox', { name: 'Monitorar pasta' }) as HTMLInputElement).checked).toBe(true);
+    });
 
-    await user.click(screen.getByRole('button', { name: 'Parar monitoramento' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Monitorar pasta' }));
     await waitFor(() => {
       expect(bridgeMock.stopWatcher).toHaveBeenCalled();
     });
-    expect(await screen.findByRole('button', { name: 'Monitorar pasta' })).toBeTruthy();
+    await waitFor(() => {
+      expect((screen.getByRole('checkbox', { name: 'Monitorar pasta' }) as HTMLInputElement).checked).toBe(false);
+    });
   });
 
   it('continua consultando o job mesmo depois de QueuePanel ser desmontado (troca de aba)', async () => {
