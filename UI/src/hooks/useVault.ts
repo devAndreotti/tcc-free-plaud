@@ -57,13 +57,16 @@ export function useVault(): VaultState {
 
   // Restaura o caminho salvo ao iniciar o app
   useEffect(() => {
-    bridge.loadVaultPath().then((savedPath) => {
-      if (savedPath) {
-        setVaultPath(savedPath);
-        // Escaneia automaticamente ao restaurar o vault salvo
-        runScan(savedPath);
-      }
-    });
+    bridge
+      .loadVaultPath()
+      .then((savedPath) => {
+        if (savedPath) {
+          setVaultPath(savedPath);
+          // Escaneia automaticamente ao restaurar o vault salvo
+          return runScan(savedPath);
+        }
+      })
+      .catch((err) => console.error('[useVault] Erro ao restaurar vault:', err));
   }, [runScan]);
 
   /** Abre o diálogo nativo, salva o path e dispara a varredura */
@@ -86,7 +89,7 @@ export function useVault(): VaultState {
     setVaultPath('');
     setNodes([]);
     setLastScanAt(null);
-    bridge.saveVaultPath('');
+    bridge.saveVaultPath('').catch((err) => console.error('[useVault] Erro ao limpar vault:', err));
   }, []);
 
   return {
