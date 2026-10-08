@@ -103,11 +103,13 @@ const NotesPanel = () => {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vinda da bridge (sistema externo).
     void loadNotes();
   }, [loadNotes]);
 
   useEffect(() => {
     if (!activeId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sem nota ativa, o detalhe some junto.
       setDetail(null);
       return;
     }
