@@ -39,18 +39,6 @@ export function useVault(): VaultState {
   const [isScanning, setIsScanning] = useState(false);
   const [lastScanAt, setLastScanAt] = useState<Date | null>(null);
 
-  // Restaura o caminho salvo ao iniciar o app
-  useEffect(() => {
-    bridge.loadVaultPath().then((savedPath) => {
-      if (savedPath) {
-        setVaultPath(savedPath);
-        // Escaneia automaticamente ao restaurar o vault salvo
-        runScan(savedPath);
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   /** Executa a varredura de arquivos .md em um caminho específico */
   const runScan = useCallback(async (path: string) => {
     if (!path) return;
@@ -66,6 +54,17 @@ export function useVault(): VaultState {
       setIsScanning(false);
     }
   }, []);
+
+  // Restaura o caminho salvo ao iniciar o app
+  useEffect(() => {
+    bridge.loadVaultPath().then((savedPath) => {
+      if (savedPath) {
+        setVaultPath(savedPath);
+        // Escaneia automaticamente ao restaurar o vault salvo
+        runScan(savedPath);
+      }
+    });
+  }, [runScan]);
 
   /** Abre o diálogo nativo, salva o path e dispara a varredura */
   const selectVault = useCallback(async () => {
