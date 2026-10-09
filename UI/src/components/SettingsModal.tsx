@@ -103,6 +103,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- abre na aba pedida por quem chamou o modal.
     if (isOpen && initialTab) setActiveTab(initialTab);
   }, [isOpen, initialTab]);
 

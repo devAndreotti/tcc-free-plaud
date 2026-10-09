@@ -46,6 +46,9 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
   const [healthKey, setHealthKey] = useState(0);
+  const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('chat');
+  const [strategy, setStrategy] = useState<AskStrategy>('hybrid');
 
   const openSettings = useCallback((tab?: SettingsTab) => {
     setSettingsTab(tab);
@@ -65,9 +68,6 @@ function App() {
     closeSettings();
     setWorkspaceView('queue');
   }, [closeSettings]);
-  const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
-  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('chat');
-  const [strategy, setStrategy] = useState<AskStrategy>('hybrid');
 
   // Alterna a visibilidade do painel lateral de grafos
   const handleToggleGraphPanel = useCallback(() => {
