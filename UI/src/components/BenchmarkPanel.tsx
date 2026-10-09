@@ -10,18 +10,32 @@ const STRATEGY_NAME: Record<string, { label: string; lower: string; sub: string 
   hybrid: { label: 'Híbrida', lower: 'híbrida', sub: 'RRF' },
 };
 
-type Metric = 'mrr' | 'recall_at_3' | 'recall_at_5' | 'recall_at_10';
+type Metric = 'mrr' | 'recall_at_3' | 'recall_at_5' | 'recall_at_10' | 'ndcg_at_10';
 const METRICS: { key: Metric; label: string }[] = [
   { key: 'mrr', label: 'MRR' },
   { key: 'recall_at_3', label: 'Recall@3' },
   { key: 'recall_at_5', label: 'Recall@5' },
   { key: 'recall_at_10', label: 'Recall@10' },
+  { key: 'ndcg_at_10', label: 'nDCG@10' },
 ];
+type Scope = 'corpus' | 'notes';
 
 const nameOf = (strategy: string) => STRATEGY_NAME[strategy] ?? { label: strategy, lower: strategy, sub: '' };
 const fmt3 = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const pct = (v: number) => (v * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 const ms = (v: number) => `${v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ms`;
+const fmt2 = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const metric = (s: BenchmarkStrategySummary, key: Metric) => s[key] ?? 0;
+const latencyOf = (s: BenchmarkStrategySummary) => s.p50_query_latency_ms ?? s.avg_query_latency_ms;
+
+/** O que o chat faz com perguntas com e sem resposta no corpus, na estratégia padrão. */
+function abstentionSentence(s: BenchmarkStrategySummary, negatives: number): string | null {
+  const a = s.abstention;
+  if (!a) return null;
+  const wrongNegatives = Math.round((1 - a.recall) * negatives);
+  const refused = pct(1 - a.answered_positive_rate);
+  return `Na ${nameOf(s.strategy).lower}, ${wrongNegatives} de ${negatives} perguntas sem resposta no corpus recebem uma resposta mesmo assim, e ${refused}% das que têm resposta ficam sem ela.`;
+}
 
 /** A frase que responde "qual estratégia usar": maior Recall@5, desempate por MRR e depois pela latência. */
 function thesis(summaries: BenchmarkStrategySummary[]): string | null {
@@ -89,7 +103,7 @@ const RecallChart = ({ summaries }: { summaries: BenchmarkStrategySummary[] }) =
           return (
             <g key={s.strategy}>
               {series.map((serie, j) => {
-                const v = s[serie.key];
+                const v = metric(s, serie.key);
                 const x = gx + j * (bw + gap);
                 return (
                   <g key={serie.k}>
@@ -138,17 +152,21 @@ const BenchmarkPanel = () => {
   const [result, setResult] = useState<BenchmarkCompareResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState('');
+  const [scope, setScope] = useState<Scope>('corpus');
 
+  const corpus = result?.corpus ?? null;
+  const activeScope: Scope = corpus ? scope : 'notes';
   const summaries = useMemo(() => {
-    if (!result?.summaries) return [];
-    return STRATEGY_ORDER.filter((strategy) => result.summaries[strategy]).map((strategy) => result.summaries[strategy]);
-  }, [result]);
+    const source = activeScope === 'corpus' ? corpus?.summaries : result?.summaries;
+    if (!source) return [];
+    return STRATEGY_ORDER.filter((strategy) => source[strategy]).map((strategy) => source[strategy]);
+  }, [activeScope, corpus, result]);
 
   const best = useMemo(() => {
     const out: Partial<Record<Metric | 'latency', number>> = {};
     if (summaries.length < 2) return out;
-    METRICS.forEach(({ key }) => { out[key] = Math.max(...summaries.map((s) => s[key])); });
-    out.latency = Math.min(...summaries.map((s) => s.avg_query_latency_ms));
+    METRICS.forEach(({ key }) => { out[key] = Math.max(...summaries.map((s) => metric(s, key))); });
+    out.latency = Math.min(...summaries.map(latencyOf));
     return out;
   }, [summaries]);
 
@@ -188,6 +206,10 @@ const BenchmarkPanel = () => {
   };
 
   const snap = result?.settings_snapshot;
+  const chatStrategy = corpus?.summaries[snap?.default_ask_strategy ?? 'hybrid'] ?? corpus?.summaries.hybrid;
+  const abstention = activeScope === 'corpus' && corpus && chatStrategy
+    ? abstentionSentence(chatStrategy, corpus.negative_count)
+    : null;
 
   return (
     <main className="main bench" id="benchmark-panel">
@@ -247,13 +269,30 @@ const BenchmarkPanel = () => {
                   <h2>Resultado por estratégia</h2>
                   {questions != null && <span className="card__count">{questions} perguntas</span>}
                 </div>
+                {corpus && (
+                  <div className="bench__scope">
+                    <div className="notes__filters" role="group" aria-label="Escopo da busca">
+                      <button type="button" className="notes__chip" aria-pressed={activeScope === 'corpus'} onClick={() => setScope('corpus')}>
+                        Corpus inteiro
+                      </button>
+                      <button type="button" className="notes__chip" aria-pressed={activeScope === 'notes'} onClick={() => setScope('notes')}>
+                        Por documento
+                      </button>
+                    </div>
+                    <p>
+                      {activeScope === 'corpus'
+                        ? `As ${corpus.note_count} notas da suite num corpus só, buscadas como o chat busca; um trecho certo de outra nota conta como erro.`
+                        : 'Cada pergunta busca só dentro da nota dela. Mais fácil que o chat; serve de teto.'}
+                    </p>
+                  </div>
+                )}
                 <div className="bench__table-wrap">
                   <table className="data-table">
                     <thead>
                       <tr>
                         <th>Estratégia</th>
                         {METRICS.map((m) => <th key={m.key} className="num">{m.label}</th>)}
-                        <th className="num">Latência média</th>
+                        <th className="num">Latência p50</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -265,13 +304,21 @@ const BenchmarkPanel = () => {
                           </td>
                           {METRICS.map((m) => (
                             <td key={m.key} className="num">
-                              {s[m.key] === best[m.key] ? <span className="bench__best">{fmt3(s[m.key])}</span> : fmt3(s[m.key])}
+                              {metric(s, m.key) === best[m.key]
+                                ? <span className="bench__best">{fmt3(metric(s, m.key))}</span>
+                                : fmt3(metric(s, m.key))}
+                              {m.key === 'mrr' && s.mrr_ci && (
+                                <span className="bench__ci" title="Intervalo de confiança de 95% (bootstrap)">
+                                  {fmt2(s.mrr_ci[0])}–{fmt2(s.mrr_ci[1])}
+                                </span>
+                              )}
                             </td>
                           ))}
                           <td className="num">
-                            {s.avg_query_latency_ms === best.latency
-                              ? <span className="bench__best">{ms(s.avg_query_latency_ms)}</span>
-                              : ms(s.avg_query_latency_ms)}
+                            {latencyOf(s) === best.latency
+                              ? <span className="bench__best">{ms(latencyOf(s))}</span>
+                              : ms(latencyOf(s))}
+                            {s.p95_query_latency_ms != null && <span className="bench__ci">p95 {ms(s.p95_query_latency_ms)}</span>}
                           </td>
                         </tr>
                       ))}
@@ -279,7 +326,8 @@ const BenchmarkPanel = () => {
                   </table>
                 </div>
                 <p className="bench__caption">
-                  Maior é melhor em MRR e Recall; menor é melhor em latência. Destaque = melhor da coluna.
+                  Maior é melhor em MRR, Recall e nDCG; menor é melhor em latência. Destaque = melhor da coluna. A faixa
+                  sob o MRR é o intervalo de confiança de 95%: faixas que se sobrepõem não separam as estratégias.
                 </p>
               </section>
 
@@ -291,6 +339,44 @@ const BenchmarkPanel = () => {
                 <RecallChart summaries={summaries} />
               </section>
             </div>
+
+            {activeScope === 'corpus' && corpus && summaries.some((s) => s.abstention) && (
+              <section className="card" aria-label="Responder ou se abster">
+                <div className="card__head">
+                  <h2>Responder ou se abster</h2>
+                  <span className="card__count">
+                    {corpus.positive_count} com resposta · {corpus.negative_count} sem resposta
+                  </span>
+                </div>
+                {abstention && <p className="bench__abstain-lead">{abstention}</p>}
+                <div className="bench__table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Estratégia</th>
+                        <th className="num">Responde quando há resposta</th>
+                        <th className="num">Se abstém quando não há</th>
+                        <th className="num">Decisão certa</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summaries.map((s) => s.abstention && (
+                        <tr key={s.strategy}>
+                          <td><b>{nameOf(s.strategy).label}</b></td>
+                          <td className="num">{pct(s.abstention.answered_positive_rate)}%</td>
+                          <td className="num">{pct(s.abstention.recall)}%</td>
+                          <td className="num">{pct(s.abstention.accuracy)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="bench__caption">
+                  Resposta extrativa, sem modelo gerativo, com o top-k do chat. As perguntas sem resposta vêm do dataset
+                  de negativas da suite.
+                </p>
+              </section>
+            )}
 
             <section className="card" aria-label="Relatórios">
               <div className="card__head"><h2>Relatórios desta comparação</h2></div>

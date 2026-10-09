@@ -1,0 +1,41 @@
+{
+  "dataset_name": "manual-validation-06-ocr-ruido-leve",
+  "samples": [
+    {
+      "sample_id": "monitor-01",
+      "question": "Qual ferramenta de monitoramento a equipe recomendou para producao?",
+      "expected_note_id": "06-ocr-ruido-leve",
+      "expected_terms": [
+        "recomenda a adoção do Prometheus + Grafana"
+      ],
+      "expected_ref": "5. Recomendação"
+    },
+    {
+      "sample_id": "monitor-02",
+      "question": "Qual o custo mensal estimado do Datadog?",
+      "expected_note_id": "06-ocr-ruido-leve",
+      "expected_terms": [
+        "R$ 18.700"
+      ],
+      "expected_ref": "4.2 Datadog"
+    },
+    {
+      "sample_id": "monitor-03",
+      "question": "Quando a decisao foi ratificada pelo Diretor de Tecnologia?",
+      "expected_note_id": "06-ocr-ruido-leve",
+      "expected_terms": [
+        "17/02/2025"
+      ],
+      "expected_ref": "5. Recomendação"
+    },
+    {
+      "sample_id": "monitor-04",
+      "question": "Qual o custo mensal estimado do New Relic?",
+      "expected_note_id": "06-ocr-ruido-leve",
+      "expected_terms": [
+        "R$ 13.400"
+      ],
+      "expected_ref": "4.3 New Relic"
+    }
+  ]
+}

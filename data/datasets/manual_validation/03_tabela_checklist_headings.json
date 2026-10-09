@@ -1,0 +1,42 @@
+{
+  "dataset_name": "manual-validation-03-tabela-checklist-headings",
+  "samples": [
+    {
+      "sample_id": "migracao-01",
+      "question": "Quantos registros a tabela eventos atingiu em fevereiro de 2025?",
+      "expected_note_id": "03-tabela-checklist-headings",
+      "expected_terms": [
+        "180 milhões de registros"
+      ],
+      "expected_ref": "Contexto da Migração"
+    },
+    {
+      "sample_id": "migracao-02",
+      "question": "Para qual versao do PostgreSQL o banco sera atualizado?",
+      "expected_note_id": "03-tabela-checklist-headings",
+      "expected_terms": [
+        "PostgreSQL 13 para a versão 16"
+      ],
+      "expected_ref": "Contexto da Migração"
+    },
+    {
+      "sample_id": "migracao-03",
+      "question": "Quanto tempo leva o rollback completo?",
+      "expected_note_id": "03-tabela-checklist-headings",
+      "expected_terms": [
+        "8 a 12 minutos"
+      ],
+      "expected_ref": "Plano de Rollback"
+    },
+    {
+      "sample_id": "migracao-04",
+      "question": "Quem e responsavel pelo teste em staging?",
+      "expected_note_id": "03-tabela-checklist-headings",
+      "expected_terms": [
+        "Teste em staging",
+        "Rafael"
+      ],
+      "expected_ref": "Status"
+    }
+  ]
+}
