@@ -309,6 +309,14 @@ def ensure_chunks_fts_current(connection: sqlite3.Connection) -> str:
     return 'rebuilt'
 
 
+def list_fts_vocabulary(connection: sqlite3.Connection) -> list[str]:
+    """Palavras indexadas no FTS (minúsculas, sem acento), via fts5vocab na base temporária."""
+    connection.execute(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS temp.chunks_fts_vocab USING fts5vocab(main, 'chunks_fts', 'row')"
+    )
+    return [str(row[0]) for row in connection.execute('SELECT term FROM temp.chunks_fts_vocab')]
+
+
 def search_chunks_fts(connection: sqlite3.Connection, match_query: str, *, limit: int) -> list[tuple[Chunk, float]]:
     """Busca candidatos lexicais via FTS5/BM25."""
     if not match_query.strip() or limit <= 0:

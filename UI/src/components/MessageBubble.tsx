@@ -127,7 +127,7 @@ const AnswerMeta = ({ ask, copyText }: { ask: AskResult; copyText?: string }) =>
 };
 
 // Motivos em que buscar só por palavra-chave não muda nada: nenhuma busca achou trecho algum.
-const NO_LEXICAL_RETRY = new Set(['no_retrieval_hits', 'empty_corpus', 'query_without_content']);
+const NO_LEXICAL_RETRY = new Set(['no_retrieval_hits', 'empty_corpus', 'query_without_content', 'query_term_not_in_corpus']);
 
 const NoAnswer = ({ ask, onRetry }: { ask: AskResult; onRetry?: MessageBubbleProps['onRetry'] }) => (
   <div className="msg__none">

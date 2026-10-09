@@ -13,6 +13,7 @@ Regras praticas deste diretorio:
 - cada arquivo JSON corresponde a um documento especifico
 - as perguntas desses arquivos assumem que existe evidencia relevante no documento
 - `negativas.json` traz perguntas sem resposta em nenhum documento (category `negativa`); a suite aponta para ele em `negative_dataset_path` e a comparacao mede se o chat se abstem
+- as negativas `neg-*` foram usadas para ajustar a regra de abstencao; as `neg2-*` foram escritas depois e medidas sem ajuste (12 quase-acertos, 6 fora do dominio, 6 com vocabulario comum do corpus). Para um numero limpo, um ajuste novo pede um lote novo
 - `expected_terms` devem apontar para termos locais do chunk esperado, para manter o benchmark util em `lexical` e `vector`
 - `suite.json` agrupa os pares documento/dataset para comparacao repetivel entre estrategias
 

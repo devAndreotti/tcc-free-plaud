@@ -438,7 +438,7 @@ def test_corpus_ask_cli_answers_against_indexed_directory(monkeypatch, tmp_path:
         encoding='utf-8',
     )
     (root / 'runbook.md').write_text(
-        '# Runbook\n\nO time SRE ficou responsavel pelo runbook de operacao.\n',
+        '# Runbook\n\nA equipe SRE ficou responsavel pelo runbook de operacao.\n',
         encoding='utf-8',
     )
     monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)

@@ -32,12 +32,14 @@ from free_plaud.retrieval.rag import (
 from free_plaud.retrieval.search import (
     STOPWORDS,
     TOKEN_PATTERN,
+    _stem_like,
     extract_named_query_terms,
     fuse_hits_by_rank,
     lexical_search_hits,
     match_terms_in_text,
     normalize_query_terms,
     open_semantic_search,
+    terms_missing_from_vocabulary,
 )
 from free_plaud.storage.sqlite import (
     count_chunks,
@@ -45,11 +47,40 @@ from free_plaud.storage.sqlite import (
     get_notes_by_id,
     list_chunk_ids,
     list_chunks,
+    list_fts_vocabulary,
     search_chunks_fts,
 )
 from free_plaud.storage.vector import LocalVectorStore
 
 RetrievalStrategy = Literal['lexical', 'vector', 'hybrid']
+
+# Radicais do vocabulário do corpus, por (arquivo, chunks no FTS, último rowid): muda a cada indexação.
+_VOCABULARY_STEMS: dict[tuple[str, int, int], frozenset[str]] = {}
+
+
+def _vocabulary_key(connection: sqlite3.Connection) -> tuple[str, int, int]:
+    # Consultas baratas: COUNT(*) no FTS varre a tabela (~40 ms com 4 mil chunks); o maior rowid
+    # do FTS muda a cada chunk gravado.
+    path = str(connection.execute('PRAGMA database_list').fetchone()[2])
+    last_rowid = connection.execute('SELECT MAX(rowid) FROM chunks_fts').fetchone()[0]
+    return path, count_chunks(connection), int(last_rowid or 0)
+
+
+def corpus_vocabulary_stems(connection: sqlite3.Connection) -> frozenset[str] | None:
+    """Radicais das palavras do corpus, em cache até a próxima indexação (~1 s com 4 mil chunks)."""
+    try:
+        key = _vocabulary_key(connection)
+        if key[0] and key in _VOCABULARY_STEMS:
+            return _VOCABULARY_STEMS[key]
+        if ensure_chunks_fts_current(connection) == 'rebuilt':
+            key = _vocabulary_key(connection)
+        stems = frozenset(_stem_like(term) for term in list_fts_vocabulary(connection))
+    except sqlite3.OperationalError:
+        return None  # sem FTS, a pergunta segue sem este filtro
+    if key[0]:  # banco em memória não tem caminho estável para servir de chave
+        _VOCABULARY_STEMS.clear()  # ponytail: um corpus por vez; o app e o benchmark alternam pouco
+        _VOCABULARY_STEMS[key] = stems
+    return stems
 TEAM_ANSWER_PATTERN = re.compile(r'\bequipe\s+(?:de|da|do|dos|das)\s+[0-9A-Za-zÀ-ÖØ-öø-ÿ_-]+')
 FRONTMATTER_PATTERN = re.compile(r'\A\s*---\s*\r?\n.*?\r?\n---\s*\r?\n', re.DOTALL)
 ANSWER_CONTEXT_TOTAL_CHAR_BUDGET = 6000
@@ -674,6 +705,20 @@ def answer_corpus_with_citations(
 
     if count_chunks(connection) == 0:
         return _no_answer('empty_corpus', ['O corpus persistido ainda não contém chunks indexados.'], [])
+
+    # Um termo de conteúdo que não está em nenhuma nota quase sempre é o assunto da pergunta
+    # ("senha", "Splunk", "orçamento"): os outros termos acham trechos parecidos e o chat responderia
+    # outra coisa. No benchmark, separa 6 de 10 negativas sem recusar nenhuma das 39 positivas.
+    vocabulary_stems = corpus_vocabulary_stems(connection)
+    missing_terms = terms_missing_from_vocabulary(query_terms, vocabulary_stems) if vocabulary_stems else []
+    if missing_terms:
+        quoted = ', '.join(f'"{term}"' for term in missing_terms)
+        verb = 'aparece' if len(missing_terms) == 1 else 'aparecem'
+        return _no_answer(
+            'query_term_not_in_corpus',
+            [f'A pergunta cita {quoted}, que não {verb} em nenhuma nota do corpus.'],
+            [],
+        )
 
     retrieval_started_at = perf_counter()
     valid_chunk_ids = list_chunk_ids(connection)
