@@ -2,7 +2,7 @@
 marp: true
 theme: default
 paginate: true
-header: 'TCC — Free Plaud: Pipeline Local-First de IA para Gestão do Conhecimento'
+header: 'TCC — Escólio: Pipeline Local-First de IA para Gestão do Conhecimento'
 footer: 'Bacharelado em Engenharia / Ciência da Computação'
 backgroundColor: #f8fafc
 color: #0f172a
@@ -27,7 +27,7 @@ style: |
 ---
 
 <!-- _class: lead -->
-# Free Plaud
+# Escólio
 ### Desenvolvimento e Avaliação de um Pipeline de IA para Captura e Recuperação Semântica de Conhecimento Pessoal
 
 **Autor:** Ricardo Andreotti  
@@ -43,7 +43,7 @@ style: |
 * **Limitações das Soluções Existentes em Nuvem:**
   * Dependência de servidores de terceiros e risco de privacidade com dados pessoais/sensíveis.
   * Alucinação de modelos generativos sem ancoragem determinística em fontes.
-* **Proposta do Free Plaud:**
+* **Proposta do Escólio:**
   * Arquitetura 100% local-first para ingestão, transcrição, indexação e RAG.
   * Citação auditável com offsets de caracteres exatos e guardrail anti-alucinação.
 

@@ -383,7 +383,7 @@ explícita quando a evidência recuperada fica fraca ou mal ancorada. Isso permi
 - manter rastreabilidade `note -> chunk -> citation` sem depender ainda de embeddings reais
 - preparar o caminho para benchmark comparativo entre estratégias de recuperação
 
-Na evolução de corpus multi-documento, o backend adiciona `free-plaud corpus ask` como fluxo
+Na evolução de corpus multi-documento, o backend adiciona `Escólio corpus ask` como fluxo
 separado de `retrieval ask <arquivo>`. O comando consulta todos os chunks persistidos no SQLite
 e no Chroma, permite `lexical`, `vector` e `hybrid`, e retorna o mesmo contrato `AskResponse`
 com `citations` e `used_sources` atravessando mais de uma nota quando a pergunta exige
@@ -424,14 +424,14 @@ também passam a reaproveitar embedder e vector store no processo, evitando paga
 SentenceTransformer em cada pergunta.
 
 Na evolução de configuração operacional, o app passa a separar preferências de usuário e overrides
-técnicos. Preferências editáveis pelo TUI, menu terminal e `free-plaud config` ficam em
-`data/results/user_settings.json`; variáveis `FREE_PLAUD_*` e `.env` continuam tendo precedência.
+técnicos. Preferências editáveis pelo TUI, menu terminal e `Escólio config` ficam em
+`data/results/user_settings.json`; variáveis `ESCOLIO_*` e `.env` continuam tendo precedência.
 O V1 cobre device/modelo de embedding, `top_k`, estratégia default do Ask, chunk size/overlap,
 modo de commit do corpus, pasta padrão, recursividade, batch de embedding e número de workers.
 Ao alterar modelo ou device pelo app, o `CorpusRuntime` limpa cache de embedder/vector store para
 evitar reutilizar runtime antigo.
 
-Na evolução atual das configurações, `free_plaud.app.settings_catalog` vira o catálogo canônico
+Na evolução atual das configurações, `escolio.app.settings_catalog` vira o catálogo canônico
 para UI real, TUI Textual e menu terminal. Ele define rótulo humano, descrição, grupo, tipo,
 opções, recomendação, storage (`user_settings.json` ou `.env`) e warnings operacionais. Assim,
 `retrieval_top_k=4`, `default_chunk_size=800` e `default_chunk_overlap=120` aparecem de forma
@@ -443,7 +443,7 @@ obrigatório antes de qualquer chamada de IA. Se o corpus estiver vazio, se não
 os hits não gerarem claims citáveis, o fluxo retorna `no_answer` sem chamar provider generativo.
 Quando há evidência validada, um provider OpenAI-compatible pode reescrever a resposta final a
 partir de contextos citáveis. O mesmo adaptador cobre Ollama, LM Studio e APIs remotas compatíveis
-com `/chat/completions`. A API key fica apenas em `.env` ou variável `FREE_PLAUD_ANSWER_API_KEY`;
+com `/chat/completions`. A API key fica apenas em `.env` ou variável `ESCOLIO_ANSWER_API_KEY`;
 `user_settings.json` guarda somente provider, modelo, base URL, temperatura e timeout.
 
 Na evolução atual, `hybrid` combina:
@@ -547,13 +547,13 @@ ignorado `data/results/audio`; arquivos de origem não são sobrescritos.
 Comandos (em `pipeline`, após `uv sync --locked --extra audio --dev`):
 
 ```powershell
-uv run free-plaud ingest audio models
-uv run free-plaud ingest audio download silero-vad
-uv run free-plaud ingest audio download whisper-small
-uv run free-plaud ingest audio verify whisper-small
-uv run free-plaud ingest audio transcribe caminho.wav --language pt
-uv run free-plaud ingest audio record --seconds 10
-uv run free-plaud ingest audio record --seconds 10 --index
+uv run escolio ingest audio models
+uv run escolio ingest audio download silero-vad
+uv run escolio ingest audio download whisper-small
+uv run escolio ingest audio verify whisper-small
+uv run escolio ingest audio transcribe caminho.wav --language pt
+uv run escolio ingest audio record --seconds 10
+uv run escolio ingest audio record --seconds 10 --index
 ```
 
 Gravação parada entra na fila STT. `--index` solicita indexação do snapshot

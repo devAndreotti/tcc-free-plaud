@@ -1,6 +1,6 @@
 # Como estruturar um backend Python 3.12 com uv, Typer, Pydantic e Pytest para um projeto RAG local-first
 
-Este guia descreve uma forma sólida de começar o backend do projeto **free-plaud** sem antecipar complexidade desnecessária. A proposta combina **Python 3.12**, **uv**, **Typer**, **Pydantic** e **Pytest** dentro de um desenho orientado a domínio, adequado para um pipeline experimental de RAG com foco em execução local, benchmark e evolução incremental.
+Este guia descreve uma forma sólida de começar o backend do projeto **Escólio** sem antecipar complexidade desnecessária. A proposta combina **Python 3.12**, **uv**, **Typer**, **Pydantic** e **Pytest** dentro de um desenho orientado a domínio, adequado para um pipeline experimental de RAG com foco em execução local, benchmark e evolução incremental.
 
 ## Princípios que devem guiar a implementação
 
@@ -11,7 +11,7 @@ Também é importante respeitar o princípio **local-first**. Em vez de espalhar
 ## Estrutura recomendada de pastas
 
 ```text
-free-plaud/
+Escólio/
 ├── data/
 │   ├── corpus/
 │   ├── datasets/
@@ -24,7 +24,7 @@ free-plaud/
 │   ├── README.md
 │   ├── pyproject.toml
 │   ├── src/
-│   │   └── free_plaud/
+│   │   └── escolio/
 │   │       ├── app/
 │   │       ├── benchmark/
 │   │       ├── ingest/
@@ -59,13 +59,13 @@ A separação acima é útil porque mantém a arquitetura flexível. Se amanhã 
 |---|---|
 | `pipeline/pyproject.toml` | define metadados, dependências, script da CLI e configuração de testes |
 | `pipeline/.python-version` | fixa o Python 3.12 para o projeto |
-| `pipeline/src/free_plaud/cli.py` | compõe a CLI raiz e registra subcomandos |
-| `pipeline/src/free_plaud/app/config.py` | centraliza configuração com Pydantic Settings |
-| `pipeline/src/free_plaud/ingest/loaders.py` | primeiro ponto de leitura de artefatos locais |
-| `pipeline/src/free_plaud/notes/schemas.py` | define a entidade central de conhecimento |
-| `pipeline/src/free_plaud/retrieval/chunking.py` | fornece chunking determinístico e testável |
-| `pipeline/src/free_plaud/benchmark/runners.py` | concentra a execução de cenários experimentais |
-| `pipeline/src/free_plaud/storage/vector.py` | define a fronteira do store vetorial local |
+| `pipeline/src/escolio/cli.py` | compõe a CLI raiz e registra subcomandos |
+| `pipeline/src/escolio/app/config.py` | centraliza configuração com Pydantic Settings |
+| `pipeline/src/escolio/ingest/loaders.py` | primeiro ponto de leitura de artefatos locais |
+| `pipeline/src/escolio/notes/schemas.py` | define a entidade central de conhecimento |
+| `pipeline/src/escolio/retrieval/chunking.py` | fornece chunking determinístico e testável |
+| `pipeline/src/escolio/benchmark/runners.py` | concentra a execução de cenários experimentais |
+| `pipeline/src/escolio/storage/vector.py` | define a fronteira do store vetorial local |
 | `pipeline/tests/` | garante feedback rápido desde o início |
 
 ## Como configurar com uv da melhor forma
@@ -75,7 +75,7 @@ O `uv` deve ser tratado como a interface principal de ambiente e dependências. 
 | Tarefa | Comando recomendado |
 |---|---|
 | sincronizar ambiente | `uv sync` |
-| executar CLI | `uv run free-plaud --help` |
+| executar CLI | `uv run escolio --help` |
 | rodar testes | `uv run pytest` |
 | adicionar dependência | `uv add nome-da-lib` |
 | adicionar dependência de desenvolvimento | `uv add --dev nome-da-lib` |
@@ -86,7 +86,7 @@ O ideal é manter `uv.lock` versionado no repositório sempre que o backend come
 
 A CLI deve ser a interface operacional principal do backend enquanto não existir interface gráfica madura. Para isso, a melhor prática é criar uma **aplicação raiz** e anexar subaplicações por domínio. A própria documentação do Typer recomenda esse estilo para CLIs com múltiplos comandos, o que combina naturalmente com módulos como `ingest`, `notes`, `retrieval`, `benchmark` e `storage` [3].
 
-Em vez de criar uma função monolítica para tudo, o mais saudável é ter um pequeno `cli.py` em cada módulo com responsabilidades diretas. Dessa forma, `free-plaud ingest show`, `free-plaud notes build` e `free-plaud benchmark run-demo` continuam coesos e fáceis de expandir.
+Em vez de criar uma função monolítica para tudo, o mais saudável é ter um pequeno `cli.py` em cada módulo com responsabilidades diretas. Dessa forma, `Escólio ingest show`, `Escólio notes build` e `Escólio benchmark run-demo` continuam coesos e fáceis de expandir.
 
 ## Como usar Pydantic corretamente
 

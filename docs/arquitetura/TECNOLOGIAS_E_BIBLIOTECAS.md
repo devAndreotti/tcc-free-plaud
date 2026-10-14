@@ -1,6 +1,6 @@
-# Stack Tecnológica e Bibliotecas - Free Plaud
+# Stack Tecnológica e Bibliotecas - Escólio
 
-Documento de referência das linguagens, runtimes, bibliotecas e componentes de infraestrutura da arquitetura do Free Plaud.
+Documento de referência das linguagens, runtimes, bibliotecas e componentes de infraestrutura da arquitetura do Escólio.
 
 ---
 
