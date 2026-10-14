@@ -1,0 +1,445 @@
+AUDITORIA APS QUALIDADE - 03 - QUALITY GATE E ANÁLISE ESTÁTICA
+==============================================================
+
+Projeto: Escólio (antes free-plaud / Evil Plaud)
+Repositório: devAndreotti/tcc-free-plaud (GitHub, privado)
+Commit analisado: dbb82fe (main, 2026-10-14)
+Coleta: 2026-10-14. Somente leitura.
+
+Legenda das fontes
+------------------
+  [fatos]    docs_aps_qualidade/_fontes/fatos_verificados.md (verificado em 2026-10-14)
+  [sonar]    docs_aps_qualidade/_fontes/sonar_raw.txt (API SonarCloud, coleta 2026-10-14T19:39:34Z)
+  [log]      log do run 38576721730 (PR #119, job "Tests & ratchet" e outros), via gh
+  [gh]       comando gh citado no texto
+  [cmd]      comando de shell citado no texto
+  [inferido] conclusão minha a partir do código ou dos dados
+  Caminhos são relativos à raiz do repositório. Linhas no formato arquivo:linha.
+  Nos números de [sonar], "sonar:N" é a linha N do arquivo sonar_raw.txt.
+
+
+1. CONFIGURAÇÕES DO QUALITY GATE
+================================
+
+1.1 SonarCloud
+--------------
+
+Projeto
+- Organização: devandreotti. Chave do projeto: devAndreotti_tcc-free-plaud.
+  Nome exibido: "Escólio" (sonar-project.properties:1-3).
+- Análise: job "SonarCloud" de quality-gate.yml (linhas 181-201), com
+  -Dsonar.qualitygate.wait=true e timeout de 300 s (linhas 196-198). Se o gate reprovar,
+  o job falha.
+
+Escopo e caminhos (sonar-project.properties)
+  Propriedade                          Valor                                   Linha
+  -----------------------------------  --------------------------------------  -----
+  sonar.sources                        pipeline/src, UI/src                    5
+  sonar.tests                          pipeline/tests, UI/src                  6
+  sonar.test.inclusions                **/tests/**/*.py, **/test_*.py,         7
+                                       UI/src/**/*.test.ts, *.test.tsx
+  sonar.python.coverage.reportPaths    coverage/coverage.xml                   9
+  sonar.javascript.lcov.reportPaths    coverage/ui/lcov.info                   10
+  sonar.typescript.tsconfigPaths       UI/tsconfig.app.json                    11
+  sonar.sourceEncoding                 UTF-8                                   12
+
+Exclusões (sonar-project.properties:8)
+  **/.venv/**, **/.pytest_cache/**, **/coverage/**, **/__pycache__/**, **/node_modules/**,
+  UI/dist/**, UI/e2e/**, UI/src/**/*.test.ts, UI/src/**/*.test.tsx, docs/**, specs/**,
+  **/*.css, **/*.tcss, pipeline/src/escolio/tui/**
+- Ponto relevante: pipeline/src/escolio/tui/** fica fora da análise do Sonar. O arquivo
+  pipeline/src/escolio/tui/app.py tem 1.227 linhas. Ele entra na cobertura do ratchet
+  (pytest usa --cov=src), mas não entra nos números do Sonar [inferido pelo código].
+- Testes de UI (*.test.tsx) ficam fora da análise, mas o Sonar lê o lcov da UI
+  (sonar-project.properties:10).
+- Os caminhos de cobertura batem com o que o CI produz: pytest grava coverage/coverage.xml
+  (quality-gate.yml:127); Vitest grava coverage/ui/lcov.info (UI/vite.config.ts:23-27).
+
+Quality gate "Sonar way" (conditions em código novo)
+- Gate: "Sonar way", id 9, isBuiltIn true (sonar:13). isCleanAsYouCode: true (sonar:13).
+- Condições (sonar:13):
+  Métrica                              Operador  Limite   Significado
+  -----------------------------------  --------  -------  ----------------------------------
+  new_security_rating                  GT        1        falha se pior que A
+  new_reliability_rating               GT        1        falha se pior que A
+  new_maintainability_rating           GT        1        falha se pior que A
+  new_coverage                         LT        80       falha se cobertura < 80%
+  new_duplicated_lines_density         GT        3        falha se duplicação > 3%
+  new_security_hotspots_reviewed       LT        100      falha se hotspots revisados < 100%
+- Atribuição do gate ao projeto: a chamada "quality gate do projeto" falhou no JSON bruto
+  com "The 'organization' parameter is missing" (sonar:7). Que o projeto usa "Sonar way"
+  vem dos fatos [fatos]. O JSON bruto não confirma a atribuição.
+
+Perfil de regras
+- Perfil: "Sonar way comprehensive" (sonar:15 mostra a lista da organização).
+- Regras ativas na organização (sonar:15, campo activeRuleCount): Python 490, TypeScript 496,
+  JavaScript 481, CSS 41, Docker 51, GitHub Actions 34, PowerShell 32, Shell 24.
+- A lista de perfis do próprio projeto (sonar:21) está truncada no arquivo bruto a 1.500
+  caracteres. Por isso as contagens por linguagem do projeto não foram verificadas.
+
+1.2 Quality gate do repositório
+-------------------------------
+
+Arquivos
+  Arquivo                              Papel
+  -----------------------------------  -----------------------------------------------------
+  scripts/quality-gate.js (246 linhas) Ratchet: comandos check, report, update, init
+                                       (linhas 189-209)
+  scripts/baseline.json (12 linhas)    Valores de referência do ratchet
+  .quality-gate/policy.json            maxFileLines: 300 (linha 14)
+  .quality-gate/policy.schema.json     JSON Schema da policy
+  scripts/quality-gate.test.cjs        Testes do ratchet, rodados em quality-gate.yml:135
+
+Baseline (scripts/baseline.json)
+  coverage.lines        88.98372056266793   (linha 3)
+  coverage.statements   88.98372056266793   (linha 4)
+  coverage.functions    88.98372056266793   (linha 5)
+  coverage.branches     88.98               (linha 6)
+  oversizedFiles        9                   (linha 10)
+  lintErrors            0                   (linha 11)
+  updatedAt             2026-09-13T17:20:19.565Z (linha 8)
+  Último commit que mexeu no arquivo: 3f42220 (#73), "ratchet coverage baseline to 89%".
+
+Regras (scripts/quality-gate.js)
+- Tolerância de cobertura: COVERAGE_EPSILON = 0.1 (linha 9).
+- lines, statements, functions e branches: falha se atual < baseline - 0,1 (linhas 133-138).
+- Lint: falha se erros atuais > baseline (linhas 141-147).
+- Arquivos grandes: falha se a contagem atual > baseline (linhas 149-155). Conta arquivos
+  .py, .ts, .tsx, .js e .jsx com mais de maxFileLines linhas, dentro de src e pipeline/src
+  (linhas 26, 98-115). A pasta UI/src não entra.
+- Exit code: 1 só no comando check, com status "failed" (linha 230).
+- Comandos update e init regravam scripts/baseline.json (linhas 200-207). Nenhum workflow
+  os chama [cmd: grep]. A atualização do baseline é manual.
+
+O que é comparado de fato na CI
+  a) A cobertura é só a do Python.
+     scripts/quality-gate.js:58 procura coverage/coverage-summary.json. O Vitest grava em
+     coverage/ui/ (UI/vite.config.ts:26, reportsDirectory '../coverage/ui'), então o arquivo
+     não é achado e o código cai para coverage/coverage.json (linha 118, função
+     collectPythonCoverage).
+     Prova no log do run 38576721730 [log]: "Coverage/lines: 89.0% -> 90.0%". No mesmo
+     log, o TOTAL do pytest é 90% (linha "TOTAL 8317 835 90%"). A cobertura da UI não entra
+     no ratchet, e a UI não tem limite de cobertura configurado (UI/vite.config.ts:23-27).
+
+  b) branches é uma cópia de lines.
+     O pytest roda sem --cov-branch (quality-gate.yml:127). Sem isso o JSON não tem
+     num_branches maior que zero, e quality-gate.js:76-78 usa a cobertura de linhas como
+     cobertura de branches. O log confirma: "Coverage/branches: 89.0% -> 90.0%", igual a lines
+     [log] [inferido pelo código].
+     Consequência: na prática o ratchet tem dois números, lines e branches, e são o mesmo.
+
+  c) Lint não é comparado na CI.
+     scripts/quality-gate.js:89-95 lê coverage/eslint-report.json (nenhum passo gera esse
+     arquivo; cmd: grep) ou coverage/ruff.json. O ruff.json só é gerado no job Lint
+     (quality-gate.yml:80), e o job Tests & ratchet não baixa esse artefato. O log do run
+     38576721730 não tem nenhuma linha "Lint/errors" [log]. Logo lintErrors fica null e a
+     regra é ignorada.
+     A proteção real de lint está nos próprios jobs Lint e Build: ruff check (linha 80) e
+     npm run lint (linha 86) saem com código diferente de zero quando há erro.
+
+  d) Arquivos grandes: 9, igual ao baseline.
+     Medido localmente com find e wc em pipeline/src (cmd: linhas acima de 300):
+       pipeline/src/escolio/corpus/ask.py                902
+       pipeline/src/escolio/corpus/service.py          1.942
+       pipeline/src/escolio/retrieval/search.py          494
+       pipeline/src/escolio/retrieval/rag.py             980
+       pipeline/src/escolio/tui/app.py                 1.227
+       pipeline/src/escolio/benchmark/runners.py         686
+       pipeline/src/escolio/storage/sqlite.py            534
+       pipeline/src/escolio/notes/structurer.py          515
+       pipeline/src/escolio/ingest/obsidian_cleaner.py   466
+     A UI tem outros 10 arquivos com mais de 300 linhas que o ratchet não conta, por exemplo
+     UI/src/services/bridge.ts (1.543), UI/src/components/SettingsModal.tsx (991) e
+     UI/src/components/Icons.tsx (545) (cmd: find UI/src com wc -l).
+
+Números do ratchet no PR #119 [log], job "Tests & ratchet" (run 38576721730):
+  Coverage/lines       89.0% -> 90.0% (+1.0)   ok
+  Coverage/statements  89.0% -> 90.0% (+1.0)   ok
+  Coverage/functions   89.0% -> 90.0% (+1.0)   ok
+  Coverage/branches    89.0% -> 90.0% (+1.0)   ok
+  Files/oversized      9 -> 9 (igual)          ok
+  (Lint/errors não aparece: ver item c)
+
+Gate de testes do próprio ratchet
+- node --test scripts/*.test.cjs (quality-gate.yml:135). Esses testes cobrem quality-gate.js,
+  docker-gate.cjs, pr-comment.js, setup.js e outros scripts de suporte.
+
+1.3 Auditoria de dependências (job "Security audit")
+----------------------------------------------------
+
+- Python: uv sync --locked --dev --extra audio --extra cpu (quality-gate.yml:43), seguido de
+  uvx pip-audit --path .venv (linha 46).
+  Sem versão fixa do pip-audit, sem arquivo de exceções e sem --strict.
+- Node: npm ci (linha 49), seguido de npm audit --audit-level=high (linha 52).
+  Falha com vulnerabilidade de severidade high ou critical. Comportamento padrão do npm
+  audit [inferido, não reexecutado aqui].
+- Nenhum relatório de auditoria é publicado como artefato (o job não tem upload).
+- Resultado da última execução no PR #119: job "Security audit" com conclusão success
+  [gh] (run 38576721730).
+
+2. REGRAS DE LINTERS E FORMATADORES
+===================================
+
+2.1 ESLint (UI/eslint.config.js, 23 linhas)
+-------------------------------------------
+
+- Script: "lint": "eslint ." (UI/package.json:9). Rodado no job Lint (quality-gate.yml:86).
+- Configs e plugins:
+    @eslint/js recommended                        (linha 13)
+    typescript-eslint recommended                 (linha 14)
+    eslint-plugin-react-hooks flat recommended    (linha 15)
+    eslint-plugin-react-refresh, config vite      (linha 16)
+- Arquivos: **/*.{ts,tsx} (linha 11).
+- Ignorados: dist (linha 9).
+- Ambiente: ecmaVersion 2020 e globals do browser (linhas 18-20).
+- Sem regras customizadas e sem overrides.
+- "eslint ." também cobre UI/e2e/ e UI/vite.config.ts, porque são arquivos .ts.
+- Versões (UI/package.json:19-36): eslint ^10.11.0, typescript-eslint ^8.71.0,
+  eslint-plugin-react-hooks ^7.1.1, eslint-plugin-react-refresh ^0.5.7.
+- Observação: ecmaVersion 2020 (eslint) não bate com target ES2023 (tsconfig.app.json:4).
+  O parser do typescript-eslint trata a sintaxe, então é uma inconsistência de configuração,
+  não um erro de lint [inferido].
+- Resultado: ESLint limpo [fatos]. Job Lint com success no PR #119 [gh].
+
+2.2 Ruff (pipeline/pyproject.toml, linhas 61-66)
+------------------------------------------------
+
+  [tool.ruff.lint]
+  ignore = ["B008", "RUF012", "BLE001", "TRY004"]
+
+- Justificativas nos comentários das linhas 62-65:
+    B008:   Typer exige Argument() e Option() como valor padrão de parâmetro.
+    RUF012: widgets do Textual declaram BINDINGS como atributo de classe.
+    BLE001: código de fronteira em doctor e embed captura qualquer exceção de propósito.
+    TRY004: validação de entrada levanta ValueError, não TypeError.
+- Não há [tool.ruff] com line-length nem select. Não há ruff.toml nem .ruff.toml na raiz
+  nem em pipeline/ (cmd: ls -a).
+- Versão: o uv.lock trava ruff 0.16.6 (pipeline/uv.lock:3436-3437). O grupo dev pede
+  ruff>=0.16.3 (pyproject.toml:50).
+- Configuração efetiva, medida com uvx ruff@0.16.6 check --show-settings (fora do venv,
+  sem sincronizar as dependências) [cmd]:
+    line-length: 88 (padrão do ruff)
+    E501 (linha longa): NÃO ativa
+    Grupos ativos, com regras dentro de cada um: PYI, UP, F, RUF, PLE, B, SIM, PLW, FURB,
+    C, PLR, YTT, DTZ, ASYNC, PLC, PIE, PT, LOG, TRY, TC, G, EXE, S, PERF, INT, PTH, FA, E,
+    W, T, RET, PGH, N, ISC, I, FLY, D. Total de 409 regras.
+    B008, RUF012, BLE001 e TRY004 ficam fora por causa do ignore.
+- Na CI: ruff check src tests com saída JSON (quality-gate.yml:80). Erro faz o job falhar.
+- ruff format não é usado em nenhum lugar (cmd: grep, 0 ocorrências). Não há formatador
+  Python configurado.
+
+2.3 TypeScript (UI/tsconfig*.json)
+----------------------------------
+
+tsconfig.app.json (usado pela build e pelo Sonar, sonar:11 e sonar-project.properties:11)
+  strict: true                       (linha 20)
+  noUnusedLocals: true               (linha 21)
+  noUnusedParameters: true           (linha 22)
+  erasableSyntaxOnly: true           (linha 23)
+  noFallthroughCasesInSwitch: true   (linha 24)
+  noUncheckedSideEffectImports: true (linha 25)
+  verbatimModuleSyntax: true         (linha 14)
+  Outros: target ES2023 (linha 4), moduleResolution bundler (linha 12), noEmit (linha 16),
+  skipLibCheck (linha 9), include ["src"] (linha 27).
+
+tsconfig.node.json: os mesmos flags de strictness (linhas 19-23), include ["vite.config.ts"]
+(linha 25).
+tsconfig.json: só referências (files vazio e references para os dois anteriores).
+
+- Verificação de tipos: npm run build = tsc -b && vite build (UI/package.json:8). Roda no
+  job Build & smoke (quality-gate.yml:179).
+
+2.4 Scripts e comandos
+----------------------
+
+  Onde                             Comando                               Roda em
+  -------------------------------  ------------------------------------  -----------------------
+  UI/package.json:7                "dev": "vite"                         manual
+  UI/package.json:8                "build": "tsc -b && vite build"       Build & smoke (179)
+  UI/package.json:9                "lint": "eslint ."                    Lint (86)
+  UI/package.json:10               "test": "vitest run"                  manual
+  UI/package.json:11               "test:coverage": "vitest run --cov"   Tests & ratchet (133)
+  UI/package.json:12               "preview": "vite preview"             manual
+  pipeline/pyproject.toml:54-55    escolio, escolio-tui (entry points)   Build & smoke (173)
+  pipeline/pyproject.toml:69-71    pytest: addopts "-ra", testpaths      Tests & ratchet (127)
+  raiz (sem package.json)          node --test scripts/*.test.cjs        Tests & ratchet (135)
+  raiz                             node scripts/quality-gate.js check    Tests & ratchet (137)
+  raiz                             node scripts/docker-gate.cjs          Docker image gate (212)
+  raiz                             node scripts/pr-comment.js            PR report (241)
+  raiz                             python scripts/build_desktop.py       desktop-release (48)
+
+2.5 Ferramentas de formatação e hooks: ausentes
+-----------------------------------------------
+
+  Ferramenta              Situação   Evidência
+  ----------------------  ---------  -------------------------------------------------------
+  Prettier                AUSENTE    sem .prettierrc*, sem chave "prettier" em UI/package.json
+  Husky                   AUSENTE    sem diretório .husky/ (cmd: git ls-files)
+  lint-staged             AUSENTE    sem .lintstagedrc, sem chave em package.json
+  pre-commit (Python)     AUSENTE    sem .pre-commit-config.yaml
+  .editorconfig           AUSENTE    não versionado (cmd: git ls-files)
+  Formatador Python       AUSENTE    ruff format e black não aparecem em nenhum arquivo
+  Config do editor        PRESENTE   .vscode/settings.json (850 bytes), sem formatter nem
+                                     lint (cmd: grep, 0 ocorrências)
+
+- Não há package.json na raiz. Os scripts JS da raiz rodam com node puro.
+- Consequência: nada formata o código nem bloqueia o commit localmente. Lint e tipos só
+  rodam na CI, e o ruff check não cobre formatação.
+
+
+3. DADOS DE ANÁLISE ESTÁTICA
+============================
+
+3.1 Métricas: código atual (PR #119) x última análise da main
+-------------------------------------------------------------
+
+Dois conjuntos de dados:
+- "main, 2026-07-21": última análise concluída da main (sonar:3 e sonar:9).
+- "PR #119": análise do commit de renomeação, que é o estado atual de main (sonar:5).
+
+  Métrica                            main (2026-07-21)    PR #119 (atual)     Fonte
+  ---------------------------------  -------------------  ------------------  ---------
+  ncloc (linhas de código)           16.686               14.839              sonar:3,5
+  Cobertura geral                    80,3%                84,9%               sonar:3,5
+  Cobertura de linhas                81,2%                87,7%               sonar:3,5
+  Cobertura de branches              54,7%                68,6%               sonar:3,5
+  Cobertura do código novo           82,68%               91,02%              sonar:3,5
+  Duplicação (densidade)             0,8%                 0,8%                sonar:3,5
+  Duplicação do código novo          0,12%                0,55%               sonar:3,5
+  Blocos duplicados                  8                    13                  sonar:3,5
+  Débito técnico (sqale_index)       1.129 min (18,8 h)   338 min (5,6 h)     sonar:3,5
+  Debt ratio                         0,2%                 0,1%                sonar:3,5
+  Rating de manutenibilidade         A (1.0)              A (1.0)             sonar:3,5
+  Rating de confiabilidade           C (3.0)              A (1.0)             sonar:3,5
+  Rating de segurança                E (5.0)              A (1.0)             sonar:3,5
+  Rating de revisão de segurança     E (5.0)              A (1.0)             sonar:3,5
+  Bugs                               2                    0                   sonar:3,5
+  Vulnerabilidades                   1                    0                   sonar:3,5
+  Security hotspots                  4                    0                   sonar:3,5
+  Code smells                        116                  53                  sonar:3,5
+  Code smells do código novo         27                   53                  sonar:3,5
+  Complexidade ciclomática           2.488                2.729               sonar:3,5
+  Complexidade cognitiva             2.032                2.380               sonar:3,5
+
+- Escala de rating: 1 = A, 2 = B, 3 = C, 4 = D, 5 = E.
+- Debt ratio: o Sonar devolve o valor em percentual (0.2 e 0.1).
+- O código novo do PR #119 inclui praticamente tudo, porque a renomeação do projeto fez o
+  código antigo contar como novo [fatos]. Por isso code smells do código novo (53) são
+  iguais ao total.
+
+3.2 Issues da análise de 2026-07-21 (main)
+------------------------------------------
+
+- Total de issues abertas: 119 (sonar:11). Todas ligadas à análise 8ccc5049-2eda-4542-
+  90b4-03deef963261, que é a de 2026-07-21 (sonar:9 e sonar:11).
+- Por severidade (sonar:11, facets):
+    BLOCKER    1
+    CRITICAL  38
+    MAJOR     57
+    MINOR     22
+    INFO       1
+    Total    119
+- Por tipo (sonar:11, facets):
+    CODE_SMELL      116
+    BUG               2
+    VULNERABILITY     1
+- Esforço total das issues: 1.169 min (19,5 h) (sonar:11, effortTotal). O débito técnico
+  da análise, em sonar:3 (sqale_index), é 1.129 min. A diferença de 40 min não é explicada
+  pelos dados brutos.
+
+3.3 Regras mais frequentes (main, 2026-07-21) e significado
+-----------------------------------------------------------
+
+  Regra                 Qtde  O que a regra aponta
+  --------------------  ----  ------------------------------------------------------------
+  python:S3776          21    Complexidade cognitiva da função acima do limite
+  typescript:S6819      17    Role ARIA em elemento que tem equivalente HTML nativo
+  python:S1192          15    Literal de string repetido (deveria virar constante)
+  python:S8786           9    Regex com backtracking super-linear. Ex.: corpus/ask.py:46
+                              (mensagem em sonar:9). O arquivo mudou de
+                              pipeline/src/free_plaud/ para pipeline/src/escolio/
+  typescript:S7780       8    Não explicado nesta auditoria; ver a regra no SonarCloud
+  typescript:S3358       6    Operador ternário aninhado
+  python:S3358           4    Mesma regra, em Python (ternário aninhado)
+  python:S107            5    Função com parâmetros demais
+  typescript:S6571       5    Não explicado nesta auditoria; ver a regra no SonarCloud
+  python:S5778           4    Não explicado nesta auditoria; ver a regra no SonarCloud
+  python:S2245           -    Não aparece nas facets de sonar:11 (ver 3.4, item b)
+
+- S2245 (PRNG, gerador pseudoaleatório) foi tratado como falso positivo: é o bootstrap de
+  intervalo de confiança com seed fixa, sem uso de segurança. Localização atual:
+  pipeline/src/escolio/benchmark/metrics.py:154 (rng = random.Random(seed)). Nos fatos a
+  localização era metrics.py:157, com o caminho antigo [fatos].
+
+3.4 Notas sobre os números
+--------------------------
+
+a) Análises da main com falha desde 2026-10-08.
+   - Runs do quality-gate em main com SonarCloud em failure: 37855744558 (2026-10-08T23:33)
+     e 37867326230 (2026-10-09T01:18) [gh].
+   - Log do run 37855744558, passo SonarCloud: "ERROR CE Task finished abnormally with
+     status: FAILED" [gh]. O log não traz a causa do lado do servidor. Os fatos classificam
+     como falha do servidor do SonarCloud [fatos].
+   - Por isso a última análise concluída da main é a de 2026-07-21 (sonar:9). As análises
+     que falharam não aparecem nessa lista.
+   - No momento da coleta, o run 38621534848 (push em main, 2026-10-14) estava com o job
+     SonarCloud em andamento [gh].
+
+b) Falso positivo S2245, marcado em 2026-10-14.
+   - Os fatos registram que o dono marcou o S2245 como falso positivo, com justificativa [fatos].
+   - O PR #119 falhou no Sonar com Security Rating C no código novo, porque a renomeação fez
+     o código antigo contar como novo e o S2245 entrou no cálculo [fatos].
+   - Na reexecução do run 38576721730 o job SonarCloud passou [gh].
+   - O status exato do S2245 não está no JSON bruto. Ele não aparece nas facets de sonar:11.
+     Isso é coerente com a issue não estar aberta na coleta [inferido].
+
+c) Dependabot sem SONAR_TOKEN.
+   - PRs abertos pelo Dependabot não recebem secrets. Por isso o job SonarCloud falha neles
+     [fatos]. Precedentes de consolidação: #113 e #118 (ver 02, item 1.2).
+   - Para comparação, o run 38563746866 (PR #118, branch do dono, não do Dependabot) passou no
+     job SonarCloud [gh].
+
+d) Três números de cobertura coexistem. Não são o mesmo cálculo:
+   - 90,0%: ratchet no run 38576721730. Só Python, lines (log; item 1.2).
+   - 84,9%: Sonar, PR #119. Python e UI (lcov), sem o pacote TUI (sonar:5 e exclusões).
+   - 88,98%: baseline.json:3. Referência do ratchet, atualizada em 2026-09-13.
+   - Cobertura do código novo no Sonar: 91,02% (sonar:5). Passa na condição de 80%.
+
+e) Condições do gate Sonar aplicadas ao PR #119 (sonar:5 e sonar:13):
+   - new_coverage 91,02% >= 80%: ok.
+   - new_duplicated_lines_density 0,55% <= 3%: ok.
+   - new_security_hotspots_reviewed: não consta no JSON bruto.
+   - Ratings de código novo: não constam como métricas separadas no JSON bruto.
+
+
+4. TESTES REGISTRADOS (contexto para a cobertura)
+=================================================
+
+- Run 38576721730, PR #119, job "Tests & ratchet" [log]:
+    pytest: "498 passed in 594.56s (0:09:54)". TOTAL: 8317 statements, 835 não cobertos, 90%.
+    Vitest: 16 arquivos de teste, 86 testes, todos passaram.
+- Fatos, medido na VPS em 2026-10-14 [fatos]:
+    pytest: 484 coletados, 483 passaram e 1 falhou em 22m37s. A falha foi
+    tests/test_tui_app.py::test_tui_notes_cancel_button_cancels_running_index, que passou
+    3/3 quando rodado isolado (flaky, por timing de pilot.pause e thread).
+    UI: 84/84 testes em 16 arquivos.
+- As contagens dos fatos (484 e 84) e do log (498 e 86) não batem. Não há no repositório
+  explicação para a diferença. Os dois números vêm de execuções diferentes.
+- Teste instável no CI [fatos]: test_tui_ask_button_ignores_double_click_while_running
+  falhou no run 38563746866 (assert ['hybrid','hybrid'] == ['hybrid']) e passou na
+  reexecução.
+
+
+5. LIMITAÇÕES DESTA AUDITORIA
+=============================
+
+- Não reexecutei pip-audit nem npm audit. O resultado registrado é o do run 38576721730.
+- Não confirmei no SonarCloud qual gate está atribuído ao projeto. Usei "Sonar way" dos
+  fatos. A chamada direta falhou por falta do parâmetro organization (sonar:7).
+- Não reexecutei ESLint, ruff check nem as suítes de teste. Os dados de lint vêm dos
+  fatos e do log de CI.
+- Os significados das regras S7780, S6571 e S5778 não foram verificados neste documento.
+- Divergências entre fatos e observação direta (registradas, não corrigidas):
+  - Pytest: 484 (fatos) x 498 (log).
+  - UI: 84 (fatos) x 86 (log).
+  - Swap do runner: 4 GB extra (fatos) x 8,0 GiB total (free -h) [ver 02, item 2.3].
