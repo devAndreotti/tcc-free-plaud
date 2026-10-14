@@ -10,7 +10,7 @@ tags:
 
 Este documento registra a forma escolhida para materializar a primeira base do backend experimental em Python.
 
-A decisão adotada foi manter o backend dentro de `pipeline/`, usando **layout em `src/`**, package principal `free_plaud` e **CLI por subcomandos** com `Typer`. Essa escolha preserva o caráter de monólito modular recomendado pela arquitetura e evita acoplamento prematuro com interface ou shell desktop.
+A decisão adotada foi manter o backend dentro de `pipeline/`, usando **layout em `src/`**, package principal `escolio` e **CLI por subcomandos** com `Typer`. Essa escolha preserva o caráter de monólito modular recomendado pela arquitetura e evita acoplamento prematuro com interface ou shell desktop.
 
 ## Estrutura principal
 
@@ -18,7 +18,7 @@ A decisão adotada foi manter o backend dentro de `pipeline/`, usando **layout e
 pipeline/
 ├── pyproject.toml
 ├── .python-version
-├── src/free_plaud/
+├── src/escolio/
 │   ├── app/
 │   ├── ingest/
 │   ├── notes/
@@ -35,7 +35,7 @@ pipeline/
 | Decisão | Justificativa |
 |---|---|
 | `pipeline/` como projeto Python isolado | Permite avançar no core experimental antes de UI e desktop |
-| `src/free_plaud/` | Melhora ergonomia de testes e packaging |
+| `src/escolio/` | Melhora ergonomia de testes e packaging |
 | `Typer` com subcomandos | Organiza capacidades por domínio e facilita crescimento incremental |
 | `providers/` como fronteira própria | Preserva a estratégia BYOK e troca futura de provedores |
 | `benchmark/` desacoplado | Reforça o princípio benchmark-first do TCC |

@@ -170,7 +170,7 @@ jobs:
         run: uv build
       - name: Smoke Python CLI
         working-directory: pipeline
-        run: uv run free-plaud --help
+        run: uv run escolio --help
       - name: Install UI dependencies
         working-directory: UI
         run: npm ci

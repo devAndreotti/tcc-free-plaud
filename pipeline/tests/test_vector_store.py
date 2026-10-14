@@ -4,18 +4,18 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from free_plaud.app.config import Settings
-from free_plaud.cli import app
-from free_plaud.notes.schemas import Note
-from free_plaud.retrieval.indexer import index_note_in_vector_store
-from free_plaud.retrieval.models import Chunk, SearchHit
-from free_plaud.retrieval.search import (
+from escolio.app.config import Settings
+from escolio.cli import app
+from escolio.notes.schemas import Note
+from escolio.retrieval.indexer import index_note_in_vector_store
+from escolio.retrieval.models import Chunk, SearchHit
+from escolio.retrieval.search import (
     _fuse_hits_by_rank,
     hybrid_search,
     open_semantic_search,
     semantic_search,
 )
-from free_plaud.storage.vector import LocalVectorStore
+from escolio.storage.vector import LocalVectorStore
 
 runner = CliRunner()
 
@@ -395,7 +395,7 @@ def test_retrieval_index_and_semantic_search_cli_use_vector_store(monkeypatch, t
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='cli_chunks',
         embedding_model='fake-hash',
@@ -408,8 +408,8 @@ def test_retrieval_index_and_semantic_search_cli_use_vector_store(monkeypatch, t
         encoding='utf-8',
     )
 
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.retrieval.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     index_result = runner.invoke(app, ['retrieval', 'index', str(sample_file), '--chunk-size', '80', '--overlap', '20'])
     search_result = runner.invoke(
@@ -439,7 +439,7 @@ def test_open_semantic_search_cli_reranks_shared_collection_results(monkeypatch,
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='cli_open_chunks',
         embedding_model='fake-hash',
@@ -457,8 +457,8 @@ def test_open_semantic_search_cli_reranks_shared_collection_results(monkeypatch,
         encoding='utf-8',
     )
 
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.retrieval.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     runner.invoke(app, ['retrieval', 'index', str(relevant_file), '--chunk-size', '80', '--overlap', '20'])
     runner.invoke(app, ['retrieval', 'index', str(noisy_file), '--chunk-size', '80', '--overlap', '20'])

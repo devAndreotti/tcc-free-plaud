@@ -3,14 +3,14 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from free_plaud.app.config import Settings, get_settings
-from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
-from free_plaud.cli import app
-from free_plaud.providers.answer import AnswerProviderTestResult
-from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
-from free_plaud.providers.smoke import ProviderSmokeAskResult, ProviderSmokeLocalResult
-from free_plaud.storage.sqlite import count_chunks, count_notes, init_sqlite
-from free_plaud.storage.vector import LocalVectorStore
+from escolio.app.config import Settings, get_settings
+from escolio.app.doctor_models import DoctorCheck, DoctorReport
+from escolio.cli import app
+from escolio.providers.answer import AnswerProviderTestResult
+from escolio.providers.model_discovery import ModelDiscoveryResult, ModelInfo
+from escolio.providers.smoke import ProviderSmokeAskResult, ProviderSmokeLocalResult
+from escolio.storage.sqlite import count_chunks, count_notes, init_sqlite
+from escolio.storage.vector import LocalVectorStore
 
 runner = CliRunner()
 
@@ -36,7 +36,7 @@ def _settings(tmp_path: Path) -> Settings:
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='corpus_cli_test',
         embedding_model='fake-hash',
@@ -57,7 +57,7 @@ def test_root_help_works() -> None:
 
 def test_config_cli_saves_user_settings(monkeypatch, tmp_path: Path) -> None:
     results_dir = tmp_path / 'data' / 'results'
-    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    monkeypatch.setenv('ESCOLIO_RESULTS_DIR', str(results_dir))
     get_settings.cache_clear()
 
     result = runner.invoke(app, ['config', 'set', 'embedding_device', 'cuda'])
@@ -71,8 +71,8 @@ def test_config_cli_saves_user_settings(monkeypatch, tmp_path: Path) -> None:
 
 def test_config_preset_preview_does_not_save(monkeypatch, tmp_path: Path) -> None:
     results_dir = tmp_path / 'data' / 'results'
-    monkeypatch.setenv('FREE_PLAUD_WORKSPACE_DIR', str(tmp_path))
-    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    monkeypatch.setenv('ESCOLIO_WORKSPACE_DIR', str(tmp_path))
+    monkeypatch.setenv('ESCOLIO_RESULTS_DIR', str(results_dir))
     get_settings.cache_clear()
 
     result = runner.invoke(app, ['config', 'preset', 'preview', 'cpu_rapido'])
@@ -87,8 +87,8 @@ def test_config_preset_preview_does_not_save(monkeypatch, tmp_path: Path) -> Non
 
 def test_config_preset_apply_saves_transactional_payload(monkeypatch, tmp_path: Path) -> None:
     results_dir = tmp_path / 'data' / 'results'
-    monkeypatch.setenv('FREE_PLAUD_WORKSPACE_DIR', str(tmp_path))
-    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    monkeypatch.setenv('ESCOLIO_WORKSPACE_DIR', str(tmp_path))
+    monkeypatch.setenv('ESCOLIO_RESULTS_DIR', str(results_dir))
     get_settings.cache_clear()
 
     result = runner.invoke(app, ['config', 'preset', 'apply', 'vault_grande'])
@@ -110,13 +110,13 @@ def test_doctor_cli_renders_structured_report(monkeypatch, tmp_path: Path) -> No
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
     )
 
-    monkeypatch.setattr('free_plaud.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.cli.get_settings', lambda: settings)
     monkeypatch.setattr(
-        'free_plaud.cli.run_doctor',
+        'escolio.cli.run_doctor',
         lambda *, settings: DoctorReport(
             status='warning',
             checks=[
@@ -152,7 +152,7 @@ def test_doctor_cli_renders_structured_report(monkeypatch, tmp_path: Path) -> No
 
 def test_provider_test_answer_cli_returns_json(monkeypatch) -> None:
     monkeypatch.setattr(
-        'free_plaud.providers.cli.test_answer_provider',
+        'escolio.providers.cli.test_answer_provider',
         lambda: AnswerProviderTestResult(
             provider='ollama',
             model='llama3.1:8b',
@@ -174,7 +174,7 @@ def test_provider_test_answer_cli_returns_json(monkeypatch) -> None:
 
 def test_provider_list_models_cli_returns_json(monkeypatch) -> None:
     monkeypatch.setattr(
-        'free_plaud.providers.cli.list_answer_models',
+        'escolio.providers.cli.list_answer_models',
         lambda: ModelDiscoveryResult(
             provider='ollama',
             base_url='http://localhost:11434',
@@ -195,7 +195,7 @@ def test_provider_list_models_cli_returns_json(monkeypatch) -> None:
 
 def test_provider_smoke_local_cli_returns_json(monkeypatch) -> None:
     monkeypatch.setattr(
-        'free_plaud.providers.cli.run_provider_smoke_local',
+        'escolio.providers.cli.run_provider_smoke_local',
         lambda strategy, top_k, keep_workspace: ProviderSmokeLocalResult(
             status='ok',
             strategy=strategy,
@@ -244,8 +244,8 @@ def test_corpus_index_cli_persists_file(monkeypatch, tmp_path: Path) -> None:
         'O corpus local deve indexar arquivos com path contendo espaco.\n',
         encoding='utf-8',
     )
-    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(app, ['corpus', 'index', *str(source).split(' ')])
 
@@ -259,7 +259,7 @@ def test_corpus_index_cli_persists_file(monkeypatch, tmp_path: Path) -> None:
 
 def test_corpus_status_cli_returns_consistency_json(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
 
     result = runner.invoke(app, ['corpus', 'status'])
 
@@ -273,7 +273,7 @@ def test_corpus_status_cli_returns_consistency_json(monkeypatch, tmp_path: Path)
 
 def test_corpus_ask_hybrid_rejects_fake_hash_with_actionable_error(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
 
     result = runner.invoke(
         app,
@@ -290,18 +290,18 @@ def test_corpus_ask_hybrid_rejects_fake_hash_with_actionable_error(monkeypatch, 
     combined_output = f'{result.stdout}\n{result.stderr}\n{result.exception or ""}'
     assert result.exit_code == 1
     assert 'fake-hash e modelo de teste' in combined_output
-    assert 'uv run free-plaud config preset apply cpu_rapido' in combined_output
+    assert 'uv run escolio config preset apply cpu_rapido' in combined_output
     assert 'Traceback' not in combined_output
 
 
 def test_corpus_ask_lexical_allows_fake_hash_without_embedder(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
 
     def fail_get_embedder(*args, **kwargs):
         raise AssertionError('lexical nao deve inicializar embedder')
 
-    monkeypatch.setattr('free_plaud.corpus.cli.get_embedder', fail_get_embedder)
+    monkeypatch.setattr('escolio.corpus.cli.get_embedder', fail_get_embedder)
 
     result = runner.invoke(
         app,
@@ -325,7 +325,7 @@ def test_corpus_embedding_info_cli_reports_device(monkeypatch, tmp_path: Path) -
     settings = _settings(tmp_path)
     settings.embedding_model = 'chroma-default'
     settings.embedding_device = 'cuda'
-    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
 
     result = runner.invoke(app, ['corpus', 'embedding-info'])
 
@@ -340,8 +340,8 @@ def test_corpus_reset_cli_previews_by_default_and_executes_with_yes(monkeypatch,
     settings = _settings(tmp_path)
     source = tmp_path / 'resetavel.md'
     source.write_text('# Resetavel\n\nRabbitMQ foi adotado como broker.\n', encoding='utf-8')
-    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     index_result = runner.invoke(app, ['corpus', 'index', str(source)])
     preview_result = runner.invoke(app, ['corpus', 'reset', '--dry-run'])
@@ -374,8 +374,8 @@ def test_corpus_rebuild_cli_rebuilds_directory_with_yes(monkeypatch, tmp_path: P
     target.mkdir()
     (target / 'broker.md').write_text('# Broker\n\nRabbitMQ foi adotado como broker.\n', encoding='utf-8')
     (target / 'runbook.md').write_text('# Runbook\n\nO time SRE ficou responsavel pelo runbook.\n', encoding='utf-8')
-    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     preview_result = runner.invoke(app, ['corpus', 'rebuild', str(target), '--recursive', '--dry-run'])
     rebuild_result = runner.invoke(app, ['corpus', 'rebuild', str(target), '--recursive', '--yes'])
@@ -398,8 +398,8 @@ def test_corpus_index_cli_returns_non_zero_for_invalid_file(monkeypatch, tmp_pat
     settings = _settings(tmp_path)
     source = tmp_path / 'planilha.xlsx'
     source.write_text('conteudo', encoding='utf-8')
-    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(app, ['corpus', 'index', str(source)])
 
@@ -416,8 +416,8 @@ def test_corpus_index_cli_accepts_recursive_directory(monkeypatch, tmp_path: Pat
     nested.mkdir(parents=True)
     (root / 'base.md').write_text('# Base\n\nArquivo raiz.\n', encoding='utf-8')
     (nested / 'detalhe.md').write_text('# Detalhe\n\nArquivo aninhado.\n', encoding='utf-8')
-    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(app, ['corpus', 'index', str(root), '--recursive'])
 
@@ -441,9 +441,9 @@ def test_corpus_ask_cli_answers_against_indexed_directory(monkeypatch, tmp_path:
         '# Runbook\n\nA equipe SRE ficou responsavel pelo runbook de operacao.\n',
         encoding='utf-8',
     )
-    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     index_result = runner.invoke(app, ['corpus', 'index', str(root), '--recursive'])
     ask_result = runner.invoke(

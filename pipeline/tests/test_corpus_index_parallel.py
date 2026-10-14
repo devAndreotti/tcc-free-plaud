@@ -1,9 +1,9 @@
 from pathlib import Path
 from threading import current_thread
 
-from free_plaud.app.config import Settings
-from free_plaud.corpus import service
-from free_plaud.corpus.service import index_corpus_path
+from escolio.app.config import Settings
+from escolio.corpus import service
+from escolio.corpus.service import index_corpus_path
 
 
 class FakeEmbedder:
@@ -27,7 +27,7 @@ def _settings(tmp_path: Path, *, workers: int, collection_name: str) -> Settings
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name=collection_name,
         embedding_model='fake-hash',

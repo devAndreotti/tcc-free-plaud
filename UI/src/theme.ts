@@ -1,10 +1,13 @@
 export type ThemeChoice = 'dark' | 'light' | 'system';
 
-const STORAGE_KEY = 'free-plaud:theme';
+import { readMigratedItem } from './services/localStorageMigration';
+
+const STORAGE_KEY = 'escolio:theme';
+const LEGACY_STORAGE_KEY = 'free-plaud:theme';
 
 export function readThemeChoice(): ThemeChoice {
   try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
+    const stored = readMigratedItem(STORAGE_KEY, LEGACY_STORAGE_KEY);
     if (stored === 'dark' || stored === 'light' || stored === 'system') return stored;
   } catch {
     // Armazenamento bloqueado: segue com o padrão.

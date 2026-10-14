@@ -1,4 +1,4 @@
-# CLAUDE.md - free-plaud
+# CLAUDE.md - Escólio
 
 ## Status
 

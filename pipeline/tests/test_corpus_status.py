@@ -1,16 +1,16 @@
 from pathlib import Path
 
-from free_plaud.app.config import Settings
-from free_plaud.corpus.service import get_corpus_status, index_corpus_file
-from free_plaud.retrieval.models import Chunk
-from free_plaud.storage.sqlite import (
+from escolio.app.config import Settings
+from escolio.corpus.service import get_corpus_status, index_corpus_file
+from escolio.retrieval.models import Chunk
+from escolio.storage.sqlite import (
     get_notes_by_id,
     init_sqlite,
     list_chunks,
     replace_chunks_for_note,
     upsert_note,
 )
-from free_plaud.storage.vector import LocalVectorStore
+from escolio.storage.vector import LocalVectorStore
 
 
 class FakeEmbedder:
@@ -33,7 +33,7 @@ def _settings(tmp_path: Path, collection_name: str = 'corpus_status_test') -> Se
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name=collection_name,
         embedding_model='fake-hash',

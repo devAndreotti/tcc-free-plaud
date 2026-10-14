@@ -16,7 +16,7 @@ No microphone recording or private speech is included.
 Run from `pipeline` after explicit model provisioning:
 
 ```powershell
-uv run free-plaud ingest audio evaluate tests/fixtures/audio/manifest.json --model whisper-small --device cpu
+uv run escolio ingest audio evaluate tests/fixtures/audio/manifest.json --model whisper-small --device cpu
 ```
 
 The evaluator verifies hashes and compares original audio, VAD and conservative

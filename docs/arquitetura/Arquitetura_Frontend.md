@@ -131,7 +131,7 @@ A interface desktop segue a linha "instrumento de pesquisa": feita para ler e ve
 - **Grafo** desenhado em canvas com as cores lidas dos tokens do tema, e redesenhado quando o tema muda. Sem cores fixas nem brilho.
 - **Configurações › Vault** só escolhe a pasta que alimenta o grafo e mostra o tamanho do corpus. Indexar fica na Fila: o botão "Indexar na Fila" leva a pasta escolhida para lá.
 - **Leitura de nota** mostra só a seção "Normalized Text" do `structured_markdown`; o frontmatter interno, o "Summary" (começo do texto) e o "Raw Text" (o texto de novo) ficam de fora. As propriedades da própria nota (tags, autor) aparecem como lista.
-- **Números do corpus** na sidebar se atualizam pelo evento `free-plaud:corpus-changed` (`notifyCorpusChanged`), disparado ao fim de um job, ao indexar um arquivo solto e ao apagar ou reindexar uma nota.
+- **Números do corpus** na sidebar se atualizam pelo evento `escolio:corpus-changed` (`notifyCorpusChanged`), disparado ao fim de um job, ao indexar um arquivo solto e ao apagar ou reindexar uma nota.
 - **Configurações › IA** mostra modelo, URL, API key, Testar e Listar só para provedores generativos; com o extractive, uma frase explica que ele não usa nada disso.
 - **Primitivas CSS** compartilhadas (`.btn`, `.switch`, `.popover`, `.pill`, `.card`, `.data-table`, `.page-head`) entre Notas, Fila, Benchmark e Configurações.
 
@@ -196,9 +196,9 @@ Só depois vale acoplar totalmente ao shell desktop.
 
 Na evolução atual, a UI React dentro do PyWebView deixa de responder apenas mock:
 
-- `UI/main.py` importa o pacote `free_plaud` pelo `pipeline/src`
+- `UI/main.py` importa o pacote `escolio` pelo `pipeline/src`
 - o chat chama `corpus ask` real usando a estratégia padrão configurada
-- o modal de configurações salva `FREE_PLAUD_ANSWER_API_KEY` em `pipeline/.env`
+- o modal de configurações salva `ESCOLIO_ANSWER_API_KEY` em `pipeline/.env`
 - a pasta selecionada no modal pode ser indexada no corpus local
 - a tela Notes agrupa as notas pela pasta relativa ao vault e abre cada uma em modo leitura
   (Markdown renderizado). O interruptor "Mostrar chunks" troca a leitura pelos trechos indexados,
@@ -212,7 +212,7 @@ Na evolução atual, a UI React dentro do PyWebView deixa de responder apenas mo
 - arquivos soltos na área de soltar da Fila entram no corpus um a um. O WebView não expõe o
   caminho do arquivo ao JS: um handler de `drop` registrado no Python (`UI/main.py`) guarda o
   caminho, e a área de soltar pede `indexDroppedFiles(nomes)`. Só é indexado o que caiu nela. A
-  fila (`free_plaud/corpus/dropped.py`) divide com o job de pasta a trava de escrita no corpus, e
+  fila (`escolio/corpus/dropped.py`) divide com o job de pasta a trava de escrita no corpus, e
   a UI consulta `pollDroppedFiles` até cada arquivo terminar (indexado, sem mudança ou falhou)
 - o chat chama `askCorpus(message, strategy)`, que devolve o `AskResponse` estruturado: afirmações
   com apoio direto ou parcial, citações com faixa de caracteres, limitações, estratégia, top-k,
@@ -225,7 +225,7 @@ Na evolução atual, a UI React dentro do PyWebView deixa de responder apenas mo
   confiança sob o MRR, nDCG@10, latência p50/p95 e o cartão "Responder ou se abster"; "Por
   documento" mostra a busca restrita à nota de cada pergunta
 - settings de frontend, TUI e menu terminal passam a consumir o catálogo canônico de
-  `free_plaud.app.settings_catalog`, evitando rótulos divergentes para `top_k`,
+  `escolio.app.settings_catalog`, evitando rótulos divergentes para `top_k`,
   `chunk_size`, `overlap`, provider, device e segredo local
 - o modal de configurações lista modelos expostos pelo provider configurado via backend,
   sem vazar API key e sem acessar endpoints locais direto pelo React

@@ -3,11 +3,11 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from free_plaud.app.config import Settings
-from free_plaud.benchmark.datasets import BenchmarkDataset, BenchmarkSample
-from free_plaud.benchmark.grounded import evaluate_grounded_answers
-from free_plaud.cli import app
-from free_plaud.notes.schemas import Note
+from escolio.app.config import Settings
+from escolio.benchmark.datasets import BenchmarkDataset, BenchmarkSample
+from escolio.benchmark.grounded import evaluate_grounded_answers
+from escolio.cli import app
+from escolio.notes.schemas import Note
 
 runner = CliRunner()
 
@@ -92,7 +92,7 @@ def test_answer_eval_cli_reports_groundedness_and_abstention(monkeypatch, tmp_pa
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
     )
     sample_file = tmp_path / 'benchmark.md'
@@ -115,7 +115,7 @@ def test_answer_eval_cli_reports_groundedness_and_abstention(monkeypatch, tmp_pa
         encoding='utf-8',
     )
 
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.benchmark.cli.get_settings', lambda: settings)
 
     result = runner.invoke(
         app,

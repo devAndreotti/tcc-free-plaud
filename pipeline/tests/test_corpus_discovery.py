@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from free_plaud.corpus.discovery import discover_corpus_files
+from escolio.corpus.discovery import discover_corpus_files
 
 
 def test_discover_corpus_files_keeps_supported_top_level_files_sorted(tmp_path: Path) -> None:

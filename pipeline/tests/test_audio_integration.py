@@ -4,11 +4,11 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
-from free_plaud.benchmark.audio import evaluate_audio, speech_metrics
-from free_plaud.ingest.audio_cli import app
-from free_plaud.providers.audio_catalog import file_hash
-from free_plaud.providers.audio_models import AudioError, TranscriptionResult
-from free_plaud.tui import audio_actions as actions
+from escolio.benchmark.audio import evaluate_audio, speech_metrics
+from escolio.ingest.audio_cli import app
+from escolio.providers.audio_catalog import file_hash
+from escolio.providers.audio_models import AudioError, TranscriptionResult
+from escolio.tui import audio_actions as actions
 
 
 def result_for(path):
@@ -29,14 +29,14 @@ def result_for(path):
 
 
 def test_audio_loader_keeps_raw_text_and_structures_cleaned_text(tmp_path, monkeypatch):
-    from free_plaud.ingest.loaders import load_document
-    from free_plaud.notes.structurer import structure_document
+    from escolio.ingest.loaders import load_document
+    from escolio.notes.structurer import structure_document
 
     path = tmp_path / "meeting.wav"
     path.write_bytes(b"audio")
     result = result_for(path)
     monkeypatch.setattr(
-        "free_plaud.app.audio_service.audio_runtime",
+        "escolio.app.audio_service.audio_runtime",
         lambda: SimpleNamespace(transcribe_result=lambda *args: result),
     )
     document = load_document(path)
@@ -94,8 +94,8 @@ def test_speech_metrics_count_substitutions_deletions_insertions():
 
 
 def test_doctor_audio_never_records_or_downloads(tmp_path, monkeypatch):
-    from free_plaud.app import doctor_audio
-    from free_plaud.app.config import Settings
+    from escolio.app import doctor_audio
+    from escolio.app.config import Settings
 
     settings = Settings(results_dir=tmp_path, audio_device="cuda")
     monkeypatch.setattr(doctor_audio, "find_spec", lambda _: None)
@@ -125,7 +125,7 @@ def test_doctor_audio_never_records_or_downloads(tmp_path, monkeypatch):
 
 
 def test_audio_facade_and_cli_use_shared_runtime(tmp_path, monkeypatch):
-    from free_plaud.providers.audio_catalog import load_catalog
+    from escolio.providers.audio_catalog import load_catalog
 
     path = tmp_path / "speech.wav"
     result = result_for(path)
@@ -173,8 +173,8 @@ def test_capture_facade_delegates_lifecycle(monkeypatch):
 
 
 def test_record_cli_progress_completion_and_start_failure(tmp_path, monkeypatch):
-    from free_plaud.ingest import audio_cli
-    from free_plaud.ingest.audio_jobs import AudioJobSnapshot
+    from escolio.ingest import audio_cli
+    from escolio.ingest.audio_jobs import AudioJobSnapshot
 
     snapshot = AudioJobSnapshot(
         job_id="one", status="recording", source_path=tmp_path / "a.wav"
@@ -207,7 +207,7 @@ def test_record_cli_progress_completion_and_start_failure(tmp_path, monkeypatch)
 
 
 def test_record_cli_interrupt_cancels_capture(tmp_path, monkeypatch):
-    from free_plaud.ingest.audio_jobs import AudioJobSnapshot
+    from escolio.ingest.audio_jobs import AudioJobSnapshot
 
     snapshot = AudioJobSnapshot(
         job_id="one", status="recording", source_path=tmp_path / "a.wav"

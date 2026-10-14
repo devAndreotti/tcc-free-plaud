@@ -2,10 +2,10 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from free_plaud.cli import app
-from free_plaud.notes.schemas import Note
-from free_plaud.retrieval.chunking import chunk_text
-from free_plaud.retrieval.indexer import index_note
+from escolio.cli import app
+from escolio.notes.schemas import Note
+from escolio.retrieval.chunking import chunk_text
+from escolio.retrieval.indexer import index_note
 
 runner = CliRunner()
 

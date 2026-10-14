@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from free_plaud.notes.metadata import build_note_id
+from escolio.notes.metadata import build_note_id
 
 
 def test_build_note_id_preserves_legacy_file_id_without_root() -> None:

@@ -6,9 +6,9 @@ from time import monotonic, sleep
 
 import pytest
 
-from free_plaud.ingest.download_jobs import DownloadJobManager
-from free_plaud.providers.audio_catalog import ModelFile, ModelStore, VoiceModel
-from free_plaud.providers.audio_models import AudioError
+from escolio.ingest.download_jobs import DownloadJobManager
+from escolio.providers.audio_catalog import ModelFile, ModelStore, VoiceModel
+from escolio.providers.audio_models import AudioError
 
 
 def _wait_until(predicate, *, timeout: float = 1.0) -> None:

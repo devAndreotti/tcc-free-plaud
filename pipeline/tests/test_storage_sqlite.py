@@ -3,16 +3,16 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from free_plaud.app.config import Settings
-from free_plaud.cli import app
-from free_plaud.notes.schemas import Note
-from free_plaud.retrieval.chunking import chunk_text
-from free_plaud.storage.models import (
+from escolio.app.config import Settings
+from escolio.cli import app
+from escolio.notes.schemas import Note
+from escolio.retrieval.chunking import chunk_text
+from escolio.storage.models import (
     BenchmarkQueryRecord,
     BenchmarkRunRecord,
     ProcessingLogRecord,
 )
-from free_plaud.storage.sqlite import (
+from escolio.storage.sqlite import (
     connect_sqlite,
     count_fts_chunks,
     get_notes_by_id,
@@ -49,7 +49,7 @@ def _build_note(tmp_path: Path) -> Note:
 
 
 def test_init_sqlite_creates_expected_tables(tmp_path: Path) -> None:
-    db_path = tmp_path / 'free_plaud.sqlite3'
+    db_path = tmp_path / 'escolio.sqlite3'
 
     connection = init_sqlite(db_path)
 
@@ -64,7 +64,7 @@ def test_init_sqlite_creates_expected_tables(tmp_path: Path) -> None:
 
 
 def test_upsert_note_persists_canonical_note_fields(tmp_path: Path) -> None:
-    db_path = tmp_path / 'free_plaud.sqlite3'
+    db_path = tmp_path / 'escolio.sqlite3'
     note = _build_note(tmp_path)
 
     connection = init_sqlite(db_path)
@@ -85,7 +85,7 @@ def test_upsert_note_persists_canonical_note_fields(tmp_path: Path) -> None:
 
 
 def test_replace_chunks_for_note_persists_offset_aware_lineage(tmp_path: Path) -> None:
-    db_path = tmp_path / 'free_plaud.sqlite3'
+    db_path = tmp_path / 'escolio.sqlite3'
     note = _build_note(tmp_path)
     chunks = chunk_text(
         note.note_id,
@@ -115,7 +115,7 @@ def test_replace_chunks_for_note_persists_offset_aware_lineage(tmp_path: Path) -
 
 
 def test_replace_chunks_for_note_maintains_fts_index(tmp_path: Path) -> None:
-    db_path = tmp_path / 'free_plaud.sqlite3'
+    db_path = tmp_path / 'escolio.sqlite3'
     note = _build_note(tmp_path)
     note.normalized_text = (
         'RabbitMQ foi adotado como broker operacional. '
@@ -147,7 +147,7 @@ def test_replace_chunks_for_note_maintains_fts_index(tmp_path: Path) -> None:
 
 
 def test_list_chunks_and_get_notes_by_id_return_persisted_contract(tmp_path: Path) -> None:
-    db_path = tmp_path / 'free_plaud.sqlite3'
+    db_path = tmp_path / 'escolio.sqlite3'
     note = _build_note(tmp_path)
     chunks = chunk_text(
         note.note_id,
@@ -171,7 +171,7 @@ def test_list_chunks_and_get_notes_by_id_return_persisted_contract(tmp_path: Pat
 
 
 def test_insert_processing_log_and_benchmark_records(tmp_path: Path) -> None:
-    db_path = tmp_path / 'free_plaud.sqlite3'
+    db_path = tmp_path / 'escolio.sqlite3'
     note = _build_note(tmp_path)
     chunks = chunk_text(
         note.note_id,
@@ -255,10 +255,10 @@ def test_storage_init_cli_creates_sqlite_database(monkeypatch, tmp_path: Path) -
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
     )
-    monkeypatch.setattr('free_plaud.storage.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.storage.cli.get_settings', lambda: settings)
 
     result = runner.invoke(app, ['storage', 'init'])
 

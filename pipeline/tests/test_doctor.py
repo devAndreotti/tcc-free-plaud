@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from free_plaud.app.config import Settings
-from free_plaud.app.doctor import run_doctor
-from free_plaud.retrieval.models import Chunk
-from free_plaud.storage.sqlite import init_sqlite
-from free_plaud.storage.vector import LocalVectorStore
+from escolio.app.config import Settings
+from escolio.app.doctor import run_doctor
+from escolio.retrieval.models import Chunk
+from escolio.storage.sqlite import init_sqlite
+from escolio.storage.vector import LocalVectorStore
 
 
 def _settings(tmp_path: Path, **overrides: object) -> Settings:
@@ -14,7 +14,7 @@ def _settings(tmp_path: Path, **overrides: object) -> Settings:
         'notes_dir': tmp_path / 'data' / 'corpus' / 'notes',
         'datasets_dir': tmp_path / 'data' / 'datasets',
         'results_dir': tmp_path / 'data' / 'results',
-        'sqlite_path': tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        'sqlite_path': tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         'vector_store_dir': tmp_path / 'data' / 'results' / 'vector_store',
         'vector_collection_name': 'doctor_test_chunks',
         'embedding_model': 'chroma-default',
@@ -49,7 +49,7 @@ def _by_code(report) -> dict[str, object]:
 
 
 def test_doctor_reports_fake_hash_as_error_without_leaking_secrets(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.delenv('FREE_PLAUD_ANSWER_API_KEY', raising=False)
+    monkeypatch.delenv('ESCOLIO_ANSWER_API_KEY', raising=False)
     settings = _settings(
         tmp_path,
         embedding_model='fake-hash',
@@ -76,7 +76,7 @@ def test_doctor_warns_for_chroma_default_cuda_but_keeps_embedding_model_ok(tmp_p
 
 
 def test_doctor_errors_when_sentence_transformer_cuda_is_unavailable(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr('free_plaud.providers.embed._cuda_available', lambda: False)
+    monkeypatch.setattr('escolio.providers.embed._cuda_available', lambda: False)
 
     report = run_doctor(
         settings=_settings(
@@ -93,7 +93,7 @@ def test_doctor_errors_when_sentence_transformer_cuda_is_unavailable(tmp_path: P
 
 
 def test_doctor_keeps_extractive_without_api_key_ok_and_warns_for_remote_provider(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.delenv('FREE_PLAUD_ANSWER_API_KEY', raising=False)
+    monkeypatch.delenv('ESCOLIO_ANSWER_API_KEY', raising=False)
 
     extractive = run_doctor(settings=_settings(tmp_path / 'extractive', answer_provider='extractive'))
     remote = run_doctor(
@@ -128,7 +128,7 @@ def test_doctor_returns_structured_errors_when_corpus_status_crashes(tmp_path: P
         _ = kwargs
         raise RuntimeError('chroma indisponivel')
 
-    monkeypatch.setattr('free_plaud.app.doctor_corpus.get_corpus_status', broken_corpus_status)
+    monkeypatch.setattr('escolio.app.doctor_corpus.get_corpus_status', broken_corpus_status)
 
     report = run_doctor(settings=_settings(tmp_path))
 

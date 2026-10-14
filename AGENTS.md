@@ -1,4 +1,4 @@
-# AGENTS.md - free-plaud
+# AGENTS.md - Escólio
 
 ## Instruction File Status
 
@@ -8,7 +8,7 @@ Se existir sobreposicao com outros arquivos de instrucao locais, seguir este arq
 
 ## Overview
 
-`free-plaud` é um projeto de TCC focado em um pipeline de IA para captura multimodal, estruturação automatizada em Markdown e recuperação semântica de conhecimento pessoal em português brasileiro.
+`Escólio` é um projeto de TCC focado em um pipeline de IA para captura multimodal, estruturação automatizada em Markdown e recuperação semântica de conhecimento pessoal em português brasileiro.
 
 O produto final desejado é um app desktop local-first, mas a prioridade do projeto é a validação experimental do pipeline e do módulo de benchmark.
 
@@ -86,7 +86,7 @@ Objetivo: empacotar a interface e integrar monitoramento local com menor custo o
 ## Planned Repository Structure
 
 ```text
-free-plaud/
+Escólio/
 ├── .agents/
 │   ├── inspirations/
 │   ├── skills/

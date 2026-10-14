@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from free_plaud.corpus.dropped import DroppedFileIndexer
-from free_plaud.corpus.models import CorpusIndexBatchResult, CorpusIndexResult
+from escolio.corpus.dropped import DroppedFileIndexer
+from escolio.corpus.models import CorpusIndexBatchResult, CorpusIndexResult
 
 
 def _batch(path: Path, status: str, **extra) -> CorpusIndexBatchResult:

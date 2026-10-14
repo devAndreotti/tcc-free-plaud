@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from free_plaud.ingest.models import IngestionResult
-from free_plaud.ingest.watcher_manager import WatcherManager
+from escolio.ingest.models import IngestionResult
+from escolio.ingest.watcher_manager import WatcherManager
 
 
 def make_result(status: str = "success") -> IngestionResult:
@@ -36,7 +36,7 @@ def test_start_activates_watcher(tmp_path: Path) -> None:
     manager = WatcherManager()
     fake_watcher = make_fake_watcher(tmp_path)
     with patch(
-        "free_plaud.ingest.watcher_manager.VaultWatcher", return_value=fake_watcher
+        "escolio.ingest.watcher_manager.VaultWatcher", return_value=fake_watcher
     ):
         result = manager.start(tmp_path)
 
@@ -49,7 +49,7 @@ def test_start_twice_returns_already_active(tmp_path: Path) -> None:
     manager = WatcherManager()
     fake_watcher = make_fake_watcher(tmp_path)
     with patch(
-        "free_plaud.ingest.watcher_manager.VaultWatcher", return_value=fake_watcher
+        "escolio.ingest.watcher_manager.VaultWatcher", return_value=fake_watcher
     ):
         manager.start(tmp_path)
         second = manager.start(tmp_path)
@@ -67,7 +67,7 @@ def test_stop_after_start_deactivates(tmp_path: Path) -> None:
     manager = WatcherManager()
     fake_watcher = make_fake_watcher(tmp_path)
     with patch(
-        "free_plaud.ingest.watcher_manager.VaultWatcher", return_value=fake_watcher
+        "escolio.ingest.watcher_manager.VaultWatcher", return_value=fake_watcher
     ):
         manager.start(tmp_path)
         result = manager.stop()

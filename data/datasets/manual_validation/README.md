@@ -5,7 +5,7 @@ Estes datasets usam perguntas positivas derivadas dos arquivos em `samples/manua
 O runner atual de benchmark opera sobre uma nota por execucao:
 
 ```powershell
-uv run free-plaud benchmark run "C:\caminho\documento.md" --dataset "D:\Dev\Repos\Own\tcc-free-plaud\data\datasets\manual_validation\07_pdf_tecnico_estruturado.json" --strategy lexical --export
+uv run escolio benchmark run "C:\caminho\documento.md" --dataset "D:\Dev\Repos\Own\tcc-free-plaud\data\datasets\manual_validation\07_pdf_tecnico_estruturado.json" --strategy lexical --export
 ```
 
 Regras praticas deste diretorio:
@@ -35,5 +35,5 @@ Arquivos incluidos:
 Comparacao repetivel:
 
 ```powershell
-uv run free-plaud benchmark compare --suite "D:\Dev\Repos\Own\tcc-free-plaud\data\datasets\manual_validation\suite.json" --export
+uv run escolio benchmark compare --suite "D:\Dev\Repos\Own\tcc-free-plaud\data\datasets\manual_validation\suite.json" --export
 ```

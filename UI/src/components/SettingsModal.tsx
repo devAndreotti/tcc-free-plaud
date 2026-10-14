@@ -676,7 +676,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                         type="password"
                         className="vault-picker__input"
                         value={apiKey}
-                        placeholder="FREE_PLAUD_ANSWER_API_KEY"
+                        placeholder="ESCOLIO_ANSWER_API_KEY"
                         aria-label="API key"
                         onChange={(event) => setApiKey(event.target.value)}
                       />
@@ -935,7 +935,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
 
                   <div className="settings-item">
                     <div className="settings-item__info">
-                      <span className="settings-item__label">Evil Plaud</span>
+                      <span className="settings-item__label">Escólio</span>
                       <span className="settings-item__description">
                         Perguntas sobre o seu vault, respondidas só com as notas indexadas e com a fonte de cada afirmação.
                       </span>

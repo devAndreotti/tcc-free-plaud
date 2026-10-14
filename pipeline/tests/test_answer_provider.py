@@ -6,8 +6,8 @@ from urllib.error import HTTPError
 
 import pytest
 
-from free_plaud.app.config import Settings
-from free_plaud.providers.answer import (
+from escolio.app.config import Settings
+from escolio.providers.answer import (
     EMPTY_ANSWER_ERROR,
     REASONING_EMPTY_ANSWER_ERROR,
     AnswerProviderError,
@@ -16,10 +16,10 @@ from free_plaud.providers.answer import (
     build_grounded_chat_messages,
     get_answer_provider,
 )
-from free_plaud.providers.answer import (
+from escolio.providers.answer import (
     test_answer_provider as run_answer_provider_test,
 )
-from free_plaud.providers.smoke import run_provider_smoke_local
+from escolio.providers.smoke import run_provider_smoke_local
 
 
 class FakeHTTPResponse:
@@ -59,7 +59,7 @@ def test_openai_compatible_provider_posts_chat_completion(monkeypatch) -> None:
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeHTTPResponse({'choices': [{'message': {'content': 'Resposta melhorada.'}}]})
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
 
     provider = OpenAICompatibleAnswerProvider(
         base_url='http://localhost:11434/v1',
@@ -111,7 +111,7 @@ def test_openai_compatible_provider_wraps_http_errors(monkeypatch) -> None:
             fp=BytesIO(b'{"error":"bad key"}'),
         )
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
     provider = OpenAICompatibleAnswerProvider(base_url='https://api.example/v1', model='model')
 
     with pytest.raises(AnswerProviderError, match='401'):
@@ -144,7 +144,7 @@ def test_openai_compatible_provider_omits_max_tokens_by_default(monkeypatch) -> 
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeHTTPResponse({'choices': [{'message': {'content': 'ok'}}]})
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
     provider = OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='gemma4-cuda')
 
     provider.answer('Pergunta?', ['[chunk] Evidencia.'])
@@ -159,7 +159,7 @@ def test_openai_compatible_provider_sends_max_tokens_when_set(monkeypatch) -> No
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeHTTPResponse({'choices': [{'message': {'content': 'ok'}}]})
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
     provider = OpenAICompatibleAnswerProvider(
         base_url='http://localhost:11434/v1',
         model='gemma4-cuda',
@@ -184,7 +184,7 @@ def test_openai_compatible_provider_flags_reasoning_without_final_answer(monkeyp
             }
         )
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
     provider = OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='gemma4-cuda')
 
     with pytest.raises(AnswerProviderError) as excinfo:
@@ -205,7 +205,7 @@ def test_openai_compatible_provider_treats_null_content_with_reasoning_as_empty(
             {'choices': [{'message': {'content': None, 'reasoning_content': 'pensando...'}}]}
         )
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
     provider = OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='gemma-pt')
 
     with pytest.raises(AnswerProviderError, match='reasoning'):
@@ -216,7 +216,7 @@ def test_openai_compatible_provider_flags_length_truncation_without_reasoning(mo
     def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': [{'message': {'content': ''}, 'finish_reason': 'length'}]})
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
     provider = OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='gemma4-cuda')
 
     with pytest.raises(AnswerProviderError) as excinfo:
@@ -229,7 +229,7 @@ def test_openai_compatible_provider_keeps_generic_empty_error_without_reasoning(
     def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': [{'message': {'content': '   '}, 'finish_reason': 'stop'}]})
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
     provider = OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='llama3.1:8b')
 
     with pytest.raises(AnswerProviderError) as excinfo:
@@ -245,7 +245,7 @@ def _settings(tmp_path: Path, **overrides) -> Settings:
         'notes_dir': tmp_path / 'data' / 'corpus' / 'notes',
         'datasets_dir': tmp_path / 'data' / 'datasets',
         'results_dir': tmp_path / 'data' / 'results',
-        'sqlite_path': tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        'sqlite_path': tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         'vector_store_dir': tmp_path / 'data' / 'results' / 'vector_store',
         'answer_provider': 'ollama',
         'answer_model': 'llama3.1:8b',
@@ -266,7 +266,7 @@ def test_provider_test_posts_synthetic_prompt_and_returns_ok(monkeypatch, tmp_pa
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeHTTPResponse({'choices': [{'message': {'content': 'ok'}}]})
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
 
     result = run_answer_provider_test(_settings(tmp_path))
 
@@ -292,7 +292,7 @@ def test_provider_test_http_401_returns_controlled_error_without_secret(monkeypa
             fp=BytesIO(b'{"error":"bad key sk-secret"}'),
         )
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
 
     result = run_answer_provider_test(_settings(tmp_path, answer_api_key='sk-secret'))
 
@@ -305,7 +305,7 @@ def test_provider_test_timeout_returns_controlled_error(monkeypatch, tmp_path: P
     def fake_urlopen(request, timeout):
         raise TimeoutError
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
 
     result = run_answer_provider_test(_settings(tmp_path))
 
@@ -324,7 +324,7 @@ def test_provider_test_urlopen_value_error_returns_controlled_error(monkeypatch,
     def fake_urlopen(request, timeout):
         raise ValueError('unknown url type: localhost')
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
 
     result = run_answer_provider_test(_settings(tmp_path))
 
@@ -336,7 +336,7 @@ def test_provider_test_accepts_non_empty_model_response(monkeypatch, tmp_path: P
     def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': [{'message': {'content': 'servico pronto'}}]})
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
 
     result = run_answer_provider_test(_settings(tmp_path))
 
@@ -348,7 +348,7 @@ def test_provider_test_rejects_empty_content(monkeypatch, tmp_path: Path) -> Non
     def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': [{'message': {'content': '   '}}]})
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
 
     result = run_answer_provider_test(_settings(tmp_path))
 
@@ -360,7 +360,7 @@ def test_provider_test_rejects_invalid_payload(monkeypatch, tmp_path: Path) -> N
     def fake_urlopen(request, timeout):
         return FakeHTTPResponse({'choices': []})
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
 
     result = run_answer_provider_test(_settings(tmp_path))
 
@@ -374,7 +374,7 @@ def test_provider_test_flags_reasoning_empty_answer(monkeypatch, tmp_path: Path)
             {'choices': [{'message': {'content': '', 'reasoning': 'pensando...'}, 'finish_reason': 'length'}]}
         )
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
 
     result = run_answer_provider_test(_settings(tmp_path))
 
@@ -389,7 +389,7 @@ def test_provider_test_sends_max_tokens_when_configured(monkeypatch, tmp_path: P
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeHTTPResponse({'choices': [{'message': {'content': 'ok'}}]})
 
-    monkeypatch.setattr('free_plaud.providers.answer.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
 
     result = run_answer_provider_test(_settings(tmp_path, answer_max_tokens=1024))
 

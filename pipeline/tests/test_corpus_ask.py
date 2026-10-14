@@ -1,26 +1,26 @@
 from pathlib import Path
 
-from free_plaud.app.config import Settings
-from free_plaud.corpus.ask import (
+from escolio.app.config import Settings
+from escolio.corpus.ask import (
     answer_corpus_with_citations,
     build_answer_contexts,
     validate_generated_answer,
 )
-from free_plaud.corpus.service import index_corpus_path
-from free_plaud.notes.metadata import build_note_id
-from free_plaud.notes.schemas import Note
-from free_plaud.retrieval.models import AnswerClaim, Chunk, Citation, SearchHit
-from free_plaud.retrieval.rag import (
+from escolio.corpus.service import index_corpus_path
+from escolio.notes.metadata import build_note_id
+from escolio.notes.schemas import Note
+from escolio.retrieval.models import AnswerClaim, Chunk, Citation, SearchHit
+from escolio.retrieval.rag import (
     _clean_claim_candidate,
     _question_needs_multiple_claims,
 )
-from free_plaud.retrieval.search import (
+from escolio.retrieval.search import (
     _stem_like,
     extract_named_query_terms,
     terms_missing_from_vocabulary,
 )
-from free_plaud.storage.sqlite import init_sqlite, list_chunks
-from free_plaud.storage.vector import LocalVectorStore
+from escolio.storage.sqlite import init_sqlite, list_chunks
+from escolio.storage.vector import LocalVectorStore
 
 
 class FakeEmbedder:
@@ -99,7 +99,7 @@ def _settings(tmp_path: Path) -> Settings:
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='corpus_ask_test',
         embedding_model='fake-hash',
@@ -376,7 +376,7 @@ def test_answer_corpus_lexical_uses_fts_candidates(monkeypatch, tmp_path: Path) 
     index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
     calls = {'count': 0}
 
-    from free_plaud.corpus import ask as ask_module
+    from escolio.corpus import ask as ask_module
 
     original_search = ask_module.search_chunks_fts
 

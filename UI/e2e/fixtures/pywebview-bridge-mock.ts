@@ -33,7 +33,7 @@ export function createPyWebViewMockScript(options: MockBridgeOptions = {}) {
           },
           listNotes: async function() {
             return [
-              { id: "note-01", title: "Arquitetura do Free Plaud", filename: "Arquitetura.md", path: "/mock/vault/Arquitetura.md", size: 1024, modified: "2026-09-08", tags: ["tcc", "rag"] },
+              { id: "note-01", title: "Arquitetura do Escólio", filename: "Arquitetura.md", path: "/mock/vault/Arquitetura.md", size: 1024, modified: "2026-09-08", tags: ["tcc", "rag"] },
               { id: "note-02", title: "Decisões de RRF", filename: "RRF.md", path: "/mock/vault/RRF.md", size: 2048, modified: "2026-09-08", tags: ["benchmark"] }
             ];
           },

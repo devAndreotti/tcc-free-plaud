@@ -18,6 +18,7 @@ import type { SettingsTab } from './SettingsModal';
 import { useQueueContext } from '../hooks/useQueueContext';
 import { useVaultContext } from '../hooks/useVaultContext';
 import { useCorpusHealth } from '../hooks/useCorpusHealth';
+import { readMigratedItem } from '../services/localStorageMigration';
 
 export type WorkspaceView = 'chat' | 'notes' | 'benchmark' | 'queue';
 
@@ -47,15 +48,10 @@ const SECTIONS: { tab: SettingsTab; label: string; icon: IconType }[] = [
   { tab: 'aparencia', label: 'Aparência', icon: ContrastIcon },
 ];
 
-const COLLAPSED_KEY = 'free-plaud:sidebar-collapsed';
+const COLLAPSED_KEY = 'escolio:sidebar-collapsed';
+const LEGACY_COLLAPSED_KEY = 'free-plaud:sidebar-collapsed';
 
-const readCollapsed = () => {
-  try {
-    return window.localStorage.getItem(COLLAPSED_KEY) !== 'false';
-  } catch {
-    return true;
-  }
-};
+const readCollapsed = () => readMigratedItem(COLLAPSED_KEY, LEGACY_COLLAPSED_KEY) !== 'false';
 
 const folderName = (path: string | null | undefined) => {
   if (!path) return null;
@@ -110,8 +106,8 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
   return (
     <aside className={`sb${collapsed ? ' sb--collapsed' : ''}`} aria-label="Navegação">
       <div className="sb__head">
-        <span className="sb__mark" aria-hidden="true">ep</span>
-        <span className="sb__name">Evil Plaud<small>vault local</small></span>
+        <span className="sb__mark" aria-hidden="true">ES</span>
+        <span className="sb__name">Escólio<small>vault local</small></span>
         <button
           type="button"
           id="btn-sidebar-toggle"

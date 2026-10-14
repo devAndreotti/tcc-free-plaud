@@ -1,4 +1,4 @@
-# Free Plaud Constitution
+# Escólio Constitution
 
 ## Core Principles
 
@@ -29,6 +29,6 @@ The backend exposes a single unified facade (tui.actions / runtime) consumed ide
 4. Ratchet metrics verification via Quality Gate before merging.
 
 ## Governance
-This constitution sets the non-negotiable architectural invariants of Free Plaud. Any evolution requires spec update, rationale in docs/, and quality gate validation.
+This constitution sets the non-negotiable architectural invariants of Escólio. Any evolution requires spec update, rationale in docs/, and quality gate validation.
 
 **Version**: 1.0.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-09-07

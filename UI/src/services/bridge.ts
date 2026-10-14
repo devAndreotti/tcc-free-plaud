@@ -540,7 +540,7 @@ interface PythonApi {
   /** Lista modelos expostos pelo provider LLM configurado. */
   listAnswerModels?: () => Promise<ModelDiscoveryResult>;
 
-  /** Salva ou remove FREE_PLAUD_ANSWER_API_KEY em pipeline/.env. */
+  /** Salva ou remove ESCOLIO_ANSWER_API_KEY em pipeline/.env. */
   saveApiKey?: (apiKey: string) => Promise<SaveApiKeyResult>;
 
   /** Salva uma setting do catálogo canônico do backend. */
@@ -604,7 +604,7 @@ const MOCK_CITATIONS: AskCitation[] = [
     note_version: 1,
     chunk_id: 'arquitetura--3f9a1c::v1::ofs-000680-001480::9a41',
     snippet: 'O id de um chunk junta o id da nota, a versão e o deslocamento no texto.',
-    source_path: 'Projetos/free-plaud/Arquitetura do índice.md',
+    source_path: 'Projetos/escolio/Arquitetura do índice.md',
     char_start: 680,
     char_end: 1480,
   },
@@ -613,7 +613,7 @@ const MOCK_CITATIONS: AskCitation[] = [
     note_version: 1,
     chunk_id: 'arquitetura--3f9a1c::v1::ofs-001360-002160::77c0',
     snippet: 'Se o hash não mudou desde a última indexação, a nota entra como inalterada.',
-    source_path: 'Projetos/free-plaud/Arquitetura do índice.md',
+    source_path: 'Projetos/escolio/Arquitetura do índice.md',
     char_start: 1360,
     char_end: 2160,
   },
@@ -622,7 +622,7 @@ const MOCK_CITATIONS: AskCitation[] = [
     note_version: 2,
     chunk_id: 'pipeline--b21e07::v2::ofs-000000-000800::1c3d',
     snippet: 'Notas alteradas voltam para a fila e passam de novo pelo chunking.',
-    source_path: 'Projetos/free-plaud/Pipeline de ingestão.md',
+    source_path: 'Projetos/escolio/Pipeline de ingestão.md',
     char_start: 0,
     char_end: 800,
   },

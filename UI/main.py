@@ -35,23 +35,23 @@ PIPELINE_SRC = REPO_ROOT / 'pipeline' / 'src'
 if PIPELINE_SRC.exists() and str(PIPELINE_SRC) not in sys.path:
     sys.path.insert(0, str(PIPELINE_SRC))
 
-from free_plaud.app.config import get_settings
-from free_plaud.app.doctor import run_doctor
-from free_plaud.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
-from free_plaud.app.settings_catalog import save_catalog_setting, save_catalog_settings, settings_catalog_payload
-from free_plaud.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
-from free_plaud.benchmark.service import run_benchmark_compare
-from free_plaud.corpus.ask import corpus_vocabulary_stems
-from free_plaud.corpus.dropped import DroppedFileIndexer
-from free_plaud.corpus.jobs import cancel_index_job, get_index_job, start_index_job
-from free_plaud.corpus.runtime import CorpusRuntime
-from free_plaud.notes.service import delete_note, get_note_detail, list_notes, reindex_note
-from free_plaud.providers.answer import test_answer_provider
-from free_plaud.providers.model_discovery import list_answer_models
-from free_plaud.retrieval.models import AskResponse
-from free_plaud.storage.sqlite import init_sqlite
-from free_plaud.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
-from free_plaud.tui.audio_actions import (
+from escolio.app.config import get_settings
+from escolio.app.doctor import run_doctor
+from escolio.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
+from escolio.app.settings_catalog import save_catalog_setting, save_catalog_settings, settings_catalog_payload
+from escolio.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
+from escolio.benchmark.service import run_benchmark_compare
+from escolio.corpus.ask import corpus_vocabulary_stems
+from escolio.corpus.dropped import DroppedFileIndexer
+from escolio.corpus.jobs import cancel_index_job, get_index_job, start_index_job
+from escolio.corpus.runtime import CorpusRuntime
+from escolio.notes.service import delete_note, get_note_detail, list_notes, reindex_note
+from escolio.providers.answer import test_answer_provider
+from escolio.providers.model_discovery import list_answer_models
+from escolio.retrieval.models import AskResponse
+from escolio.storage.sqlite import init_sqlite
+from escolio.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
+from escolio.tui.audio_actions import (
     cancel_audio_capture,
     cancel_voice_model_download,
     get_audio_capture,
@@ -61,7 +61,7 @@ from free_plaud.tui.audio_actions import (
     start_voice_model_download,
     stop_audio_capture,
 )
-from free_plaud.ingest.watcher_manager import watcher_manager
+from escolio.ingest.watcher_manager import watcher_manager
 
 load_local_env()
 
@@ -483,7 +483,7 @@ if __name__ == '__main__':
 
     # Cria a janela nativa do desktop
     window = webview.create_window(
-        title='Evil Plaud',
+        title='Escólio',
         url=html_path,
         js_api=api,          # Expõe a classe Api ao JavaScript
         width=1100,

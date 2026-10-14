@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from free_plaud.app.config import Settings
-from free_plaud.corpus.runtime import CorpusRuntime
+from escolio.app.config import Settings
+from escolio.corpus.runtime import CorpusRuntime
 
 
 class FakeEmbedder:
@@ -22,7 +22,7 @@ def _settings(tmp_path: Path) -> Settings:
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='runtime_test',
         embedding_model='sentence-transformer:fake-runtime',
@@ -40,7 +40,7 @@ def test_corpus_runtime_reuses_embedder_and_warms_once(monkeypatch, tmp_path: Pa
         created.append(embedder)
         return embedder
 
-    monkeypatch.setattr('free_plaud.corpus.runtime.get_embedder', fake_get_embedder)
+    monkeypatch.setattr('escolio.corpus.runtime.get_embedder', fake_get_embedder)
     runtime = CorpusRuntime(_settings(tmp_path))
 
     first = runtime.warmup_embedder()

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from free_plaud.ingest.loaders import load_document
+from escolio.ingest.loaders import load_document
 
 
 def test_load_document_reads_text_file(sample_text_file: Path) -> None:

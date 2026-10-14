@@ -10,15 +10,21 @@ describe('theme', () => {
 
   it('lê a escolha salva e cai no escuro quando não há escolha válida', () => {
     expect(readThemeChoice()).toBe('dark');
+    window.localStorage.setItem('escolio:theme', 'light');
+    expect(readThemeChoice()).toBe('light');
+    window.localStorage.setItem('escolio:theme', 'roxo');
+    expect(readThemeChoice()).toBe('dark');
+  });
+
+  it('migra a escolha salva com a chave antiga free-plaud:theme', () => {
     window.localStorage.setItem('free-plaud:theme', 'light');
     expect(readThemeChoice()).toBe('light');
-    window.localStorage.setItem('free-plaud:theme', 'roxo');
-    expect(readThemeChoice()).toBe('dark');
+    expect(window.localStorage.getItem('escolio:theme')).toBe('light');
   });
 
   it('salva, aplica e segue o sistema quando a escolha é "system"', () => {
     saveThemeChoice('light');
-    expect(window.localStorage.getItem('free-plaud:theme')).toBe('light');
+    expect(window.localStorage.getItem('escolio:theme')).toBe('light');
     expect(document.documentElement.dataset.theme).toBe('light');
 
     vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('light') }));

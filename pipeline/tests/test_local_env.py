@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
 
-from free_plaud.app.config import Settings
-from free_plaud.app.local_env import (
+from escolio.app.config import Settings
+from escolio.app.local_env import (
     ANSWER_API_KEY_ENV,
     answer_api_key_is_configured,
     local_env_path_for,
@@ -15,7 +15,7 @@ def _settings(tmp_path: Path) -> Settings:
         workspace_dir=tmp_path,
         data_dir=tmp_path / 'data',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
     )
 

@@ -38,7 +38,16 @@ describe('Sidebar', () => {
     await user.click(screen.getByRole('button', { name: 'Expandir menu' }));
 
     expect(container.querySelector('.sb')?.classList.contains('sb--collapsed')).toBe(false);
-    expect(window.localStorage.getItem('free-plaud:sidebar-collapsed')).toBe('false');
+    expect(window.localStorage.getItem('escolio:sidebar-collapsed')).toBe('false');
+  });
+
+  it('migra a preferência antiga free-plaud:sidebar-collapsed', () => {
+    window.localStorage.setItem('free-plaud:sidebar-collapsed', 'false');
+    const { container } = render(
+      <Sidebar activeView="chat" onNavigate={vi.fn()} onOpenSettings={vi.fn()} healthKey={0} />
+    );
+    expect(container.querySelector('.sb')?.classList.contains('sb--collapsed')).toBe(false);
+    expect(window.localStorage.getItem('escolio:sidebar-collapsed')).toBe('false');
   });
 
   it('navega e abre Configurações direto na seção escolhida', async () => {

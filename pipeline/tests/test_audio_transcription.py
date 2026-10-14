@@ -3,15 +3,15 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from free_plaud.ingest.audio_cleaner import clean_segment
-from free_plaud.providers.audio_engines import OnnxEngine, WhisperEngine
-from free_plaud.providers.audio_models import (
+from escolio.ingest.audio_cleaner import clean_segment
+from escolio.providers.audio_engines import OnnxEngine, WhisperEngine
+from escolio.providers.audio_models import (
     AudioError,
     AudioOptions,
     TranscriptSegment,
     TranscriptWord,
 )
-from free_plaud.providers.audio_runtime import AudioRuntime
+from escolio.providers.audio_runtime import AudioRuntime
 
 
 def test_cleaner_preserves_raw_words_and_timestamps():
@@ -143,7 +143,7 @@ def test_onnx_adapters_preserve_region_extent(monkeypatch, tmp_path, kind, metho
 def test_runtime_maps_disjoint_regions_and_saves_provenance(tmp_path, monkeypatch):
     import json
 
-    from free_plaud.providers.audio_models import SpeechRegion
+    from escolio.providers.audio_models import SpeechRegion
 
     path = tmp_path / "original.wav"
     path.write_bytes(b"original bytes")
@@ -160,7 +160,7 @@ def test_runtime_maps_disjoint_regions_and_saves_provenance(tmp_path, monkeypatc
     )
     monkeypatch.setattr(runtime, "_engine", lambda opts: engine)
     monkeypatch.setattr(
-        "free_plaud.ingest.audio_dsp.decode_audio", lambda path: np.ones(160000)
+        "escolio.ingest.audio_dsp.decode_audio", lambda path: np.ones(160000)
     )
     monkeypatch.setattr(
         runtime,

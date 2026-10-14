@@ -1,6 +1,6 @@
 from chromadb.utils import embedding_functions
 
-from free_plaud.providers.embed import (
+from escolio.providers.embed import (
     ChromaDefaultEmbedder,
     SentenceTransformerEmbedder,
     describe_embedding_config,
@@ -54,7 +54,7 @@ def test_get_embedder_resolves_sentence_transformer_alias(monkeypatch) -> None:
 
 
 def test_get_embedder_rejects_unavailable_cuda(monkeypatch) -> None:
-    monkeypatch.setattr('free_plaud.providers.embed._cuda_available', lambda: False)
+    monkeypatch.setattr('escolio.providers.embed._cuda_available', lambda: False)
 
     try:
         get_embedder('sentence-transformer:sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', device='cuda')
@@ -74,7 +74,7 @@ def test_get_embedder_auto_uses_cuda_when_available(monkeypatch) -> None:
         def __call__(self, texts: list[str]) -> list[list[float]]:
             return [[1.0, 2.0] for _ in texts]
 
-    monkeypatch.setattr('free_plaud.providers.embed._cuda_available', lambda: True)
+    monkeypatch.setattr('escolio.providers.embed._cuda_available', lambda: True)
     monkeypatch.setattr(
         embedding_functions,
         'SentenceTransformerEmbeddingFunction',
@@ -92,7 +92,7 @@ def test_get_embedder_wraps_sentence_transformer_initialization_errors(monkeypat
             _ = (model_name, device, normalize_embeddings)
             raise TypeError("'NoneType' object is not subscriptable")
 
-    monkeypatch.setattr('free_plaud.providers.embed._cuda_available', lambda: True)
+    monkeypatch.setattr('escolio.providers.embed._cuda_available', lambda: True)
     monkeypatch.setattr(
         embedding_functions,
         'SentenceTransformerEmbeddingFunction',

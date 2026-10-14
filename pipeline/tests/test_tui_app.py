@@ -6,10 +6,10 @@ from types import SimpleNamespace
 import pytest
 from textual.widgets import Button, Input, Select
 
-from free_plaud.app.config import Settings
-from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
-from free_plaud.corpus.cancellation import CancellationToken
-from free_plaud.corpus.models import (
+from escolio.app.config import Settings
+from escolio.app.doctor_models import DoctorCheck, DoctorReport
+from escolio.corpus.cancellation import CancellationToken
+from escolio.corpus.models import (
     CorpusDiscoveryResult,
     CorpusIndexBatchResult,
     CorpusIndexProgress,
@@ -17,17 +17,17 @@ from free_plaud.corpus.models import (
     CorpusSkippedPath,
     CorpusStatusResult,
 )
-from free_plaud.notes.schemas import Note
-from free_plaud.providers.answer import AnswerProviderTestResult
-from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
-from free_plaud.retrieval.models import AskResponse, Citation, UsedSource
-from free_plaud.tui.app import (
+from escolio.notes.schemas import Note
+from escolio.providers.answer import AnswerProviderTestResult
+from escolio.providers.model_discovery import ModelDiscoveryResult, ModelInfo
+from escolio.retrieval.models import AskResponse, Citation, UsedSource
+from escolio.tui.app import (
     ASK_MODES,
     ASK_STRATEGIES,
     COMPACT_WIDTH,
     ActionCell,
     AskPane,
-    FreePlaudApp,
+    EscolioApp,
     SettingsPane,
     _bullet_help,
     _progress_rate_and_eta,
@@ -42,7 +42,7 @@ def _settings(tmp_path: Path) -> Settings:
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='tui_test',
         embedding_model='fake-hash',
@@ -91,7 +91,7 @@ def _answer(question: str) -> AskResponse:
 
 
 def test_provider_test_message_appends_hint_on_error() -> None:
-    from free_plaud.tui.app import _provider_test_message
+    from escolio.tui.app import _provider_test_message
 
     result = SimpleNamespace(
         provider='ollama',
@@ -133,7 +133,7 @@ def test_progress_rate_and_eta_are_renderable() -> None:
 
 def test_ask_layout_keeps_inputs_and_actions_in_compact_rows() -> None:
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 36)):
             input_row = app.query_one('#ask-input-row')
             control_row = app.query_one('#ask-control-row')
@@ -155,8 +155,8 @@ def test_ask_file_lexical_uses_file_pipeline_without_vector_dependencies(monkeyp
     sample.write_text('# Sample\n\nO benchmark mede recall e latencia.\n', encoding='utf-8')
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr('free_plaud.tui.app.load_document', lambda path: ('document', path))
-    monkeypatch.setattr('free_plaud.tui.app.structure_document', lambda document: _note(sample))
+    monkeypatch.setattr('escolio.tui.app.load_document', lambda path: ('document', path))
+    monkeypatch.setattr('escolio.tui.app.structure_document', lambda document: _note(sample))
 
     def fail_vector_store(*args, **kwargs):
         raise AssertionError('lexical nao deve inicializar vector store')
@@ -168,9 +168,9 @@ def test_ask_file_lexical_uses_file_pipeline_without_vector_dependencies(monkeyp
         captured.update(note=note, question=question, top_k=top_k, kwargs=kwargs)
         return _answer(question)
 
-    monkeypatch.setattr('free_plaud.tui.app.LocalVectorStore', fail_vector_store)
-    monkeypatch.setattr('free_plaud.tui.app.get_embedder', fail_embedder)
-    monkeypatch.setattr('free_plaud.tui.app.answer_with_citations', fake_answer_with_citations)
+    monkeypatch.setattr('escolio.tui.app.LocalVectorStore', fail_vector_store)
+    monkeypatch.setattr('escolio.tui.app.get_embedder', fail_embedder)
+    monkeypatch.setattr('escolio.tui.app.answer_with_citations', fake_answer_with_citations)
 
     response = ask_file(sample, '  O que o benchmark mede?  ', 'lexical', settings=_settings(tmp_path))
 
@@ -193,16 +193,16 @@ def test_ask_file_hybrid_initializes_vector_dependencies(monkeypatch, tmp_path: 
     class FakeEmbedder:
         model_name = 'fake-hash'
 
-    monkeypatch.setattr('free_plaud.tui.app.load_document', lambda path: ('document', path))
-    monkeypatch.setattr('free_plaud.tui.app.structure_document', lambda document: _note(sample))
-    monkeypatch.setattr('free_plaud.tui.app.LocalVectorStore', FakeVectorStore)
-    monkeypatch.setattr('free_plaud.tui.app.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.tui.app.load_document', lambda path: ('document', path))
+    monkeypatch.setattr('escolio.tui.app.structure_document', lambda document: _note(sample))
+    monkeypatch.setattr('escolio.tui.app.LocalVectorStore', FakeVectorStore)
+    monkeypatch.setattr('escolio.tui.app.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     def fake_answer_with_citations(note, question, top_k, **kwargs):
         captured.update(note=note, question=question, top_k=top_k, kwargs=kwargs)
         return _answer(question)
 
-    monkeypatch.setattr('free_plaud.tui.app.answer_with_citations', fake_answer_with_citations)
+    monkeypatch.setattr('escolio.tui.app.answer_with_citations', fake_answer_with_citations)
 
     response = ask_file(sample, 'O que o benchmark mede?', 'hybrid', settings=_settings(tmp_path))
 
@@ -235,10 +235,10 @@ def test_tui_ask_button_runs_corpus_by_default(monkeypatch) -> None:
         captured.update(question=question, strategy=strategy)
         return _answer(question)
 
-    monkeypatch.setattr('free_plaud.tui.app.ask_corpus', fake_ask_corpus)
+    monkeypatch.setattr('escolio.tui.app.ask_corpus', fake_ask_corpus)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(100, 30)) as pilot:
             app.query_one('#ask-question', Input).value = 'O que o benchmark mede?'
             await pilot.click('#ask-submit')
@@ -261,10 +261,10 @@ def test_tui_ask_button_runs_file_mode_when_selected(monkeypatch, tmp_path: Path
         captured.update(file_path=file_path, question=question, strategy=strategy)
         return _answer(question)
 
-    monkeypatch.setattr('free_plaud.tui.app.ask_file', fake_ask_file)
+    monkeypatch.setattr('escolio.tui.app.ask_file', fake_ask_file)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(100, 30)) as pilot:
             app.query_one('#ask-file-path', Input).value = str(sample)
             app.query_one('#ask-question', Input).value = 'O que o benchmark mede?'
@@ -284,7 +284,7 @@ def test_tui_ask_button_runs_file_mode_when_selected(monkeypatch, tmp_path: Path
 
 def test_tui_strategy_defaults_to_hybrid_and_updates_active_button() -> None:
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(100, 30)) as pilot:
             ask_pane = app.query_one(AskPane)
             assert ask_pane.selected_strategy == 'hybrid'
@@ -308,10 +308,10 @@ def test_tui_strategy_defaults_to_hybrid_and_updates_active_button() -> None:
 def test_tui_ask_strategy_uses_saved_default(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     settings.default_ask_strategy = 'lexical'
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(100, 30)):
             ask_pane = app.query_one(AskPane)
             assert ask_pane.selected_strategy == 'lexical'
@@ -331,12 +331,12 @@ def test_tui_settings_pane_saves_device_and_clears_runtime(monkeypatch, tmp_path
         updated.embedding_device = values['embedding_device']  # type: ignore[assignment]
         return updated
 
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.tui.app.save_user_settings', fake_save_user_settings)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.save_user_settings', fake_save_user_settings)
 
     async def run_app() -> None:
         nonlocal cleared
-        app = FreePlaudApp()
+        app = EscolioApp()
         original_clear = app.corpus_runtime.clear
 
         def clear_runtime() -> None:
@@ -363,10 +363,10 @@ def test_tui_settings_pane_saves_device_and_clears_runtime(monkeypatch, tmp_path
 
 def test_tui_settings_fields_react_to_provider(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 38)) as pilot:
             await pilot.click('#nav-settings')
 
@@ -390,7 +390,7 @@ def test_tui_settings_fields_react_to_provider(monkeypatch, tmp_path: Path) -> N
 
 def test_tui_settings_model_select_populates_from_discovery(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
     fake_result = ModelDiscoveryResult(
         provider='ollama',
         base_url='http://localhost:11434',
@@ -401,10 +401,10 @@ def test_tui_settings_model_select_populates_from_discovery(monkeypatch, tmp_pat
         ],
         latency_ms=1,
     )
-    monkeypatch.setattr('free_plaud.tui.app.list_answer_models', lambda *args, **kwargs: fake_result)
+    monkeypatch.setattr('escolio.tui.app.list_answer_models', lambda *args, **kwargs: fake_result)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 38)) as pilot:
             await pilot.click('#nav-settings')
             await pilot.click('#settings-provider-ollama')
@@ -420,15 +420,15 @@ def test_tui_settings_model_select_populates_from_discovery(monkeypatch, tmp_pat
 
 def test_tui_settings_blank_model_blocks_save_for_generative_provider(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
 
     def fail_save_user_settings(*args, **kwargs):
         raise AssertionError('nao deveria salvar com answer_model em branco')
 
-    monkeypatch.setattr('free_plaud.tui.app.save_user_settings', fail_save_user_settings)
+    monkeypatch.setattr('escolio.tui.app.save_user_settings', fail_save_user_settings)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 38)) as pilot:
             await pilot.click('#nav-settings')
             await pilot.click('#settings-provider-ollama')
@@ -456,12 +456,12 @@ def test_tui_settings_pane_saves_answer_api_key_to_local_env(monkeypatch, tmp_pa
         saved_settings.append(values)
         return _settings(tmp_path)
 
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.tui.app.save_answer_api_key', fake_save_answer_api_key)
-    monkeypatch.setattr('free_plaud.tui.app.save_user_settings', fake_save_user_settings)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.save_answer_api_key', fake_save_answer_api_key)
+    monkeypatch.setattr('escolio.tui.app.save_user_settings', fake_save_user_settings)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 38)) as pilot:
             await pilot.click('#nav-settings')
             app.query_one('#settings-answer-api-key', Input).value = 'sk-tui-test'
@@ -487,10 +487,10 @@ def test_tui_settings_pane_applies_preset_and_clears_runtime(monkeypatch, tmp_pa
         captured.append(name)
         return SimpleNamespace(preset=SimpleNamespace(key=name), settings=updated)
 
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.tui.app.apply_settings_preset', fake_apply_settings_preset)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.apply_settings_preset', fake_apply_settings_preset)
     monkeypatch.setattr(
-        'free_plaud.tui.app.run_doctor',
+        'escolio.tui.app.run_doctor',
         lambda *, settings: DoctorReport(
             status='ok',
             checks=[DoctorCheck(code='corpus', status='ok', message='Corpus consistente.', latency_ms=1)],
@@ -503,7 +503,7 @@ def test_tui_settings_pane_applies_preset_and_clears_runtime(monkeypatch, tmp_pa
 
     async def run_app() -> None:
         nonlocal cleared
-        app = FreePlaudApp()
+        app = EscolioApp()
 
         def clear_runtime() -> None:
             nonlocal cleared
@@ -525,9 +525,9 @@ def test_tui_settings_pane_applies_preset_and_clears_runtime(monkeypatch, tmp_pa
 
 def test_tui_settings_pane_tests_answer_provider(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
     monkeypatch.setattr(
-        'free_plaud.tui.app.test_answer_provider',
+        'escolio.tui.app.test_answer_provider',
         lambda: AnswerProviderTestResult(
             provider='ollama',
             model='llama3.1:8b',
@@ -539,7 +539,7 @@ def test_tui_settings_pane_tests_answer_provider(monkeypatch, tmp_path: Path) ->
     )
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 38)) as pilot:
             await pilot.click('#nav-settings')
             await pilot.click('#settings-test-provider')
@@ -554,9 +554,9 @@ def test_tui_settings_pane_tests_answer_provider(monkeypatch, tmp_path: Path) ->
 
 def test_tui_settings_pane_lists_answer_models(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
     monkeypatch.setattr(
-        'free_plaud.tui.app.list_answer_models',
+        'escolio.tui.app.list_answer_models',
         lambda: ModelDiscoveryResult(
             provider='ollama',
             base_url='http://localhost:11434',
@@ -567,7 +567,7 @@ def test_tui_settings_pane_lists_answer_models(monkeypatch, tmp_path: Path) -> N
     )
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 38)) as pilot:
             await pilot.click('#nav-settings')
             await pilot.click('#settings-list-models')
@@ -583,9 +583,9 @@ def test_tui_settings_pane_lists_answer_models(monkeypatch, tmp_path: Path) -> N
 def test_tui_settings_pane_renders_doctor_error_without_crash(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     settings.embedding_model = 'fake-hash'
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
     monkeypatch.setattr(
-        'free_plaud.tui.app.run_doctor',
+        'escolio.tui.app.run_doctor',
         lambda *, settings: DoctorReport(
             status='error',
             checks=[
@@ -605,7 +605,7 @@ def test_tui_settings_pane_renders_doctor_error_without_crash(monkeypatch, tmp_p
     )
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 38)) as pilot:
             await pilot.click('#nav-settings')
             await pilot.pause(0.2)
@@ -619,7 +619,7 @@ def test_tui_settings_pane_renders_doctor_error_without_crash(monkeypatch, tmp_p
 
 def test_tui_settings_pane_runs_doctor_in_background(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
     doctor_started = threading.Event()
     doctor_release = threading.Event()
 
@@ -635,10 +635,10 @@ def test_tui_settings_pane_runs_doctor_in_background(monkeypatch, tmp_path: Path
             error_count=0,
         )
 
-    monkeypatch.setattr('free_plaud.tui.app.run_doctor', slow_doctor)
+    monkeypatch.setattr('escolio.tui.app.run_doctor', slow_doctor)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 38)) as pilot:
             settings_pane = app.query_one(SettingsPane)
             app._show_pane('settings')
@@ -661,10 +661,10 @@ def test_tui_settings_pane_runs_doctor_in_background(monkeypatch, tmp_path: Path
 def test_tui_notes_uses_saved_default_corpus_path(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     settings.default_corpus_path = tmp_path / 'vault'
-    monkeypatch.setattr('free_plaud.tui.app.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.tui.app.get_settings', lambda: settings)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 36)) as pilot:
             await pilot.click('#nav-notes')
             assert app.query_one('#notes-folder-path', Input).value == str(tmp_path / 'vault')
@@ -673,7 +673,7 @@ def test_tui_notes_uses_saved_default_corpus_path(monkeypatch, tmp_path: Path) -
 
 
 def test_tui_settings_layout_keeps_actions_visible() -> None:
-    def assert_visible(app: FreePlaudApp, selector: str) -> None:
+    def assert_visible(app: EscolioApp, selector: str) -> None:
         region = app.query_one(selector).region
         assert region.x >= 0
         assert region.y >= 0
@@ -682,7 +682,7 @@ def test_tui_settings_layout_keeps_actions_visible() -> None:
 
     async def run_app() -> None:
         for size in ((80, 24), (120, 36)):
-            app = FreePlaudApp()
+            app = EscolioApp()
             async with app.run_test(size=size) as pilot:
                 await pilot.click('#nav-settings')
                 await pilot.pause(0.1)
@@ -724,10 +724,10 @@ def test_tui_ask_button_ignores_double_click_while_running(monkeypatch, tmp_path
         release.wait(timeout=2)
         return _answer(question)
 
-    monkeypatch.setattr('free_plaud.tui.app.ask_corpus', fake_ask_corpus)
+    monkeypatch.setattr('escolio.tui.app.ask_corpus', fake_ask_corpus)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(100, 30)) as pilot:
             app.query_one('#ask-file-path', Input).value = str(sample)
             app.query_one('#ask-question', Input).value = 'O que o benchmark mede?'
@@ -750,10 +750,10 @@ def test_tui_ask_button_restores_state_after_worker_error(monkeypatch, tmp_path:
     def fail_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:
         raise FileNotFoundError('arquivo quebrado')
 
-    monkeypatch.setattr('free_plaud.tui.app.ask_corpus', fail_ask_corpus)
+    monkeypatch.setattr('escolio.tui.app.ask_corpus', fail_ask_corpus)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(100, 30)) as pilot:
             app.query_one('#ask-file-path', Input).value = str(sample)
             app.query_one('#ask-question', Input).value = 'O que o benchmark mede?'
@@ -774,10 +774,10 @@ def test_tui_clear_button_resets_ask_response(monkeypatch) -> None:
         calls += 1
         return _answer(question)
 
-    monkeypatch.setattr('free_plaud.tui.app.ask_corpus', fake_ask_corpus)
+    monkeypatch.setattr('escolio.tui.app.ask_corpus', fake_ask_corpus)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(100, 30)) as pilot:
             app.query_one('#ask-question', Input).value = 'O que o benchmark mede?'
             await pilot.click('#ask-submit')
@@ -802,7 +802,7 @@ def test_tui_layout_mounts_at_supported_sizes() -> None:
 
     async def run_app() -> None:
         for size in ((80, 24), (100, 30), (120, 36)):
-            app = FreePlaudApp()
+            app = EscolioApp()
             async with app.run_test(size=size) as pilot:
                 await pilot.pause()
                 form_card = app.query_one('#ask-form-card')
@@ -822,7 +822,7 @@ def test_tui_layout_mounts_at_supported_sizes() -> None:
 
 
 def test_tui_layout_reflows_when_terminal_resizes() -> None:
-    def assert_visible(app: FreePlaudApp, selector: str) -> None:
+    def assert_visible(app: EscolioApp, selector: str) -> None:
         region = app.query_one(selector).region
         assert region.x >= 0
         assert region.y >= 0
@@ -830,7 +830,7 @@ def test_tui_layout_reflows_when_terminal_resizes() -> None:
         assert region.y + region.height <= app.size.height
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 36)) as pilot:
             await pilot.pause()
             assert not app.screen.has_class('compact')
@@ -878,7 +878,7 @@ def test_tui_buttons_do_not_use_default_active_flash() -> None:
         assert all(edge[0] == '' for edge in control.styles.outline)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             assert {button.active_effect_duration for button in app.query(Button)} == {0}
@@ -947,10 +947,10 @@ def test_tui_notes_can_index_folder_and_reset_with_confirmation(monkeypatch, tmp
             status='reset',
         )
 
-    monkeypatch.setattr('free_plaud.tui.app.index_corpus_folder', fake_index_folder)
-    monkeypatch.setattr('free_plaud.tui.app.reset_corpus_from_tui', fake_reset)
+    monkeypatch.setattr('escolio.tui.app.index_corpus_folder', fake_index_folder)
+    monkeypatch.setattr('escolio.tui.app.reset_corpus_from_tui', fake_reset)
     monkeypatch.setattr(
-        'free_plaud.tui.app.corpus_status_from_tui',
+        'escolio.tui.app.corpus_status_from_tui',
         lambda: CorpusStatusResult(
             sqlite_path='db',
             vector_store_dir='vec',
@@ -963,10 +963,10 @@ def test_tui_notes_can_index_folder_and_reset_with_confirmation(monkeypatch, tmp
             status='empty',
         ),
     )
-    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', list)
+    monkeypatch.setattr('escolio.tui.app.list_corpus_notes', list)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 36)) as pilot:
             await pilot.click('#nav-notes')
             await pilot.pause(0.1)
@@ -999,10 +999,10 @@ def test_tui_notes_rejects_empty_folder_before_index(monkeypatch) -> None:
         calls += 1
         raise AssertionError('indexacao nao deve iniciar com pasta vazia')
 
-    monkeypatch.setattr('free_plaud.tui.app.index_corpus_folder', fake_index_folder)
+    monkeypatch.setattr('escolio.tui.app.index_corpus_folder', fake_index_folder)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 36)) as pilot:
             await pilot.click('#nav-notes')
             await pilot.pause(0.1)
@@ -1047,10 +1047,10 @@ def test_tui_notes_runs_preflight_before_index(monkeypatch, tmp_path: Path) -> N
             results=[],
         )
 
-    monkeypatch.setattr('free_plaud.tui.app.preflight_corpus_folder', fake_preflight_folder)
-    monkeypatch.setattr('free_plaud.tui.app.index_corpus_folder', fake_index_folder)
+    monkeypatch.setattr('escolio.tui.app.preflight_corpus_folder', fake_preflight_folder)
+    monkeypatch.setattr('escolio.tui.app.index_corpus_folder', fake_index_folder)
     monkeypatch.setattr(
-        'free_plaud.tui.app.corpus_status_from_tui',
+        'escolio.tui.app.corpus_status_from_tui',
         lambda: CorpusStatusResult(
             sqlite_path='db',
             vector_store_dir='vec',
@@ -1063,10 +1063,10 @@ def test_tui_notes_runs_preflight_before_index(monkeypatch, tmp_path: Path) -> N
             status='empty',
         ),
     )
-    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', list)
+    monkeypatch.setattr('escolio.tui.app.list_corpus_notes', list)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 36)) as pilot:
             await pilot.click('#nav-notes')
             await pilot.pause(0.1)
@@ -1120,9 +1120,9 @@ def test_tui_notes_passes_progress_callback_to_indexer(monkeypatch, tmp_path: Pa
         )
 
     (tmp_path / 'nota.md').write_text('# Nota\n\nTexto.', encoding='utf-8')
-    monkeypatch.setattr('free_plaud.tui.app.index_corpus_folder', fake_index_folder)
+    monkeypatch.setattr('escolio.tui.app.index_corpus_folder', fake_index_folder)
     monkeypatch.setattr(
-        'free_plaud.tui.app.corpus_status_from_tui',
+        'escolio.tui.app.corpus_status_from_tui',
         lambda: CorpusStatusResult(
             sqlite_path='db',
             vector_store_dir='vec',
@@ -1135,10 +1135,10 @@ def test_tui_notes_passes_progress_callback_to_indexer(monkeypatch, tmp_path: Pa
             status='empty',
         ),
     )
-    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', list)
+    monkeypatch.setattr('escolio.tui.app.list_corpus_notes', list)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 36)) as pilot:
             await pilot.click('#nav-notes')
             await pilot.pause(0.1)
@@ -1179,9 +1179,9 @@ def test_tui_notes_cancel_button_cancels_running_index(monkeypatch, tmp_path: Pa
         )
 
     (tmp_path / 'nota.md').write_text('# Nota\n\nTexto.', encoding='utf-8')
-    monkeypatch.setattr('free_plaud.tui.app.index_corpus_folder', fake_index_folder)
+    monkeypatch.setattr('escolio.tui.app.index_corpus_folder', fake_index_folder)
     monkeypatch.setattr(
-        'free_plaud.tui.app.corpus_status_from_tui',
+        'escolio.tui.app.corpus_status_from_tui',
         lambda: CorpusStatusResult(
             sqlite_path='db',
             vector_store_dir='vec',
@@ -1194,10 +1194,10 @@ def test_tui_notes_cancel_button_cancels_running_index(monkeypatch, tmp_path: Pa
             status='empty',
         ),
     )
-    monkeypatch.setattr('free_plaud.tui.app.list_corpus_notes', list)
+    monkeypatch.setattr('escolio.tui.app.list_corpus_notes', list)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 36)) as pilot:
             await pilot.click('#nav-notes')
             await pilot.pause(0.1)
@@ -1222,10 +1222,10 @@ def test_tui_reset_requires_literal_confirmation(monkeypatch) -> None:
         calls += 1
         return CorpusResetResult(dry_run=False, would_delete_notes=0, would_delete_chunks=0, would_delete_vectors=0)
 
-    monkeypatch.setattr('free_plaud.tui.app.reset_corpus_from_tui', fake_reset)
+    monkeypatch.setattr('escolio.tui.app.reset_corpus_from_tui', fake_reset)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 36)) as pilot:
             await pilot.click('#nav-notes')
             await pilot.pause(0.1)
@@ -1263,10 +1263,10 @@ def test_tui_benchmark_runs_suite_comparison(monkeypatch, tmp_path: Path) -> Non
         captured['suite_path'] = path
         return Result()
 
-    monkeypatch.setattr('free_plaud.tui.app.compare_suite_from_tui', fake_compare)
+    monkeypatch.setattr('escolio.tui.app.compare_suite_from_tui', fake_compare)
 
     async def run_app() -> None:
-        app = FreePlaudApp()
+        app = EscolioApp()
         async with app.run_test(size=(120, 36)) as pilot:
             await pilot.click('#nav-benchmark')
             await pilot.pause(0.1)

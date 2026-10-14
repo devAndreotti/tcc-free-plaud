@@ -1,7 +1,7 @@
-from free_plaud.benchmark.datasets import BenchmarkDataset, BenchmarkSample
-from free_plaud.benchmark.embed_compression_bench import compare_embedding_compression
-from free_plaud.notes.schemas import Note
-from free_plaud.providers.embed_compressor import (
+from escolio.benchmark.datasets import BenchmarkDataset, BenchmarkSample
+from escolio.benchmark.embed_compression_bench import compare_embedding_compression
+from escolio.notes.schemas import Note
+from escolio.providers.embed_compressor import (
     CompressingEmbedder,
     EmbeddingQuantizationError,
     compression_ratio,
@@ -14,7 +14,7 @@ from free_plaud.providers.embed_compressor import (
     quantized_size_bytes,
     unpack_quantized_vector,
 )
-from free_plaud.storage.vector import LocalVectorStore
+from escolio.storage.vector import LocalVectorStore
 
 
 class FakeEmbedder:
