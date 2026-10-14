@@ -9,7 +9,7 @@ export interface CorpusHealth {
   warningCount: number;
 }
 
-const CORPUS_CHANGED = 'free-plaud:corpus-changed';
+const CORPUS_CHANGED = 'escolio:corpus-changed';
 
 /** Avisa quem mostra números do corpus (a sidebar) que algo foi indexado, reindexado ou apagado. */
 export function notifyCorpusChanged(): void {

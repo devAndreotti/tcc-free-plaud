@@ -12,7 +12,7 @@ test.describe('Notes & Corpus Exploration E2E Flow', () => {
     const notesButton = page.locator('button:has-text("Notas"), [aria-label*="Notas"], [data-tab="notes"]').first();
     if (await notesButton.isVisible()) {
       await notesButton.click();
-      await expect(page.locator('text=Arquitetura do Free Plaud')).toBeVisible();
+      await expect(page.locator('text=Arquitetura do Escólio')).toBeVisible();
     } else {
       // Verifica presença no DOM geral
       await expect(page.locator('body')).toBeVisible();
