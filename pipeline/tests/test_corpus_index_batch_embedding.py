@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from free_plaud.app.config import Settings
-from free_plaud.corpus.service import index_corpus_path
-from free_plaud.retrieval.models import Chunk
-from free_plaud.storage.sqlite import count_chunks, count_notes, init_sqlite
-from free_plaud.storage.vector import LocalVectorStore
+from escolio.app.config import Settings
+from escolio.corpus.service import index_corpus_path
+from escolio.retrieval.models import Chunk
+from escolio.storage.sqlite import count_chunks, count_notes, init_sqlite
+from escolio.storage.vector import LocalVectorStore
 
 
 class RecordingEmbedder:
@@ -43,7 +43,7 @@ def _settings(tmp_path: Path) -> Settings:
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='corpus_batch_embedding_test',
         embedding_model='recording',

@@ -5,8 +5,8 @@ from urllib.error import HTTPError, URLError
 
 import pytest
 
-from free_plaud.app.config import Settings
-from free_plaud.providers.model_discovery import (
+from escolio.app.config import Settings
+from escolio.providers.model_discovery import (
     clear_model_discovery_cache,
     list_answer_models,
 )
@@ -33,7 +33,7 @@ def _settings(tmp_path, *, provider='ollama', base_url=None, api_key=None) -> Se
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         answer_provider=provider,
         answer_base_url=base_url,
@@ -45,7 +45,7 @@ def test_extractive_returns_not_applicable_without_network(monkeypatch, tmp_path
     def fail_urlopen(*args, **kwargs):
         raise AssertionError('extractive nao deve chamar rede')
 
-    monkeypatch.setattr('free_plaud.providers.model_discovery.urlopen', fail_urlopen)
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fail_urlopen)
 
     result = list_answer_models(_settings(tmp_path, provider='extractive'))
 
@@ -64,7 +64,7 @@ def test_ollama_default_calls_api_tags(monkeypatch, tmp_path) -> None:
         assert timeout == pytest.approx(2.0)
         return FakeResponse({'models': [{'name': 'llama3.1:8b', 'size': 123, 'details': {'family': 'llama'}}]})
 
-    monkeypatch.setattr('free_plaud.providers.model_discovery.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fake_urlopen)
 
     result = list_answer_models(_settings(tmp_path, provider='ollama'))
 
@@ -84,7 +84,7 @@ def test_ollama_strips_v1_from_base_url(monkeypatch, tmp_path) -> None:
         called_urls.append(request.full_url)
         return FakeResponse({'models': []})
 
-    monkeypatch.setattr('free_plaud.providers.model_discovery.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fake_urlopen)
 
     result = list_answer_models(_settings(tmp_path, provider='ollama', base_url='http://localhost:11434/v1/'))
 
@@ -100,7 +100,7 @@ def test_lmstudio_calls_v1_models(monkeypatch, tmp_path) -> None:
         called_urls.append(request.full_url)
         return FakeResponse({'data': [{'id': 'local-model', 'object': 'model'}]})
 
-    monkeypatch.setattr('free_plaud.providers.model_discovery.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fake_urlopen)
 
     result = list_answer_models(_settings(tmp_path, provider='lmstudio'))
 
@@ -119,7 +119,7 @@ def test_openai_compatible_custom_calls_models_without_api_key(monkeypatch, tmp_
         assert request.full_url == 'http://localhost:9999/v1/models'
         return FakeResponse({'data': [{'id': 'custom-model'}]})
 
-    monkeypatch.setattr('free_plaud.providers.model_discovery.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fake_urlopen)
 
     result = list_answer_models(
         _settings(tmp_path, provider='openai-compatible', base_url='http://localhost:9999/v1')
@@ -134,7 +134,7 @@ def test_openai_compatible_default_without_api_key_returns_unauthorized(monkeypa
     def fail_urlopen(*args, **kwargs):
         raise AssertionError('default OpenAI sem chave nao deve chamar rede')
 
-    monkeypatch.setattr('free_plaud.providers.model_discovery.urlopen', fail_urlopen)
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fail_urlopen)
 
     result = list_answer_models(_settings(tmp_path, provider='openai-compatible'))
 
@@ -148,7 +148,7 @@ def test_http_unauthorized_is_safe(monkeypatch, tmp_path) -> None:
     def fake_urlopen(request, timeout):
         raise HTTPError(request.full_url, 401, 'Unauthorized', hdrs=None, fp=BytesIO(b'token sk-secret leaked'))
 
-    monkeypatch.setattr('free_plaud.providers.model_discovery.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fake_urlopen)
 
     result = list_answer_models(
         _settings(tmp_path, provider='openai-compatible', base_url='http://localhost:9999/v1', api_key='sk-secret')
@@ -165,7 +165,7 @@ def test_connection_error_is_offline(monkeypatch, tmp_path) -> None:
     def fake_urlopen(request, timeout):
         raise URLError('connection refused')
 
-    monkeypatch.setattr('free_plaud.providers.model_discovery.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fake_urlopen)
 
     result = list_answer_models(_settings(tmp_path, provider='ollama'))
 
@@ -179,7 +179,7 @@ def test_invalid_json_is_error(monkeypatch, tmp_path) -> None:
     def fake_urlopen(request, timeout):
         return FakeResponse(b'{')
 
-    monkeypatch.setattr('free_plaud.providers.model_discovery.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fake_urlopen)
 
     result = list_answer_models(_settings(tmp_path, provider='ollama'))
 
@@ -195,7 +195,7 @@ def test_cache_is_scoped_by_provider_and_base_url(monkeypatch, tmp_path) -> None
         calls.append(request.full_url)
         return FakeResponse({'models': [{'name': f'model-{len(calls)}'}]})
 
-    monkeypatch.setattr('free_plaud.providers.model_discovery.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fake_urlopen)
 
     first = list_answer_models(_settings(tmp_path, provider='ollama', base_url='http://localhost:11434'))
     second = list_answer_models(_settings(tmp_path, provider='ollama', base_url='http://localhost:11434'))

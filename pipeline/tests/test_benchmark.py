@@ -5,35 +5,35 @@ from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
-from free_plaud.app.config import Settings
-from free_plaud.benchmark.datasets import (
+from escolio.app.config import Settings
+from escolio.benchmark.datasets import (
     BenchmarkDataset,
     BenchmarkSample,
     load_benchmark_dataset,
     load_benchmark_suite,
 )
-from free_plaud.benchmark.metrics import (
+from escolio.benchmark.metrics import (
     mean_reciprocal_rank,
     ndcg_at_k,
     recall_at_k_from_ranks,
 )
-from free_plaud.benchmark.reports import (
+from escolio.benchmark.reports import (
     export_benchmark_comparison_csv,
     export_benchmark_comparison_json,
     export_benchmark_csv,
     export_benchmark_json,
 )
-from free_plaud.benchmark.runners import (
+from escolio.benchmark.runners import (
     BenchmarkSettingsSnapshot,
     compare_benchmark_suite,
     run_benchmark,
 )
-from free_plaud.benchmark.service import run_benchmark_compare
-from free_plaud.cli import app
-from free_plaud.notes.schemas import Note
-from free_plaud.retrieval.indexer import index_note
-from free_plaud.storage.sqlite import connect_sqlite, init_sqlite
-from free_plaud.storage.vector import LocalVectorStore
+from escolio.benchmark.service import run_benchmark_compare
+from escolio.cli import app
+from escolio.notes.schemas import Note
+from escolio.retrieval.indexer import index_note
+from escolio.storage.sqlite import connect_sqlite, init_sqlite
+from escolio.storage.vector import LocalVectorStore
 
 runner = CliRunner()
 
@@ -190,7 +190,7 @@ def test_run_benchmark_persists_run_and_queries_in_sqlite(tmp_path: Path) -> Non
             ),
         ],
     )
-    connection = init_sqlite(tmp_path / 'free_plaud.sqlite3')
+    connection = init_sqlite(tmp_path / 'escolio.sqlite3')
 
     result = run_benchmark(
         note,
@@ -301,7 +301,7 @@ def test_benchmark_run_cli_executes_dataset_and_exports_reports(monkeypatch, tmp
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
     )
     sample_file = tmp_path / 'benchmark.md'
@@ -328,7 +328,7 @@ def test_benchmark_run_cli_executes_dataset_and_exports_reports(monkeypatch, tmp
         encoding='utf-8',
     )
 
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.benchmark.cli.get_settings', lambda: settings)
 
     result = runner.invoke(
         app,
@@ -368,7 +368,7 @@ def test_benchmark_run_cli_accepts_hybrid_knobs(monkeypatch, tmp_path: Path) -> 
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         embedding_model='sentence-transformer:fake-hash',
     )
@@ -396,8 +396,8 @@ def test_benchmark_run_cli_accepts_hybrid_knobs(monkeypatch, tmp_path: Path) -> 
         encoding='utf-8',
     )
 
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.benchmark.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(
         app,
@@ -447,7 +447,7 @@ def test_benchmark_run_cli_rejects_fake_hash_with_actionable_error(monkeypatch, 
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         embedding_model='fake-hash',
     )
@@ -459,8 +459,8 @@ def test_benchmark_run_cli_rejects_fake_hash_with_actionable_error(monkeypatch, 
     def fail_init_sqlite(_path):
         raise AssertionError('benchmark nao deve abrir SQLite com fake-hash')
 
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.benchmark.cli.init_sqlite', fail_init_sqlite)
+    monkeypatch.setattr('escolio.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.benchmark.cli.init_sqlite', fail_init_sqlite)
 
     result = runner.invoke(
         app,
@@ -478,7 +478,7 @@ def test_benchmark_run_cli_rejects_fake_hash_with_actionable_error(monkeypatch, 
     combined_output = f'{result.stdout}\n{result.stderr}\n{result.exception or ""}'
     assert result.exit_code == 1
     assert 'fake-hash e modelo de teste' in combined_output
-    assert 'uv run free-plaud config preset apply cpu_rapido' in combined_output
+    assert 'uv run escolio config preset apply cpu_rapido' in combined_output
     assert 'Traceback' not in combined_output
 
 
@@ -489,7 +489,7 @@ def test_benchmark_run_cli_closes_sqlite_connection(monkeypatch, tmp_path: Path)
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
     )
     sample_file = tmp_path / 'benchmark.md'
@@ -498,10 +498,10 @@ def test_benchmark_run_cli_closes_sqlite_connection(monkeypatch, tmp_path: Path)
     dataset_path.write_text(json.dumps({'dataset_name': 'close-dataset', 'samples': []}), encoding='utf-8')
     connection = FakeConnection()
 
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.benchmark.cli.init_sqlite', lambda path: connection)
+    monkeypatch.setattr('escolio.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.benchmark.cli.init_sqlite', lambda path: connection)
     monkeypatch.setattr(
-        'free_plaud.benchmark.cli.run_benchmark',
+        'escolio.benchmark.cli.run_benchmark',
         lambda *args, **kwargs: SimpleNamespace(
             benchmark_run_id='run-close',
             model_dump=lambda mode='json': {'benchmark_run_id': 'run-close'},
@@ -565,7 +565,7 @@ def test_compare_benchmark_suite_runs_lexical_vector_and_hybrid_strategies(tmp_p
         encoding='utf-8',
     )
     suite = load_benchmark_suite(suite_path)
-    connection = init_sqlite(tmp_path / 'results' / 'free_plaud.sqlite3')
+    connection = init_sqlite(tmp_path / 'results' / 'escolio.sqlite3')
     vector_store = LocalVectorStore(tmp_path / 'results' / 'vector_store', collection_name='compare_suite')
 
     result = compare_benchmark_suite(
@@ -790,7 +790,7 @@ def test_run_benchmark_compare_service_exports_structured_payload(tmp_path: Path
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         embedding_model='fake-hash',
         embedding_device='cpu',
@@ -824,7 +824,7 @@ def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, t
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='compare_cli',
         embedding_model='fake-hash',
@@ -869,8 +869,8 @@ def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, t
         encoding='utf-8',
     )
 
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.benchmark.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(
         app,
@@ -926,7 +926,7 @@ def test_benchmark_compare_cli_closes_sqlite_connection(monkeypatch, tmp_path: P
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         embedding_model='sentence-transformer:fake-hash',
     )
@@ -937,12 +937,12 @@ def test_benchmark_compare_cli_closes_sqlite_connection(monkeypatch, tmp_path: P
     )
     connection = FakeConnection()
 
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.benchmark.cli.init_sqlite', lambda path: connection)
-    monkeypatch.setattr('free_plaud.benchmark.cli.LocalVectorStore', lambda *args, **kwargs: object())
-    monkeypatch.setattr('free_plaud.benchmark.cli.get_embedder', lambda *args, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.benchmark.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.benchmark.cli.init_sqlite', lambda path: connection)
+    monkeypatch.setattr('escolio.benchmark.cli.LocalVectorStore', lambda *args, **kwargs: object())
+    monkeypatch.setattr('escolio.benchmark.cli.get_embedder', lambda *args, **kwargs: FakeEmbedder())
     monkeypatch.setattr(
-        'free_plaud.benchmark.cli.compare_benchmark_suite',
+        'escolio.benchmark.cli.compare_benchmark_suite',
         lambda *args, **kwargs: SimpleNamespace(
             comparison_id='cmp-close',
             model_dump=lambda mode='json': {'comparison_id': 'cmp-close'},

@@ -4,10 +4,10 @@ from urllib.error import URLError
 
 from typer.testing import CliRunner
 
-from free_plaud.app.config import Settings
-from free_plaud.cli import app
-from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
-from free_plaud.providers.provisioning import (
+from escolio.app.config import Settings
+from escolio.cli import app
+from escolio.providers.model_discovery import ModelDiscoveryResult, ModelInfo
+from escolio.providers.provisioning import (
     MODEL_CATALOG,
     EnsureModelResult,
     PullProgress,
@@ -28,7 +28,7 @@ def _settings(tmp_path, *, provider='ollama', model='gemma2:2b-instruct-q4_K_M',
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         answer_provider=provider,
         answer_model=model,
@@ -75,7 +75,7 @@ def test_catalog_seeded_with_both_gemmas() -> None:
 def test_detect_runtime_ready_when_model_installed(monkeypatch, tmp_path) -> None:
     model = ModelInfo(id='gemma2:2b-instruct-q4_K_M', label='gemma2', provider='ollama')
     monkeypatch.setattr(
-        'free_plaud.providers.provisioning.list_answer_models',
+        'escolio.providers.provisioning.list_answer_models',
         lambda settings, **kwargs: _discovery('ok', models=[model]),
     )
 
@@ -88,7 +88,7 @@ def test_detect_runtime_ready_when_model_installed(monkeypatch, tmp_path) -> Non
 def test_detect_runtime_no_model_when_server_up_but_model_missing(monkeypatch, tmp_path) -> None:
     other = ModelInfo(id='llama3.1:8b', label='llama', provider='ollama')
     monkeypatch.setattr(
-        'free_plaud.providers.provisioning.list_answer_models',
+        'escolio.providers.provisioning.list_answer_models',
         lambda settings, **kwargs: _discovery('ok', models=[other]),
     )
 
@@ -100,7 +100,7 @@ def test_detect_runtime_no_model_when_server_up_but_model_missing(monkeypatch, t
 
 def test_detect_runtime_offline_propagates(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
-        'free_plaud.providers.provisioning.list_answer_models',
+        'escolio.providers.provisioning.list_answer_models',
         lambda settings, **kwargs: _discovery('offline', message='Servidor indisponivel ou timeout.'),
     )
 
@@ -122,7 +122,7 @@ def test_ensure_model_streams_progress_until_success(monkeypatch, tmp_path) -> N
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeStreamResponse(lines)
 
-    monkeypatch.setattr('free_plaud.providers.provisioning.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.provisioning.urlopen', fake_urlopen)
 
     events: list[PullProgress] = []
     result = ensure_model('gemma2:2b-instruct-q4_K_M', _settings(tmp_path), on_progress=events.append)
@@ -139,7 +139,7 @@ def test_ensure_model_streams_progress_until_success(monkeypatch, tmp_path) -> N
 def test_ensure_model_surfaces_error_event(monkeypatch, tmp_path) -> None:
     lines = [json.dumps({'error': 'pull model manifest: file does not exist'}).encode('utf-8')]
     monkeypatch.setattr(
-        'free_plaud.providers.provisioning.urlopen',
+        'escolio.providers.provisioning.urlopen',
         lambda request, timeout: FakeStreamResponse(lines),
     )
 
@@ -154,7 +154,7 @@ def test_ensure_model_reports_offline(monkeypatch, tmp_path) -> None:
     def boom(request, timeout):
         raise URLError('connection refused')
 
-    monkeypatch.setattr('free_plaud.providers.provisioning.urlopen', boom)
+    monkeypatch.setattr('escolio.providers.provisioning.urlopen', boom)
 
     result = ensure_model('gemma2:2b-instruct-q4_K_M', _settings(tmp_path))
 
@@ -166,7 +166,7 @@ def test_ensure_model_rejects_non_ollama_without_network(monkeypatch, tmp_path) 
     def fail(*args, **kwargs):
         raise AssertionError('nao deve tocar a rede para provider nao-ollama')
 
-    monkeypatch.setattr('free_plaud.providers.provisioning.urlopen', fail)
+    monkeypatch.setattr('escolio.providers.provisioning.urlopen', fail)
 
     result = ensure_model('gpt-4o-mini', _settings(tmp_path, provider='openai-compatible'))
 
@@ -232,8 +232,8 @@ def test_provider_pull_cli_resolves_catalog_and_streams(monkeypatch, tmp_path) -
         captured['body'] = json.loads(request.data.decode('utf-8'))
         return FakeStreamResponse(lines)
 
-    monkeypatch.setattr('free_plaud.providers.provisioning.urlopen', fake_urlopen)
-    monkeypatch.setattr('free_plaud.providers.provisioning.get_settings', lambda: _settings(tmp_path))
+    monkeypatch.setattr('escolio.providers.provisioning.urlopen', fake_urlopen)
+    monkeypatch.setattr('escolio.providers.provisioning.get_settings', lambda: _settings(tmp_path))
 
     result = runner.invoke(app, ['provider', 'pull', 'gemma-veloz'])
 

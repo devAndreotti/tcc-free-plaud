@@ -4,8 +4,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from free_plaud.providers.audio_models import AudioError, AudioOptions
-from free_plaud.providers.audio_runtime import AudioRuntime
+from escolio.providers.audio_models import AudioError, AudioOptions
+from escolio.providers.audio_runtime import AudioRuntime
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def runtime(tmp_path, monkeypatch):
     engine = SimpleNamespace(device="cpu", warnings=[], transcribe=lambda *args: [])
     monkeypatch.setattr(runtime, "_engine", lambda _: engine)
     monkeypatch.setattr(
-        "free_plaud.ingest.audio_dsp.decode_audio", lambda _: np.zeros(16000)
+        "escolio.ingest.audio_dsp.decode_audio", lambda _: np.zeros(16000)
     )
     return runtime, source, engine
 
@@ -40,7 +40,7 @@ def test_empty_and_cancelled_audio_do_not_publish(runtime, monkeypatch):
     with pytest.raises(AudioError, match="cancelled"):
         instance.transcribe_result(source, AudioOptions(vad=False), cancel=cancel)
     monkeypatch.setattr(
-        "free_plaud.ingest.audio_dsp.decode_audio", lambda _: np.zeros(0)
+        "escolio.ingest.audio_dsp.decode_audio", lambda _: np.zeros(0)
     )
     with pytest.raises(AudioError, match="no samples"):
         instance.transcribe_result(source)
@@ -70,7 +70,7 @@ def test_model_prepare_reuses_engine_without_native_loading(tmp_path, monkeypatc
 
 
 def test_missing_cuda_dll_allows_single_cpu_retry(tmp_path, monkeypatch):
-    from free_plaud.providers import audio_engines
+    from escolio.providers import audio_engines
 
     monkeypatch.setattr("ctranslate2.get_cuda_device_count", lambda: 1)
     monkeypatch.setattr(

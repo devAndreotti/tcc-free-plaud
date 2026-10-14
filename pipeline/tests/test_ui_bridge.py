@@ -3,10 +3,10 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
-from free_plaud.providers.answer import AnswerProviderTestResult
-from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
-from free_plaud.retrieval.models import AnswerClaim, AskResponse, Citation, UsedSource
+from escolio.app.doctor_models import DoctorCheck, DoctorReport
+from escolio.providers.answer import AnswerProviderTestResult
+from escolio.providers.model_discovery import ModelDiscoveryResult, ModelInfo
+from escolio.retrieval.models import AnswerClaim, AskResponse, Citation, UsedSource
 
 
 def _load_ui_main(monkeypatch):
@@ -16,7 +16,7 @@ def _load_ui_main(monkeypatch):
         SimpleNamespace(create_window=lambda *a, **k: None, start=lambda *a, **k: None),
     )
     path = Path(__file__).resolve().parents[2] / "UI" / "main.py"
-    spec = importlib.util.spec_from_file_location("free_plaud_ui_main_test", path)
+    spec = importlib.util.spec_from_file_location("escolio_ui_main_test", path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -543,7 +543,7 @@ def test_desktop_api_indexes_dropped_files(monkeypatch, tmp_path: Path) -> None:
     indexed: list[str] = []
 
     def runner(path: Path):
-        from free_plaud.corpus.models import CorpusIndexBatchResult, CorpusIndexResult
+        from escolio.corpus.models import CorpusIndexBatchResult, CorpusIndexResult
 
         indexed.append(path.name)
         return CorpusIndexBatchResult(

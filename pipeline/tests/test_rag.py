@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from free_plaud.app.config import Settings
-from free_plaud.cli import app
-from free_plaud.notes.schemas import Note
-from free_plaud.retrieval.indexer import index_note
-from free_plaud.retrieval.rag import (
+from escolio.app.config import Settings
+from escolio.cli import app
+from escolio.notes.schemas import Note
+from escolio.retrieval.indexer import index_note
+from escolio.retrieval.rag import (
     SCORING,
     ClaimScoringConfig,
     _claim_variant_score,
@@ -17,12 +17,12 @@ from free_plaud.retrieval.rag import (
     _trim_dangling_tail,
     answer_with_citations,
 )
-from free_plaud.retrieval.search import (
+from escolio.retrieval.search import (
     extract_named_query_terms,
     lexical_search_hits,
     normalize_query_terms,
 )
-from free_plaud.storage.vector import LocalVectorStore
+from escolio.storage.vector import LocalVectorStore
 
 runner = CliRunner()
 
@@ -892,7 +892,7 @@ def test_retrieval_ask_cli_supports_vector_strategy(monkeypatch, tmp_path: Path)
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='ask_vector',
         embedding_model='fake-hash',
@@ -904,8 +904,8 @@ def test_retrieval_ask_cli_supports_vector_strategy(monkeypatch, tmp_path: Path)
         encoding='utf-8',
     )
 
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.retrieval.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(
         app,
@@ -936,7 +936,7 @@ def test_retrieval_ask_cli_supports_hybrid_strategy(monkeypatch, tmp_path: Path)
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='ask_hybrid',
         embedding_model='fake-hash',
@@ -948,8 +948,8 @@ def test_retrieval_ask_cli_supports_hybrid_strategy(monkeypatch, tmp_path: Path)
         encoding='utf-8',
     )
 
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.retrieval.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.retrieval.cli.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(
         app,

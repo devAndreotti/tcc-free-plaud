@@ -3,12 +3,12 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from free_plaud.app.config import get_settings
-from free_plaud.app.doctor_models import DoctorCheck, DoctorReport
-from free_plaud.cli import app
-from free_plaud.providers.answer import AnswerProviderTestResult
-from free_plaud.providers.model_discovery import ModelDiscoveryResult, ModelInfo
-from free_plaud.providers.provisioning import RuntimeStatusReport
+from escolio.app.config import get_settings
+from escolio.app.doctor_models import DoctorCheck, DoctorReport
+from escolio.cli import app
+from escolio.providers.answer import AnswerProviderTestResult
+from escolio.providers.model_discovery import ModelDiscoveryResult, ModelInfo
+from escolio.providers.provisioning import RuntimeStatusReport
 
 runner = CliRunner()
 
@@ -17,7 +17,7 @@ def test_terminal_menu_can_open_and_exit() -> None:
     result = runner.invoke(app, ['menu'], input='0\n')
 
     assert result.exit_code == 0
-    assert 'free-plaud terminal' in result.stdout
+    assert 'Escólio terminal' in result.stdout
     assert 'ACOES:\n\n' in result.stdout
     assert '[8] Diagnostico' in result.stdout
     assert '[9] Testar provider' in result.stdout
@@ -27,7 +27,7 @@ def test_terminal_menu_can_open_and_exit() -> None:
 
 def test_terminal_menu_can_update_embedding_device(monkeypatch, tmp_path: Path) -> None:
     results_dir = tmp_path / 'data' / 'results'
-    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    monkeypatch.setenv('ESCOLIO_RESULTS_DIR', str(results_dir))
     get_settings.cache_clear()
 
     result = runner.invoke(app, ['menu'], input='7\n2\ncuda\n0\n')
@@ -40,7 +40,7 @@ def test_terminal_menu_can_update_embedding_device(monkeypatch, tmp_path: Path) 
 
 def test_terminal_settings_menu_uses_human_catalog(monkeypatch, tmp_path: Path) -> None:
     results_dir = tmp_path / 'data' / 'results'
-    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    monkeypatch.setenv('ESCOLIO_RESULTS_DIR', str(results_dir))
     get_settings.cache_clear()
 
     result = runner.invoke(app, ['menu'], input='7\n0\n0\n')
@@ -59,8 +59,8 @@ def test_terminal_settings_menu_uses_human_catalog(monkeypatch, tmp_path: Path) 
 
 def test_terminal_settings_menu_can_apply_preset(monkeypatch, tmp_path: Path) -> None:
     results_dir = tmp_path / 'data' / 'results'
-    monkeypatch.setenv('FREE_PLAUD_WORKSPACE_DIR', str(tmp_path))
-    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    monkeypatch.setenv('ESCOLIO_WORKSPACE_DIR', str(tmp_path))
+    monkeypatch.setenv('ESCOLIO_RESULTS_DIR', str(results_dir))
     get_settings.cache_clear()
 
     result = runner.invoke(app, ['menu'], input='7\nP\ncpu_rapido\napply\n0\n')
@@ -75,26 +75,26 @@ def test_terminal_settings_menu_can_apply_preset(monkeypatch, tmp_path: Path) ->
 
 def test_terminal_menu_can_update_answer_api_key(monkeypatch, tmp_path: Path) -> None:
     results_dir = tmp_path / 'data' / 'results'
-    monkeypatch.setenv('FREE_PLAUD_WORKSPACE_DIR', str(tmp_path))
-    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
-    monkeypatch.delenv('FREE_PLAUD_ANSWER_API_KEY', raising=False)
+    monkeypatch.setenv('ESCOLIO_WORKSPACE_DIR', str(tmp_path))
+    monkeypatch.setenv('ESCOLIO_RESULTS_DIR', str(results_dir))
+    monkeypatch.delenv('ESCOLIO_ANSWER_API_KEY', raising=False)
     get_settings.cache_clear()
 
     result = runner.invoke(app, ['menu'], input='7\n17\nsk-menu-test\n0\n')
 
     assert result.exit_code == 0
     local_env = tmp_path / 'pipeline' / '.env'
-    assert 'FREE_PLAUD_ANSWER_API_KEY=sk-menu-test' in local_env.read_text(encoding='utf-8')
+    assert 'ESCOLIO_ANSWER_API_KEY=sk-menu-test' in local_env.read_text(encoding='utf-8')
     assert not (results_dir / 'user_settings.json').exists()
     get_settings.cache_clear()
 
 
 def test_terminal_settings_menu_can_list_models_and_save_choice(monkeypatch, tmp_path: Path) -> None:
     results_dir = tmp_path / 'data' / 'results'
-    monkeypatch.setenv('FREE_PLAUD_RESULTS_DIR', str(results_dir))
+    monkeypatch.setenv('ESCOLIO_RESULTS_DIR', str(results_dir))
     get_settings.cache_clear()
     monkeypatch.setattr(
-        'free_plaud.terminal_settings.list_answer_models',
+        'escolio.terminal_settings.list_answer_models',
         lambda: ModelDiscoveryResult(
             provider='ollama',
             base_url='http://localhost:11434',
@@ -118,7 +118,7 @@ def test_terminal_settings_menu_can_list_models_and_save_choice(monkeypatch, tmp
 
 def test_terminal_menu_can_show_doctor(monkeypatch) -> None:
     monkeypatch.setattr(
-        'free_plaud.terminal_menu.run_doctor',
+        'escolio.terminal_menu.run_doctor',
         lambda: DoctorReport(
             status='ok',
             checks=[DoctorCheck(code='corpus', status='ok', message='Corpus consistente.', latency_ms=1)],
@@ -139,7 +139,7 @@ def test_terminal_menu_can_show_doctor(monkeypatch) -> None:
 
 def test_terminal_menu_can_test_provider(monkeypatch) -> None:
     monkeypatch.setattr(
-        'free_plaud.terminal_menu.test_answer_provider',
+        'escolio.terminal_menu.test_answer_provider',
         lambda: AnswerProviderTestResult(
             provider='ollama',
             model='llama3.1:8b',
@@ -160,7 +160,7 @@ def test_terminal_menu_can_test_provider(monkeypatch) -> None:
 
 def test_terminal_menu_provider_error_shows_actionable_hint(monkeypatch) -> None:
     monkeypatch.setattr(
-        'free_plaud.terminal_menu.test_answer_provider',
+        'escolio.terminal_menu.test_answer_provider',
         lambda: AnswerProviderTestResult(
             provider='ollama',
             model='llama3.1:8b',
@@ -171,7 +171,7 @@ def test_terminal_menu_provider_error_shows_actionable_hint(monkeypatch) -> None
         ),
     )
     monkeypatch.setattr(
-        'free_plaud.terminal_menu.detect_runtime',
+        'escolio.terminal_menu.detect_runtime',
         lambda *args, **kwargs: RuntimeStatusReport(
             provider='ollama',
             base_url='http://localhost:11434',

@@ -2,7 +2,7 @@ from math import log2
 
 import pytest
 
-from free_plaud.benchmark.metrics import (
+from escolio.benchmark.metrics import (
     abstention_metrics,
     bootstrap_ci,
     lexical_groundedness,

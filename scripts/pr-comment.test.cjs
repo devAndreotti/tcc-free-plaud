@@ -56,8 +56,8 @@ test('readCoverageSection supports coverage.py JSON reports', () => {
   fs.writeFileSync(path.join(project, 'coverage/coverage.json'), JSON.stringify({
     meta: { format: 3 },
     files: {
-      'src/free_plaud/good.py': { summary: { percent_covered: 92.25 } },
-      'src/free_plaud/low.py': { summary: { percent_covered: 41.5 } },
+      'src/escolio/good.py': { summary: { percent_covered: 92.25 } },
+      'src/escolio/low.py': { summary: { percent_covered: 41.5 } },
     },
     totals: {
       percent_covered: 88.5,
@@ -70,5 +70,5 @@ test('readCoverageSection supports coverage.py JSON reports', () => {
 
   assert.match(section, /`lines` \| 80\.0% \| 88\.5%/);
   assert.match(section, /`branches` \| 70\.0% \| 85\.0%/);
-  assert.match(section, /src\/free_plaud\/low\.py/);
+  assert.match(section, /src\/escolio\/low\.py/);
 });

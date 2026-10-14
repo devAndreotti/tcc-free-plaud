@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from free_plaud.app.config import Settings, user_settings_path_for
-from free_plaud.app.settings_presets import (
+from escolio.app.config import Settings, user_settings_path_for
+from escolio.app.settings_presets import (
     SettingPreset,
     apply_settings_preset,
     list_settings_presets,
@@ -19,7 +19,7 @@ def _settings(tmp_path: Path) -> Settings:
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         embedding_model='fake-hash',
         embedding_device='auto',
@@ -79,7 +79,7 @@ def test_invalid_preset_fails_before_writing(tmp_path: Path, monkeypatch) -> Non
         description='Preset invalido para teste.',
         values={'answer_api_key': 'secret'},
     )
-    monkeypatch.setattr('free_plaud.app.settings_presets.SETTING_PRESETS', (broken,))
+    monkeypatch.setattr('escolio.app.settings_presets.SETTING_PRESETS', (broken,))
 
     with pytest.raises(ValueError, match='answer_api_key'):
         apply_settings_preset('broken', settings=settings)

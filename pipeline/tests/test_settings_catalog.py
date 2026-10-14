@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-import free_plaud.app.settings_catalog as free_plaud_settings_catalog
-from free_plaud.app.config import USER_SETTING_FIELDS, Settings
-from free_plaud.app.settings_catalog import (
+import escolio.app.settings_catalog as escolio_settings_catalog
+from escolio.app.config import USER_SETTING_FIELDS, Settings
+from escolio.app.settings_catalog import (
     SETTING_SPECS,
     get_setting_spec,
     parse_catalog_value,
@@ -20,7 +20,7 @@ def _settings(tmp_path: Path) -> Settings:
         workspace_dir=tmp_path,
         data_dir=tmp_path / 'data',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         embedding_model='fake-hash',
         retrieval_top_k=4,
@@ -76,7 +76,7 @@ def test_settings_catalog_warns_when_embedding_model_is_fake_hash(tmp_path: Path
 
 def test_save_catalog_setting_uses_user_settings_or_local_env(tmp_path: Path, monkeypatch) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.delenv('FREE_PLAUD_ANSWER_API_KEY', raising=False)
+    monkeypatch.delenv('ESCOLIO_ANSWER_API_KEY', raising=False)
 
     save_catalog_setting('retrieval_top_k', '7', settings=settings)
     save_catalog_setting('answer_api_key', 'sk-catalog-test', settings=settings)
@@ -84,7 +84,7 @@ def test_save_catalog_setting_uses_user_settings_or_local_env(tmp_path: Path, mo
     payload = json.loads((tmp_path / 'data' / 'results' / 'user_settings.json').read_text(encoding='utf-8'))
     assert payload['retrieval_top_k'] == 7
     assert 'answer_api_key' not in payload
-    assert 'FREE_PLAUD_ANSWER_API_KEY=sk-catalog-test' in (tmp_path / 'pipeline' / '.env').read_text(encoding='utf-8')
+    assert 'ESCOLIO_ANSWER_API_KEY=sk-catalog-test' in (tmp_path / 'pipeline' / '.env').read_text(encoding='utf-8')
 
 
 def test_save_catalog_setting_accepts_audio_fields(tmp_path: Path) -> None:
@@ -102,15 +102,15 @@ def test_save_catalog_setting_accepts_audio_fields(tmp_path: Path) -> None:
 
 def test_save_catalog_settings_batches_multiple_keys_in_one_write(tmp_path: Path, monkeypatch) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.delenv('FREE_PLAUD_ANSWER_API_KEY', raising=False)
+    monkeypatch.delenv('ESCOLIO_ANSWER_API_KEY', raising=False)
     write_calls = []
-    real_save_user_settings = free_plaud_settings_catalog.save_user_settings
+    real_save_user_settings = escolio_settings_catalog.save_user_settings
 
     def counting_save_user_settings(values, *, settings=None):
         write_calls.append(dict(values))
         return real_save_user_settings(values, settings=settings)
 
-    monkeypatch.setattr(free_plaud_settings_catalog, 'save_user_settings', counting_save_user_settings)
+    monkeypatch.setattr(escolio_settings_catalog, 'save_user_settings', counting_save_user_settings)
 
     save_catalog_settings(
         {
@@ -128,7 +128,7 @@ def test_save_catalog_settings_batches_multiple_keys_in_one_write(tmp_path: Path
     assert payload['default_chunk_size'] == 500
     assert payload['default_chunk_overlap'] == 50
     assert 'answer_api_key' not in payload
-    assert 'FREE_PLAUD_ANSWER_API_KEY=sk-batch-test' in (tmp_path / 'pipeline' / '.env').read_text(encoding='utf-8')
+    assert 'ESCOLIO_ANSWER_API_KEY=sk-batch-test' in (tmp_path / 'pipeline' / '.env').read_text(encoding='utf-8')
 
 
 def test_save_catalog_settings_rejects_invalid_pair_together(tmp_path: Path) -> None:

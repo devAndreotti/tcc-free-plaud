@@ -2,14 +2,14 @@ import hashlib
 
 import pytest
 
-import free_plaud.providers.audio_catalog as free_plaud_audio_catalog
-from free_plaud.providers.audio_catalog import (
+import escolio.providers.audio_catalog as escolio_audio_catalog
+from escolio.providers.audio_catalog import (
     ModelFile,
     ModelStore,
     VoiceModel,
     load_catalog,
 )
-from free_plaud.providers.audio_models import AudioError
+from escolio.providers.audio_models import AudioError
 
 
 @pytest.fixture
@@ -110,9 +110,9 @@ def test_verify_caches_hash_by_mtime_and_size(store, monkeypatch, tmp_path):
     store.download("sample")
 
     calls = []
-    real_file_hash = free_plaud_audio_catalog.file_hash
+    real_file_hash = escolio_audio_catalog.file_hash
     monkeypatch.setattr(
-        free_plaud_audio_catalog,
+        escolio_audio_catalog,
         "file_hash",
         lambda path: (calls.append(path), real_file_hash(path))[1],
     )

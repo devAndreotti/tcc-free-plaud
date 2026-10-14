@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from free_plaud.ingest.obsidian_cleaner import clean_obsidian_md, has_obsidian_signals
+from escolio.ingest.obsidian_cleaner import clean_obsidian_md, has_obsidian_signals
 
 
 def test_has_obsidian_signals_detects_dataview_and_obsidian_links() -> None:
@@ -119,7 +119,7 @@ def test_clean_obsidian_md_rejects_destination_inside_vault_root(tmp_path: Path,
     dest = vault_root / 'out.md'
     source.write_text('# teste', encoding='utf-8')
 
-    monkeypatch.setattr('free_plaud.ingest.obsidian_cleaner.OBSIDIAN_VAULT_ROOT', vault_root)
+    monkeypatch.setattr('escolio.ingest.obsidian_cleaner.OBSIDIAN_VAULT_ROOT', vault_root)
 
     with pytest.raises(ValueError, match='Destino dentro do vault'):
         clean_obsidian_md(source, dest)

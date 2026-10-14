@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from free_plaud.tui.actions import index_corpus_folder, preflight_corpus_folder
+from escolio.tui.actions import index_corpus_folder, preflight_corpus_folder
 
 
 def test_preflight_corpus_folder_rejects_empty_path() -> None:
@@ -29,7 +29,7 @@ def test_index_corpus_folder_rejects_empty_path_before_settings(monkeypatch) -> 
     def fail_get_settings():
         raise AssertionError('settings nao deve ser lido para pasta vazia')
 
-    monkeypatch.setattr('free_plaud.tui.actions.get_settings', fail_get_settings)
+    monkeypatch.setattr('escolio.tui.actions.get_settings', fail_get_settings)
 
     with pytest.raises(ValueError, match='Informe uma pasta'):
         index_corpus_folder('')

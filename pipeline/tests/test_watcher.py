@@ -1,8 +1,8 @@
 import time
 from pathlib import Path
 
-from free_plaud.ingest.models import IngestionResult
-from free_plaud.ingest.watcher import VaultWatcher, discover_files
+from escolio.ingest.models import IngestionResult
+from escolio.ingest.watcher import VaultWatcher, discover_files
 
 
 def test_discover_files_lists_only_files(tmp_path: Path) -> None:

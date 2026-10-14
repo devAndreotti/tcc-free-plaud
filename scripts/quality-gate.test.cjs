@@ -107,8 +107,8 @@ test('check tolerates tiny coverage drift between platforms', () => {
 test('init creates baseline from Python coverage JSON', () => {
   const project = tempProject();
   fs.mkdirSync(path.join(project, 'scripts'), { recursive: true });
-  fs.mkdirSync(path.join(project, 'pipeline/src/free_plaud'), { recursive: true });
-  fs.writeFileSync(path.join(project, 'pipeline/src/free_plaud/app.py'), 'print("ok")\n');
+  fs.mkdirSync(path.join(project, 'pipeline/src/escolio'), { recursive: true });
+  fs.writeFileSync(path.join(project, 'pipeline/src/escolio/app.py'), 'print("ok")\n');
   writePythonCoverage(project, 83.7);
 
   const result = runQualityGate({ root: project, command: 'init', now: '2026-05-24T00:00:00.000Z' });

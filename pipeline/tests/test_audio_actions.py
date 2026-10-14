@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from free_plaud.app.config import Settings
-from free_plaud.tui.audio_actions import list_voice_models
+from escolio.app.config import Settings
+from escolio.tui.audio_actions import list_voice_models
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -38,7 +38,7 @@ def test_list_voice_models_includes_ui_metadata(tmp_path: Path) -> None:
 def test_list_voice_models_defaults_metadata_for_unknown_id(tmp_path: Path, monkeypatch) -> None:
     # Um modelo no catalogo sem entrada em VOICE_MODEL_UI_META nao deve quebrar
     # a listagem - so cai nos defaults (label=id, tiers=None, recommended=False).
-    monkeypatch.setattr('free_plaud.tui.audio_actions.ui_meta_for', lambda model_id: None)
+    monkeypatch.setattr('escolio.tui.audio_actions.ui_meta_for', lambda model_id: None)
 
     models = list_voice_models(settings=_settings(tmp_path))
     whisper = next(model for model in models if model['id'] == 'whisper-small')
@@ -52,7 +52,7 @@ def test_list_voice_models_defaults_metadata_for_unknown_id(tmp_path: Path, monk
 
 def test_list_voice_models_marks_installed_when_verified(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        'free_plaud.providers.audio_catalog.ModelStore.verify',
+        'escolio.providers.audio_catalog.ModelStore.verify',
         lambda self, model_id: model_id == 'whisper-small',
     )
 

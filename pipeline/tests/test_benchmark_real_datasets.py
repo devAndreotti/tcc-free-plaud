@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from free_plaud.benchmark.datasets import load_benchmark_dataset, load_benchmark_suite
-from free_plaud.benchmark.runners import _is_relevant
-from free_plaud.ingest.loaders import load_document
-from free_plaud.notes.structurer import structure_document
-from free_plaud.retrieval.indexer import index_note
+from escolio.benchmark.datasets import load_benchmark_dataset, load_benchmark_suite
+from escolio.benchmark.runners import _is_relevant
+from escolio.ingest.loaders import load_document
+from escolio.notes.structurer import structure_document
+from escolio.retrieval.indexer import index_note
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SUITE_PATH = REPO_ROOT / 'data' / 'datasets' / 'manual_validation' / 'suite.json'

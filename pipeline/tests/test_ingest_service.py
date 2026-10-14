@@ -2,8 +2,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from free_plaud.cli import app
-from free_plaud.ingest.service import ingest_file
+from escolio.cli import app
+from escolio.ingest.service import ingest_file
 
 runner = CliRunner()
 
@@ -36,7 +36,7 @@ def _blank_pdf_bytes() -> bytes:
 
 
 def test_ingest_file_returns_traceable_result_for_text(sample_text_file: Path, caplog) -> None:
-    with caplog.at_level('INFO', logger='free_plaud.ingest'):
+    with caplog.at_level('INFO', logger='escolio.ingest'):
         result = ingest_file(sample_text_file, correlation_id='corr-001')
 
     assert result.status == 'success'
@@ -53,7 +53,7 @@ def test_ingest_file_returns_traceable_result_for_text(sample_text_file: Path, c
 def test_ingest_file_returns_failure_for_missing_file(caplog, tmp_path: Path) -> None:
     missing = tmp_path / 'missing.txt'
 
-    with caplog.at_level('INFO', logger='free_plaud.ingest'):
+    with caplog.at_level('INFO', logger='escolio.ingest'):
         result = ingest_file(missing, correlation_id='corr-missing')
 
     assert result.status == 'failed'
@@ -63,7 +63,7 @@ def test_ingest_file_returns_failure_for_missing_file(caplog, tmp_path: Path) ->
 
 
 def test_ingest_file_rejects_empty_content(empty_text_file: Path, caplog) -> None:
-    with caplog.at_level('INFO', logger='free_plaud.ingest'):
+    with caplog.at_level('INFO', logger='escolio.ingest'):
         result = ingest_file(empty_text_file, correlation_id='corr-empty')
 
     assert result.status == 'failed'
@@ -87,7 +87,7 @@ def test_ingest_file_returns_structured_failure_for_corrupted_pdf(tmp_path: Path
     corrupted_pdf = tmp_path / 'corrupted.pdf'
     corrupted_pdf.write_bytes(b'%PDF-1.4\nconteudo quebrado sem xref')
 
-    with caplog.at_level('INFO', logger='free_plaud.ingest'):
+    with caplog.at_level('INFO', logger='escolio.ingest'):
         result = ingest_file(corrupted_pdf, correlation_id='corr-corrupted-pdf')
 
     assert result.status == 'failed'

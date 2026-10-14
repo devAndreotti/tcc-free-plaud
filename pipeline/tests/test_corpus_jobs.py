@@ -6,8 +6,8 @@ from time import monotonic, sleep
 
 import pytest
 
-from free_plaud.corpus.jobs import IndexJobAlreadyRunningError, IndexJobManager
-from free_plaud.corpus.models import (
+from escolio.corpus.jobs import IndexJobAlreadyRunningError, IndexJobManager
+from escolio.corpus.models import (
     CorpusIndexBatchResult,
     CorpusIndexProgress,
     CorpusIndexResult,

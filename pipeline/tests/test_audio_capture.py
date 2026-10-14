@@ -5,10 +5,10 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from free_plaud.ingest.audio_capture import AudioCapture
-from free_plaud.ingest.audio_jobs import AudioJobManager
-from free_plaud.ingest.audio_vad import SpeechDetector
-from free_plaud.providers.audio_models import AudioError
+from escolio.ingest.audio_capture import AudioCapture
+from escolio.ingest.audio_jobs import AudioJobManager
+from escolio.ingest.audio_vad import SpeechDetector
+from escolio.providers.audio_models import AudioError
 
 
 @pytest.fixture

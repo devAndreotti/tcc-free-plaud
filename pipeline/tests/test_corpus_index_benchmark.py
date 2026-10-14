@@ -3,9 +3,9 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from free_plaud.app.config import Settings
-from free_plaud.cli import app
-from free_plaud.corpus.service import benchmark_corpus_indexing, perf_benchmark_corpus
+from escolio.app.config import Settings
+from escolio.cli import app
+from escolio.corpus.service import benchmark_corpus_indexing, perf_benchmark_corpus
 
 runner = CliRunner()
 
@@ -35,7 +35,7 @@ def _settings(tmp_path: Path) -> Settings:
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='corpus_index_benchmark_test',
         embedding_model='fake-hash',
@@ -73,8 +73,8 @@ def test_benchmark_corpus_indexing_measures_repeat_and_unchanged(tmp_path: Path)
 
 def test_corpus_index_benchmark_cli_outputs_json(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
-    monkeypatch.setattr('free_plaud.corpus.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('free_plaud.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.service.get_embedder', lambda model_name, **kwargs: FakeEmbedder())
 
     result = runner.invoke(app, ['corpus', 'index-benchmark', '--files', '4', '--repeat', '2'])
 

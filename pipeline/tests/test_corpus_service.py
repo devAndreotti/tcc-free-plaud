@@ -1,20 +1,20 @@
 from pathlib import Path
 
-from free_plaud.app.config import Settings
-from free_plaud.corpus.cancellation import CancellationToken
-from free_plaud.corpus.service import (
+from escolio.app.config import Settings
+from escolio.corpus.cancellation import CancellationToken
+from escolio.corpus.service import (
     get_corpus_status,
     index_corpus_file,
     index_corpus_path,
 )
-from free_plaud.notes.metadata import build_note_id
-from free_plaud.storage.sqlite import (
+from escolio.notes.metadata import build_note_id
+from escolio.storage.sqlite import (
     connect_sqlite,
     count_notes,
     init_sqlite,
     list_chunk_ids,
 )
-from free_plaud.storage.vector import LocalVectorStore
+from escolio.storage.vector import LocalVectorStore
 
 
 class FakeEmbedder:
@@ -54,7 +54,7 @@ def _settings(tmp_path: Path) -> Settings:
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='corpus_service_test',
         embedding_model='fake-hash',
@@ -229,7 +229,7 @@ def test_index_corpus_path_fails_batch_when_note_id_duplicates_remain(monkeypatc
     (root / 'b.md').write_text('# B\n\nSegunda nota.\n', encoding='utf-8')
     connection = init_sqlite(settings.sqlite_path)
     vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
-    monkeypatch.setattr('free_plaud.notes.structurer.build_note_id', lambda path, **kwargs: 'duplicado')
+    monkeypatch.setattr('escolio.notes.structurer.build_note_id', lambda path, **kwargs: 'duplicado')
 
     result = index_corpus_path(
         root,

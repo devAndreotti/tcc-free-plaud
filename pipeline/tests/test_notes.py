@@ -3,12 +3,12 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from free_plaud.app.config import Settings
-from free_plaud.cli import app
-from free_plaud.ingest.loaders import load_document
-from free_plaud.notes.metadata import build_note_id
-from free_plaud.notes.repository import save_note_locally
-from free_plaud.notes.structurer import structure_document
+from escolio.app.config import Settings
+from escolio.cli import app
+from escolio.ingest.loaders import load_document
+from escolio.notes.metadata import build_note_id
+from escolio.notes.repository import save_note_locally
+from escolio.notes.structurer import structure_document
 
 runner = CliRunner()
 
@@ -288,7 +288,7 @@ def test_save_note_locally_persists_markdown_and_manifest(sample_markdown_file: 
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
     )
 
@@ -317,10 +317,10 @@ def test_notes_save_cli_persists_note_using_configured_notes_dir(
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
     )
-    monkeypatch.setattr('free_plaud.notes.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.notes.cli.get_settings', lambda: settings)
 
     result = runner.invoke(app, ['notes', 'save', str(sample_markdown_file)])
 

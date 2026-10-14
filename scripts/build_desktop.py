@@ -59,7 +59,7 @@ def verify_bundle() -> None:
 
 def main() -> None:
     print("==================================================")
-    print("  Free Plaud — Build & Packaging Desktop Release  ")
+    print("  Escólio — Build & Packaging Desktop Release  ")
     print("==================================================")
     build_react_frontend()
     run_pyinstaller_bundle()

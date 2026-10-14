@@ -1,15 +1,15 @@
 from pathlib import Path
 
-from free_plaud.app.config import Settings
-from free_plaud.corpus.service import index_corpus_path, reset_corpus
-from free_plaud.storage.models import BenchmarkRunRecord
-from free_plaud.storage.sqlite import (
+from escolio.app.config import Settings
+from escolio.corpus.service import index_corpus_path, reset_corpus
+from escolio.storage.models import BenchmarkRunRecord
+from escolio.storage.sqlite import (
     count_chunks,
     count_notes,
     init_sqlite,
     insert_benchmark_run,
 )
-from free_plaud.storage.vector import LocalVectorStore
+from escolio.storage.vector import LocalVectorStore
 
 
 class FakeEmbedder:
@@ -32,7 +32,7 @@ def _settings(tmp_path: Path) -> Settings:
         notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
         datasets_dir=tmp_path / 'data' / 'datasets',
         results_dir=tmp_path / 'data' / 'results',
-        sqlite_path=tmp_path / 'data' / 'results' / 'free_plaud.sqlite3',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         vector_collection_name='corpus_reset_test',
         embedding_model='fake-hash',

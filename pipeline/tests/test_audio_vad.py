@@ -3,9 +3,9 @@ from itertools import pairwise
 import numpy as np
 import pytest
 
-from free_plaud.ingest.audio_dsp import AudioResampler, mono_pcm
-from free_plaud.ingest.audio_vad import FRAME, SpeechDetector, VadOptions
-from free_plaud.providers.audio_models import AudioError
+from escolio.ingest.audio_dsp import AudioResampler, mono_pcm
+from escolio.ingest.audio_vad import FRAME, SpeechDetector, VadOptions
+from escolio.providers.audio_models import AudioError
 
 
 def energy(frame):
@@ -112,7 +112,7 @@ def test_pcm_downmix_scaling_and_invalid_input():
 
 
 def test_silero_recurrent_context_without_model_download(monkeypatch, tmp_path):
-    from free_plaud.ingest.audio_vad import SileroVad
+    from escolio.ingest.audio_vad import SileroVad
 
     seen = []
 

@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from free_plaud.ingest.loaders import load_document
-from free_plaud.ingest.models import IngestedDocument
-from free_plaud.notes.structurer import structure_document
+from escolio.ingest.loaders import load_document
+from escolio.ingest.models import IngestedDocument
+from escolio.notes.structurer import structure_document
 
 
 def test_structure_document_falls_back_to_filename_when_markdown_has_only_generic_sections(
