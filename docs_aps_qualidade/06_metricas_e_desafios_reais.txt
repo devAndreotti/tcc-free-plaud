@@ -1,0 +1,475 @@
+AUDITORIA TÉCNICA - PARTE 06: MÉTRICAS E DESAFIOS REAIS
+========================================================
+
+Projeto:   Escólio (antigo free-plaud)
+Repo:      devAndreotti/tcc-free-plaud (GitHub, privado)
+Commit:    dbb82fe (main, merge do PR #119, 2026-10-14)
+Coleta:    2026-10-14
+
+Convenções desta parte
+- "(verificado em 2026-10-14)" = fato de docs_aps_qualidade/_fontes/fatos_verificados.md.
+- Demais fontes: arquivo:linha, comando, run ID ou PR.
+- Dados brutos da CI em docs_aps_qualidade/_fontes/:
+    ci_runs.csv          100 runs de quality-gate.yml (gh run list)
+    ci_runs.json         mesma lista, JSON bruto
+    ci_jobs_ultimas15.csv jobs das 15 últimas runs concluídas (gh run view)
+    jobs_<runId>.json    detalhe de jobs por run
+- Nenhuma suíte foi rodada. Não houve commit, push nem alteração de código.
+
+
+1. MÉTRICAS PRÁTICAS DE QA
+--------------------------
+
+1.1 Amostra e método
+--------------------
+
+Comando:
+  gh run list -R devAndreotti/tcc-free-plaud --workflow quality-gate.yml \
+    --limit 100 --json databaseId,conclusion,status,event,headBranch,\
+    createdAt,updatedAt,startedAt
+
+- 100 runs, de 2026-09-13 a 2026-10-14. Uma delas ainda estava em
+  andamento (38621534848) e ficou fora das métricas.
+- 99 runs concluídas. Como o limite foi 100, runs mais antigas podem
+  existir. Não verifiquei.
+- Tempo de execução = updatedAt - startedAt (run).
+- Cancelamentos: quality-gate.yml, linhas 9-11, usa
+  "concurrency: cancel-in-progress: true". Um push novo cancela a run
+  anterior do mesmo ref. Por isso cancelled não é falha real.
+
+1.2 Taxas de resultado
+----------------------
+
+  Grupo                       n    success          failure          cancelled
+  --------------------------  ---  ---------------  ---------------  ---------------
+  Todas (concluídas)          99   13  (13,1%)      72  (72,7%)      14  (14,1%)
+  Sem cancelled               85   13  (15,3%)      72  (84,7%)      -
+  push na main                15    0  ( 0,0%)      14  (93,3%)       1  ( 6,7%)
+  pull_request                84   13  (15,5%)      58  (69,0%)      13  (15,5%)
+  Antes do PR #93 (<21/09)    24    3  (12,5%)      21  (87,5%)       0  ( 0,0%)
+  Depois do PR #93 (>=21/09)  75   10  (13,3%)      51  (68,0%)      14  (18,7%)
+
+  Fonte: ci_runs.csv (cálculo próprio). PR #93 = "ci: self-hosted runner
+  OSTG 0.2" (fatos, 2026-09-21).
+
+1.3 Tempo de pipeline (wall time da run)
+----------------------------------------
+
+  Grupo                          n    Média      Mediana
+  -----------------------------  ---  ---------  ---------
+  Todas, incluindo cancelled     99   41,7 min   20,5 min
+  Sem cancelled                  85   38,0 min   14,2 min
+  Só sucessos                    13   25,9 min   19,8 min
+  push na main                   15   21,6 min   12,9 min
+  pull_request                   84   45,3 min   21,5 min
+  Antes do PR #93                24    2,5 min    0,1 min
+  Depois do PR #93               75   54,3 min   34,2 min
+
+Leitura:
+- Pipeline típico na era self-hosted: mediana de ~14 min sem cancelados,
+  com cauda longa (máximo de 224 min na amostra).
+- A era anterior não é comparável em tempo. Nela, a maioria das falhas
+  termina em segundos sem nenhum passo executado (ver 1.5).
+- A taxa de sucesso não melhorou com o runner próprio: 12,5% antes contra
+  13,3% depois. O gargalo principal é a falha do job SonarCloud (1.5).
+
+1.4 Tempo por job (últimas 15 runs concluídas)
+----------------------------------------------
+
+Fonte: ci_jobs_ultimas15.csv (completedAt - startedAt por job).
+Inclui runs com falha; por isso o máximo de alguns jobs é alto.
+
+  Job                  n    Média      Mediana    Máximo
+  -------------------  ---  ---------  ---------  ---------
+  Security audit       15   2,14 min   0,65 min   16,63 min
+  Lint                 15   2,03 min   1,02 min    6,10 min
+  Tests & ratchet      15   8,61 min   7,18 min   15,23 min
+  Build & smoke        15   5,36 min   0,92 min   56,93 min
+  Docker image gate    15   4,15 min   0,23 min   52,73 min
+  SonarCloud           15   5,78 min   7,67 min   12,80 min
+  PR report            15   0,29 min   0,23 min    0,78 min
+
+Observações:
+- Os máximos de 56,9 min (Build & smoke, run 38331804021) e 52,7 min
+  (Docker image gate, run 38331774418) são de 2026-10-13, 01:21-01:22 UTC.
+  Essa janela coincide com o incidente de disco cheio do runner
+  (fatos). Não confirmei a relação causal pelos logs.
+- Security audit de 16m38s (run 38563746866) esperava o cache (fatos).
+- Tests & ratchet de PR #118 (run 38563746866): 23m33s, com 1 falha
+  de teste instável (fatos). Na reexecução levou 14m47s.
+- Tests & ratchet de PR #119 (run 38576721730): 13m23s (fatos).
+
+1.5 Causas das falhas (8 runs com falha entre as 15 últimas)
+-----------------------------------------------------------
+
+Comando: gh run view <id> --json jobs e --log-failed (filtro de erro).
+
+  Run ID       Evento / branch                  Data        Job que falhou
+  -----------  -------------------------------  ----------  ---------------
+  38331774418  PR, dependabot/.../playwright    2026-10-13  SonarCloud
+               /test-1.64.0
+  38331791967  PR, dependabot/.../vite-8.3.4    2026-10-13  SonarCloud
+  38331804021  PR, dependabot/.../plugin-react  2026-10-13  SonarCloud
+  38331816547  PR, dependabot/.../types/node    2026-10-13  SonarCloud
+  37867326230  push, main                       2026-10-09  SonarCloud
+  37863767524  push, main                       2026-10-09  SonarCloud
+  37855744558  push, main                       2026-10-08  SonarCloud
+  37723399230  PR, chore/deps-2026-10           2026-10-08  SonarCloud
+
+Classificação (8 de 8 falharam no step "SonarCloud scan and Quality Gate"):
+
+  Causa                                       Runs   Evidência no log
+  ------------------------------------------  -----  -----------------------
+  Dependabot sem secrets (SONAR_TOKEN          4     "Secret source:
+  vazio)                                             Dependabot"; em
+                                                     38331816547:
+                                                     "SONAR_TOKEN:" vazio e
+                                                     aviso "Running this
+                                                     GitHub Action without
+                                                     SONAR_TOKEN"
+  Falha do servidor SonarCloud (CE)            1     37867326230: "CE Task
+                                                     finished abnormally
+                                                     with status: FAILED"
+                                                     (task
+                                                     AaEePbN9Hxi1U64p2sTO)
+  Causa não confirmada (sonar-scanner          3     Só "exit code 3" no
+    saiu com código 3; token presente)               log. O detalhe do CE
+                                                     não foi lido.
+
+Contexto:
+- As análises da main falham desde 2026-10-08 com "CE Task finished
+  abnormally" (lado do servidor) (fatos). Última análise bem-sucedida da
+  main: 2026-07-21 (sonar_raw.txt).
+- Antes do PR #93, as falhas (amostra de 2 runs verificada: 35176553137 e
+  34824531296) não executaram nenhum step e não tiveram runner atribuído
+  (gh run view --json jobs). A causa não foi identificada: os logs estão
+  vazios. Tratar essa era como não comparável.
+
+1.6 Cobertura (resumo; detalhe na parte 04)
+-------------------------------------------
+
+- SonarCloud, PR #119 (= main): cobertura 84,9%; linhas 87,7%; branches
+  68,6% (fatos; sonar_raw.txt).
+- Comentário sticky do PR #119: lines 90,0% contra baseline 89,0%
+  (gh pr view 119 --json comments).
+- Ratchet local: scripts/baseline.json, lines 88,98%
+  (updatedAt 2026-09-13). Script: quality-gate.yml, linhas 136-137.
+- Teste de quality-gate: 64 casos em scripts/*.test.cjs (AUDIO_VALIDATION.md:57).
+
+1.7 Desempenho do sistema (reaproveitando relatórios existentes)
+----------------------------------------------------------------
+
+Cada linha cita o relatório de origem. Nenhum número foi medido nesta
+auditoria.
+
+A. Transcrição (STT) - docs/spec-kit/AUDIO_VALIDATION.md, tabela das
+   linhas 31-44. Sprint 09, validado em 2026-09-09 (linhas 2-4):
+   Windows, Python 3.12.9, RTX 2050 4 GB. Fixtures: 6 clipes FLEURS
+   (pt_br e en_us), ver manifest.json.
+
+   Motor / device        Modo       Clipes  WER     CER     RTF
+   --------------------  ---------  ------  ------  ------  ------
+   Whisper small CPU     original   6       0,0790  0,0673  0,7768  (linha 39)
+   Whisper small CPU     VAD        6       0,0895  0,0635  0,7270  (linha 40)
+   Whisper small CUDA    original   6       0,0790  0,0673  0,3003  (linha 42)
+   Moonshine CPU         original   3       0,2206  0,1384  0,1872  (linha 33)
+
+   Ressalvas do próprio doc (linhas 46-49): a amostra é pequena; o VAD
+   piorou um pouco o WER; os tempos misturam carga a frio e a quente.
+   "Não deve ser tratada como comparação controlada de desempenho."
+
+B. Recuperação - suíte manual (4 documentos, 16 consultas; fatos).
+   Experimentos 01, 07 e 08 em docs/experimentos/.
+
+   Estratégia           MRR       Recall@3  Latência média  Fonte
+   -------------------  --------  --------  --------------  ------------------
+   lexical              0,96875   1,0       86,4 ms         01, linhas 41 e 45
+   lexical              0,96875   1,0       130,2 ms        08, linha 40
+   vetorial             0,7917    0,9375    1.180 ms        01, linhas 49 e 53
+   vetorial             0,7917    0,9375    600,1 ms        08, linha 41
+   híbrida (lex. 1,5)   0,96875   1,0       729,6 ms        07, linha 67
+   híbrida (lex. 1,5)   0,96875   1,0       761,2 ms        08, linha 42
+
+   Leitura: a latência da mesma estratégia varia entre rodadas (lexical:
+   86 ms contra 130 ms). O doc não registra a carga da máquina em cada
+   rodada. Use faixas, não um número único.
+
+C. Exp. 15 - NÃO REPRODUZÍVEL. docs/experimentos/15_calibracao_rrf_tcc.md,
+   linhas 22-24: híbrido RRF k=60 com MRR 0,884, Recall@3 0,915 e
+   latência ~41,8 ms.
+   Motivo: não tem n, comando nem artefato. Contradiz 01/07/08 (MRR
+   híbrido 0,96875 e latência de 730 a 760 ms). Não usar como métrica.
+
+D. Embeddings - docs/experimentos/03_embeddings_alternativos_suite_baseline.md:
+   linha 27 traz vector MRR 0,7917 e a linha 66 traz chroma-default com
+   MRR 1,0. Valores divergentes dentro do mesmo doc. Não conciliei.
+   Citar só com essa ressalva.
+
+E. Pergunta no corpus (exp. 13) - docs/experimentos/13_validacao_exaustiva_ask_corpus.md:
+   corpus Obsidian copiado com 294 chunks (linhas 155-158). Latência de
+   ~2 s a ~12 s por pergunta (linha 199).
+
+F. Pergunta aquecida e benchmark - PR #102 (gh pr view 102, seção
+   "Desempenho"; PR mergeado em 2026-10-02):
+   - pergunta aquecida: 2,5-3,4 s para 0,4-0,7 s. Fatos: ~3 s para ~0,5 s.
+   - benchmark da suíte: 42 s para 28 s, com métricas idênticas.
+   - causa: o wrapper do Chroma passou a reaproveitar a sessão ONNX
+     (antes recarregava a cada chamada).
+
+G. Smoke do backend real (VPS, 2026-10-14, corpus de 10 docs, 78 chunks)
+   (fatos): 14/15 perguntas positivas com citação; 5/6 negativas abstidas.
+   CLI leva ~90 s por invocação na VPS ARM (fatos).
+
+H. Build - bundle principal da UI: 347,84 kB; 103,39 kB gzip
+   (vite build, fatos). Pacote Python (uv build): não medido.
+
+I. Tempos de suíte:
+   - pytest na CI (job Tests & ratchet): 498 testes em 594,56 s na main atual
+     (run 38576721730) e 484 testes em 593,18 s antes do #119 (run 38563746866).
+   - pytest completo na VPS, fora da CI e com a máquina carregada: 22m37s, 484 testes (fatos).
+   - Playwright 7/7: 36,7 s, 2 workers (fatos).
+   - Vitest: sem tempo registrado nas fontes.
+   - CI, job Tests & ratchet (ci_jobs_ultimas15.csv): média 8,6 min,
+     mediana 7,2 min, máximo 15,2 min.
+
+J. Experimento 14 (consistência e rebuild):
+   docs/experimentos/14_consistencia_reset_rebuild_corpus.md, linha 40:
+   stale_vector_chunks_count 122 e linha 51: status "inconsistent" antes
+   do rebuild. Após o rebuild: rebuild_status "success", indexados 3,
+   stale_after 0 (linhas 79-85).
+
+1.8 Artefatos de relatório existentes
+-------------------------------------
+
+CI (gh api repos/devAndreotti/tcc-free-plaud/actions/runs/38576721730/artifacts):
+  coverage-report   354.241 bytes   (upload em quality-gate.yml, ~linha 139)
+  ruff-report       136 bytes       (upload em quality-gate.yml, ~linha 88)
+
+- docker-gate-report é enviado pelo workflow (quality-gate.yml, linhas
+  213-217), mas não aparece na lista dessa run. Não investiguei o motivo.
+- Não existe artefato do Playwright: nenhum job roda o E2E na CI.
+
+Locais, no PC Windows (fatos, linha 112). Não versionados e não
+inspecionados nesta auditoria:
+  D:\Dev\Repos\Own\tcc-free-plaud\data\results\
+    benchmark_compare\
+    experiments\02_calibracao\*
+    experiments\03_embeddings\*
+    vector_store_*
+
+
+2. DESAFIOS E DIFICULDADES REAIS
+--------------------------------
+
+Cada item traz o problema, a evidência e o que foi feito.
+
+2.1 Testes instáveis na TUI (Textual)
+- Problema: teste depende de tempo (pilot.pause e thread). Falha
+  aleatória sem mudança de código.
+- Evidência:
+  - PR #118, run 38563746866: falhou em
+    test_tui_ask_button_ignores_double_click_while_running com
+    "assert ['hybrid','hybrid'] == ['hybrid']" (pipeline/tests/test_tui_app.py:714-743).
+    Passou na reexecução (14m47s) (fatos).
+  - Pytest completo na VPS: falhou
+    test_tui_notes_cancel_button_cancels_running_index
+    (test_tui_app.py:1154). Passou 3/3 isolado (fatos).
+  - As esperas são fixas: pilot.pause(0.5) em test_tui_app.py:738, além de
+    outras esperas de 0,1 a 0,5 s no mesmo arquivo.
+- O que foi feito: reexecução manual. Não há retry automático no pytest.
+  git log --grep=flaky (e instav) não retorna nenhum commit.
+
+2.2 Runner de 1 slot (fila de jobs)
+- Problema: um único runner executa todos os jobs de todos os PRs em série.
+- Evidência: fatos (runner hermes-ostg02-tcc-runner, 1 slot). Security
+  audit chegou a 16m38s esperando cache (run 38563746866).
+- Efeito no código: concurrency cancel-in-progress (quality-gate.yml:9-11)
+  cancela runs antigas. Resultado: 14 cancelled entre 99 runs (1.2).
+- O que foi feito: cache do uv desligado (enable-cache: false) e cache
+  movido para o volume do workspace (quality-gate.yml:33-35). O comentário
+  do workflow diz que o /home do runner encheu e deixou entradas
+  incompletas no cache, e que no mesmo disco o uv usa hardlink.
+
+2.3 Incidente de disco cheio no runner (2026-10-13)
+- Problema: o volume do runner lotou. Jobs falharam com "No space left on
+  device" ou travaram cerca de 10 min sem executar passos (fatos).
+- Causas: venv de 6,6 GB; runner antigo 2.322.0 (1,25 GB) sem remoção;
+  logs _diag antigos; runner duplicado (fatos).
+- Causa de fundo: o uv.lock fixava torch CUDA (+ ~3 GB de bibliotecas
+  NVIDIA) também no runner ARM, sem GPU. Ver commit b6a8b49 (item 2.8).
+- O que foi feito: limpeza, volume de 100% para 65% (fatos). Disco raiz
+  da VM em 94% e volume de 50 GB em 83% em 2026-10-14 (fatos).
+- Impacto medido: Build & smoke 56,9 min e Docker gate 52,7 min nas runs
+  de 2026-10-13 (1.4).
+
+2.4 Secrets do Dependabot e SonarCloud
+- Problema: PRs do Dependabot não recebem secrets. Sem SONAR_TOKEN, o
+  job SonarCloud falha sempre.
+- Evidência: 4 das 8 falhas verificadas (1.5) são PRs do Dependabot.
+- O que foi feito: consolidar as atualizações em um PR único:
+  - commit b0e02a9, "chore(deps): consolida as atualizações do Dependabot
+    (#113)";
+  - commit 7da8203, "chore(deps): consolida as atualizações do Dependabot
+    (#114-#117) (#118)".
+
+2.5 Falhas do servidor SonarCloud
+- Problema: análises da main falham desde 2026-10-08 com "CE Task finished
+  abnormally" (fatos; run 37867326230).
+- Efeito: a última métrica válida da main é de 2026-07-21 (sonar_raw.txt).
+  Sem análise nova, as métricas da main ficam defasadas.
+- Diferença: o relatório de 2026-07-21 mostra ncloc 16.686, cobertura
+  80,3% e 116 code smells. A análise do PR #119 mostra ncloc 14.839,
+  cobertura 84,9% e 53 code smells (fatos).
+- O que foi feito: nada no repo. Pendente: abrir caso no SonarCloud ou
+  reexecutar a análise.
+
+2.6 Renomeação que virou "código novo" no Sonar (PR #119)
+- Problema: o rename do projeto (free-plaud para Escólio) fez todo o
+  código aparecer como novo para o SonarCloud.
+- Evidência: run 38576721730 falhou com Security Rating C on New Code.
+  Causa: a issue antiga python:S2245 (PRNG em
+  pipeline/src/escolio/benchmark/metrics.py, linha ~157, bootstrap de
+  intervalo de confiança com seed fixa) entrou no cálculo (fatos).
+- O que foi feito: o dono marcou a issue como falso positivo, com
+  justificativa. A reexecução passou. Sem mudança de código.
+- Risco: um falso positivo marcado à mão. Se o código mudar, a marcação
+  precisa ser revista.
+
+2.7 Lockfile com CRLF
+- Problema: UI/package-lock.json é versionado com CRLF. npm e o
+  Dependabot regravam em LF, e o diff vira o arquivo inteiro (fatos).
+- O que foi feito: restaurar o CRLF antes de commitar. Procedimento
+  manual; não há checagem automática no workflow.
+
+2.8 torch CPU em ARM (PR #103)
+- Problema: sentence-transformers puxa torch. O marcador
+  "extra == 'gpu-cu128'" nas sources não separava a resolução, e o
+  uv.lock fixava torch CUDA em Linux e Windows (commit b6a8b49).
+- Efeito: no runner ARM, sem GPU, ~3 GB de bibliotecas NVIDIA a cada
+  execução, enchendo o disco.
+- O que foi feito: extras "cpu" (índice pytorch-cpu) e "gpu-cu128"
+  declarados como conflitantes, com "extra =" nas sources. Quality gate e
+  desktop-release usam --extra cpu (pipeline/pyproject.toml; commit b6a8b49).
+
+2.9 Regressão do undici no Node 20.20 (commit 97b1ece)
+- Problema: undici markAsUncloneable falhava no Node 20.20 (mensagem do
+  commit 97b1ece).
+- O que foi feito: node-version subiu para 22, no PR #93 (fatos).
+
+2.10 Mock do bridge PyWebView no E2E
+- Problema: o app é um pywebview. Sem o bridge, a UI cai no fallback.
+  O React lê window.pywebview ao carregar o módulo
+  (docs/spec-kit/playwright-e2e-suite-plan.md, linhas 6-7). O mock tem
+  que chegar antes do bundle (addInitScript).
+- Evidência: o mock tem que cobrir todos os métodos chamados
+  (UI/e2e/fixtures/pywebview-bridge-mock.ts). Faltou scanVault em uma
+  rodada (AUDIO_VALIDATION.md:64-66). Três specs (04, 05, 06) fazem só
+  smoke (parte 04, 2.1).
+- O que foi feito: branch fix/e2e-backend-real e PR #102 ("correções do
+  teste ponta a ponta com o backend real"). Esse PR usou o backend real
+  com dados isolados e achou bugs de dados (reindex trocava note_id;
+  benchmark gravava no corpus do usuário).
+
+2.11 Modelo de embedding divergente no corpus real
+- Problema: o índice real foi gerado com chroma-default, mas a
+  configuração atual usa paraphrase-multilingual-MiniLM-L12-v2 em CUDA.
+- Evidência: corpus status do PC do autor (fatos): 668 notas, 4.195
+  chunks no SQLite, 4.195 no FTS5 e 4.195 vetores; 0 obsoletos; 0
+  faltantes; status "inconsistent" por embedding_model_mismatch_count
+  = 4195.
+- Detecção: teste em pipeline/tests/test_corpus_status.py:140-160, que
+  cria um índice com FakeEmbedder e troca o modelo para chroma-default.
+- O que falta: rebuild do corpus com o modelo atual (exp. 14 mostra o
+  caminho: corpus reset e rebuild). Não executado nesta auditoria.
+
+2.12 E2E fora da CI
+- Problema: o Playwright não roda em nenhum workflow (parte 04, 2.4).
+- Evidência: grep sem resultado em .github/workflows; git log -S sem
+  resultado (verificado em 2026-10-14).
+- O que foi feito: rodada manual (7/7). Custo para entrar na CI em
+  parte 04, 2.4.
+
+2.13 Defeitos abertos no smoke real (fatos)
+- (a) "Qual versão do Kubernetes roda no cluster de produção?" foi
+  respondida com frase irrelevante de um doc de Docker, em vez de
+  abster-se.
+- (b) "Quando o componente MAJOR deve ser incrementado?" teve abstenção
+  falsa (missing_named_anchor) no modo híbrido.
+- Ambos seguem abertos. Nenhum teste automatizado os cobre hoje.
+
+2.14 Ausência de framework de migração no SQLite
+- Problema: o schema é criado com CREATE TABLE IF NOT EXISTS
+  (pipeline/src/escolio/storage/sqlite.py, linhas 18, 35, 61, 77, 97).
+  Não há tabela de versão nem user_version (grep sem resultado).
+- Consequência: a troca de nomes (free-plaud para Escólio) foi tratada
+  por fallbacks em runtime (pipeline/src/escolio/app/legacy.py), e não
+  por migração de dados.
+
+
+3. CONEXÕES INTERDISCIPLINARES
+------------------------------
+
+3.1 Banco de dados
+------------------
+
+Persistência dupla:
+- SQLite (pipeline/src/escolio/storage/sqlite.py):
+  - notes (linha 18), chunks (linha 35);
+  - chunks_fts, tabela virtual FTS5 (linha 54), para busca léxica;
+  - processing_logs (linha 61), benchmark_runs (linha 77),
+    benchmark_queries (linha 97).
+- Chroma (pipeline/src/escolio/storage/vector.py, classe LocalVectorStore,
+  linha 52), para os vetores.
+- Os dois precisam estar em sincronia. A verificação é feita pelo
+  get_corpus_status (pipeline/src/escolio/corpus/service.py:529), que
+  reporta: vetores obsoletos (stale), vetores faltantes, notas órfãs e
+  divergência de modelo de embedding.
+- Testes desses casos: test_corpus_status.py:64 (vazio, limpo e stale),
+  :105 (só SQLite e vetores faltantes), :140 (divergência de modelo).
+- Reset e rebuild: reset_corpus (service.py:611) e rebuild_corpus
+  (service.py:998). Experimento 14 valida o caminho com corpus temporário
+  (docs/experimentos/14_consistencia_reset_rebuild_corpus.md, linhas 65-66).
+- Fallback de nomes antigos: pipeline/src/escolio/app/legacy.py (variáveis
+  FREE_PLAUD_*, free_plaud.sqlite3, coleção free_plaud_chunks, localStorage
+  free-plaud:*). Testes em test_legacy_names.py (linhas 41-54).
+- Não há framework de migração. Só o fallback de nomes. Isso é uma
+  lacuna para evolução de schema (ver 2.14).
+
+3.2 Redes e DevOps
+------------------
+
+- Runner self-hosted em VM Oracle Cloud (OCI): shape VM.Standard.A1.Flex,
+  ARM aarch64, região eu-amsterdam-1, ~11 GiB de RAM, disco raiz de 96 GB
+  (fatos). Serviço systemd do runner (fatos). Não verifiquei a conexão
+  de rede do runner (ex.: Tailscale) nas fontes do repo.
+- GitHub Actions: quality-gate.yml com 7 jobs (Security audit, Lint,
+  Tests & ratchet, Build & smoke, SonarCloud, Docker image gate, PR report).
+  Todos em runs-on: [self-hosted, linux, ostg02, tcc] (fatos).
+- Caches: npm com cache: npm e cache-dependency-path (quality-gate.yml:39-40).
+  O cache do uv está desligado (enable-cache: false, linhas 33-35).
+- Docker gate: scripts/docker-gate.cjs. Em 2026-09-09 o job foi pulado
+  porque o repo não tinha Dockerfile (AUDIO_VALIDATION.md:71-72). Hoje o
+  job roda: 25 s na run do PR #118 (fatos). Não verifiquei o que ele
+  checa além de scripts/docker-gate.cjs.
+- Auditoria de dependências: pip-audit (quality-gate.yml:46) e npm audit
+  --audit-level=high (linha 52).
+- Branch protection da main (fatos): 6 checks obrigatórios, strict = true,
+  0 revisões obrigatórias, enforce_admins = false.
+
+3.3 Engenharia de software
+--------------------------
+
+- Arquitetura modular em pipeline/src/escolio: app, benchmark, corpus,
+  ingest, notes, providers, retrieval, storage, tui, além de cli.py e
+  terminal_menu.py. Áudio fica em ingest/audio_*.py e providers/audio_runtime.py.
+- Pirâmide de testes (parte 04, 1.5): 484 pytest, 84 Vitest, 64 Node e 7
+  Playwright (manual).
+- Quality gates:
+  - ruff (lint Python) e ESLint (UI);
+  - ratchet de cobertura local (scripts/quality-gate.js check, com
+    scripts/baseline.json);
+  - SonarCloud com perfil "Sonar way comprehensive" e quality gate
+    "Sonar way" sobre código novo (sonar_raw.txt, fatos);
+  - limite de linhas: o baseline tem oversizedFiles = 9 (scripts/baseline.json).
+- Conventional Commits: 165 de 173 commits começam com tipo (feat, fix,
+  chore, ci, docs, test, refactor etc.). Contagem própria sobre git log.

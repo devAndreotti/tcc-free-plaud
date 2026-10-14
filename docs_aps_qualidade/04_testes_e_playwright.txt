@@ -1,0 +1,410 @@
+AUDITORIA TÉCNICA - PARTE 04: TESTES E PLAYWRIGHT
+=================================================
+
+Projeto:   Escólio (antigo free-plaud)
+Repo:      devAndreotti/tcc-free-plaud (GitHub, privado)
+Commit:    dbb82fe (main, merge do PR #119, 2026-10-14)
+Coleta:    2026-10-14
+
+Convenções desta parte
+- "(verificado em 2026-10-14)" = fato de docs_aps_qualidade/_fontes/fatos_verificados.md.
+- Demais fontes: arquivo:linha, comando, run ID ou PR.
+- Nenhuma suíte foi executada nesta auditoria. Números de execução vêm de
+  logs e relatórios já existentes.
+
+
+1. PIRÂMIDE DE TESTES
+---------------------
+
+1.1 Pytest (backend, pipeline/)
+-------------------------------
+
+Contagem de funções de teste:
+
+  grep -c "^def test_\|^async def test_" pipeline/tests/*.py   -> total 484 funções
+
+- Arquivos test_*.py: 53 (mais conftest.py, que não tem testes).
+- Funções x testes coletados: com a parametrização (@pytest.mark.parametrize),
+  as 484 funções da main atual (dbb82fe) viram 498 testes coletados.
+- Main atual na CI (run 38576721730, PR #119): 498 passaram em 594,56 s (9m54s).
+  Antes do #119 (main 6c442ee): 470 funções e 484 testes coletados
+  (run 38563746866: 484 passed in 593,18 s).
+- Execução completa na VPS (verificado em 2026-10-14, main ANTERIOR 6c442ee): 484 coletados,
+  483 passaram e 1 falhou, em 22m37s. A falha foi
+  tests/test_tui_app.py::test_tui_notes_cancel_button_cancels_running_index,
+  que passou 3/3 isolado (teste instável, ver parte 06).
+
+Agrupamento por área (contagem de "def test_" por prefixo do nome do
+arquivo; soma = 484):
+
+  Área                               Arquivos   Funções
+  ---------------------------------  --------   -------
+  Configuração, settings, env,       7          72
+    legacy, provisioning, modelos
+  Corpus (ask, index, status,        11         69
+    reset, rebuild, jobs, service)
+  Áudio (capture, VAD, STT,          7          47
+    catálogo, runtime, integração)
+  RAG, respostas, grounded,          3          63
+    answer provider
+  TUI (Textual) e terminal menu      3          49
+  Notas e limpeza Obsidian           5          36
+  Ingestão, watcher, download,       6          34
+    dropped files
+  Embeddings, chunking, vetor        4          38
+    (vector_store, compressor)
+  CLI e doctor                       2          24
+  Benchmark e métricas               3          29
+  Bridge da UI (ui_bridge)           1          16
+  SQLite (storage)                   1          7
+  ---------------------------------  --------   -------
+  Total                              53         484
+
+  Fonte: contagem própria sobre pipeline/tests/test_*.py, agrupada por
+  prefixo do nome do arquivo (grep e script Python, não commitados).
+
+Fixtures:
+- pipeline/tests/conftest.py (sem testes).
+- pipeline/tests/fixtures/audio/: manifest.json, README.md e 6 WAV do
+  FLEURS (3 pt_br e 3 en_us). Ver docs/spec-kit/AUDIO_VALIDATION.md,
+  linhas 21-27.
+
+Configuração (pipeline/pyproject.toml):
+- linha 49: pytest-cov>=5.0.0 (dependência de dev).
+- linhas 68-71: [tool.pytest.ini_options], addopts = "-ra",
+  testpaths = ["tests"].
+- Não há bloco [tool.coverage] no arquivo. A cobertura é configurada por
+  flags na CI: quality-gate.yml, linhas 123-126
+  (--cov=src --cov-report=json/xml/lcov/term-missing).
+- Não há markers nem pytest.ini separado.
+
+1.2 Vitest (frontend, UI/)
+--------------------------
+
+- Arquivos *.test.ts(x) em UI/src: 16.
+- Casos: 84 (execução verificada em 2026-10-14, fatos).
+  A contagem estática não bate exatamente: 82 chamadas it( / test( mais
+  1 bloco it.each em UI/src/components/BenchmarkPanel.test.tsx:117
+  (4 casos). Não reconciliei a diferença; uso o número da execução.
+- Configuração: UI/vite.config.ts, linhas 18-27 (bloco test):
+    19  environment: 'jsdom'
+    20  include: ['src/**/*.test.{ts,tsx}']
+    21  exclude: ['node_modules', 'dist', 'e2e/**']
+    22  testTimeout: 15000
+    24  coverage.provider: 'v8'
+    25  reporter: ['text', 'json-summary', 'lcov']
+    26  reportsDirectory: '../coverage/ui'
+- Scripts (UI/package.json): "test": "vitest run";
+  "test:coverage": "vitest run --coverage".
+- Versões: vitest ^5.0.3 e @vitest/coverage-v8 ^5.0.3.
+- Lint e build: ESLint limpo; vite build ok; bundle principal de
+  347,84 kB (103,39 kB gzip) (verificado em 2026-10-14).
+
+1.3 Testes Node (scripts de CI)
+-------------------------------
+
+- scripts/*.test.cjs: 11 arquivos, 64 casos (contagem de test( por
+  arquivo). AUDIO_VALIDATION.md:57 registra "script tests: 64/64".
+- Execução na CI: quality-gate.yml, linhas 134-135:
+    node --test scripts/*.test.cjs
+- scripts/e2e-smoke.test.cjs tem 1 teste (linha 24). NÃO é teste
+  Playwright. Ele copia os arquivos do pacote de qualidade para um repo
+  temporário (linhas 26-62), roda bootstrap-repo, quality-gate init,
+  doctor e docker gate, e verifica: doctor com 0 falhas (linha 80),
+  docker gate "skipped" (linha 81), LICENSE e dependabot.yml presentes
+  (linhas 82-83). Serve para validar o empacotamento do quality gate.
+
+1.4 Cobertura
+-------------
+
+  Fonte                                        Métrica          Valor
+  -------------------------------------------  ---------------  ---------------
+  SonarCloud, análise do PR #119 (= main)      cobertura        84,9%
+                                               linhas           87,7%
+                                               branches         68,6%
+                                               (sonar_raw.txt, measures main)
+  SonarCloud, última análise bem-sucedida      cobertura        80,3%
+    da main (2026-07-21)                       linhas / branch  81,2% / 54,7%
+                                               (sonar_raw.txt)
+  Comentário sticky do PR #119 (gh pr view     lines atual      90,0%
+    119 --json comments)                       baseline         89,0%
+                                               delta            +1,0
+  scripts/baseline.json (ratchet, 2026-09-13)  lines            88,98%
+                                               branches         88,98%
+  UI (Vitest v8)                               -                não encontrado
+                                                                nas fontes
+
+Menor cobertura, comentário sticky do PR #119 (top 3, Lines %):
+  src/escolio/__main__.py              0,0%
+  src/escolio/app/logging.py           0,0%
+  src/escolio/providers/structure.py   0,0%
+
+Observação: a tabela do comentário (90,0%) e a métrica do SonarCloud
+(84,9%) não são a mesma medida e não devem ser tratadas como uma só.
+Não verifiquei a origem exata da diferença entre as duas.
+
+Histórico: AUDIO_VALIDATION.md:54-55 registra 89,5% no backend em
+2026-09-09, com 432 testes passando (Sprint 09).
+
+1.5 Pirâmide (contagens acima)
+------------------------------
+
+                          /\
+                         /  \
+                        /E2E \       7 specs Playwright
+                       /------\      (rodada manual, fora da CI)
+                      /        \
+                     / Node CI  \    64 casos em 11 arquivos
+                    /------------\   (scripts/*.test.cjs)
+                   /              \
+                  /   Vitest UI    \  84 casos em 16 arquivos
+                 /------------------\ (UI/src)
+                /                    \
+               /       Pytest         \ 484 funções em 53 arquivos
+              /________________________\ (pipeline/tests)
+
+Leitura: a base é forte no backend (484) e na UI (84). O topo (E2E) tem
+7 specs, mas só 3 deles fazem asserts reais de comportamento (ver 2.1).
+Testes Node são de ferramenta de CI, não do app.
+
+
+2. E2E COM PLAYWRIGHT
+---------------------
+
+2.1 Specs em UI/e2e/ (7 arquivos)
+---------------------------------
+
+  Arquivo                   Fluxo coberto                       Asserts reais?
+  ------------------------  ----------------------------------  ---------------
+  01-chat-rag.spec.ts       Envia pergunta no chat; o mock      Sim (eco da
+                            responde com uma frase fixa.        pergunta e
+                                                                resposta)
+  02-security-xss.spec.ts   Mock devolve HTML com onerror e     Sim (texto
+                            <script>; checa que nada executa.   visível e
+                                                                nenhum alert)
+  03-notes-corpus.spec.ts   Clica na aba Notas se o botão       Condicional: se
+                            existir; senão só checa o body.     o botão não
+                                                                existir, só
+                                                                checa o body
+  04-settings-presets.spec  Só verifica que o body está         Não (smoke)
+                            visível. Não abre Configurações.
+  05-benchmark-panel.spec   Clica em Benchmark se existir;      Não (smoke)
+                            só checa o body.
+  06-graph-view.spec.ts     Clica em Grafo se existir;          Não (smoke)
+                            só checa o body.
+  07-zero-state.spec.ts     Corpus vazio: a resposta "Nenhum    Sim (texto da
+                            documento" aparece sem quebrar.     resposta vazia)
+
+Resumo: 3 specs com asserts de comportamento (01, 02, 07); 1 condicional
+(03); 3 de smoke que quase não testam nada (04, 05, 06).
+
+2.2 playwright.config.ts (UI/playwright.config.ts)
+--------------------------------------------------
+
+Trecho com números de linha (o arquivo tem 27 linhas):
+
+     3  export default defineConfig({
+     4    testDir: './e2e',
+     5    fullyParallel: true,
+     6    forbidOnly: !!process.env.CI,
+     7    retries: process.env.CI ? 2 : 0,
+     8    workers: process.env.CI ? 1 : undefined,
+     9    reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+    10    use: {
+    11      baseURL: 'http://localhost:5174',
+    12      trace: 'on-first-retry',
+    13      viewport: { width: 1280, height: 720 },
+    14    },
+    15    projects: [
+    16      {
+    17        name: 'chromium',
+    18        use: { ...devices['Desktop Chrome'] },
+    19      },
+    20    ],
+    21    webServer: {
+    22      command: 'npx vite --port 5174 --strictPort',
+    23      port: 5174,
+    24      reuseExistingServer: !process.env.CI,
+    25      timeout: 30000,
+    26    },
+    27  });
+
+Pontos:
+- baseURL e porta: http://localhost:5174 (linha 11); Vite na 5174 com
+  --strictPort (linha 22).
+- webServer (linhas 21-26): sobe o Vite; reaproveita servidor aberto fora
+  da CI (linha 24); timeout de 30 s.
+- Headless vs headed: a config não define headless. Vale o padrão do
+  Playwright (headless). Headed só com --headed na linha de comando.
+- Retries: 2 na CI, 0 local (linha 7). Workers: 1 na CI (linha 8); local
+  fica no padrão do Playwright (fatos registram 2 workers na VPS).
+- Reporter: list local; list + html na CI, html sem abrir (linha 9).
+- trace: 'on-first-retry' (linha 12). Ou seja, traces só em retry.
+- Viewport: 1280x720 (linha 13).
+- Projeto único: chromium com Desktop Chrome (linhas 15-20). Sem firefox
+  nem webkit.
+- Screenshot e vídeo: NÃO configurados (nenhuma chave no arquivo). Valem
+  os padrões do Playwright (desligados).
+
+2.3 Mock do bridge PyWebView
+----------------------------
+
+Arquivo: UI/e2e/fixtures/pywebview-bridge-mock.ts (100 linhas).
+- Linha 6: createPyWebViewMockScript(options) devolve uma string JS que
+  define window.pywebview.api (injetada com page.addInitScript).
+- Linhas 1-4: opções askLatencyMs e simulateLlmTimeout.
+- Linha 32: sendMessage devolve sempre a mesma frase, com
+  "Recuperação híbrida via BM25 e ChromaDB." e
+  "Citações obrigatórias e verificadas.".
+- Linhas 34-39: listNotes devolve 2 notas fixas.
+- Linhas 57-65: getDoctor devolve status ok para sqlite e chroma.
+- Linhas 86-95: runBenchmarkCompare devolve MRR fixo.
+
+O que isso significa: o E2E testa a UI React contra um bridge falso. O
+backend Python não roda. Logo, os specs provam renderização e fluxo de
+tela, não a qualidade do RAG nem a lógica do pipeline. Os testes de
+backend real ficam no pytest.
+
+Complexidade: o mock precisa cobrir todos os métodos que a UI chama. Um
+método faltando gera erro no console; AUDIO_VALIDATION.md:64-66 registra
+um scanVault faltando. Além disso, o React lê window.pywebview ao carregar
+o módulo (docs/spec-kit/playwright-e2e-suite-plan.md, linhas 6-7). Por
+isso o mock precisa ser injetado antes do bundle, via addInitScript.
+
+2.4 Como o Playwright roda hoje
+-------------------------------
+
+- NÃO roda em nenhum workflow. Verificado:
+    grep -c playwright .github/workflows/*.yml  -> 0 em ambos
+    git log -S"playwright" -- .github/          -> nenhum commit
+  (verificado em 2026-10-14).
+- Execução manual em 2026-10-14, na VPS ARM (fatos):
+    npx playwright test -> 7/7 passaram em 36,7 s, 2 workers,
+    Chromium headless.
+- PR #118 (bump do Playwright para 1.64.0) também registrou 7/7 (fatos).
+- Não verifiquei PLAYWRIGHT_BROWSERS_PATH: a variável não está definida
+  no shell desta auditoria, e o fato não consta em fatos_verificados.md.
+
+O que falta para entrar na CI (estimativa, sem medição):
+  1. Job novo em quality-gate.yml (mesmo runner self-hosted), com
+     needs: build para reaproveitar a UI.
+  2. Instalar o Chromium: npx playwright install --with-deps chromium,
+     com cache dos browsers (ainda não existe no workflow).
+  3. Garantir que o Vite suba na 5174 sem conflito (na CI, a config já
+     não reaproveita servidor: reuseExistingServer = !CI, linha 24).
+  4. Subir o relatório HTML como artifact (o reporter html já existe na
+     config, linha 9).
+  5. Custo: ~37 s de testes, mais a instalação do browser (não medida).
+     Com retries = 2 na CI (linha 7), teste flaky vira falso verde.
+  6. Impacto no runner de 1 slot: o job entra na fila (parte 06).
+
+2.5 Teste de pacote (scripts/e2e-smoke.test.cjs)
+------------------------------------------------
+
+Já descrito em 1.3. O nome "e2e" é enganoso: ele testa o empacotamento do
+quality gate em um repo temporário, sem browser nem app.
+
+
+3. EXEMPLOS REAIS DE CASOS DE TESTE
+-----------------------------------
+
+Cinco casos lidos do código. Asserts copiados das linhas indicadas.
+
+CASO 1 - Segurança: XSS no chat (Playwright)
+--------------------------------------------
+ID / Nome: E2E-SEG-01 / "deve sanitizar tags html perigosas em respostas
+           markdown sem executar scripts"
+Arquivo:   UI/e2e/02-security-xss.spec.ts:4
+Rota:      chat (envio de mensagem e renderização da resposta).
+Massa:     pergunta "Teste de injeção XSS". O mock (linha 17) responde:
+             "Conteúdo com injeção: <img src=\"invalid-image\"
+              onerror=\"alert(1)\"> e <script>window.xss=true</script>"
+           Listener de dialog (linhas 6-9) marca alertTriggered = true se
+           um alert disparar.
+Esperado:  o texto aparece como texto, e nenhum alert dispara.
+Asserts (linhas 35-36):
+    await expect(page.locator('text=Conteúdo com injeção:'))
+      .toBeVisible({ timeout: 10000 });
+    expect(alertTriggered).toBe(false);
+Limitações: não afirma a ausência de <img> ou <script> no DOM, e não
+  confere window.xss. O seletor só pega o prefixo do texto. Em UI/src não
+  há dangerouslySetInnerHTML fora de testes (grep sem resultado), o que
+  indica renderização como texto pelo React. O teste não roda na CI.
+
+CASO 2 - Chat RAG: fluxo feliz (Playwright)
+-------------------------------------------
+ID / Nome: E2E-CHAT-01 / "deve enviar pergunta e receber resposta
+           formatada com citações"
+Arquivo:   UI/e2e/01-chat-rag.spec.ts:10
+Rota:      chat principal (campo de texto, envio com Enter).
+Massa:     pergunta "Como funciona o pipeline multimodal do Escólio?".
+           Resposta do mock (linha 32 de pywebview-bridge-mock.ts):
+           "...- Recuperação híbrida via BM25 e ChromaDB." e
+           "- Citações obrigatórias e verificadas.".
+Esperado:  a pergunta aparece como eco, e a resposta aparece na tela.
+Asserts (linhas 19 e 22):
+    await expect(page.getByText('Como funciona o pipeline multimodal do Escólio?',
+      { exact: true })).toBeVisible();
+    await expect(page.locator('text=Recuperação híbrida via BM25 e ChromaDB.'))
+      .toBeVisible({ timeout: 10000 });
+Limitações: a resposta vem do mock. O teste não prova busca, citação real
+  nem RAG. O nome do teste fala em citações, mas não há assert sobre elas.
+
+CASO 3 - RAG: abstenção por baixa cobertura de termos (Pytest)
+--------------------------------------------------------------
+ID / Nome: PYT-RAG-01 / test_answer_with_citations_abstains_on_low_term_
+           coverage_even_with_generic_match
+Arquivo:   pipeline/tests/test_rag.py:143
+Rota:      resposta com citações (answer_with_citations), sem backend externo.
+Massa:     nota com texto "O sistema opera localmente e persiste notas em
+           SQLite." (sem "embeddings" nem "vetoriais"). Pergunta: "Como o
+           sistema gera embeddings vetoriais?", top_k=3.
+Esperado:  abstenção por cobertura de termos insuficiente, mesmo havendo
+           um match genérico ("sistema").
+Asserts (linhas 153-157):
+    assert response.status == 'no_answer'
+    assert response.no_answer is True
+    assert response.answer is None
+    assert response.reason_for_no_answer == 'insufficient_term_coverage'
+    assert response.used_sources
+Observação: o teste vizinho (linha 130, sem evidência) confirma
+  reason_for_no_answer == 'no_retrieval_hits' (linha 140).
+
+CASO 4 - Corpus: abstenção com termo ausente no corpus (Pytest)
+---------------------------------------------------------------
+ID / Nome: PYT-CORP-01 / test_answer_corpus_abstains_when_question_term_is_
+           not_in_any_note
+Arquivo:   pipeline/tests/test_corpus_ask.py:500
+Rota:      corpus ask, estratégia lexical, SQLite real em tmp_path.
+Massa:     corpus distribuído montado por _build_distributed_corpus(root),
+           indexado com FakeEmbedder (recursive=True). Pergunta 1: "Qual a
+           senha do broker do pipeline?" ("senha" não existe em nenhuma
+           nota). Pergunta 2 (paráfrase): "Qual equipe ficou responsável
+           pelo runbook?", top_k=4.
+Esperado:  pergunta 1 abstém por termo ausente; pergunta 2 responde.
+Asserts (linhas 516-518):
+    assert missing.reason_for_no_answer == 'query_term_not_in_corpus'
+    assert missing.limitations == ['A pergunta cita "senha", que não aparece em nenhuma nota do corpus.']
+    assert paraphrase.status == 'answer'
+Observação: este teste não cobre os defeitos achados no smoke real da VPS
+  (ver parte 06). Esses defeitos seguem abertos (fatos).
+
+CASO 5 - Persistência: migração de chave legada (Vitest)
+--------------------------------------------------------
+ID / Nome: VIT-THEME-02 / "migra a escolha salva com a chave antiga
+           free-plaud:theme"
+Arquivo:   UI/src/theme.test.ts:19
+Rota:      tema da interface (leitura do localStorage).
+Massa:     localStorage["free-plaud:theme"] = "light" (linha 20).
+Esperado:  a leitura devolve "light" e a chave nova é gravada.
+Asserts (linhas 21-22):
+    expect(readThemeChoice()).toBe('light');
+    expect(window.localStorage.getItem('escolio:theme')).toBe('light');
+Relação com o legado: a mesma regra de compatibilidade aparece no backend
+  (pipeline/tests/test_legacy_names.py:46-48, env FREE_PLAUD_* como fallback).
+  Ver a parte 06, item 3.1.
+
+Casos relacionados (não usados acima):
+- theme.test.ts:37 "continua funcionando com o armazenamento bloqueado"
+  (o storage lança erro; a UI segue com o tema escuro).
+- test_legacy_names.py:51-54: a variável nova vence a legada.
