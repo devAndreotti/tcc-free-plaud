@@ -30,6 +30,7 @@ from escolio.corpus.models import (
     ResolvedCorpusCommitMode,
 )
 from escolio.ingest.loaders import PDF_PARSE_FAILED, load_document
+from escolio.ingest.validators import has_indexable_content
 from escolio.notes.schemas import Note
 from escolio.notes.structurer import structure_document
 from escolio.providers.embed import Embedder, get_embedder
@@ -1098,7 +1099,7 @@ def _load_structure_chunk_corpus_file(
 ) -> _PendingCorpusIndex | _PreparationFailure:
     try:
         document = load_document(path)
-        if not document.raw_text.strip():
+        if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
         note = structure_document(document, source_root=source_root)
         return _PendingCorpusIndex(
@@ -1212,7 +1213,7 @@ def index_corpus_file(
 
     try:
         document = load_document(source_path)
-        if not document.raw_text.strip():
+        if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
 
         note = structure_document(document, source_root=source_root)

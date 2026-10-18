@@ -83,6 +83,43 @@ def test_ingest_file_rejects_blank_pdf_as_empty_content(tmp_path: Path) -> None:
     assert result.source_type == 'pdf'
 
 
+def test_regressao_ingest_file_rejects_markdown_with_only_frontmatter(tmp_path: Path) -> None:
+    note = tmp_path / 'so-frontmatter.md'
+    note.write_text('---\ntitle: x\n---\n', encoding='utf-8')
+
+    result = ingest_file(note, correlation_id='corr-frontmatter-only')
+
+    assert result.status == 'failed'
+    assert result.error_code == 'EMPTY_CONTENT'
+
+
+def test_regressao_ingest_file_accepts_frontmatter_followed_by_body(tmp_path: Path) -> None:
+    note = tmp_path / 'com-corpo.md'
+    note.write_text('---\ntitle: x\n---\n\nConteudo real da nota.\n', encoding='utf-8')
+
+    result = ingest_file(note, correlation_id='corr-frontmatter-body')
+
+    assert result.status == 'success'
+
+
+def test_regressao_ingest_file_keeps_horizontal_rule_as_content(tmp_path: Path) -> None:
+    note = tmp_path / 'regua.md'
+    note.write_text('Introducao.\n\n---\n\nFim.\n', encoding='utf-8')
+
+    result = ingest_file(note, correlation_id='corr-horizontal-rule')
+
+    assert result.status == 'success'
+
+
+def test_regressao_ingest_file_keeps_txt_with_frontmatter_shape_as_content(tmp_path: Path) -> None:
+    note = tmp_path / 'nota.txt'
+    note.write_text('---\ntitle: x\n---\n', encoding='utf-8')
+
+    result = ingest_file(note, correlation_id='corr-txt-shape')
+
+    assert result.status == 'success'
+
+
 def test_ingest_file_returns_structured_failure_for_corrupted_pdf(tmp_path: Path, caplog) -> None:
     corrupted_pdf = tmp_path / 'corrupted.pdf'
     corrupted_pdf.write_bytes(b'%PDF-1.4\nconteudo quebrado sem xref')

@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from escolio.ingest.loaders import PDF_PARSE_FAILED, load_document
 from escolio.ingest.models import IngestionResult
+from escolio.ingest.validators import has_indexable_content
 from escolio.providers.audio_models import AudioError
 
 logger = logging.getLogger("escolio.ingest")
@@ -63,7 +64,7 @@ def ingest_file(path: Path, correlation_id: str | None = None) -> IngestionResul
         detected_media_type = _detect_media_type(source_path)
         document = load_document(source_path)
 
-        if not document.raw_text.strip():
+        if not has_indexable_content(document):
             raise ValueError(EMPTY_CONTENT)
 
         result = IngestionResult(
