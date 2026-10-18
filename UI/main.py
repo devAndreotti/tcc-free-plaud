@@ -347,7 +347,7 @@ class Api:
 
     def startWatcher(self, folder_path: str) -> dict:
         """Inicia monitoramento continuo da pasta para auto-ingestao de novos arquivos."""
-        return watcher_manager.start(folder_path)
+        return watcher_manager.start(folder_path, self.dropped_files)
 
     def stopWatcher(self) -> dict:
         """Para o monitoramento continuo ativo, se houver."""
@@ -364,10 +364,6 @@ class Api:
     def pollDroppedFiles(self) -> list:
         """Drena os resultados da indexação de arquivos soltos."""
         return [event.model_dump(mode='json') for event in self.dropped_files.poll_events()]
-
-    def pollWatcherEvents(self) -> list:
-        """Drena e retorna eventos de ingestao capturados pelo watcher desde a ultima consulta."""
-        return [event.model_dump(mode="json") for event in watcher_manager.poll_events()]
 
     def startAudioCapture(self) -> dict:
         """Inicia gravacao do microfone padrao do sistema e devolve o job_id."""

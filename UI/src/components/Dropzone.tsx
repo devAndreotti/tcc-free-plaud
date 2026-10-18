@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
-import { bridge, type DroppedFileEvent, type WatcherIngestionEvent } from '../services/bridge';
+import { bridge, type DroppedFileEvent } from '../services/bridge';
 import { FileIcon, XIcon } from './Icons';
 import { notifyCorpusChanged } from '../hooks/useCorpusHealth';
 
@@ -46,6 +46,7 @@ const STATUS_LABEL: Record<DropzoneFile['status'], { label: string; tone: string
 const dropMessage = (event: DroppedFileEvent): string => {
   if (event.status === 'indexed') return `${event.name} entrou no corpus (${event.chunks} chunks).`;
   if (event.status === 'unchanged') return `${event.name} já estava indexado, sem mudança.`;
+  if (event.status === 'removed') return `${event.name} removido do corpus.`;
   return `Falha ao indexar ${event.name}: ${event.message ?? 'erro desconhecido'}`;
 };
 
@@ -60,36 +61,6 @@ const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [files, setFiles] = useState<DropzoneFile[]>([]);
   const dragCounter = useRef(0);
-
-  const applyWatcherEvent = useCallback(
-    (event: WatcherIngestionEvent) => {
-      const name = event.source_path.split(/[/\\]/).pop() ?? event.source_path;
-      const status: DropzoneFile['status'] = event.status === 'success' ? 'indexed' : 'failed';
-      setFiles((prev) => {
-        const next = prev.filter((file) => file.name !== name);
-        return [{ id: event.ingestion_id, name, status, message: event.message }, ...next];
-      });
-      onToast?.({
-        id: event.ingestion_id,
-        status: event.status,
-        message:
-          event.status === 'success'
-            ? `${name} indexado com sucesso.`
-            : `Falha ao indexar ${name}: ${event.message ?? 'erro desconhecido'}`,
-      });
-    },
-    [onToast]
-  );
-
-  useEffect(() => {
-    if (!watchDirectory) return undefined;
-    const interval = window.setInterval(() => {
-      void bridge.pollWatcherEvents().then((events) => {
-        events.forEach((event) => applyWatcherEvent(event));
-      });
-    }, POLL_INTERVAL_MS);
-    return () => window.clearInterval(interval);
-  }, [watchDirectory, applyWatcherEvent]);
 
   const markFailed = useCallback((names: string[], message: string) => {
     setFiles((prev) =>
@@ -120,28 +91,34 @@ const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
 
   const applyDropEvent = useCallback(
     (event: DroppedFileEvent) => {
-      setFiles((prev) => {
-        const index = prev.findIndex((file) => file.status === 'indexing' && file.name === event.name);
-        if (index < 0) return prev;
-        const next = [...prev];
-        next[index] = { ...next[index], status: event.status, message: event.message };
-        return next;
-      });
+      // 'removed' não tem linha na lista: é só um aviso do watcher.
+      const { status, message } = event;
+      if (status !== 'removed') {
+        setFiles((prev) => {
+          const index = prev.findIndex((file) => file.status === 'indexing' && file.name === event.name);
+          if (index < 0) return prev;
+          const next = [...prev];
+          next[index] = { ...next[index], status, message };
+          return next;
+        });
+      }
       onToast?.(dropToast(event));
-      if (event.status === 'indexed') notifyCorpusChanged();
+      if (event.status === 'indexed' || event.status === 'removed') notifyCorpusChanged();
     },
     [onToast]
   );
 
+  // Com o watcher ativo, os eventos dele chegam pela mesma fila de resultados dos drops.
   const isIndexing = files.some((file) => file.status === 'indexing');
+  const shouldPoll = Boolean(watchDirectory) || isIndexing;
 
   useEffect(() => {
-    if (!isIndexing) return undefined;
+    if (!shouldPoll) return undefined;
     const interval = window.setInterval(() => {
       void bridge.pollDroppedFiles().then((events) => events.forEach((event) => applyDropEvent(event)));
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
-  }, [isIndexing, applyDropEvent]);
+  }, [shouldPoll, applyDropEvent]);
 
   const addDroppedFiles = useCallback(
     (fileList: FileList) => {

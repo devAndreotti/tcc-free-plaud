@@ -32,6 +32,7 @@ from escolio.corpus.models import (
 from escolio.ingest.loaders import PDF_PARSE_FAILED, load_document
 from escolio.ingest.validators import has_indexable_content
 from escolio.notes.schemas import Note
+from escolio.notes.service import delete_notes_by_source_path
 from escolio.notes.structurer import structure_document
 from escolio.providers.embed import Embedder, get_embedder
 from escolio.retrieval.indexer import index_note
@@ -1469,6 +1470,19 @@ def index_corpus_path(
                 skipped=discovery.skipped,
             )
 
+        # Notas de arquivos apagados da pasta saem do índice; só após confirmar a raiz e sem cancelamento.
+        removed_count = 0
+        if not _is_cancelled(cancel_token):
+            removed_count = delete_notes_by_source_path(
+                source_path,
+                folder=True,
+                recursive=recursive,
+                missing_only=True,
+                settings=resolved_settings,
+                connection=resolved_connection,
+                vector_store=resolved_vector_store,
+            )
+
         pending_items: list[_PendingCorpusIndex] = []
         results: list[CorpusIndexResult] = []
         indexed_count = 0
@@ -1521,6 +1535,7 @@ def index_corpus_path(
                 failed_count=0,
                 skipped_count=skipped_count,
                 unchanged_count=0,
+                removed_count=removed_count,
                 commit_mode_requested=commit_mode_requested,
                 commit_mode_resolved=commit_mode_resolved,
                 results=[],
@@ -1933,6 +1948,7 @@ def index_corpus_path(
             failed_count=failed_count,
             skipped_count=len(discovery.skipped),
             unchanged_count=unchanged_count,
+            removed_count=removed_count,
             commit_mode_requested=commit_mode_requested,
             commit_mode_resolved=commit_mode_resolved,
             results=results,

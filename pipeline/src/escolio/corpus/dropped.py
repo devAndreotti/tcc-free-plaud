@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from queue import Queue
 from threading import Lock, Thread
@@ -14,8 +14,11 @@ from escolio.corpus.jobs import corpus_write_lock
 from escolio.corpus.models import CorpusIndexBatchResult
 from escolio.corpus.runtime import CorpusRuntime
 from escolio.ingest.validators import SUPPORTED_EXTENSIONS
+from escolio.notes.service import delete_notes_by_source_path
 
 DroppedFileRunner = Callable[[Path], CorpusIndexBatchResult]
+# (caminho, é pasta) -> notas removidas
+DroppedFileRemover = Callable[[Path, bool], int]
 
 _MAX_STAGED = 200
 
@@ -23,7 +26,7 @@ _MAX_STAGED = 200
 class DroppedFileEvent(BaseModel):
     name: str
     source_path: str
-    status: str  # indexed | unchanged | failed
+    status: str  # indexed | unchanged | failed | removed
     chunks: int = 0
     error_code: str | None = None
     message: str | None = None
@@ -43,6 +46,14 @@ def _default_runner(runtime: CorpusRuntime | None) -> DroppedFileRunner:
         return index_corpus_path(path, vector_store=vector_store, embedder=embedder)
 
     return run
+
+
+def _default_remover(runtime: CorpusRuntime | None) -> DroppedFileRemover:
+    def remove(path: Path, folder: bool) -> int:
+        vector_store = runtime.get_vector_store() if runtime is not None else None
+        return delete_notes_by_source_path(path, folder=folder, vector_store=vector_store)
+
+    return remove
 
 
 def _event_from_result(path: Path, result: CorpusIndexBatchResult) -> DroppedFileEvent:
@@ -67,8 +78,14 @@ class DroppedFileIndexer:
     Por isso o drop só guarda o caminho (`stage`) e a área de soltar confirma (`enqueue`).
     """
 
-    def __init__(self, runner: DroppedFileRunner | None = None, runtime: CorpusRuntime | None = None) -> None:
+    def __init__(
+        self,
+        runner: DroppedFileRunner | None = None,
+        runtime: CorpusRuntime | None = None,
+        remover: DroppedFileRemover | None = None,
+    ) -> None:
         self._runner = runner or _default_runner(runtime)
+        self._remover = remover or _default_remover(runtime)
         self._lock = Lock()
         self._staged: dict[str, deque[Path]] = {}
         self._staged_order: deque[str] = deque()  # um nome por caminho staged, do mais antigo ao mais novo
@@ -116,10 +133,33 @@ class DroppedFileIndexer:
                     )
                     continue
                 self._queue.put(path)
-            if self._worker is None or not self._worker.is_alive():
-                self._worker = Thread(target=self._drain, name='dropped-file-indexer', daemon=True)
-                self._worker.start()
+            self._ensure_worker()
         return result
+
+    def enqueue_paths(self, paths: Iterable[Path]) -> None:
+        """Enfileira caminhos já conhecidos (watcher de pasta), sem passar pelo staging.
+
+        Extensões fora de SUPPORTED_EXTENSIONS são ignoradas em silêncio.
+        """
+        with self._lock:
+            for path in paths:
+                if path.suffix.lower() in SUPPORTED_EXTENSIONS:
+                    self._queue.put(path)
+            self._ensure_worker()
+
+    def remove_paths(self, path: Path, *, folder: bool = False) -> int:
+        """Remove do corpus as notas do arquivo (ou de tudo sob a pasta) e registra `removed`."""
+        with corpus_write_lock:
+            removed = self._remover(path, folder)
+        if removed:
+            with self._lock:
+                self._events.append(DroppedFileEvent(name=path.name, source_path=str(path), status='removed'))
+        return removed
+
+    def _ensure_worker(self) -> None:
+        if self._worker is None or not self._worker.is_alive():
+            self._worker = Thread(target=self._drain, name='dropped-file-indexer', daemon=True)
+            self._worker.start()
 
     def poll_events(self) -> list[DroppedFileEvent]:
         with self._lock:
