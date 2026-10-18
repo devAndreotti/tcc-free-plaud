@@ -12,7 +12,7 @@ import {
   type VaultMutationResult,
   type VaultPatch,
 } from '../services/bridge';
-import { VaultsContext, type VaultsState } from './VaultsContextObject';
+import { VAULT_SWITCHED_EVENT, VaultsContext, type VaultsState } from './VaultsContextObject';
 
 export const CORPUS_CHANGED_EVENT = 'escolio:corpus-changed';
 
@@ -54,6 +54,7 @@ export function VaultsProvider({ children }: Readonly<{ children: ReactNode }>) 
         return failed(err);
       }
       if (result.ok) {
+        window.dispatchEvent(new Event(VAULT_SWITCHED_EVENT));
         await refresh();
         announceSwitch();
       }

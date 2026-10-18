@@ -1,7 +1,9 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VaultsProvider, CORPUS_CHANGED_EVENT } from '../contexts/VaultsContext';
+import { useIndexJob } from '../hooks/useIndexJob';
+import { useVaults } from '../hooks/useVaults';
 import { bridge, type Vault, type VaultList } from '../services/bridge';
 import Sidebar from './Sidebar';
 import VaultDialog from './VaultDialog';
@@ -89,5 +91,32 @@ describe('vaults: seletor, criação e aba Vaults', () => {
     expect((confirmBtn as HTMLButtonElement).disabled).toBe(false);
     await user.click(confirmBtn);
     await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith('culinaria', 'Culinária'));
+  });
+});
+
+describe('vaults: monitor de pasta acompanha a vault', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('vault: com o monitor ligado, trocar de vault deixa o toggle desligado', async () => {
+    vi.spyOn(bridge, 'listVaults').mockResolvedValue(LIST);
+    vi.spyOn(bridge, 'selectVault').mockResolvedValue({ ok: true, active: 'culinaria' });
+    vi.spyOn(bridge, 'startWatcher').mockResolvedValue({ active: true } as never);
+    const { result } = renderHook(() => ({ queue: useIndexJob(), vaults: useVaults() }), {
+      wrapper: VaultsProvider,
+    });
+
+    act(() => result.current.queue.setFolderPath(String.raw`C:\Notas\Obsidian`));
+    await act(async () => {
+      await result.current.queue.toggleWatcher();
+    });
+    expect(result.current.queue.watcherActive).toBe(true);
+
+    await act(async () => {
+      await result.current.vaults.select('culinaria');
+    });
+    expect(result.current.queue.watcherActive).toBe(false);
   });
 });

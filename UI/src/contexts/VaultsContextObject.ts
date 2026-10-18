@@ -13,4 +13,7 @@ export interface VaultsState {
   remove: (vaultId: string, confirm: string) => Promise<VaultMutationResult>;
 }
 
+/** Disparado ao trocar de vault: o backend parou o watcher; a Fila zera o toggle local. */
+export const VAULT_SWITCHED_EVENT = 'escolio:vault-switched';
+
 export const VaultsContext = createContext<VaultsState | null>(null);
