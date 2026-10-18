@@ -58,6 +58,8 @@ function App() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
   const [healthKey, setHealthKey] = useState(0);
   const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
+  // Nota pedida pelo grafo; a tela Notas a abre ao montar. Navegar pela sidebar limpa o pedido.
+  const [pendingNoteId, setPendingNoteId] = useState<string | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('chat');
   const [strategy, setStrategy] = useState<AskStrategy>('hybrid');
   const [sourceRoot, setSourceRoot] = useState<string | null>(readStoredSourceRoot);
@@ -104,7 +106,14 @@ function App() {
   }, []);
 
   const navigate = useCallback((view: WorkspaceView) => {
+    setPendingNoteId(null);
     setWorkspaceView(view);
+  }, []);
+
+  // Clique numa nota do grafo: vai para Notas e abre o detalhe dela
+  const handleOpenNote = useCallback((noteId: string) => {
+    setPendingNoteId(noteId);
+    setWorkspaceView('notes');
   }, []);
 
   const openQueueFromSettings = useCallback(() => {
@@ -284,7 +293,7 @@ function App() {
             />
 
             {/* View ativa conforme a aba selecionada */}
-            {workspaceView === 'notes' && <NotesPanel />}
+            {workspaceView === 'notes' && <NotesPanel key={pendingNoteId ?? 'lista'} initialNoteId={pendingNoteId} />}
 
             {workspaceView === 'benchmark' && <BenchmarkPanel />}
 
@@ -345,7 +354,7 @@ function App() {
           </div>
 
           {/* Painel lateral de grafos — expande à direita do conteúdo */}
-          <GraphPanel isOpen={isGraphPanelOpen} onToggle={handleToggleGraphPanel} />
+          <GraphPanel isOpen={isGraphPanelOpen} onToggle={handleToggleGraphPanel} onOpenNote={handleOpenNote} />
         </div>
       </QueueProvider>
     </VaultProvider>
