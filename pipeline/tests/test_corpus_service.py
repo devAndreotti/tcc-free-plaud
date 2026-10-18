@@ -381,6 +381,36 @@ def test_index_corpus_path_indexes_directory_without_stopping_on_file_failure(tm
     assert failed[0].error_code == 'EMPTY_CONTENT'
 
 
+def test_regressao_index_corpus_file_rejects_markdown_with_only_frontmatter(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'so-frontmatter.md'
+    source.write_text('---\ntitle: x\n---\n', encoding='utf-8')
+
+    result = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
+
+    assert result.status == 'failed'
+    assert result.error_code == 'EMPTY_CONTENT'
+    assert result.note_id is None
+    assert result.chunks_indexed == 0
+
+
+def test_regressao_index_corpus_path_rejects_frontmatter_only_note_and_indexes_others(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    (root / 'base.md').write_text('# Base\n\nRabbitMQ foi adotado como broker.\n', encoding='utf-8')
+    (root / 'so-frontmatter.md').write_text('---\ntitle: x\n---\n', encoding='utf-8')
+    (root / 'com-corpo.md').write_text('---\ntitle: y\n---\n\nO time SRE ficou com o runbook.\n', encoding='utf-8')
+
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+
+    assert result.status == 'partial'
+    assert result.indexed_count == 2
+    assert result.failed_count == 1
+    failed = [item for item in result.results if item.status == 'failed']
+    assert failed[0].error_code == 'EMPTY_CONTENT'
+
+
 def test_index_corpus_path_emits_progress_events_for_directory(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     root = tmp_path / 'corpus'
