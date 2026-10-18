@@ -59,7 +59,7 @@ afterEach(() => {
 describe('ForceGraph', () => {
   it('sem notas mostra o estado vazio e não desenha', () => {
     render(<ForceGraph vaultNodes={[]} />);
-    expect(screen.getByText('Nenhuma nota no grafo')).toBeTruthy();
+    expect(screen.getByText('Nenhuma nota indexada nesta vault. Indexe uma pasta na Fila.')).toBeTruthy();
     expect(ctx.arc).not.toHaveBeenCalled();
   });
 
@@ -117,5 +117,63 @@ describe('ForceGraph', () => {
 
     fireEvent.mouseMove(canvas, { clientX: 0, clientY: 0 });
     expect(screen.queryByText('solo')).toBeNull();
+  });
+
+  // Posição na tela do nó de id dado (mesmo cálculo do tooltip acima)
+  const screenPos = (vault: MarkdownNode[], id: string) => {
+    const { nodes } = buildGraph(vault, 320, 600);
+    const cam = fitCamera(nodes, 320, 600);
+    const target = nodes.find((n) => n.id === id)!;
+    return { x: target.x * cam.scale + cam.x, y: target.y * cam.scale + cam.y };
+  };
+
+  it('regressao: clique sem arrastar num nó de nota chama onOpenNote com o note_id', () => {
+    const vault = [note('A/x.md'), note('B/y.md')];
+    const onOpenNote = vi.fn();
+    const { container } = render(<ForceGraph vaultNodes={vault} onOpenNote={onOpenNote} />);
+    const canvas = container.querySelector('canvas')!;
+    const p = screenPos(vault, 'A/x.md');
+
+    fireEvent.mouseMove(canvas, { clientX: p.x, clientY: p.y });
+    fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
+    fireEvent.mouseUp(canvas, { clientX: p.x, clientY: p.y });
+    expect(onOpenNote).toHaveBeenCalledTimes(1);
+    expect(onOpenNote).toHaveBeenCalledWith('A/x.md');
+  });
+
+  it('regressao: arrastar a partir de um nó de nota não abre a nota', () => {
+    const vault = [note('A/x.md'), note('B/y.md')];
+    const onOpenNote = vi.fn();
+    const { container } = render(<ForceGraph vaultNodes={vault} onOpenNote={onOpenNote} />);
+    const canvas = container.querySelector('canvas')!;
+    const p = screenPos(vault, 'A/x.md');
+
+    fireEvent.mouseMove(canvas, { clientX: p.x, clientY: p.y });
+    fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
+    fireEvent.mouseMove(canvas, { clientX: p.x + 30, clientY: p.y });
+    fireEvent.mouseUp(canvas, { clientX: p.x + 30, clientY: p.y });
+    expect(onOpenNote).not.toHaveBeenCalled();
+  });
+
+  it('regressao: clique em pasta não chama onOpenNote', () => {
+    const vault = [note('A/x.md'), note('B/y.md')];
+    const onOpenNote = vi.fn();
+    const { container } = render(<ForceGraph vaultNodes={vault} onOpenNote={onOpenNote} />);
+    const canvas = container.querySelector('canvas')!;
+    const p = screenPos(vault, 'dir:A');
+
+    fireEvent.mouseMove(canvas, { clientX: p.x, clientY: p.y });
+    fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
+    fireEvent.mouseUp(canvas, { clientX: p.x, clientY: p.y });
+    expect(onOpenNote).not.toHaveBeenCalled();
+  });
+
+  it('regressao: sem onOpenNote, clicar numa nota não quebra', () => {
+    const vault = [note('A/x.md')];
+    const { container } = render(<ForceGraph vaultNodes={vault} />);
+    const canvas = container.querySelector('canvas')!;
+    const p = screenPos(vault, 'A/x.md');
+    fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
+    expect(() => fireEvent.mouseUp(canvas, { clientX: p.x, clientY: p.y })).not.toThrow();
   });
 });

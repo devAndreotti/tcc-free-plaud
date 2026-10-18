@@ -1,12 +1,13 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import ForceGraph from './ForceGraph';
 import { GraphIcon, XIcon } from './Icons';
-import { useVaultContext } from '../hooks/useVaultContext';
+import { useCorpusGraph } from '../hooks/useCorpusGraph';
 
 // Props do painel lateral de grafos
 interface GraphPanelProps {
   isOpen: boolean;
   onToggle: () => void;
+  onOpenNote?: (noteId: string) => void;
 }
 
 // Largura mínima e máxima permitidas ao redimensionar
@@ -15,13 +16,16 @@ const MAX_WIDTH = 700;
 const DEFAULT_WIDTH = 320;
 
 // Painel lateral direito para visualização de grafos
-const GraphPanel = ({ isOpen, onToggle }: GraphPanelProps) => {
+const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [isResizingActive, setIsResizingActive] = useState(false);
   const isResizing = useRef(false);
 
-  // Consome os nós do Vault para alimentar o grafo
-  const { nodes } = useVaultContext();
+  // Notas indexadas da vault ativa; recarrega ao abrir o painel
+  const { nodes, refresh } = useCorpusGraph();
+  useEffect(() => {
+    if (isOpen) void refresh();
+  }, [isOpen, refresh]);
 
   // Inicia o arrasto da alça de redimensionamento
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -106,7 +110,7 @@ const GraphPanel = ({ isOpen, onToggle }: GraphPanelProps) => {
 
       {/* Corpo do painel — grafo de força interativo */}
       <div className="graph-panel__body">
-        <ForceGraph vaultNodes={nodes} />
+        <ForceGraph vaultNodes={nodes} onOpenNote={onOpenNote} />
       </div>
     </aside>
   );
