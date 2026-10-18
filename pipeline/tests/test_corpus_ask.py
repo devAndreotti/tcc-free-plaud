@@ -9,6 +9,7 @@ from escolio.corpus.ask import (
 from escolio.corpus.service import index_corpus_path
 from escolio.notes.metadata import build_note_id
 from escolio.notes.schemas import Note
+from escolio.notes.service import delete_note
 from escolio.retrieval.models import AnswerClaim, Chunk, Citation, SearchHit
 from escolio.retrieval.rag import (
     _clean_claim_candidate,
@@ -526,6 +527,14 @@ def test_terms_missing_from_vocabulary_splits_identifiers_and_ignores_low_signal
     assert terms_missing_from_vocabulary(['splunk', 'arquivo'], vocabulary) == ['splunk']
 
 
+def test_regressao_terms_missing_from_vocabulary_ignores_short_fragment_inside_term() -> None:
+    # Positivas do benchmark (#112) dependem de flexões; o bug 5 vinha de um fragmento curto.
+    vocabulary = frozenset({'gera', 'suficient', 'cont', 'quartz'})  # radicais do corpus do benchmark
+
+    assert terms_missing_from_vocabulary(['geram', 'insuficiente', 'acontece'], vocabulary) == []
+    assert terms_missing_from_vocabulary(['zanzibarquartzo'], vocabulary) == ['zanzibarquartzo']
+
+
 def test_named_query_terms_ignore_capitalized_question_word() -> None:
     assert extract_named_query_terms('Quantos registros a tabela eventos atingiu?') == []
     assert extract_named_query_terms('Quando o componente MAJOR muda?') == ['MAJOR']
@@ -786,3 +795,34 @@ def test_answer_corpus_uses_valid_vector_hit_after_dropping_stale_hit(tmp_path: 
     assert 'RabbitMQ' in (response.answer or '')
     assert {citation.note_id for citation in response.citations} == {context_note_id}
     assert all(citation.note_id != 'stale-broker' for citation in response.citations)
+
+
+class _NoVectorStore:
+    def delete_by_note_id(self, note_id: str) -> int:
+        return 0
+
+
+def test_answer_corpus_regressao_abstains_after_only_note_with_term_is_deleted(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root_a = tmp_path / 'nota_a'
+    root_b = tmp_path / 'nota_b'
+    root_a.mkdir()
+    root_b.mkdir()
+    (root_a / 'a.md').write_text(
+        '# Cafeteira\n\nA cafeteira moka modelo xilofone-quartzo-917 fica na copa.\n', encoding='utf-8'
+    )
+    (root_b / 'b.md').write_text('# Termo raro\n\nO codigo secreto e zanzibarquartzo.\n', encoding='utf-8')
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root_a, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+    index_corpus_path(root_b, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    before = answer_corpus_with_citations('zanzibarquartzo', connection=connection, strategy='lexical')
+    note_b = connection.execute(
+        "SELECT note_id FROM chunks WHERE chunk_text LIKE '%zanzibarquartzo%'"
+    ).fetchone()[0]
+    delete_note(note_b, settings=settings, connection=connection, vector_store=_NoVectorStore())
+    after = answer_corpus_with_citations('zanzibarquartzo', connection=connection, strategy='lexical')
+
+    assert before.status == 'answer'
+    assert after.status == 'no_answer'
+    assert after.reason_for_no_answer == 'query_term_not_in_corpus'

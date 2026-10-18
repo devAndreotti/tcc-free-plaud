@@ -212,8 +212,12 @@ def terms_missing_from_vocabulary(query_terms: list[str], vocabulary_stems: froz
         # Mesma raiz com outra terminação (responsavel / responsabilidade): 6 letras iniciais em comum.
         # ponytail: heurística de morfologia; um stemmer de português (RSLP) resolveria melhor.
         prefix = stem[:6] if len(stem) >= 6 else None
+        # Palavra do corpus dentro do termo só conta se cobrir ao menos metade dele: "gera" em
+        # "geram" e "suficient" em "insuficient" contam; "quartz" em "zanzibarquartz" não.
+        # ponytail: razão fixa de 1/2, calibrada para não mudar as positivas do benchmark.
         return any(
-            _stem_matches(stem, candidate) or (prefix is not None and candidate.startswith(prefix))
+            (_stem_matches(stem, candidate) and (stem in candidate or 2 * len(candidate) >= len(stem)))
+            or (prefix is not None and candidate.startswith(prefix))
             for candidate in vocabulary_stems
         )
 
