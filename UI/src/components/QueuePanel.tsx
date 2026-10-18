@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
+import { VaultsContext } from '../contexts/VaultsContextObject';
+import { VaultGlyph } from './VaultGlyph';
 import { bridge, type CorpusRoot, type IndexJobSnapshot } from '../services/bridge';
 import type { SettingsTab } from './SettingsModal';
 import { useQueueContext } from '../hooks/useQueueContext';
 import Dropzone, { type DropzoneToast } from './Dropzone';
 import ToastStack from './ToastStack';
-import { FolderIcon, PlayIcon, XCircleIcon } from './Icons';
+import { FolderIcon, LoaderIcon, PlayIcon, XCircleIcon } from './Icons';
+import { notifyCorpusChanged } from '../hooks/useCorpusHealth';
 
 interface QueuePanelProps {
   onOpenSettings?: (tab?: SettingsTab) => void;
@@ -275,6 +278,7 @@ const CorpusRootsPanel = ({ roots, disabled, onReindex, onRemoved }: CorpusRoots
       }
       setMessage(`${basename(root.root)} saiu do corpus: ${notesLabel(result.removed_notes ?? 0)} removidas.`);
       cancelRemove();
+      notifyCorpusChanged();
       onRemoved();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Falha ao tirar a pasta do corpus.');
@@ -324,10 +328,10 @@ const CorpusRootsPanel = ({ roots, disabled, onReindex, onRemoved }: CorpusRoots
                   </p>
                   <label>
                     <span>Digite REMOVER para confirmar</span>
-                    <input value={typed} onChange={(event) => setTyped(event.target.value)} className="mono" autoComplete="off" />
+                    <input value={typed} onChange={(event) => setTyped(event.target.value)} className="mono" autoComplete="off" disabled={busy} />
                   </label>
                   <div className="nd__confirm-actions">
-                    <button type="button" className="btn btn--sm btn--ghost" onClick={cancelRemove}>
+                    <button type="button" className="btn btn--sm btn--ghost" onClick={cancelRemove} disabled={busy}>
                       Cancelar
                     </button>
                     <button
@@ -336,7 +340,8 @@ const CorpusRootsPanel = ({ roots, disabled, onReindex, onRemoved }: CorpusRoots
                       onClick={() => void confirmRemove(root)}
                       disabled={typed !== 'REMOVER' || busy}
                     >
-                      Remover do corpus
+                      {busy && <LoaderIcon size={14} className="spin" />}
+                      {busy ? 'Removendo…' : 'Remover do corpus'}
                     </button>
                   </div>
                 </div>
@@ -407,11 +412,22 @@ const QueuePanel = ({ onOpenSettings }: QueuePanelProps) => {
     [setFolderPath, startJob],
   );
 
+  // Fila da vault ativa: o título mostra o ícone e o nome dela.
+  const active = useContext(VaultsContext)?.active ?? null;
+
   return (
     <main className="main queue" id="queue-panel">
       <header className="page-head">
         <div>
-          <h1>Fila de indexação</h1>
+          <h1>
+            {active ? (
+              <>
+                Fila · <VaultGlyph icon={active.icon} color={active.color} size={14} /> {active.name}
+              </>
+            ) : (
+              'Fila de indexação'
+            )}
+          </h1>
           <p>Indexe quantas pastas quiser; elas ficam no mesmo corpus e o chat pode perguntar a uma só. Um job por vez.</p>
         </div>
         <div className="page-head__actions">

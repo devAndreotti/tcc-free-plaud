@@ -102,7 +102,9 @@ def _default_runner(
 ) -> CorpusIndexBatchResult:
     from escolio.tui.actions import index_corpus_folder
 
-    return index_corpus_folder(path, rebuild=rebuild, runtime=runtime, progress=progress, cancel_token=cancel_token)
+    # O runtime antigo mantem as settings da vault em que o job comecou, mesmo apos a troca.
+    settings = runtime.settings_snapshot() if runtime is not None else None
+    return index_corpus_folder(path, rebuild=rebuild, settings=settings, runtime=runtime, progress=progress, cancel_token=cancel_token)
 
 
 class IndexJobManager:

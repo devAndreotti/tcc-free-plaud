@@ -5,7 +5,14 @@
  * pasta-mãe: o grafo mostra a árvore do vault.
  */
 
-import type { MarkdownNode } from '../hooks/useVault';
+/** Metadados de uma nota indexada, no formato que o grafo usa. */
+export interface MarkdownNode {
+  id: string;
+  name: string; // nome sem extensão .md
+  path: string; // caminho relativo à raiz do corpus
+  size: number; // tamanho em bytes
+  modified: string; // data de modificação em ISO 8601
+}
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 

@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { bridge, type IndexJobSnapshot } from '../services/bridge';
 import { notifyCorpusChanged } from './useCorpusHealth';
+import { VAULT_SWITCHED_EVENT } from '../contexts/VaultsContextObject';
 
 export interface QueueState {
   folderPath: string;
@@ -29,6 +30,8 @@ export interface QueueState {
   startJob: (path?: string) => Promise<void>;
   cancelJob: () => Promise<void>;
   toggleWatcher: () => Promise<void>;
+  /** Zera o toggle local (o backend já parou o watcher ao trocar de vault). */
+  resetWatcher: () => void;
 }
 
 export function useIndexJob(): QueueState {
@@ -55,6 +58,12 @@ export function useIndexJob(): QueueState {
     }, 1000);
     return () => window.clearInterval(interval);
   }, [job, refreshJob]);
+
+  const resetWatcher = useCallback(() => setWatcherActive(false), []);
+  useEffect(() => {
+    window.addEventListener(VAULT_SWITCHED_EVENT, resetWatcher);
+    return () => window.removeEventListener(VAULT_SWITCHED_EVENT, resetWatcher);
+  }, [resetWatcher]);
 
   const toggleWatcher = useCallback(async () => {
     if (watcherActive) {
@@ -126,5 +135,6 @@ export function useIndexJob(): QueueState {
     startJob,
     cancelJob,
     toggleWatcher,
+    resetWatcher,
   };
 }

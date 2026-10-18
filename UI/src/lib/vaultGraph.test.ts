@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MarkdownNode } from '../hooks/useVault';
+import type { MarkdownNode } from './vaultGraph';
 import { buildGraph, fitCamera, tick } from './vaultGraph';
 
 const note = (path: string): MarkdownNode => ({

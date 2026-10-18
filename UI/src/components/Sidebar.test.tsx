@@ -11,8 +11,18 @@ vi.mock('../hooks/useQueueContext', () => ({
   }),
 }));
 
-vi.mock('../hooks/useVaultContext', () => ({
-  useVaultContext: () => ({ vaultPath: '' }),
+const obsidian = { id: 'obsidian', name: 'Obsidian', icon: 'notes', color: 'violet', folders: [], embedding_model: null, created_at: '', sqlite_path: null, vector_store_dir: null, note_count: 42 };
+vi.mock('../hooks/useVaults', () => ({
+  useVaults: () => ({
+    vaults: [obsidian],
+    active: obsidian,
+    version: 0,
+    refresh: vi.fn(),
+    select: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+  }),
 }));
 
 vi.mock('../hooks/useCorpusHealth', () => ({

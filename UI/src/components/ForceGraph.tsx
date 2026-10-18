@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import type { MarkdownNode } from '../hooks/useVault';
+import type { MarkdownNode } from '../lib/vaultGraph';
 import { buildGraph, fitCamera, nodeRadius, tick, type Camera, type SimEdge, type SimNode } from '../lib/vaultGraph';
 import { GraphIcon } from './Icons';
 
@@ -76,9 +76,26 @@ function drawFolderLabels(ctx: Ctx, nodes: SimNode[], colors: Colors, cam: Camer
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
-interface ForceGraphProps { vaultNodes: MarkdownNode[] }
+interface ForceGraphProps {
+  vaultNodes: MarkdownNode[];
+  /** Clique numa nota (sem arrastar) abre a nota; clique em pasta não faz nada */
+  onOpenNote?: (noteId: string) => void;
+}
 
-const ForceGraph = ({ vaultNodes }: ForceGraphProps) => {
+// Deslocamento (px na tela) acima do qual o gesto é arrasto, não clique
+const CLICK_SLOP = 4;
+
+// Nó sob o ponto (coordenadas de mundo); a folga de 5 px na tela facilita o alvo
+function nodeAt(nodes: SimNode[], world: { x: number; y: number }, scale: number): SimNode | null {
+  for (const n of nodes) {
+    const r = nodeRadius(n) + 5 / scale;
+    const dx = n.x - world.x, dy = n.y - world.y;
+    if (dx * dx + dy * dy <= r * r) return n;
+  }
+  return null;
+}
+
+const ForceGraph = ({ vaultNodes, onOpenNote }: ForceGraphProps) => {
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const animRef    = useRef<number>(0);
 
@@ -199,12 +216,8 @@ const ForceGraph = ({ vaultNodes }: ForceGraphProps) => {
     const { nodes } = graphRef.current;
     const cam = camRef.current;
 
-    let found: SimNode | null = null;
-    for (const n of nodes) {
-      const r = nodeRadius(n) + 5 / cam.scale;
-      const dx = n.x - world.x, dy = n.y - world.y;
-      if (dx * dx + dy * dy <= r * r) { found = n; break; }
-    }
+    const found = nodeAt(nodes, world, cam.scale);
+    canvas.style.cursor = found?.kind === 'note' ? 'pointer' : '';
 
     if (found) {
       if (hovered.current !== found.id) {
@@ -230,7 +243,18 @@ const ForceGraph = ({ vaultNodes }: ForceGraphProps) => {
     dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, camX: camRef.current.x, camY: camRef.current.y };
   }, []);
 
-  const handleMouseUp    = useCallback(() => { dragRef.current.active = false; }, []);
+  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag.active) return; // soltou o botão vindo de fora do canvas
+    drag.active = false;
+    if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const hit = nodeAt(graphRef.current.nodes, toWorld(e.clientX - rect.left, e.clientY - rect.top), camRef.current.scale);
+    if (hit?.kind === 'note') onOpenNote?.(hit.id);
+  }, [toWorld, onOpenNote]);
   const handleMouseLeave = useCallback(() => {
     dragRef.current.active = false;
     if (hovered.current !== null) { hovered.current = null; setTooltip(null); draw(); }
@@ -261,8 +285,7 @@ const ForceGraph = ({ vaultNodes }: ForceGraphProps) => {
     return (
       <div className="force-graph force-graph--empty">
         <GraphIcon size={20} />
-        <b>Nenhuma nota no grafo</b>
-        <span className="force-graph__empty-msg">Indexe uma pasta na Fila para ver as notas e as pastas que as ligam.</span>
+        <span className="force-graph__empty-msg">Nenhuma nota indexada nesta vault. Indexe uma pasta na Fila.</span>
       </div>
     );
   }

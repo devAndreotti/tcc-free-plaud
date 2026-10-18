@@ -36,9 +36,14 @@ const TypeIcon = ({ type }: { type: string | null | undefined }) => {
   return <NoteIcon size={15} />;
 };
 
-const NotesPanel = () => {
+interface NotesPanelProps {
+  /** Nota pedida pelo grafo: abre o detalhe dela ao montar ou quando muda */
+  initialNoteId?: string | null;
+}
+
+const NotesPanel = ({ initialNoteId = null }: NotesPanelProps) => {
   const [notes, setNotes] = useState<NoteSummary[]>(() => notesCache ?? []);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialNoteId);
   const [detail, setDetail] = useState<NoteDetail | null>(null);
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -83,6 +88,9 @@ const NotesPanel = () => {
     setIsLoadingList(true);
     try {
       const loaded = await bridge.listNotes();
+      if (initialNoteId && !loaded.some((note) => note.note_id === initialNoteId)) {
+        setStatus('Esta nota não existe mais no corpus.');
+      }
       // Evita re-render/flicker quando o resultado é idêntico ao já exibido.
       const changed = JSON.stringify(loaded) !== JSON.stringify(notesCache);
       notesCache = loaded;
@@ -100,7 +108,7 @@ const NotesPanel = () => {
     } finally {
       setIsLoadingList(false);
     }
-  }, []);
+  }, [initialNoteId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vinda da bridge (sistema externo).

@@ -49,6 +49,9 @@ class CorpusRuntime:
         ensure_runtime_dirs(settings)
         return settings
 
+    def settings_snapshot(self) -> Settings:
+        return self._settings_now()
+
     def get_embedder(self) -> Embedder:
         settings = self._settings_now()
         validate_runtime_embedding_model(settings.embedding_model)

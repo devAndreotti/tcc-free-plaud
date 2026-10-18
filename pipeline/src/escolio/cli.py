@@ -16,6 +16,7 @@ from escolio.providers.cli import app as provider_app
 from escolio.retrieval.cli import app as retrieval_app
 from escolio.storage.cli import app as storage_app
 from escolio.terminal_menu import run_terminal_menu
+from escolio.vault_cli import app as vault_app
 
 app = typer.Typer(
     help="CLI principal do backend experimental Escólio.",
@@ -31,6 +32,7 @@ app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(storage_app, name="storage")
 app.add_typer(corpus_app, name="corpus")
 app.add_typer(config_app, name="config")
+app.add_typer(vault_app, name="vault")
 app.add_typer(provider_app, name="provider")
 
 

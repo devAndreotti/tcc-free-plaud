@@ -32,7 +32,12 @@ describe('App', () => {
     // A sidebar resume o corpus a partir das configurações do backend.
     expect(await screen.findByText(/notas · .* chunks/)).toBeTruthy();
 
-    await user.type(screen.getByRole('textbox', { name: 'Campo de mensagem' }), 'Qual broker foi adotado?');
+    // Regressão: o campo não pode remontar quando a lista de vaults chega (o texto digitado se perdia).
+    const input = screen.getByRole('textbox', { name: 'Campo de mensagem' });
+    expect(await screen.findByRole('button', { name: /Vault ativa: Obsidian/ })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Campo de mensagem' })).toBe(input);
+
+    await user.type(input, 'Qual broker foi adotado?');
     await user.click(screen.getByRole('button', { name: 'Enviar mensagem' }));
 
     const history = await screen.findByRole('log', { name: 'Histórico de mensagens' });
@@ -48,7 +53,7 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Notas' })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: /Fila/ }));
-    expect(await screen.findByRole('heading', { name: 'Fila de indexação' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /Fila/ })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: /Benchmark/ }));
     expect(await screen.findByRole('heading', { name: 'Benchmark' })).toBeTruthy();

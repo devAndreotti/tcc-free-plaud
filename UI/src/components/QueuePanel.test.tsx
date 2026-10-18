@@ -4,12 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import QueuePanel from './QueuePanel';
 import { QueueProvider } from '../contexts/QueueContext';
-import { VaultProvider } from '../contexts/VaultContext';
 
 // QueuePanel agora depende do QueueContext — todo render precisa do Provider.
-// QueueProvider consome o VaultContext, por isso fica dentro do VaultProvider (como em App.tsx).
 const Providers = ({ children }: { children: ReactNode }) => (
-  <VaultProvider><QueueProvider>{children}</QueueProvider></VaultProvider>
+  <QueueProvider>{children}</QueueProvider>
 );
 const renderQueuePanel = () => render(<Providers><QueuePanel /></Providers>);
 
@@ -243,45 +241,6 @@ describe('QueuePanel', () => {
     vi.useRealTimers();
   });
 
-  it('indexar com vault vazio adota a pasta indexada como vault', async () => {
-    const user = userEvent.setup();
-    renderQueuePanel();
-
-    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
-    await user.click(screen.getByRole('button', { name: 'Indexar' }));
-
-    await waitFor(() => expect(bridgeMock.startIndexJob).toHaveBeenCalled());
-    expect(bridgeMock.saveVaultPath).toHaveBeenCalledWith('C:\\Vault');
-    expect(bridgeMock.scanVault).toHaveBeenCalledWith('C:\\Vault');
-  });
-
-  it('indexar não troca um vault já configurado em Configurações', async () => {
-    bridgeMock.loadVaultPath.mockResolvedValue('D:\\Escolhido');
-    const user = userEvent.setup();
-    renderQueuePanel();
-    await waitFor(() => expect(bridgeMock.scanVault).toHaveBeenCalledWith('D:\\Escolhido'));
-
-    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
-    await user.click(screen.getByRole('button', { name: 'Indexar' }));
-
-    await waitFor(() => expect(bridgeMock.startIndexJob).toHaveBeenCalled());
-    expect(bridgeMock.saveVaultPath).not.toHaveBeenCalled();
-  });
-
-  it('reescaneia o vault quando o job da pasta do vault conclui', async () => {
-    bridgeMock.loadVaultPath.mockResolvedValue('C:\\Vault');
-    bridgeMock.getIndexJob.mockResolvedValue({ ...runningJob, status: 'success', finished_at: '2026-05-26T10:01:00+00:00' });
-    const user = userEvent.setup();
-    renderQueuePanel();
-    await waitFor(() => expect(bridgeMock.scanVault).toHaveBeenCalledTimes(1));
-
-    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
-    await user.click(screen.getByRole('button', { name: 'Indexar' }));
-
-    await waitFor(() => expect(bridgeMock.scanVault).toHaveBeenCalledTimes(2), { timeout: 3000 });
-    expect(bridgeMock.saveVaultPath).not.toHaveBeenCalled();
-  });
-
   it('regressao: lista as pastas indexadas no corpus com a contagem de notas', async () => {
     bridgeMock.listCorpusRoots.mockResolvedValue(CORPUS_ROOTS);
     renderQueuePanel();
@@ -327,5 +286,60 @@ describe('QueuePanel', () => {
       expect(screen.queryByText('Culinaria')).toBeNull();
     });
     expect(bridgeMock.listCorpusRoots).toHaveBeenCalledTimes(2);
+  });
+
+  it('regressao: Remover do corpus mostra Removendo… e desabilita o painel enquanto a remoção roda', async () => {
+    bridgeMock.listCorpusRoots.mockResolvedValue(CORPUS_ROOTS);
+    bridgeMock.removeCorpusRoot.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    renderQueuePanel();
+
+    const row = (await screen.findByText('Culinaria')).closest('li') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Remover' }));
+    await user.type(within(row).getByLabelText('Digite REMOVER para confirmar'), 'REMOVER');
+    await user.click(within(row).getByRole('button', { name: 'Remover do corpus' }));
+
+    const pending = await within(row).findByRole('button', { name: 'Removendo…' });
+    expect((pending as HTMLButtonElement).disabled).toBe(true);
+    expect((within(row).getByLabelText('Digite REMOVER para confirmar') as HTMLInputElement).disabled).toBe(true);
+    expect((within(row).getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('regressao: Remover do corpus mostra N notas removidas, avisa a sidebar e recarrega a lista', async () => {
+    bridgeMock.listCorpusRoots.mockResolvedValueOnce(CORPUS_ROOTS).mockResolvedValue([CORPUS_ROOTS[0]]);
+    bridgeMock.removeCorpusRoot.mockResolvedValue({ ok: true, removed_notes: 7 });
+    const onCorpusChanged = vi.fn();
+    window.addEventListener('escolio:corpus-changed', onCorpusChanged);
+    const user = userEvent.setup();
+    renderQueuePanel();
+
+    const row = (await screen.findByText('Culinaria')).closest('li') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Remover' }));
+    await user.type(within(row).getByLabelText('Digite REMOVER para confirmar'), 'REMOVER');
+    await user.click(within(row).getByRole('button', { name: 'Remover do corpus' }));
+
+    expect(await screen.findByText('Culinaria saiu do corpus: 7 notas removidas.')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.queryByText('Culinaria')).toBeNull();
+    });
+    expect(bridgeMock.listCorpusRoots).toHaveBeenCalledTimes(2);
+    expect(onCorpusChanged).toHaveBeenCalled();
+    window.removeEventListener('escolio:corpus-changed', onCorpusChanged);
+  });
+
+  it('regressao: Remover do corpus sai de Removendo… e mostra o erro quando o bridge rejeita', async () => {
+    bridgeMock.listCorpusRoots.mockResolvedValue(CORPUS_ROOTS);
+    bridgeMock.removeCorpusRoot.mockRejectedValue(new Error('Backend indisponível'));
+    const user = userEvent.setup();
+    renderQueuePanel();
+
+    const row = (await screen.findByText('Culinaria')).closest('li') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Remover' }));
+    await user.type(within(row).getByLabelText('Digite REMOVER para confirmar'), 'REMOVER');
+    await user.click(within(row).getByRole('button', { name: 'Remover do corpus' }));
+
+    expect(await screen.findByText('Backend indisponível')).toBeTruthy();
+    expect(within(row).queryByRole('button', { name: 'Removendo…' })).toBeNull();
+    expect((within(row).getByRole('button', { name: 'Remover do corpus' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
