@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { readThemeChoice, saveThemeChoice, type ThemeChoice } from '../theme';
 import { createPortal } from 'react-dom';
 import {
@@ -17,6 +17,9 @@ import {
 } from './Icons';
 import Select from './Select';
 import VaultsTab from './VaultsTab';
+import { VaultGlyph } from './VaultGlyph';
+import { useVaults } from '../hooks/useVaults';
+import { checkLabel, groupChecks } from '../lib/doctorChecks';
 import {
   bridge,
   type BackendSettings,
@@ -99,6 +102,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [downloadJob, setDownloadJob] = useState<VoiceModelDownloadSnapshot | null>(null);
   const [downloadError, setDownloadError] = useState('');
   const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice);
+  const { active } = useVaults();
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- abre na aba pedida por quem chamou o modal.
@@ -446,6 +450,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
 
   if (!isOpen) return null;
 
+  const doctor = backendSettings?.doctor;
   const audioRows = backendSettings?.settings_catalog.filter((row) => row.group === 'Áudio' && !row.secret) ?? [];
   const audioModelRow = audioRows.find((row) => row.key === 'audio_model') ?? null;
   const audioLanguageRow = audioRows.find((row) => row.key === 'audio_language') ?? null;
@@ -532,25 +537,33 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
           <div className="settings-panel">
             {activeTab === 'geral' && (
               <section className="settings-section" aria-labelledby="settings-doctor">
-                <h3 id="settings-doctor" className="settings-section__title">
-                  Diagnóstico
+                <h3 id="settings-doctor" className={`settings-section__title${active ? ' settings-section__title--vault' : ''}`}>
+                  {active ? (
+                    <>
+                      Diagnóstico da vault
+                      <VaultGlyph icon={active.icon} color={active.color} size={12} />
+                      <span>{active.name}</span>
+                    </>
+                  ) : (
+                    'Diagnóstico'
+                  )}
                 </h3>
-                {backendSettings?.doctor ? (
+                {backendSettings && doctor ? (
                   <>
-                    <div className={`doctor__summary doctor__summary--${backendSettings.doctor.status}`}>
+                    <div className={`doctor__summary doctor__summary--${doctor.status}`}>
                       <span className="doctor__summary-icon" aria-hidden="true">
-                        {backendSettings.doctor.status === 'ok' ? <CheckCircleIcon size={17} /> : <AlertTriangleIcon size={17} />}
+                        {doctor.status === 'ok' ? <CheckCircleIcon size={18} /> : <AlertTriangleIcon size={18} />}
                       </span>
                       <div>
                         <b>
-                          {backendSettings.doctor.error_count > 0
-                            ? `${backendSettings.doctor.error_count} ${backendSettings.doctor.error_count === 1 ? 'verificação com erro' : 'verificações com erro'}`
-                            : backendSettings.doctor.warning_count > 0
-                              ? `${backendSettings.doctor.warning_count} ${backendSettings.doctor.warning_count === 1 ? 'aviso' : 'avisos'}`
+                          {doctor.error_count > 0
+                            ? `${doctor.error_count} ${doctor.error_count === 1 ? 'verificação com erro' : 'verificações com erro'}`
+                            : doctor.warning_count > 0
+                              ? `${doctor.warning_count} ${doctor.warning_count === 1 ? 'aviso' : 'avisos'}`
                               : 'Tudo certo'}
                         </b>
-                        <span className="mono">
-                          {backendSettings.doctor.ok_count} ok · {backendSettings.doctor.warning_count} {backendSettings.doctor.warning_count === 1 ? 'aviso' : 'avisos'} · {backendSettings.doctor.error_count} {backendSettings.doctor.error_count === 1 ? 'erro' : 'erros'} · {backendSettings.doctor.latency_ms} ms
+                        <span className="doctor__summary-meta">
+                          {doctor.ok_count + doctor.warning_count + doctor.error_count} verificações · {doctor.latency_ms} ms
                         </span>
                       </div>
                       <button type="button" className="btn btn--sm" onClick={handleRerunDoctor} disabled={isRunningDoctor}>
@@ -558,24 +571,40 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                         {isRunningDoctor ? 'Verificando…' : 'Verificar de novo'}
                       </button>
                     </div>
-                    <ul className="doctor__checks">
-                      {[...backendSettings.doctor.checks]
-                        .sort((a, b) => (a.status === 'ok' ? 1 : 0) - (b.status === 'ok' ? 1 : 0))
-                        .map((check) => (
-                          <li key={check.code} className={`doctor__check doctor__check--${check.status}`}>
-                            {check.status === 'ok' ? <CheckCircleIcon size={15} /> : check.status === 'warning' ? <AlertTriangleIcon size={15} /> : <XCircleIcon size={15} />}
-                            <div>
-                              <code>{check.code}</code>
-                              <span className="doctor__msg">{check.message}</span>
-                              {check.action && check.status !== 'ok' && <span className="doctor__action">{check.action}</span>}
-                            </div>
-                            {check.latency_ms != null && <span className="doctor__lat mono">{check.latency_ms} ms</span>}
-                          </li>
-                        ))}
-                    </ul>
-                    <p className="settings-inline-status">
-                      Corpus: {backendSettings.notes_count.toLocaleString('pt-BR')} notas · {backendSettings.sqlite_chunks_count.toLocaleString('pt-BR')} chunks no SQLite · {backendSettings.vector_chunks_count.toLocaleString('pt-BR')} vetores no Chroma
-                    </p>
+                    <dl className="doctor__stats">
+                      <div className="doctor__stat">
+                        <dt>Notas</dt>
+                        <dd className="mono">{backendSettings.notes_count.toLocaleString('pt-BR')}</dd>
+                      </div>
+                      <div className="doctor__stat">
+                        <dt>Chunks no SQLite</dt>
+                        <dd className="mono">{backendSettings.sqlite_chunks_count.toLocaleString('pt-BR')}</dd>
+                      </div>
+                      <div className="doctor__stat">
+                        <dt>Vetores no Chroma</dt>
+                        <dd className="mono">{backendSettings.vector_chunks_count.toLocaleString('pt-BR')}</dd>
+                      </div>
+                    </dl>
+                    {groupChecks(doctor.checks).map((group) => (
+                      <Fragment key={group.id}>
+                        <h4 className="doctor__group">{group.title}</h4>
+                        <ul className="doctor__checks">
+                          {group.checks.map((check) => (
+                            <li key={check.code} className={`doctor__check doctor__check--${check.status}`}>
+                              {check.status === 'ok' ? <CheckCircleIcon size={15} /> : check.status === 'warning' ? <AlertTriangleIcon size={15} /> : <XCircleIcon size={15} />}
+                              <div>
+                                <span className="doctor__label">{checkLabel(check.code)}</span>
+                                <span className="doctor__msg">{check.message}</span>
+                                {check.action && check.status !== 'ok' && <span className="doctor__action">{check.action}</span>}
+                              </div>
+                              <span className="doctor__meta mono">
+                                {check.latency_ms != null && check.latency_ms >= 100 ? `${check.code} · ${check.latency_ms} ms` : check.code}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </Fragment>
+                    ))}
                   </>
                 ) : (
                   <div className="settings-item settings-item--stacked" aria-label="Carregando diagnóstico">

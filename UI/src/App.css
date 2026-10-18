@@ -3418,18 +3418,34 @@
 }
 
 /* Diagnóstico (Doctor) */
+.settings-section__title--vault {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .doctor__summary {
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 14px 16px;
   border-radius: 12px;
-  background: var(--bg-panel);
 }
 
-.doctor__summary--error { background: color-mix(in srgb, var(--err) 10%, transparent); }
-.doctor__summary--warning { background: color-mix(in srgb, var(--warn) 10%, transparent); }
-.doctor__summary--ok { background: color-mix(in srgb, var(--ok) 9%, transparent); }
+.doctor__summary--ok {
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ok) 24%, transparent);
+}
+
+.doctor__summary--warning {
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 24%, transparent);
+}
+
+.doctor__summary--error {
+  background: color-mix(in srgb, var(--err) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--err) 24%, transparent);
+}
 
 .doctor__summary-icon {
   width: 32px;
@@ -3438,13 +3454,22 @@
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: var(--text-muted);
-  color: #fff;
 }
 
-.doctor__summary--error .doctor__summary-icon { background: var(--err); }
-.doctor__summary--warning .doctor__summary-icon { background: var(--warn); }
-.doctor__summary--ok .doctor__summary-icon { background: var(--ok); }
+.doctor__summary--ok .doctor__summary-icon {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  color: var(--ok);
+}
+
+.doctor__summary--warning .doctor__summary-icon {
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+}
+
+.doctor__summary--error .doctor__summary-icon {
+  background: color-mix(in srgb, var(--err) 18%, transparent);
+  color: var(--err);
+}
 
 .doctor__summary b {
   display: block;
@@ -3452,13 +3477,48 @@
   font-weight: 600;
 }
 
-.doctor__summary span {
-  font-size: 11.5px;
+.doctor__summary-meta {
+  display: block;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
 .doctor__summary .btn {
   margin-left: auto;
+}
+
+.doctor__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.doctor__stat {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color-subtle);
+}
+
+.doctor__stat dt {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.doctor__stat dd {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.doctor__group {
+  margin: 14px 0 2px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
 }
 
 .doctor__checks {
@@ -3486,8 +3546,10 @@
 .doctor__check--warning > svg { color: var(--warn); }
 .doctor__check--error > svg { color: var(--err); }
 
-.doctor__check code {
-  font: 12px var(--font-mono);
+.doctor__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-primary);
 }
 
@@ -3501,13 +3563,21 @@
 .doctor__action {
   display: block;
   margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
   font-size: 12px;
   color: var(--text-primary);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
 }
 
-.doctor__lat {
+.doctor__check--error .doctor__action {
+  background: color-mix(in srgb, var(--err) 10%, transparent);
+}
+
+.doctor__meta {
   font-size: 11px;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 /* Modelos de voz como cartões comparáveis */
