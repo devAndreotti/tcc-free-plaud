@@ -38,11 +38,11 @@ from escolio.providers.embed import Embedder, get_embedder
 from escolio.retrieval.indexer import index_note
 from escolio.retrieval.models import Chunk
 from escolio.storage.sqlite import (
+    corpus_root_for_path,
     count_chunks,
     count_fts_chunks,
     count_notes,
     delete_corpus_notes_and_chunks,
-    corpus_root_for_path,
     delete_note_and_chunks,
     get_note_content_hash,
     init_sqlite,
