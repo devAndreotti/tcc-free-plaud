@@ -103,6 +103,12 @@ class LocalVectorStore:
         self._collection().delete(ids=chunk_ids)
         return len(chunk_ids)
 
+    def delete_by_note_ids(self, note_ids: list[str]) -> None:
+        # ponytail: um delete por bloco de 500 notas; sem get prévio, o filtro $in roda no próprio Chroma.
+        for start in range(0, len(note_ids), 500):
+            block = note_ids[start : start + 500]
+            self._collection().delete(where={'note_id': {'$in': block}})
+
     def reset(self) -> None:
         try:
             self._client.delete_collection(self.collection_name)
