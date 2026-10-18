@@ -220,3 +220,30 @@ def test_get_setting_spec_rejects_unknown_key() -> None:
         assert 'missing' in str(exc)
     else:
         raise AssertionError('missing setting deveria falhar')
+
+
+def test_audio_input_device_lists_connected_mics_and_flags_missing_saved_one(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(escolio_settings_catalog, 'list_input_devices', lambda: ['Headset (QCY H3 Pro)'])
+    settings = _settings(tmp_path).model_copy(update={'audio_input_device': 'Mic sumiu'})
+
+    row = next(r for r in settings_catalog_payload(settings) if r['key'] == 'audio_input_device')
+
+    assert row['options'] == [
+        {'value': '', 'label': 'Padrão do sistema'},
+        {'value': 'Headset (QCY H3 Pro)', 'label': 'Headset (QCY H3 Pro)'},
+        {'value': 'Mic sumiu', 'label': 'Mic sumiu (não encontrado)'},
+    ]
+    assert row['warning'] == 'Microfone "Mic sumiu" não está conectado; a gravação vai falhar até reconectar ou escolher outro.'
+
+
+def test_audio_input_device_keeps_only_default_when_listing_fails(tmp_path: Path, monkeypatch) -> None:
+    def unavailable() -> list[str]:
+        raise OSError('PortAudio ausente')
+
+    monkeypatch.setattr(escolio_settings_catalog, 'list_input_devices', unavailable)
+    settings = _settings(tmp_path).model_copy(update={'audio_input_device': 'Headset'})
+
+    row = next(r for r in settings_catalog_payload(settings) if r['key'] == 'audio_input_device')
+
+    assert row['options'] == [{'value': '', 'label': 'Padrão do sistema'}]
+    assert row['warning'] is None

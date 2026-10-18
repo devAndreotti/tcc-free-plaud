@@ -152,6 +152,8 @@ const ChatInput = ({ onSendMessage, isLoading = false, strategy, onStrategyChang
     if (snapshot.status === 'completed' && snapshot.result?.text) {
       setText((prev) => (prev.trim() ? `${prev.trim()} ${snapshot.result!.text}` : snapshot.result!.text));
       setMicError('');
+    } else if (snapshot.status === 'completed') {
+      setMicError('Nenhuma fala detectada no áudio. Confira o microfone em Configurações → Voz.');
     } else if (snapshot.status === 'failed') {
       setMicError(describeAudioFailure(snapshot.error_code, snapshot.message));
     }

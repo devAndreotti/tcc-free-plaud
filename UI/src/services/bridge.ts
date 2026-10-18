@@ -1335,6 +1335,22 @@ export const bridge = {
           ],
           recommended: 'auto',
         }),
+        mockSettingRow({
+          index: 8,
+          key: 'audio_input_device',
+          label: 'Microfone',
+          description: 'Dispositivo usado para gravar a pergunta por voz. "Padrão do sistema" segue o microfone padrão do Windows.',
+          group: 'Áudio',
+          value_type: 'string',
+          layer: 'simple',
+          value: null,
+          display_value: 'vazio',
+          options: [
+            { value: '', label: 'Padrão do sistema' },
+            { value: 'Headset (QCY H3 Pro)', label: 'Headset (QCY H3 Pro)' },
+          ],
+          recommended: null,
+        }),
       ],
     };
   },
