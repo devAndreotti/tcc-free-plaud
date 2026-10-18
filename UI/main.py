@@ -21,7 +21,6 @@ import os
 import sys
 import threading
 import json
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -333,12 +332,15 @@ class Api:
 
         nodes = []
         for md_file in vault.rglob('*.md'):
+            # .obsidian, .trash e afins não são notas do usuário
+            if any(part.startswith('.') for part in md_file.relative_to(vault).parts):
+                continue
             try:
                 stat = md_file.stat()
                 # Caminho relativo ao vault (usa barras normais para consistência)
                 relative = md_file.relative_to(vault).as_posix()
                 nodes.append({
-                    'id': str(uuid.uuid4()),
+                    'id': relative,  # estável entre varreduras: o grafo mantém o desenho
                     'name': md_file.stem,                           # nome sem .md
                     'path': relative,                              # caminho relativo
                     'size': stat.st_size,                          # bytes

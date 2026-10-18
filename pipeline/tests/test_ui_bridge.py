@@ -550,3 +550,20 @@ def test_desktop_api_indexes_dropped_files(monkeypatch, tmp_path: Path) -> None:
     events = api.pollDroppedFiles()
     assert indexed == ["nota.md"]
     assert events[0]["status"] == "indexed" and events[0]["chunks"] == 2
+
+
+def test_regressao_scan_vault_usa_caminho_como_id_e_ignora_pastas_ocultas(monkeypatch, tmp_path: Path) -> None:
+    module = _load_ui_main(monkeypatch)
+    (tmp_path / "Pessoas").mkdir()
+    (tmp_path / "Pessoas" / "ana.md").write_text("# Ana\n", encoding="utf-8")
+    (tmp_path / "raiz.md").write_text("# Raiz\n", encoding="utf-8")
+    for hidden in (".obsidian", ".trash"):
+        (tmp_path / hidden).mkdir()
+        (tmp_path / hidden / "lixo.md").write_text("# Lixo\n", encoding="utf-8")
+
+    first = module.Api().scanVault(str(tmp_path))
+    second = module.Api().scanVault(str(tmp_path))
+
+    assert sorted(node["path"] for node in first) == ["Pessoas/ana.md", "raiz.md"]
+    assert all(node["id"] == node["path"] for node in first)  # grafo não se redesenha a cada rescan
+    assert sorted(node["id"] for node in second) == sorted(node["id"] for node in first)
