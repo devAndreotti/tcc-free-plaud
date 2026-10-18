@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import type { MarkdownNode } from '../hooks/useVault';
+import type { MarkdownNode } from '../lib/vaultGraph';
 import { buildGraph, fitCamera, nodeRadius, tick, type Camera, type SimEdge, type SimNode } from '../lib/vaultGraph';
 import { GraphIcon } from './Icons';
 

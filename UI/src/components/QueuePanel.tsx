@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
+import { VaultsContext } from '../contexts/VaultsContextObject';
+import { VaultGlyph } from './VaultGlyph';
 import { bridge, type CorpusRoot, type IndexJobSnapshot } from '../services/bridge';
 import type { SettingsTab } from './SettingsModal';
 import { useQueueContext } from '../hooks/useQueueContext';
@@ -410,11 +412,22 @@ const QueuePanel = ({ onOpenSettings }: QueuePanelProps) => {
     [setFolderPath, startJob],
   );
 
+  // Fila da vault ativa: o título mostra o ícone e o nome dela.
+  const active = useContext(VaultsContext)?.active ?? null;
+
   return (
     <main className="main queue" id="queue-panel">
       <header className="page-head">
         <div>
-          <h1>Fila de indexação</h1>
+          <h1>
+            {active ? (
+              <>
+                Fila · <VaultGlyph icon={active.icon} color={active.color} size={14} /> {active.name}
+              </>
+            ) : (
+              'Fila de indexação'
+            )}
+          </h1>
           <p>Indexe quantas pastas quiser; elas ficam no mesmo corpus e o chat pode perguntar a uma só. Um job por vez.</p>
         </div>
         <div className="page-head__actions">

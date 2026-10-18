@@ -15,7 +15,8 @@ import NotesPanel from './components/NotesPanel';
 import BenchmarkPanel from './components/BenchmarkPanel';
 import QueuePanel from './components/QueuePanel';
 import { bridge, type AskStrategy, type CorpusRoot } from './services/bridge';
-import { VaultProvider } from './contexts/VaultContext';
+import { VaultsProvider } from './contexts/VaultsContext';
+import { useVaults } from './hooks/useVaults';
 import { QueueProvider } from './contexts/QueueContext';
 
 // Gera ID único para mensagens e abas
@@ -43,7 +44,9 @@ const readStoredSourceRoot = (): string | null => {
   }
 };
 
-function App() {
+function AppContent() {
+  // Troca de vault: a versão sobe e as telas com estado próprio remontam.
+  const { version: vaultVersion } = useVaults();
   // Gerenciamento de abas
   const [tabs, setTabs] = useState<Tab[]>([INITIAL_TAB]);
   const [activeTabId, setActiveTabId] = useState<string | null>(INITIAL_TAB.id);
@@ -58,8 +61,9 @@ function App() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
   const [healthKey, setHealthKey] = useState(0);
   const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
-  // Nota pedida pelo grafo; a tela Notas a abre ao montar. Navegar pela sidebar limpa o pedido.
-  const [pendingNoteId, setPendingNoteId] = useState<string | null>(null);
+  // Nota pedida pelo grafo; a tela Notas a abre ao montar. `at` muda a cada clique, então clicar de novo na mesma nota reabre.
+  // Navegar pela sidebar limpa o pedido.
+  const [pendingNote, setPendingNote] = useState<{ noteId: string; at: number } | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('chat');
   const [strategy, setStrategy] = useState<AskStrategy>('hybrid');
   const [sourceRoot, setSourceRoot] = useState<string | null>(readStoredSourceRoot);
@@ -79,7 +83,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [workspaceView]);
+  }, [workspaceView, vaultVersion]);
 
   const chooseSourceRoot = useCallback((root: string | null) => {
     setSourceRoot(root);
@@ -106,13 +110,13 @@ function App() {
   }, []);
 
   const navigate = useCallback((view: WorkspaceView) => {
-    setPendingNoteId(null);
+    setPendingNote(null);
     setWorkspaceView(view);
   }, []);
 
   // Clique numa nota do grafo: vai para Notas e abre o detalhe dela
   const handleOpenNote = useCallback((noteId: string) => {
-    setPendingNoteId(noteId);
+    setPendingNote((prev) => ({ noteId, at: (prev?.at ?? 0) + 1 }));
     setWorkspaceView('notes');
   }, []);
 
@@ -263,7 +267,7 @@ function App() {
   const hasMessages = activeMessages.length > 0;
 
   return (
-    <VaultProvider>
+    <>
       <QueueProvider>
         {/* Layout raiz: sidebar à esquerda + coluna de conteúdo à direita */}
         <div className="app" id="app-root">
@@ -293,7 +297,7 @@ function App() {
             />
 
             {/* View ativa conforme a aba selecionada */}
-            {workspaceView === 'notes' && <NotesPanel key={pendingNoteId ?? 'lista'} initialNoteId={pendingNoteId} />}
+            {workspaceView === 'notes' && <NotesPanel key={pendingNote ? `nota-${pendingNote.at}` : `lista-${vaultVersion}`} initialNoteId={pendingNote?.noteId ?? null} />}
 
             {workspaceView === 'benchmark' && <BenchmarkPanel />}
 
@@ -357,7 +361,15 @@ function App() {
           <GraphPanel isOpen={isGraphPanelOpen} onToggle={handleToggleGraphPanel} onOpenNote={handleOpenNote} />
         </div>
       </QueueProvider>
-    </VaultProvider>
+    </>
+  );
+}
+
+function App() {
+  return (
+    <VaultsProvider>
+      <AppContent />
+    </VaultsProvider>
   );
 }
 

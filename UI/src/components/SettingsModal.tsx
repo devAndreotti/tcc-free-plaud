@@ -1,10 +1,9 @@
-import { useContext, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { readThemeChoice, saveThemeChoice, type ThemeChoice } from '../theme';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangleIcon,
   CheckCircleIcon,
-  ChevronRightIcon,
   CodeIcon,
   ContrastIcon,
   DownloadIcon,
@@ -17,8 +16,7 @@ import {
   XIcon,
 } from './Icons';
 import Select from './Select';
-import { useVaultContext } from '../hooks/useVaultContext';
-import { QueueContext } from '../contexts/QueueContextObject';
+import VaultsTab from './VaultsTab';
 import {
   bridge,
   type BackendSettings,
@@ -46,11 +44,11 @@ const PRESET_KEY_LABELS: Record<string, string> = { embedding_model: 'Modelo de 
 
 const MODEL_STATUS: Record<string, string> = { offline: 'offline', unauthorized: 'sem autorização', error: 'erro' };
 
-export type SettingsTab = 'geral' | 'vault' | 'ia' | 'voz' | 'avancado' | 'aparencia';
+export type SettingsTab = 'geral' | 'vaults' | 'ia' | 'voz' | 'avancado' | 'aparencia';
 
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: 'geral', label: 'Geral' },
-  { id: 'vault', label: 'Vault' },
+  { id: 'vaults', label: 'Vaults' },
   { id: 'ia', label: 'IA' },
   { id: 'voz', label: 'Voz' },
   { id: 'avancado', label: 'Avançado' },
@@ -59,7 +57,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
 
 const TAB_ICONS: Record<SettingsTab, ComponentType<{ size?: number }>> = {
   geral: SlidersIcon,
-  vault: VaultIcon,
+  vaults: VaultIcon,
   ia: StarsIcon,
   voz: MicIcon,
   avancado: CodeIcon,
@@ -107,11 +105,6 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     if (isOpen && initialTab) setActiveTab(initialTab);
   }, [isOpen, initialTab]);
 
-  // Consome o contexto global do vault
-  const { vaultPath, selectVault, isScanning } = useVaultContext();
-  const isSelectingVault = isScanning;
-  // Opcional: sem QueueProvider (testes), o link só navega.
-  const queue = useContext(QueueContext);
 
   // Fecha o modal ao pressionar Escape
   useEffect(() => {
@@ -235,16 +228,6 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     } catch (error) {
       setDownloadError(error instanceof Error ? error.message : 'Falha ao cancelar download do modelo.');
     }
-  };
-
-  // Chama o contexto para abrir o seletor e escanear automaticamente
-  const handleSelectVault = async () => {
-    await selectVault();
-  };
-
-  const handleOpenQueue = () => {
-    if (queue && !queue.folderPath && vaultPath) queue.setFolderPath(vaultPath);
-    onOpenQueue?.();
   };
 
   const handleSaveApiKey = async () => {
@@ -603,64 +586,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
               </section>
             )}
 
-            {activeTab === 'vault' && (
-              <section className="settings-section" aria-labelledby="settings-vault">
-                <h3 id="settings-vault" className="settings-section__title">
-                  Vault
-                </h3>
-
-                <div className="settings-item settings-item--stacked">
-                  <div className="settings-item__info">
-                    <span className="settings-item__label">Pasta do vault</span>
-                    <span className="settings-item__description">
-                      Alimenta o painel de grafo. Indexar no corpus é feito na Fila.
-                    </span>
-                  </div>
-
-                  <div className="vault-picker" role="group" aria-label="Selecionar pasta do vault">
-                    <input
-                      id="input-vault-path"
-                      type="text"
-                      className="vault-picker__input mono"
-                      value={vaultPath}
-                      placeholder="Nenhuma pasta selecionada"
-                      readOnly
-                      aria-label="Caminho da pasta do vault"
-                      title={vaultPath || 'Nenhuma pasta selecionada'}
-                    />
-                    <button
-                      id="btn-select-vault"
-                      type="button"
-                      className="btn"
-                      onClick={handleSelectVault}
-                      disabled={isSelectingVault}
-                      aria-label="Selecionar pasta do vault"
-                    >
-                      {isSelectingVault ? 'Selecionando…' : 'Selecionar'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="vault-queue">
-                  <div>
-                    <b>Corpus indexado</b>
-                    <span className="mono">
-                      {(backendSettings?.notes_count ?? 0).toLocaleString('pt-BR')} notas ·{' '}
-                      {(backendSettings?.sqlite_chunks_count ?? 0).toLocaleString('pt-BR')} chunks
-                    </span>
-                  </div>
-                  <button
-                    id="btn-open-queue"
-                    type="button"
-                    className="btn"
-                    onClick={handleOpenQueue}
-                  >
-                    Indexar na Fila
-                    <ChevronRightIcon size={14} />
-                  </button>
-                </div>
-              </section>
-            )}
+            {activeTab === 'vaults' && <VaultsTab onOpenQueue={() => onOpenQueue?.()} />}
 
             {activeTab === 'ia' && (
               <section className="settings-section" aria-labelledby="settings-ai">

@@ -16,7 +16,9 @@ import {
 } from './Icons';
 import type { SettingsTab } from './SettingsModal';
 import { useQueueContext } from '../hooks/useQueueContext';
-import { useVaultContext } from '../hooks/useVaultContext';
+import { useVaults } from '../hooks/useVaults';
+import VaultDialog from './VaultDialog';
+import { VaultGlyph } from './VaultGlyph';
 import { useCorpusHealth } from '../hooks/useCorpusHealth';
 import { readMigratedItem } from '../services/localStorageMigration';
 
@@ -41,7 +43,7 @@ const NAV: { view: WorkspaceView; label: string; icon: IconType; id: string }[] 
 
 const SECTIONS: { tab: SettingsTab; label: string; icon: IconType }[] = [
   { tab: 'geral', label: 'Geral', icon: SlidersIcon },
-  { tab: 'vault', label: 'Vault', icon: VaultIcon },
+  { tab: 'vaults', label: 'Vaults', icon: VaultIcon },
   { tab: 'ia', label: 'IA', icon: StarsIcon },
   { tab: 'voz', label: 'Voz', icon: MicIcon },
   { tab: 'avancado', label: 'Avançado', icon: CodeIcon },
@@ -64,7 +66,9 @@ const plural = (n: number, one: string, many: string) => `${n.toLocaleString('pt
 const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const { job, watcherActive, folderPath } = useQueueContext();
-  const { vaultPath } = useVaultContext();
+  const { vaults, active, select } = useVaults();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const health = useCorpusHealth(healthKey);
 
   useEffect(() => {
@@ -93,7 +97,7 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
     : null;
 
   const toggleLabel = collapsed ? 'Expandir menu' : 'Recolher menu';
-  const vaultName = folderName(folderPath || vaultPath);
+  const vaultName = folderName(folderPath);
   const healthStatus = health?.status ?? 'unknown';
   const healthText = !health
     ? 'Verificando corpus'
@@ -104,10 +108,76 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
         : 'saudável';
 
   return (
+    <>
     <aside className={`sb${collapsed ? ' sb--collapsed' : ''}`} aria-label="Navegação">
       <div className="sb__head">
         <span className="sb__mark" aria-hidden="true">ES</span>
-        <span className="sb__name">Escólio<small>vault local</small></span>
+        <span className="sb__name">
+          Escólio
+          {/* Seletor da vault ativa: o ícone aparece sozinho com a sidebar recolhida. */}
+          <span className="sb__vault-switch">
+            <button
+              type="button"
+              id="btn-vault-switcher"
+              className="sb__vault"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label={`Vault ativa: ${active?.name ?? 'nenhuma'}. Trocar vault`}
+              onClick={() => setMenuOpen((prev) => !prev)}
+            >
+              {active ? (
+                <VaultGlyph icon={active.icon} color={active.color} size={14} />
+              ) : (
+                <FolderIcon size={14} />
+              )}
+              <small className="sb__vault-name">{active?.name ?? 'vault local'}</small>
+            </button>
+            {menuOpen && (
+              <div className="sb__vault-menu" role="menu" aria-label="Vaults">
+                {vaults.map((vault) => (
+                  <button
+                    key={vault.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={vault.id === active?.id}
+                    className="sb__vault-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      if (vault.id !== active?.id) void select(vault.id);
+                    }}
+                  >
+                    <VaultGlyph icon={vault.icon} color={vault.color} size={14} />
+                    <span>{vault.name}</span>
+                    <em className="mono">{(vault.note_count ?? 0).toLocaleString('pt-BR')} notas</em>
+                  </button>
+                ))}
+                <div className="sb__sep" role="separator" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="sb__vault-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setCreating(true);
+                  }}
+                >
+                  Nova vault…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="sb__vault-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenSettings('vaults');
+                  }}
+                >
+                  Gerenciar vaults…
+                </button>
+              </div>
+            )}
+          </span>
+        </span>
         <button
           type="button"
           id="btn-sidebar-toggle"
@@ -215,6 +285,8 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
         <span className="sb__tip">Corpus: {healthText}<small>abrir diagnóstico</small></span>
       </button>
     </aside>
+    {creating && <VaultDialog onClose={() => setCreating(false)} />}
+    </>
   );
 };
 

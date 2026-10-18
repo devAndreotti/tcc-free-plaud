@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MarkdownNode } from '../hooks/useVault';
+import type { MarkdownNode } from '../lib/vaultGraph';
 import { buildGraph, fitCamera } from '../lib/vaultGraph';
 import ForceGraph from './ForceGraph';
 

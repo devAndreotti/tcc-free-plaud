@@ -4,12 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import QueuePanel from './QueuePanel';
 import { QueueProvider } from '../contexts/QueueContext';
-import { VaultProvider } from '../contexts/VaultContext';
 
 // QueuePanel agora depende do QueueContext — todo render precisa do Provider.
-// QueueProvider consome o VaultContext, por isso fica dentro do VaultProvider (como em App.tsx).
 const Providers = ({ children }: { children: ReactNode }) => (
-  <VaultProvider><QueueProvider>{children}</QueueProvider></VaultProvider>
+  <QueueProvider>{children}</QueueProvider>
 );
 const renderQueuePanel = () => render(<Providers><QueuePanel /></Providers>);
 
@@ -241,45 +239,6 @@ describe('QueuePanel', () => {
     expect(await screen.findByText('job-queue-1')).toBeTruthy();
 
     vi.useRealTimers();
-  });
-
-  it('indexar com vault vazio adota a pasta indexada como vault', async () => {
-    const user = userEvent.setup();
-    renderQueuePanel();
-
-    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
-    await user.click(screen.getByRole('button', { name: 'Indexar' }));
-
-    await waitFor(() => expect(bridgeMock.startIndexJob).toHaveBeenCalled());
-    expect(bridgeMock.saveVaultPath).toHaveBeenCalledWith('C:\\Vault');
-    expect(bridgeMock.scanVault).toHaveBeenCalledWith('C:\\Vault');
-  });
-
-  it('indexar não troca um vault já configurado em Configurações', async () => {
-    bridgeMock.loadVaultPath.mockResolvedValue('D:\\Escolhido');
-    const user = userEvent.setup();
-    renderQueuePanel();
-    await waitFor(() => expect(bridgeMock.scanVault).toHaveBeenCalledWith('D:\\Escolhido'));
-
-    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
-    await user.click(screen.getByRole('button', { name: 'Indexar' }));
-
-    await waitFor(() => expect(bridgeMock.startIndexJob).toHaveBeenCalled());
-    expect(bridgeMock.saveVaultPath).not.toHaveBeenCalled();
-  });
-
-  it('reescaneia o vault quando o job da pasta do vault conclui', async () => {
-    bridgeMock.loadVaultPath.mockResolvedValue('C:\\Vault');
-    bridgeMock.getIndexJob.mockResolvedValue({ ...runningJob, status: 'success', finished_at: '2026-05-26T10:01:00+00:00' });
-    const user = userEvent.setup();
-    renderQueuePanel();
-    await waitFor(() => expect(bridgeMock.scanVault).toHaveBeenCalledTimes(1));
-
-    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
-    await user.click(screen.getByRole('button', { name: 'Indexar' }));
-
-    await waitFor(() => expect(bridgeMock.scanVault).toHaveBeenCalledTimes(2), { timeout: 3000 });
-    expect(bridgeMock.saveVaultPath).not.toHaveBeenCalled();
   });
 
   it('regressao: lista as pastas indexadas no corpus com a contagem de notas', async () => {

@@ -48,7 +48,7 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Notas' })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: /Fila/ }));
-    expect(await screen.findByRole('heading', { name: 'Fila de indexação' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /Fila/ })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: /Benchmark/ }));
     expect(await screen.findByRole('heading', { name: 'Benchmark' })).toBeTruthy();

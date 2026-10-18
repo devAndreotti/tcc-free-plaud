@@ -8,7 +8,7 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { QueueContext } from '../contexts/QueueContextObject';
 import { bridge, type CorpusRoot, type NoteSummary } from '../services/bridge';
-import type { MarkdownNode } from './useVault';
+import type { MarkdownNode } from '../lib/vaultGraph';
 
 // Mesmo evento que notifyCorpusChanged() (hooks/useCorpusHealth) dispara após indexar/apagar
 const CORPUS_CHANGED = 'escolio:corpus-changed';

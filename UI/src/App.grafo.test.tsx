@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
@@ -23,6 +23,21 @@ describe('App: clique numa nota do grafo', () => {
     render(<App />);
     await user.click(screen.getByRole('button', { name: 'Abrir painel de grafos' }));
     await user.click(await screen.findByRole('button', { name: 'nota no grafo' }));
+    expect((await screen.findAllByText('Plataforma local')).length).toBeGreaterThan(0);
+  });
+
+  it('regressao: clicar de novo na mesma nota do grafo reabre depois de trocar a seleção em Notas', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Abrir painel de grafos' }));
+    await user.click(await screen.findByRole('button', { name: 'nota no grafo' }));
+    expect((await screen.findAllByText('Plataforma local')).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'nota apagada' }));
+    expect(await screen.findByText('Esta nota não existe mais no corpus.')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'nota no grafo' }));
+    await waitFor(() => expect(screen.queryByText('Esta nota não existe mais no corpus.')).toBeNull());
     expect((await screen.findAllByText('Plataforma local')).length).toBeGreaterThan(0);
   });
 
