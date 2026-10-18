@@ -567,3 +567,21 @@ def test_regressao_scan_vault_usa_caminho_como_id_e_ignora_pastas_ocultas(monkey
     assert sorted(node["path"] for node in first) == ["Pessoas/ana.md", "raiz.md"]
     assert all(node["id"] == node["path"] for node in first)  # grafo não se redesenha a cada rescan
     assert sorted(node["id"] for node in second) == sorted(node["id"] for node in first)
+
+
+def test_desktop_api_removes_corpus_root_only_with_confirmation_regressao(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    calls: list[str] = []
+
+    def fake_remove(root, *, runtime=None):
+        calls.append(root)
+        return 3
+
+    monkeypatch.setattr(module, "remove_corpus_root_from_tui", fake_remove)
+    api = module.Api()
+
+    assert api.removeCorpusRoot("D:/Notas/Culinaria", "")["status"] == "confirmation_required"
+    assert api.removeCorpusRoot("D:/Notas/Culinaria", "APAGAR")["status"] == "confirmation_required"
+    assert calls == []
+    assert api.removeCorpusRoot("D:/Notas/Culinaria", "REMOVER") == {"ok": True, "removed_notes": 3}
+    assert calls == ["D:/Notas/Culinaria"]

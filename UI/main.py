@@ -49,7 +49,13 @@ from escolio.providers.answer import test_answer_provider
 from escolio.providers.model_discovery import list_answer_models
 from escolio.retrieval.models import AskResponse
 from escolio.storage.sqlite import init_sqlite
-from escolio.tui.actions import ask_corpus, corpus_roots_from_tui, corpus_status_from_tui, index_corpus_folder
+from escolio.tui.actions import (
+    ask_corpus,
+    corpus_roots_from_tui,
+    corpus_status_from_tui,
+    index_corpus_folder,
+    remove_corpus_root_from_tui,
+)
 from escolio.tui.audio_actions import (
     cancel_audio_capture,
     cancel_voice_model_download,
@@ -160,6 +166,18 @@ class Api:
     def listCorpusRoots(self) -> list[dict]:
         """Pastas indexadas com notas, para o seletor de pasta do chat."""
         return corpus_roots_from_tui()
+
+    def removeCorpusRoot(self, root: str, confirm: str = '') -> dict:
+        """Tira a pasta do corpus (notas e raiz). Não apaga arquivos do disco."""
+        if confirm != 'REMOVER':
+            return {
+                'ok': False,
+                'status': 'confirmation_required',
+                'removed_notes': 0,
+                'message': 'Digite REMOVER para confirmar.',
+            }
+        removed = remove_corpus_root_from_tui(root, runtime=self.runtime)
+        return {'ok': True, 'removed_notes': removed}
 
     def indexVault(self, folder_path: str) -> dict:
         """

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import QueuePanel from './QueuePanel';
@@ -23,6 +23,8 @@ const bridgeMock = vi.hoisted(() => ({
   loadVaultPath: vi.fn(),
   saveVaultPath: vi.fn(),
   scanVault: vi.fn(),
+  listCorpusRoots: vi.fn(),
+  removeCorpusRoot: vi.fn(),
 }));
 
 vi.mock('../services/bridge', () => ({
@@ -65,6 +67,11 @@ const runningJob = {
   eta_seconds: 1,
 };
 
+const CORPUS_ROOTS = [
+  { root: 'D:\\Notas\\Obsidian', notes_count: 42 },
+  { root: 'D:\\Notas\\Culinaria', notes_count: 7 },
+];
+
 describe('QueuePanel', () => {
   afterEach(() => {
     cleanup();
@@ -83,6 +90,8 @@ describe('QueuePanel', () => {
     bridgeMock.loadVaultPath.mockResolvedValue('');
     bridgeMock.saveVaultPath.mockResolvedValue(true);
     bridgeMock.scanVault.mockResolvedValue([]);
+    bridgeMock.listCorpusRoots.mockResolvedValue([]);
+    bridgeMock.removeCorpusRoot.mockReset();
 
     bridgeMock.selectFolder.mockResolvedValue('C:\\Vault');
     bridgeMock.startIndexJob.mockResolvedValue(runningJob);
@@ -271,5 +280,52 @@ describe('QueuePanel', () => {
 
     await waitFor(() => expect(bridgeMock.scanVault).toHaveBeenCalledTimes(2), { timeout: 3000 });
     expect(bridgeMock.saveVaultPath).not.toHaveBeenCalled();
+  });
+
+  it('regressao: lista as pastas indexadas no corpus com a contagem de notas', async () => {
+    bridgeMock.listCorpusRoots.mockResolvedValue(CORPUS_ROOTS);
+    renderQueuePanel();
+
+    expect(await screen.findByText('Obsidian')).toBeTruthy();
+    expect(screen.getByText('42 notas')).toBeTruthy();
+    expect(screen.getByText('Culinaria')).toBeTruthy();
+    expect(screen.getByText('7 notas')).toBeTruthy();
+    expect(screen.getByTitle('D:\\Notas\\Culinaria')).toBeTruthy();
+  });
+
+  it('regressao: Reindexar usa a raiz da linha e chama startIndexJob com ela', async () => {
+    bridgeMock.listCorpusRoots.mockResolvedValue(CORPUS_ROOTS);
+    const user = userEvent.setup();
+    renderQueuePanel();
+
+    const row = (await screen.findByText('Culinaria')).closest('li') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Reindexar' }));
+
+    await waitFor(() => {
+      expect(bridgeMock.startIndexJob).toHaveBeenCalledWith('D:\\Notas\\Culinaria', false);
+    });
+  });
+
+  it('regressao: Remover do corpus só chama removeCorpusRoot depois de digitar REMOVER e recarrega a lista', async () => {
+    bridgeMock.listCorpusRoots.mockResolvedValueOnce(CORPUS_ROOTS).mockResolvedValue([CORPUS_ROOTS[0]]);
+    bridgeMock.removeCorpusRoot.mockResolvedValue({ ok: true, removed_notes: 7 });
+    const user = userEvent.setup();
+    renderQueuePanel();
+
+    const row = (await screen.findByText('Culinaria')).closest('li') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Remover' }));
+    expect((within(row).getByRole('button', { name: 'Remover do corpus' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(bridgeMock.removeCorpusRoot).not.toHaveBeenCalled();
+
+    await user.type(within(row).getByLabelText('Digite REMOVER para confirmar'), 'REMOVER');
+    await user.click(within(row).getByRole('button', { name: 'Remover do corpus' }));
+
+    await waitFor(() => {
+      expect(bridgeMock.removeCorpusRoot).toHaveBeenCalledWith('D:\\Notas\\Culinaria', 'REMOVER');
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('Culinaria')).toBeNull();
+    });
+    expect(bridgeMock.listCorpusRoots).toHaveBeenCalledTimes(2);
   });
 });

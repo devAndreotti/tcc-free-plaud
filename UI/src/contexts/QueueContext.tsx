@@ -30,10 +30,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const rescannedJobId = useRef<string | null>(null);
 
   // Sem vault configurado, a pasta indexada vira o vault. Escolha explícita em Configurações vence.
-  const startJobAndAdopt = useCallback(async () => {
-    const path = folderPath.trim();
-    if (!vaultPath && path) await adoptVault(path);
-    await startJob();
+  const startJobAndAdopt = useCallback(async (path?: string) => {
+    const target = (typeof path === 'string' ? path : folderPath).trim();
+    if (!vaultPath && target) await adoptVault(target);
+    await startJob(target);
   }, [folderPath, vaultPath, adoptVault, startJob]);
 
   // Ao concluir um job na pasta do vault, reescaneia para o grafo refletir arquivos novos.

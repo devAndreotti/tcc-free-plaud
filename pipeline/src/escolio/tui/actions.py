@@ -25,6 +25,7 @@ from escolio.corpus.service import (
     get_corpus_status,
     index_corpus_path,
     rebuild_corpus,
+    remove_corpus_root,
     reset_corpus,
 )
 from escolio.notes.schemas import Note
@@ -123,6 +124,16 @@ def corpus_roots_from_tui(*, settings: Settings | None = None) -> list[dict[str,
         return list_corpus_roots(connection)
     finally:
         connection.close()
+
+
+def remove_corpus_root_from_tui(
+    root: str,
+    *,
+    settings: Settings | None = None,
+    runtime: CorpusRuntime | None = None,
+) -> int:
+    vector_store = runtime.get_vector_store() if runtime is not None else None
+    return remove_corpus_root(root, settings=settings or get_settings(), vector_store=vector_store)
 
 
 def corpus_status_from_tui(*, settings: Settings | None = None) -> CorpusStatusResult:
