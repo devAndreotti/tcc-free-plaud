@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MarkdownNode } from '../hooks/useVault';
-import { buildGraph, fitCamera } from './vaultGraph';
+import { buildGraph, fitCamera, tick } from './vaultGraph';
 
 const note = (path: string): MarkdownNode => ({
   id: path,
@@ -60,6 +60,25 @@ describe('vaultGraph (regressão do grafo bagunçado)', () => {
       expect(sx).toBeLessThanOrEqual(320);
       expect(sy).toBeGreaterThanOrEqual(0);
       expect(sy).toBeLessThanOrEqual(900);
+    }
+  });
+});
+
+describe('vaultGraph.tick (regressão da física)', () => {
+  it('converge: notas ficam perto da sua pasta, nada vira NaN e a velocidade tem teto', () => {
+    const vault = Array.from({ length: 40 }, (_, i) => note(`P${i % 4}/n${i}.md`));
+    const { nodes, edges } = buildGraph(vault, 400, 400);
+    nodes[0].x = 3000; // nó jogado longe volta sem salto: o teto de velocidade limita cada passo
+    for (let i = 0; i < 300; i++) tick(nodes, edges, 200, 200);
+
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    for (const n of nodes) {
+      expect(Number.isFinite(n.x) && Number.isFinite(n.y)).toBe(true);
+      expect(Math.hypot(n.vx, n.vy)).toBeLessThanOrEqual(30 + 1e-9);
+    }
+    for (const e of edges.filter((e) => byId.get(e.target)?.kind === 'note')) {
+      const a = byId.get(e.source)!, b = byId.get(e.target)!;
+      expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThan(200);
     }
   });
 });
