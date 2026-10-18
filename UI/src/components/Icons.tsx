@@ -492,6 +492,9 @@ const PdfIcon = (p: IconProps) => (
 const PlusIcon = (p: IconProps) => (
   <Icon {...p}><path d="M5 12h14" /><path d="M12 5v14" /></Icon>
 );
+const ChevronsUpDownIcon = (p: IconProps) => (
+  <Icon {...p}><path d="m7 15 5 5 5-5" /><path d="m7 9 5-5 5 5" /></Icon>
+);
 const InfoIcon = (p: IconProps) => (
   <Icon {...p}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></Icon>
 );
@@ -542,4 +545,5 @@ export {
   PdfIcon,
   PlusIcon,
   InfoIcon,
+  ChevronsUpDownIcon,
 };

@@ -1,4 +1,4 @@
-import type { VaultColor, VaultIconId } from '../services/bridge';
+import type { Vault, VaultColor, VaultIconId } from '../services/bridge';
 
 /** Ordem e rótulos dos ícones e cores de vault (ids espelham escolio/app/vaults.py). */
 export const VAULT_ICON_OPTIONS: { id: VaultIconId; label: string }[] = [
@@ -25,3 +25,9 @@ export const VAULT_COLOR_OPTIONS: { id: VaultColor; label: string }[] = [
   { id: 'teal', label: 'Turquesa' },
   { id: 'slate', label: 'Ardósia' },
 ];
+
+const plural = (n: number, one: string, many: string) => `${n.toLocaleString('pt-BR')} ${n === 1 ? one : many}`;
+
+/** "12 notas · 2 pastas": resumo da vault no seletor, na aba Vaults e na tela inicial. */
+export const vaultMeta = (vault: Vault): string =>
+  `${plural(vault.note_count ?? 0, 'nota', 'notas')} · ${plural(vault.roots?.length ?? vault.folders.length, 'pasta', 'pastas')}`;

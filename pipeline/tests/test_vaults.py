@@ -299,3 +299,37 @@ def test_vault_api_delete_da_ativa_com_banco_aberto_apaga_a_pasta(tmp_path: Path
     assert not folder.exists()
     assert api.listVaults()["active"] != extra.id
     assert api.runtime._settings.sqlite_path != settings_for_vault(extra, base).sqlite_path
+
+
+def test_vault_api_list_vaults_traz_as_pastas_reais_de_cada_vault(tmp_path: Path, monkeypatch) -> None:
+    # A aba Vaults e o seletor mostram as pastas do banco da vault, nao a lista da criacao no registro.
+    module = _load_ui_main_isolated(monkeypatch, tmp_path)
+    base = _base(tmp_path)
+    load_registry(base)
+    extra = create_vault("Extra", "notes", "rose", [], base)
+    connection = init_sqlite(settings_for_vault(extra, base).sqlite_path)
+    try:
+        root = tmp_path / "Receitas"
+        empty = tmp_path / "Vazia"
+        for folder in (root, empty):
+            connection.execute(
+                "INSERT INTO corpus_roots (root, last_indexed_at) VALUES (?, ?)",
+                (str(folder), datetime.now(UTC).isoformat()),
+            )
+        connection.execute(
+            "INSERT INTO notes (note_id, note_version, source_type, source_path, source_name, title, summary,"
+            " raw_text, normalized_text, structured_markdown, content_hash, provider, model, created_at)"
+            " VALUES ('n1', 1, 'markdown', ?, 'bolo.md', 'Bolo', '', '', '', '', 'h', 'p', 'm', ?)",
+            (str(root / "bolo.md"), datetime.now(UTC).isoformat()),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    api = module.Api()
+
+    rows = {row["id"]: row for row in api.listVaults()["vaults"]}
+
+    # Pasta sem notas nao conta (mesma regra do seletor de pasta do chat).
+    assert rows[extra.id]["roots"] == [{"root": str(root), "notes_count": 1}]
+    assert rows[extra.id]["note_count"] == 1
+    assert all(isinstance(row["roots"], list) for row in rows.values())

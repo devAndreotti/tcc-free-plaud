@@ -83,7 +83,7 @@ const Header = ({
               <div
                 key={tab.id}
                 id={`tab-${tab.id}`}
-                className={`tab ${isActive ? 'tab--active' : ''}`}
+                className={`tab${isActive ? ' tab--active' : ''}${vault ? ` vault-glyph--${vault.color}` : ''}`}
                 role="tab"
                 aria-selected={isActive}
                 aria-controls={`tabpanel-${tab.id}`}

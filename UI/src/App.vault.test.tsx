@@ -105,6 +105,18 @@ describe('vault: cada conversa pertence a uma vault', () => {
     expect(await screen.findByText('Resposta da Obsidian')).toBeTruthy();
   });
 
+  it('vault: o chip da vault no campo de pergunta abre o seletor de vault', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForVault();
+    expect(screen.getByRole('textbox', { name: 'Campo de mensagem' }).getAttribute('placeholder')).toBe('Pergunte à vault Obsidian…');
+
+    await user.click(screen.getByRole('button', { name: 'Vault da pergunta: Obsidian. Trocar vault' }));
+    expect(await screen.findByRole('menu', { name: 'Vaults' })).toBeTruthy();
+    await user.click(screen.getByRole('menuitemradio', { name: /Culinária/ }));
+    expect(await waitForVault(/Culinária/)).toBeTruthy();
+  });
+
   it('vault: duplo clique renomeia a conversa; Esc cancela', async () => {
     const user = userEvent.setup();
     render(<App />);

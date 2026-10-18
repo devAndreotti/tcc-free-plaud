@@ -1,7 +1,9 @@
-import { useEffect, useState, type ComponentType } from 'react';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
 import {
   AskIcon,
   BarChartIcon,
+  CheckIcon,
+  ChevronsUpDownIcon,
   CodeIcon,
   ContrastIcon,
   FolderIcon,
@@ -9,6 +11,7 @@ import {
   MicIcon,
   NoteIcon,
   PanelLeftIcon,
+  PlusIcon,
   SettingsIcon,
   SlidersIcon,
   StarsIcon,
@@ -17,6 +20,8 @@ import {
 import type { SettingsTab } from './SettingsModal';
 import { useQueueContext } from '../hooks/useQueueContext';
 import { useVaults } from '../hooks/useVaults';
+import { OPEN_VAULT_MENU_EVENT } from '../contexts/VaultsContextObject';
+import { vaultMeta } from '../lib/vaultVisuals';
 import VaultDialog from './VaultDialog';
 import { VaultGlyph } from './VaultGlyph';
 import { useCorpusHealth } from '../hooks/useCorpusHealth';
@@ -69,6 +74,31 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
   const { vaults, active, select } = useVaults();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const switchRef = useRef<HTMLDivElement>(null);
+
+  // Menu de vaults fecha ao clicar fora ou com Esc.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (event: MouseEvent) => {
+      if (!switchRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
+  // O chip da vault no campo de pergunta abre este mesmo seletor.
+  useEffect(() => {
+    const open = () => setMenuOpen(true);
+    window.addEventListener(OPEN_VAULT_MENU_EVENT, open);
+    return () => window.removeEventListener(OPEN_VAULT_MENU_EVENT, open);
+  }, []);
   const health = useCorpusHealth(healthKey);
 
   useEffect(() => {
@@ -112,72 +142,7 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
     <aside className={`sb${collapsed ? ' sb--collapsed' : ''}`} aria-label="Navegação">
       <div className="sb__head">
         <span className="sb__mark" aria-hidden="true">ES</span>
-        <span className="sb__name">
-          Escólio
-          {/* Seletor da vault ativa: o ícone aparece sozinho com a sidebar recolhida. */}
-          <span className="sb__vault-switch">
-            <button
-              type="button"
-              id="btn-vault-switcher"
-              className="sb__vault"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              aria-label={`Vault ativa: ${active?.name ?? 'nenhuma'}. Trocar vault`}
-              onClick={() => setMenuOpen((prev) => !prev)}
-            >
-              {active ? (
-                <VaultGlyph icon={active.icon} color={active.color} size={14} />
-              ) : (
-                <FolderIcon size={14} />
-              )}
-              <small className="sb__vault-name">{active?.name ?? 'vault local'}</small>
-            </button>
-            {menuOpen && (
-              <div className="sb__vault-menu" role="menu" aria-label="Vaults">
-                {vaults.map((vault) => (
-                  <button
-                    key={vault.id}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={vault.id === active?.id}
-                    className="sb__vault-item"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      if (vault.id !== active?.id) void select(vault.id);
-                    }}
-                  >
-                    <VaultGlyph icon={vault.icon} color={vault.color} size={14} />
-                    <span>{vault.name}</span>
-                    <em className="mono">{(vault.note_count ?? 0).toLocaleString('pt-BR')} notas</em>
-                  </button>
-                ))}
-                <div className="sb__sep" role="separator" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="sb__vault-item"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setCreating(true);
-                  }}
-                >
-                  Nova vault…
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="sb__vault-item"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onOpenSettings('vaults');
-                  }}
-                >
-                  Gerenciar vaults…
-                </button>
-              </div>
-            )}
-          </span>
-        </span>
+        <span className="sb__name">Escólio</span>
         <button
           type="button"
           id="btn-sidebar-toggle"
@@ -189,6 +154,83 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
           <PanelLeftIcon />
           <span className="sb__tip">{toggleLabel}<small>Ctrl B</small></span>
         </button>
+      </div>
+
+      {/* Seletor da vault ativa: cartão com nome e contagens; recolhida, só o ícone. */}
+      <div className="sb__vault-switch" ref={switchRef}>
+        <button
+          type="button"
+          id="btn-vault-switcher"
+          className="sb__vault"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-label={`Vault ativa: ${active?.name ?? 'nenhuma'}. Trocar vault`}
+          onClick={() => setMenuOpen((prev) => !prev)}
+        >
+          {active ? (
+            <VaultGlyph icon={active.icon} color={active.color} size={17} />
+          ) : (
+            <span className="vault-glyph vault-glyph--slate" aria-hidden="true">
+              <FolderIcon size={17} />
+            </span>
+          )}
+          <span className="sb__vault-text">
+            <span className="sb__vault-name">{active?.name ?? 'Carregando vaults…'}</span>
+            {active && <span className="sb__vault-meta mono">{vaultMeta(active)}</span>}
+          </span>
+          <ChevronsUpDownIcon size={16} className="sb__vault-chevron" />
+          <span className="sb__tip">{active?.name ?? 'Vault'}<small>trocar vault</small></span>
+        </button>
+        {menuOpen && (
+          <div className="sb__vault-menu" role="menu" aria-label="Vaults">
+            <div className="sb__vault-menu-head" aria-hidden="true">Trocar de vault</div>
+            {vaults.map((vault) => (
+              <button
+                key={vault.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={vault.id === active?.id}
+                className="sb__vault-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  if (vault.id !== active?.id) void select(vault.id);
+                }}
+              >
+                <VaultGlyph icon={vault.icon} color={vault.color} size={15} />
+                <span className="sb__vault-item-text">
+                  <span>{vault.name}</span>
+                  <small className="mono">{vaultMeta(vault)}</small>
+                </span>
+                {vault.id === active?.id && <CheckIcon size={16} className="sb__vault-check" />}
+              </button>
+            ))}
+            <div className="sb__sep" role="separator" />
+            <button
+              type="button"
+              role="menuitem"
+              className="sb__vault-item"
+              onClick={() => {
+                setMenuOpen(false);
+                setCreating(true);
+              }}
+            >
+              <PlusIcon size={16} />
+              <span>Nova vault</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="sb__vault-item"
+              onClick={() => {
+                setMenuOpen(false);
+                onOpenSettings('vaults');
+              }}
+            >
+              <VaultIcon size={16} />
+              <span>Gerenciar vaults</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <nav className="sb__nav" aria-label="Navegação principal">
