@@ -15,7 +15,6 @@ const bridgeMock = vi.hoisted(() => ({
   cancelIndexJob: vi.fn(),
   startWatcher: vi.fn(),
   stopWatcher: vi.fn(),
-  pollWatcherEvents: vi.fn(),
 }));
 
 vi.mock('../services/bridge', () => ({
@@ -70,7 +69,6 @@ describe('QueuePanel', () => {
     bridgeMock.cancelIndexJob.mockReset();
     bridgeMock.startWatcher.mockReset();
     bridgeMock.stopWatcher.mockReset();
-    bridgeMock.pollWatcherEvents.mockReset();
 
     bridgeMock.selectFolder.mockResolvedValue('C:\\Vault');
     bridgeMock.startIndexJob.mockResolvedValue(runningJob);
@@ -78,7 +76,6 @@ describe('QueuePanel', () => {
     bridgeMock.cancelIndexJob.mockResolvedValue({ ...runningJob, status: 'cancelled', cancel_requested: true });
     bridgeMock.startWatcher.mockResolvedValue({ ok: true, active: true, directory: 'C:\\Vault' });
     bridgeMock.stopWatcher.mockResolvedValue({ ok: true, active: false, directory: null });
-    bridgeMock.pollWatcherEvents.mockResolvedValue([]);
   });
 
   it('cria job e mostra progresso consultado do backend', async () => {

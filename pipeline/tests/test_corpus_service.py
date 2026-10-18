@@ -11,6 +11,7 @@ from escolio.notes.metadata import build_note_id
 from escolio.storage.sqlite import (
     connect_sqlite,
     count_notes,
+    get_all_notes,
     init_sqlite,
     list_chunk_ids,
 )
@@ -468,3 +469,60 @@ def test_index_corpus_path_non_recursive_skips_nested_files(tmp_path: Path) -> N
     assert result.indexed_count == 1
     assert result.skipped_count == 1
     assert result.skipped[0].reason == 'directory_requires_recursive'
+
+
+def _notes_by_name(settings: Settings) -> list[str]:
+    connection = init_sqlite(settings.sqlite_path)
+    try:
+        return sorted(Path(note.source_path).name for note in get_all_notes(connection))
+    finally:
+        connection.close()
+
+
+def test_regressao_indexacao_de_pasta_remove_nota_de_arquivo_apagado(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'vault'
+    root.mkdir()
+    (root / 'a.md').write_text('# A\n\nPrimeiro conteudo do corpus.\n', encoding='utf-8')
+    (root / 'b.md').write_text('# B\n\nSegundo conteudo do corpus.\n', encoding='utf-8')
+    index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+    assert _notes_by_name(settings) == ['a.md', 'b.md']
+
+    (root / 'a.md').unlink()
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+
+    assert _notes_by_name(settings) == ['b.md']
+    assert result.removed_count == 1
+
+
+def test_regressao_indexacao_de_pasta_nao_mexe_em_notas_fora_da_raiz(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    outside = tmp_path / 'outra-pasta'
+    outside.mkdir()
+    (outside / 'fora.md').write_text('# Fora\n\nNota de outra raiz.\n', encoding='utf-8')
+    index_corpus_path(outside, settings=settings, embedder=FakeEmbedder(), recursive=True)
+    (outside / 'fora.md').unlink()
+
+    root = tmp_path / 'vault'
+    root.mkdir()
+    (root / 'dentro.md').write_text('# Dentro\n\nNota da raiz indexada.\n', encoding='utf-8')
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+
+    assert _notes_by_name(settings) == ['dentro.md', 'fora.md']
+    assert result.removed_count == 0
+
+
+def test_regressao_indexacao_nao_recursiva_so_remove_filhos_diretos(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'vault'
+    (root / 'sub').mkdir(parents=True)
+    (root / 'a.md').write_text('# A\n\nFilho direto da raiz.\n', encoding='utf-8')
+    (root / 'sub' / 's.md').write_text('# S\n\nNeto da raiz.\n', encoding='utf-8')
+    index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+
+    (root / 'a.md').unlink()
+    (root / 'sub' / 's.md').unlink()
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=False)
+
+    assert _notes_by_name(settings) == ['s.md']
+    assert result.removed_count == 1

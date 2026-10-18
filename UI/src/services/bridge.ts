@@ -44,7 +44,7 @@ export interface WatcherStatus {
 export interface DroppedFileEvent {
   name: string;
   source_path: string;
-  status: 'indexed' | 'unchanged' | 'failed';
+  status: 'indexed' | 'unchanged' | 'failed' | 'removed';
   chunks: number;
   error_code: string | null;
   message: string | null;
@@ -56,27 +56,13 @@ export interface DroppedFilesEnqueueResult {
   missing: string[];
 }
 
-export interface WatcherIngestionEvent {
-  ingestion_id: string;
-  correlation_id: string;
-  source_path: string;
-  source_type: string | null;
-  detected_media_type: string | null;
-  status: "success" | "failed";
-  size_bytes: number;
-  content_sha256: string | null;
-  error_code: string | null;
-  message: string | null;
-  warnings: string[];
-  created_at: string;
-}
-
 export interface IndexVaultResult {
   ok: boolean;
   status: string;
   total_found: number;
   indexed_count: number;
   unchanged_count: number;
+  removed_count: number;
   failed_count: number;
   skipped_count: number;
 }
@@ -477,9 +463,6 @@ interface PythonApi {
   /** Consulta se ha monitoramento ativo e qual pasta esta sendo observada. */
   getWatcherStatus?: () => Promise<WatcherStatus>;
 
-  /** Drena eventos de ingestao capturados pelo watcher desde a ultima consulta. */
-  pollWatcherEvents?: () => Promise<WatcherIngestionEvent[]>;
-
   /** Indexa no corpus os arquivos soltos na área de soltar (pelo nome; o caminho fica no Python). */
   indexDroppedFiles?: (names: string[]) => Promise<DroppedFilesEnqueueResult>;
 
@@ -823,6 +806,7 @@ const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobS
     total_found: 5,
     indexed_count: 5,
     unchanged_count: 0,
+    removed_count: 0,
     failed_count: 0,
     skipped_count: 0,
   },
@@ -1025,6 +1009,7 @@ export const bridge = {
       total_found: 5,
       indexed_count: 5,
       unchanged_count: 0,
+      removed_count: 0,
       failed_count: 0,
       skipped_count: 0,
     };
@@ -1147,13 +1132,6 @@ export const bridge = {
       return window.pywebview.api.getWatcherStatus();
     }
     return { active: mockWatcherActive, directory: mockWatcherDirectory };
-  },
-
-  pollWatcherEvents: async (): Promise<WatcherIngestionEvent[]> => {
-    if (isDesktopApp() && window.pywebview?.api.pollWatcherEvents) {
-      return window.pywebview.api.pollWatcherEvents();
-    }
-    return [];
   },
 
   indexDroppedFiles: async (names: string[]): Promise<DroppedFilesEnqueueResult> => {

@@ -64,6 +64,7 @@ const JobCard = ({ job, onCancel, busy, onOpenSettings }: {
     { key: 'unchanged', label: 'inalteradas', value: progress?.unchanged_count ?? job.result?.unchanged_count ?? 0, color: 'color-mix(in srgb, var(--accent-blue-light) 38%, transparent)' },
     { key: 'failed', label: 'com falha', value: progress?.failed_count ?? job.result?.failed_count ?? 0, color: 'var(--err)' },
     { key: 'skipped', label: 'ignoradas', value: progress?.skipped_count ?? job.result?.skipped_count ?? 0, color: 'var(--text-muted)' },
+    { key: 'removed', label: 'removidas', value: job.result?.removed_count ?? 0, color: 'var(--text-muted)' },
   ];
 
   const timing = progress
