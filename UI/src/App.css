@@ -3087,6 +3087,16 @@
 }
 
 /* Janela do modal — não precisa mais de position:fixed próprio */
+/* Fundo clicável do modal (botão nativo atrás do card) */
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
 .modal {
   position: relative;
   width: min(520px, calc(100vw - 32px));

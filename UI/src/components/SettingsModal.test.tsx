@@ -451,7 +451,7 @@ describe('SettingsModal', () => {
     const onClose = vi.fn();
     render(<SettingsModal isOpen onClose={onClose} />);
 
-    await user.click(screen.getByRole('dialog').parentElement as HTMLElement);
+    await user.click(screen.getByRole('button', { name: 'Fechar configurações clicando fora' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });

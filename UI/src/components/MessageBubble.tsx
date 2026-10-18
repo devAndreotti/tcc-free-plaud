@@ -174,8 +174,8 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
 
       <div className="msg__answer">
         {claims.length > 0
-          ? claims.map((claim, i) => (
-              <span key={i}>
+          ? claims.map((claim) => (
+              <span key={`${claim.refs.join(',')}:${claim.text}`}>
                 <span
                   className={`msg__claim${claim.support_level === 'partial' ? ' msg__claim--partial' : ''}${claim.refs.includes(hl ?? -1) ? ' is-hl' : ''}`}
                 >
