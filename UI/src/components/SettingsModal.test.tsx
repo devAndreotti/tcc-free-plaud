@@ -219,6 +219,13 @@ describe('SettingsModal', () => {
     expect(screen.queryByLabelText('Modelo de resposta')).toBeNull();
   });
 
+  it('na aba Vaults o rodapé avisa que as mudanças valem na hora (não passam pelo Salvar)', async () => {
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="vaults" />);
+
+    expect(await screen.findByText('Mudanças nas vaults valem na hora.')).toBeTruthy();
+    expect(screen.queryByText('Nenhuma alteração')).toBeNull();
+  });
+
   it('lista modelos e preenche draft de answer_model ao clicar', async () => {
     const user = userEvent.setup();
     renderModal(<SettingsModal isOpen onClose={vi.fn()} />);

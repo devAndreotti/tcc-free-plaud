@@ -573,7 +573,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                           {doctorTotal} {doctorTotal === 1 ? 'verificação' : 'verificações'} · {doctor.latency_ms} ms
                         </span>
                       </div>
-                      <button type="button" className="btn btn--sm" onClick={handleRerunDoctor} disabled={isRunningDoctor}>
+                      <button type="button" className="btn" onClick={handleRerunDoctor} disabled={isRunningDoctor}>
                         <RefreshIcon size={14} />
                         {isRunningDoctor ? 'Verificando…' : 'Verificar de novo'}
                       </button>
@@ -933,6 +933,8 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                 <span className="modal__pending-dot" aria-hidden="true" />
                 {pendingChanges} {pendingChanges === 1 ? 'alteração não salva' : 'alterações não salvas'}
               </>
+            ) : activeTab === 'vaults' ? (
+              'Mudanças nas vaults valem na hora.'
             ) : (
               'Nenhuma alteração'
             )}
