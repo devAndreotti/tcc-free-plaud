@@ -20,6 +20,7 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}'],
     exclude: ['node_modules', 'dist', 'e2e/**'],
     testTimeout: 15000,
+    setupFiles: ['src/test/setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'lcov'],
