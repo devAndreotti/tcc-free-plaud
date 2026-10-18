@@ -47,6 +47,7 @@ from escolio.storage.sqlite import (
     list_chunk_ids_for_note,
     list_note_ids_by_source_path,
     note_chunks_match_config,
+    record_corpus_root,
     replace_chunks_for_note,
     upsert_note,
 )
@@ -1468,6 +1469,8 @@ def index_corpus_path(
                 skipped=discovery.skipped,
             )
 
+        # Antes de qualquer arquivo: a pasta vira raiz do corpus mesmo que a reindexação venha toda "unchanged".
+        record_corpus_root(resolved_connection, source_path.resolve())
         pending_items: list[_PendingCorpusIndex] = []
         results: list[CorpusIndexResult] = []
         indexed_count = 0

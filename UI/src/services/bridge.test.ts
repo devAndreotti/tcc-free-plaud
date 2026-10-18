@@ -200,4 +200,26 @@ describe('askCorpus', () => {
     expect(result.claims).toEqual([]);
     expect(result.no_answer).toBe(false);
   });
+
+  it('repassa a pasta de origem escolhida ao askCorpus do backend (regressao)', async () => {
+    const calls: unknown[][] = [];
+    (window as unknown as { pywebview: { api: unknown } }).pywebview = {
+      api: {
+        askCorpus: (...args: unknown[]) => {
+          calls.push(args);
+          return Promise.resolve({ query: 'q', status: 'answer', claims: [], citations: [] });
+        },
+      },
+    };
+    await bridge.askCorpus('q', 'hybrid', 'D:\\Notas\\Culinaria');
+    expect(calls).toEqual([['q', 'hybrid', 'D:\\Notas\\Culinaria']]);
+  });
+
+  it('lista as pastas do corpus pelo backend quando existe (regressao)', async () => {
+    const roots = [{ root: 'D:\\Notas\\Culinaria', notes_count: 3 }];
+    (window as unknown as { pywebview: { api: unknown } }).pywebview = {
+      api: { listCorpusRoots: () => Promise.resolve(roots) },
+    };
+    expect(await bridge.listCorpusRoots()).toEqual(roots);
+  });
 });
