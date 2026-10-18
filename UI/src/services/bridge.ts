@@ -393,6 +393,44 @@ export interface CorpusRootRemoveResult {
   message?: string;
 }
 
+/** Ícones de vault: ids do conjunto de Icons.tsx (sem o sufixo "Icon"). Espelha escolio/app/vaults.py. */
+export type VaultIconId = 'notes' | 'ask' | 'graph' | 'layers' | 'chart' | 'sparkle' | 'stars' | 'code' | 'folder' | 'mic' | 'vault' | 'file';
+export type VaultColor = 'violet' | 'blue' | 'green' | 'amber' | 'rose' | 'teal' | 'slate';
+
+/** Vault: corpus independente (SQLite + Chroma + pastas de origem). */
+export interface Vault {
+  id: string;
+  name: string;
+  icon: VaultIconId;
+  color: VaultColor;
+  folders: string[];
+  embedding_model: string | null;
+  created_at: string;
+  sqlite_path: string | null;
+  vector_store_dir: string | null;
+  note_count?: number;
+}
+
+export interface VaultList {
+  active: string;
+  vaults: Vault[];
+}
+
+export interface VaultPatch {
+  name?: string;
+  icon?: VaultIconId;
+  color?: VaultColor;
+  folders?: string[];
+}
+
+/** Resultado de criar, editar, excluir ou trocar vault (UI/main.py). */
+export interface VaultMutationResult {
+  ok: boolean;
+  message?: string;
+  vault?: Vault;
+  active?: string;
+}
+
 /** Trecho do corpus que sustenta uma resposta (retrieval/models.py: Citation). */
 export interface AskCitation {
   note_id: string;
@@ -560,6 +598,14 @@ interface PythonApi {
 
   /** Tira a pasta do corpus (notas e raiz), exigindo 'REMOVER'. Não apaga arquivos do disco. */
   removeCorpusRoot?: (root: string, confirmation: string) => Promise<CorpusRootRemoveResult>;
+
+  /** Vaults cadastradas, com a ativa e a contagem de notas de cada uma. */
+  listVaults?: () => Promise<VaultList>;
+  createVault?: (name: string, icon: VaultIconId, color: VaultColor, folders: string[]) => Promise<VaultMutationResult>;
+  updateVault?: (vaultId: string, patch: VaultPatch) => Promise<VaultMutationResult>;
+  /** Exclui a vault; `confirm` precisa ser o nome dela. Nunca apaga pastas de origem. */
+  deleteVault?: (vaultId: string, confirm: string) => Promise<VaultMutationResult>;
+  selectVault?: (vaultId: string) => Promise<VaultMutationResult>;
 
   /** Reindexa uma nota a partir do source_path salvo no banco. */
   reindexNote?: (noteId: string) => Promise<NoteReindexResult>;
@@ -934,6 +980,16 @@ const mockVoiceModelDownload = (
 // ─── Serviço de bridge exportado ─────────────────────────────────────────────
 let mockWatcherActive = false;
 let mockWatcherDirectory: string | null = null;
+
+// ─── Vaults (mock) ──────────────────────────────────────────────────────────
+const MOCK_VAULTS: Vault[] = [
+  { id: 'obsidian', name: 'Obsidian', icon: 'notes', color: 'violet', folders: ['C:/Notas/Obsidian'], embedding_model: 'chroma-default', created_at: '2026-10-18T12:00:00-03:00', sqlite_path: null, vector_store_dir: null, note_count: 42 },
+  { id: 'culinaria', name: 'Culinária', icon: 'layers', color: 'amber', folders: ['C:/Notas/Receitas'], embedding_model: 'chroma-default', created_at: '2026-10-18T12:05:00-03:00', sqlite_path: null, vector_store_dir: null, note_count: 7 },
+];
+let mockActiveVaultId = 'obsidian';
+
+const mockVaultId = (name: string): string =>
+  name.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'vault';
 
 export const bridge = {
   /**
@@ -1548,6 +1604,82 @@ export const bridge = {
     const index = MOCK_CORPUS_ROOTS.findIndex((item) => item.root === root);
     const removed = index >= 0 ? MOCK_CORPUS_ROOTS.splice(index, 1)[0].notes_count : 0;
     return { ok: true, removed_notes: removed };
+  },
+
+  listVaults: async (): Promise<VaultList> => {
+    if (isDesktopApp() && window.pywebview?.api.listVaults) {
+      return window.pywebview.api.listVaults();
+    }
+    return { active: mockActiveVaultId, vaults: MOCK_VAULTS.map((vault) => ({ ...vault })) };
+  },
+
+  createVault: async (name: string, icon: VaultIconId, color: VaultColor, folders: string[]): Promise<VaultMutationResult> => {
+    if (isDesktopApp() && window.pywebview?.api.createVault) {
+      return window.pywebview.api.createVault(name, icon, color, folders);
+    }
+    if (!name.trim()) {
+      return { ok: false, message: 'O nome da vault não pode ser vazio.' };
+    }
+    const id = mockVaultId(name);
+    const vault: Vault = {
+      id: MOCK_VAULTS.some((item) => item.id === id) ? `${id}-2` : id,
+      name: name.trim(),
+      icon,
+      color,
+      folders,
+      embedding_model: 'chroma-default',
+      created_at: new Date().toISOString(),
+      sqlite_path: null,
+      vector_store_dir: null,
+      note_count: 0,
+    };
+    MOCK_VAULTS.push(vault);
+    return { ok: true, vault };
+  },
+
+  updateVault: async (vaultId: string, patch: VaultPatch): Promise<VaultMutationResult> => {
+    if (isDesktopApp() && window.pywebview?.api.updateVault) {
+      return window.pywebview.api.updateVault(vaultId, patch);
+    }
+    const vault = MOCK_VAULTS.find((item) => item.id === vaultId);
+    if (!vault) {
+      return { ok: false, message: `vault não encontrada: ${vaultId}` };
+    }
+    Object.assign(vault, patch);
+    return { ok: true, vault: { ...vault } };
+  },
+
+  deleteVault: async (vaultId: string, confirm: string): Promise<VaultMutationResult> => {
+    if (isDesktopApp() && window.pywebview?.api.deleteVault) {
+      return window.pywebview.api.deleteVault(vaultId, confirm);
+    }
+    const index = MOCK_VAULTS.findIndex((item) => item.id === vaultId);
+    if (index < 0) {
+      return { ok: false, message: `vault não encontrada: ${vaultId}` };
+    }
+    if (MOCK_VAULTS.length === 1) {
+      return { ok: false, message: 'Não é possível excluir a única vault.' };
+    }
+    if (confirm !== MOCK_VAULTS[index].name) {
+      return { ok: false, message: 'Digite o nome da vault para confirmar a exclusão.' };
+    }
+    MOCK_VAULTS.splice(index, 1);
+    if (mockActiveVaultId === vaultId) {
+      mockActiveVaultId = MOCK_VAULTS[0].id;
+    }
+    return { ok: true, active: mockActiveVaultId };
+  },
+
+  selectVault: async (vaultId: string): Promise<VaultMutationResult> => {
+    if (isDesktopApp() && window.pywebview?.api.selectVault) {
+      return window.pywebview.api.selectVault(vaultId);
+    }
+    const vault = MOCK_VAULTS.find((item) => item.id === vaultId);
+    if (!vault) {
+      return { ok: false, message: `vault não encontrada: ${vaultId}` };
+    }
+    mockActiveVaultId = vault.id;
+    return { ok: true, vault: { ...vault } };
   },
 
   reindexNote: async (noteId: string): Promise<NoteReindexResult> => {

@@ -184,7 +184,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def use_legacy_sqlite_when_default(self) -> "Settings":
         if "sqlite_path" not in self.model_fields_set:
-            self.sqlite_path = resolve_legacy_sqlite_path(self.sqlite_path)
+            # __dict__ e nao setattr: atribuir marcaria sqlite_path como explicito e quebraria a vault ativa.
+            self.__dict__["sqlite_path"] = resolve_legacy_sqlite_path(self.sqlite_path)
         return self
 
     @classmethod
@@ -206,9 +207,49 @@ class Settings(BaseSettings):
         )
 
 
+def vault_dir(base: Settings, vault_id: str) -> Path:
+    return base.data_dir / "vaults" / vault_id
+
+
+def _vault_overrides(vault: Any, base: Settings) -> dict[str, Any]:
+    folder = vault_dir(base, vault.id)
+    return {
+        "sqlite_path": Path(vault.sqlite_path) if vault.sqlite_path else folder / "escolio.sqlite3",
+        "vector_store_dir": Path(vault.vector_store_dir) if vault.vector_store_dir else folder / "vector_store",
+        "notes_dir": folder / "notes",
+        "embedding_model": vault.embedding_model or base.embedding_model,
+    }
+
+
+def settings_for_vault(vault: Any, base: Settings) -> Settings:
+    """Copia de `base` apontando para o banco, Chroma e notas da vault. results_dir fica global."""
+    return base.model_copy(update=_vault_overrides(vault, base))
+
+
+def base_settings() -> Settings:
+    """Settings sem a vault ativa aplicada (usado pelo registro de vaults)."""
+    return Settings()
+
+
+def _apply_active_vault(base: Settings) -> Settings:
+    from escolio.app.vaults import active_vault, registry_path
+
+    if not registry_path(base).exists():
+        return base
+    vault = active_vault(base)
+    explicit = base.model_fields_set
+    # ponytail: embedding_model sempre vem da vault (vetores dependem dele); os caminhos respeitam env explicito.
+    overrides = {
+        key: value
+        for key, value in _vault_overrides(vault, base).items()
+        if key not in explicit or key == "embedding_model"
+    }
+    return base.model_copy(update=overrides) if overrides else base
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    return _apply_active_vault(Settings())
 
 
 def user_settings_path_for(settings: Settings | None = None) -> Path:
