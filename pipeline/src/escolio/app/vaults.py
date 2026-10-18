@@ -225,16 +225,20 @@ def delete_vault(vault_id: str, base: Settings) -> Vault:
     vault = _find(registry, vault_id)
     if len(registry.vaults) == 1:
         raise VaultError("nao e possivel excluir a unica vault")
+    # So apaga o que o app criou; origem e caminhos customizados (vault migrada) ficam intactos.
+    # A pasta sai antes do registro: se o disco recusar, a vault continua na lista e da para tentar de novo.
+    if vault.sqlite_path is None and vault.vector_store_dir is None:
+        folder = vault_dir(base, vault.id)
+        if folder.exists():
+            try:
+                shutil.rmtree(folder)
+            except OSError as exc:
+                raise VaultError(f"nao foi possivel apagar {folder}: {exc}") from exc
     registry.vaults = [item for item in registry.vaults if item.id != vault_id]
     if registry.active == vault_id:
         registry.active = registry.vaults[0].id
     save_registry(registry, base)
     get_settings.cache_clear()
-    # So apaga o que o app criou; origem e caminhos customizados (vault migrada) ficam intactos.
-    if vault.sqlite_path is None and vault.vector_store_dir is None:
-        folder = vault_dir(base, vault.id)
-        if folder.exists():
-            shutil.rmtree(folder)
     return vault
 
 

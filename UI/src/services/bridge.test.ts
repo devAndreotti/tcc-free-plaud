@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bridge } from './bridge';
 
 describe('bridge watcher and audio (mock mode)', () => {
@@ -67,6 +67,20 @@ describe('isDesktopApp (lazy PyWebView detection)', () => {
 
   it('falls back to mock when window.pywebview is absent', async () => {
     expect(await bridge.selectFolder()).toContain('mock');
+  });
+
+  it('no app empacotado espera o pywebviewready em vez de cair no mock (regressao)', async () => {
+    // Build de produção: a primeira chamada sai antes do PyWebView injetar a API.
+    vi.stubEnv('DEV', false);
+    try {
+      const pending = bridge.listVaults();
+      const real = { active: 'area-de-ti', vaults: [] };
+      (window as unknown as { pywebview: { api: unknown } }).pywebview = { api: { listVaults: async () => real } };
+      window.dispatchEvent(new Event('pywebviewready'));
+      expect(await pending).toBe(real);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('delegates every bridge method to window.pywebview.api once it becomes available', async () => {

@@ -19,6 +19,18 @@
 const isDesktopApp = (): boolean =>
   typeof window !== 'undefined' && 'pywebview' in window && Boolean(window.pywebview?.api);
 
+// No app (build de produção) o PyWebView injeta a API depois do bundle e avisa com 'pywebviewready'.
+// As chamadas esperam esse aviso: sem isso, as da abertura caíam no mock (vaults e números de exemplo na tela).
+// Em dev e nos testes (navegador, Vitest, Playwright) não há PyWebView e o mock responde na hora.
+let desktopReady: Promise<boolean> | null = null;
+const whenDesktopReady = (): Promise<boolean> => {
+  if (isDesktopApp() || import.meta.env.DEV) return Promise.resolve(isDesktopApp());
+  desktopReady ??= new Promise((resolve) => {
+    window.addEventListener('pywebviewready', () => resolve(isDesktopApp()), { once: true });
+  });
+  return desktopReady;
+};
+
 // ─── Declaração de tipos da API Python exposta pelo PyWebView ───────────────
 /** Metadados de um arquivo Markdown retornado pelo scanVault */
 export interface MarkdownNodeRaw {
@@ -1001,7 +1013,7 @@ export const bridge = {
     message: string,
     attachmentName?: string
   ): Promise<string> => {
-    if (isDesktopApp() && window.pywebview?.api) {
+    if ((await whenDesktopReady()) && window.pywebview?.api) {
       // Produção: delega ao backend Python via PyWebView
       return window.pywebview.api.sendMessage(message, attachmentName);
     }
@@ -1010,14 +1022,14 @@ export const bridge = {
   },
 
   askCorpus: async (message: string, strategy?: AskStrategy, sourceRoot?: string | null): Promise<AskResult> => {
-    if (isDesktopApp() && window.pywebview?.api.askCorpus) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.askCorpus) {
       // Sem pasta escolhida, o backend recebe só (message, strategy): corpus inteiro.
       return sourceRoot
         ? window.pywebview.api.askCorpus(message, strategy, sourceRoot)
         : window.pywebview.api.askCorpus(message, strategy);
     }
     // Backend antigo (ou mocks de E2E) só expõem sendMessage: vira resposta sem citações.
-    if (isDesktopApp() && window.pywebview?.api.sendMessage) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.sendMessage) {
       return plainAskResult(message, await window.pywebview.api.sendMessage(message));
     }
     return mockAskCorpus(message, strategy);
@@ -1029,7 +1041,7 @@ export const bridge = {
    * Em produção: chama window.pywebview.api.selectFolder().
    */
   selectFolder: async (): Promise<string> => {
-    if (isDesktopApp() && window.pywebview?.api) {
+    if ((await whenDesktopReady()) && window.pywebview?.api) {
       return window.pywebview.api.selectFolder();
     }
     // Mock de desenvolvimento: simula delay e retorna caminho fictício
@@ -1042,7 +1054,7 @@ export const bridge = {
    * Em dev: retorna lista de arquivos fictícios.
    */
   scanVault: async (folderPath: string): Promise<MarkdownNodeRaw[]> => {
-    if (isDesktopApp() && window.pywebview?.api) {
+    if ((await whenDesktopReady()) && window.pywebview?.api) {
       return window.pywebview.api.scanVault(folderPath);
     }
     // Mock de desenvolvimento
@@ -1062,7 +1074,7 @@ export const bridge = {
    * Em dev: no-op.
    */
   saveVaultPath: async (path: string): Promise<boolean> => {
-    if (isDesktopApp() && window.pywebview?.api) {
+    if ((await whenDesktopReady()) && window.pywebview?.api) {
       return window.pywebview.api.saveVaultPath(path);
     }
     // Mock: simula sucesso silencioso
@@ -1075,7 +1087,7 @@ export const bridge = {
    * Em dev: retorna string vazia.
    */
   loadVaultPath: async (): Promise<string> => {
-    if (isDesktopApp() && window.pywebview?.api) {
+    if ((await whenDesktopReady()) && window.pywebview?.api) {
       return window.pywebview.api.loadVaultPath();
     }
     // Mock: sem persistência em dev
@@ -1083,7 +1095,7 @@ export const bridge = {
   },
 
   indexVault: async (folderPath: string): Promise<IndexVaultResult> => {
-    if (isDesktopApp() && window.pywebview?.api.indexVault) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.indexVault) {
       return window.pywebview.api.indexVault(folderPath);
     }
     await new Promise((resolve) => setTimeout(resolve, 700));
@@ -1100,7 +1112,7 @@ export const bridge = {
   },
 
   startIndexJob: async (folderPath: string, rebuild = false): Promise<IndexJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.startIndexJob) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startIndexJob) {
       return window.pywebview.api.startIndexJob(folderPath, rebuild);
     }
     console.debug(`[Bridge Mock] startIndexJob: ${folderPath} rebuild=${String(rebuild)}`);
@@ -1109,7 +1121,7 @@ export const bridge = {
   },
 
   getIndexJob: async (jobId: string): Promise<IndexJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.getIndexJob) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getIndexJob) {
       return window.pywebview.api.getIndexJob(jobId);
     }
     console.debug(`[Bridge Mock] getIndexJob: ${jobId}`);
@@ -1117,7 +1129,7 @@ export const bridge = {
   },
 
   cancelIndexJob: async (jobId: string): Promise<IndexJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.cancelIndexJob) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.cancelIndexJob) {
       return window.pywebview.api.cancelIndexJob(jobId);
     }
     console.debug(`[Bridge Mock] cancelIndexJob: ${jobId}`);
@@ -1125,7 +1137,7 @@ export const bridge = {
   },
 
   startAudioCapture: async (): Promise<AudioJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.startAudioCapture) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startAudioCapture) {
       return window.pywebview.api.startAudioCapture();
     }
     console.debug('[Bridge Mock] startAudioCapture');
@@ -1134,7 +1146,7 @@ export const bridge = {
   },
 
   getAudioCapture: async (jobId: string): Promise<AudioJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.getAudioCapture) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getAudioCapture) {
       return window.pywebview.api.getAudioCapture(jobId);
     }
     console.debug(`[Bridge Mock] getAudioCapture: ${jobId}`);
@@ -1142,7 +1154,7 @@ export const bridge = {
   },
 
   stopAudioCapture: async (jobId: string): Promise<AudioJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.stopAudioCapture) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.stopAudioCapture) {
       return window.pywebview.api.stopAudioCapture(jobId);
     }
     console.debug(`[Bridge Mock] stopAudioCapture: ${jobId}`);
@@ -1151,7 +1163,7 @@ export const bridge = {
   },
 
   cancelAudioCapture: async (jobId: string): Promise<AudioJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.cancelAudioCapture) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.cancelAudioCapture) {
       return window.pywebview.api.cancelAudioCapture(jobId);
     }
     console.debug(`[Bridge Mock] cancelAudioCapture: ${jobId}`);
@@ -1159,7 +1171,7 @@ export const bridge = {
   },
 
   listVoiceModels: async (): Promise<VoiceModelInfo[]> => {
-    if (isDesktopApp() && window.pywebview?.api.listVoiceModels) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.listVoiceModels) {
       return window.pywebview.api.listVoiceModels();
     }
     console.debug('[Bridge Mock] listVoiceModels');
@@ -1167,7 +1179,7 @@ export const bridge = {
   },
 
   startVoiceModelDownload: async (modelId: string): Promise<VoiceModelDownloadSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.startVoiceModelDownload) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startVoiceModelDownload) {
       return window.pywebview.api.startVoiceModelDownload(modelId);
     }
     console.debug(`[Bridge Mock] startVoiceModelDownload: ${modelId}`);
@@ -1176,7 +1188,7 @@ export const bridge = {
   },
 
   getVoiceModelDownload: async (jobId: string): Promise<VoiceModelDownloadSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.getVoiceModelDownload) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getVoiceModelDownload) {
       return window.pywebview.api.getVoiceModelDownload(jobId);
     }
     console.debug(`[Bridge Mock] getVoiceModelDownload: ${jobId}`);
@@ -1184,7 +1196,7 @@ export const bridge = {
   },
 
   cancelVoiceModelDownload: async (jobId: string): Promise<VoiceModelDownloadSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.cancelVoiceModelDownload) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.cancelVoiceModelDownload) {
       return window.pywebview.api.cancelVoiceModelDownload(jobId);
     }
     console.debug(`[Bridge Mock] cancelVoiceModelDownload: ${jobId}`);
@@ -1192,7 +1204,7 @@ export const bridge = {
   },
 
   startWatcher: async (folderPath: string): Promise<WatcherStartResult> => {
-    if (isDesktopApp() && window.pywebview?.api.startWatcher) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startWatcher) {
       return window.pywebview.api.startWatcher(folderPath);
     }
     console.debug(`[Bridge Mock] startWatcher: ${folderPath}`);
@@ -1202,7 +1214,7 @@ export const bridge = {
   },
 
   stopWatcher: async (): Promise<WatcherStartResult> => {
-    if (isDesktopApp() && window.pywebview?.api.stopWatcher) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.stopWatcher) {
       return window.pywebview.api.stopWatcher();
     }
     console.debug("[Bridge Mock] stopWatcher");
@@ -1212,14 +1224,14 @@ export const bridge = {
   },
 
   getWatcherStatus: async (): Promise<WatcherStatus> => {
-    if (isDesktopApp() && window.pywebview?.api.getWatcherStatus) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getWatcherStatus) {
       return window.pywebview.api.getWatcherStatus();
     }
     return { active: mockWatcherActive, directory: mockWatcherDirectory };
   },
 
   indexDroppedFiles: async (names: string[]): Promise<DroppedFilesEnqueueResult> => {
-    if (isDesktopApp() && window.pywebview?.api.indexDroppedFiles) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.indexDroppedFiles) {
       return window.pywebview.api.indexDroppedFiles(names);
     }
     // Fora do app desktop o navegador não expõe o caminho do arquivo.
@@ -1227,14 +1239,14 @@ export const bridge = {
   },
 
   pollDroppedFiles: async (): Promise<DroppedFileEvent[]> => {
-    if (isDesktopApp() && window.pywebview?.api.pollDroppedFiles) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.pollDroppedFiles) {
       return window.pywebview.api.pollDroppedFiles();
     }
     return [];
   },
 
   getBackendSettings: async (): Promise<BackendSettings> => {
-    if (isDesktopApp() && window.pywebview?.api.getBackendSettings) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getBackendSettings) {
       return window.pywebview.api.getBackendSettings();
     }
     return {
@@ -1418,7 +1430,7 @@ export const bridge = {
   },
 
   getDoctor: async (): Promise<DoctorReport> => {
-    if (isDesktopApp() && window.pywebview?.api.getDoctor) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getDoctor) {
       return window.pywebview.api.getDoctor();
     }
     return {
@@ -1441,7 +1453,7 @@ export const bridge = {
   },
 
   listSettingsPresets: async (): Promise<SettingPreset[]> => {
-    if (isDesktopApp() && window.pywebview?.api.listSettingsPresets) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.listSettingsPresets) {
       return window.pywebview.api.listSettingsPresets();
     }
     return [
@@ -1459,7 +1471,7 @@ export const bridge = {
   },
 
   previewSettingsPreset: async (name: string): Promise<SettingPresetResult> => {
-    if (isDesktopApp() && window.pywebview?.api.previewSettingsPreset) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.previewSettingsPreset) {
       return window.pywebview.api.previewSettingsPreset(name);
     }
     const preset = (await bridge.listSettingsPresets()).find((item) => item.key === name);
@@ -1474,7 +1486,7 @@ export const bridge = {
   },
 
   applySettingsPreset: async (name: string): Promise<SettingPresetResult> => {
-    if (isDesktopApp() && window.pywebview?.api.applySettingsPreset) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.applySettingsPreset) {
       return window.pywebview.api.applySettingsPreset(name);
     }
     const preview = await bridge.previewSettingsPreset(name);
@@ -1483,7 +1495,7 @@ export const bridge = {
   },
 
   testAnswerProvider: async (): Promise<AnswerProviderTestResult> => {
-    if (isDesktopApp() && window.pywebview?.api.testAnswerProvider) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.testAnswerProvider) {
       return window.pywebview.api.testAnswerProvider();
     }
     await new Promise((resolve) => setTimeout(resolve, 300));
@@ -1498,8 +1510,9 @@ export const bridge = {
   },
 
   listAnswerModels: async (): Promise<ModelDiscoveryResult> => {
+    const desktop = await whenDesktopReady();
     const pywebviewApi = globalThis.window?.pywebview?.api;
-    if (isDesktopApp() && pywebviewApi?.listAnswerModels) {
+    if (desktop && pywebviewApi?.listAnswerModels) {
       return pywebviewApi.listAnswerModels();
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -1518,7 +1531,7 @@ export const bridge = {
   },
 
   saveApiKey: async (apiKey: string): Promise<SaveApiKeyResult> => {
-    if (isDesktopApp() && window.pywebview?.api.saveApiKey) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.saveApiKey) {
       return window.pywebview.api.saveApiKey(apiKey);
     }
     console.debug('[Bridge Mock] saveApiKey:', apiKey ? '<redacted>' : '<empty>');
@@ -1533,7 +1546,7 @@ export const bridge = {
     key: string,
     value: string | number | boolean | null
   ): Promise<{ ok: boolean }> => {
-    if (isDesktopApp() && window.pywebview?.api.saveBackendSetting) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.saveBackendSetting) {
       return window.pywebview.api.saveBackendSetting(key, value);
     }
     console.debug(`[Bridge Mock] saveBackendSetting: ${key}=${String(value)}`);
@@ -1541,7 +1554,7 @@ export const bridge = {
   },
 
   saveBackendSettings: async (values: Record<string, string>): Promise<BackendSettings> => {
-    if (isDesktopApp() && window.pywebview?.api.saveBackendSettings) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.saveBackendSettings) {
       return window.pywebview.api.saveBackendSettings(values);
     }
     console.debug('[Bridge Mock] saveBackendSettings:', values);
@@ -1549,7 +1562,7 @@ export const bridge = {
   },
 
   listCorpusRoots: async (): Promise<CorpusRoot[]> => {
-    if (isDesktopApp()) {
+    if ((await whenDesktopReady())) {
       // Backend sem o método devolve lista vazia, sem pastas inventadas.
       return window.pywebview?.api.listCorpusRoots ? window.pywebview.api.listCorpusRoots() : [];
     }
@@ -1557,7 +1570,7 @@ export const bridge = {
   },
 
   listNotes: async (): Promise<NoteSummary[]> => {
-    if (isDesktopApp() && window.pywebview?.api.listNotes) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.listNotes) {
       return window.pywebview.api.listNotes();
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -1573,7 +1586,7 @@ export const bridge = {
   },
 
   getNoteDetail: async (noteId: string): Promise<NoteDetail> => {
-    if (isDesktopApp() && window.pywebview?.api.getNoteDetail) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getNoteDetail) {
       return window.pywebview.api.getNoteDetail(noteId);
     }
     await new Promise((resolve) => setTimeout(resolve, 180));
@@ -1583,7 +1596,7 @@ export const bridge = {
   },
 
   deleteNote: async (noteId: string, confirmation: string): Promise<NoteDeleteResult> => {
-    if (isDesktopApp() && window.pywebview?.api.deleteNote) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.deleteNote) {
       return window.pywebview.api.deleteNote(noteId, confirmation);
     }
     if (confirmation !== 'APAGAR') {
@@ -1594,7 +1607,7 @@ export const bridge = {
   },
 
   removeCorpusRoot: async (root: string, confirmation: string): Promise<CorpusRootRemoveResult> => {
-    if (isDesktopApp() && window.pywebview?.api.removeCorpusRoot) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.removeCorpusRoot) {
       return window.pywebview.api.removeCorpusRoot(root, confirmation);
     }
     if (confirmation !== 'REMOVER') {
@@ -1607,14 +1620,14 @@ export const bridge = {
   },
 
   listVaults: async (): Promise<VaultList> => {
-    if (isDesktopApp() && window.pywebview?.api.listVaults) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.listVaults) {
       return window.pywebview.api.listVaults();
     }
     return { active: mockActiveVaultId, vaults: MOCK_VAULTS.map((vault) => ({ ...vault })) };
   },
 
   createVault: async (name: string, icon: VaultIconId, color: VaultColor, folders: string[]): Promise<VaultMutationResult> => {
-    if (isDesktopApp() && window.pywebview?.api.createVault) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.createVault) {
       return window.pywebview.api.createVault(name, icon, color, folders);
     }
     if (!name.trim()) {
@@ -1638,7 +1651,7 @@ export const bridge = {
   },
 
   updateVault: async (vaultId: string, patch: VaultPatch): Promise<VaultMutationResult> => {
-    if (isDesktopApp() && window.pywebview?.api.updateVault) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.updateVault) {
       return window.pywebview.api.updateVault(vaultId, patch);
     }
     const vault = MOCK_VAULTS.find((item) => item.id === vaultId);
@@ -1650,7 +1663,7 @@ export const bridge = {
   },
 
   deleteVault: async (vaultId: string, confirm: string): Promise<VaultMutationResult> => {
-    if (isDesktopApp() && window.pywebview?.api.deleteVault) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.deleteVault) {
       return window.pywebview.api.deleteVault(vaultId, confirm);
     }
     const index = MOCK_VAULTS.findIndex((item) => item.id === vaultId);
@@ -1671,7 +1684,7 @@ export const bridge = {
   },
 
   selectVault: async (vaultId: string): Promise<VaultMutationResult> => {
-    if (isDesktopApp() && window.pywebview?.api.selectVault) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.selectVault) {
       return window.pywebview.api.selectVault(vaultId);
     }
     const vault = MOCK_VAULTS.find((item) => item.id === vaultId);
@@ -1683,7 +1696,7 @@ export const bridge = {
   },
 
   reindexNote: async (noteId: string): Promise<NoteReindexResult> => {
-    if (isDesktopApp() && window.pywebview?.api.reindexNote) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.reindexNote) {
       return window.pywebview.api.reindexNote(noteId);
     }
     await new Promise((resolve) => setTimeout(resolve, 350));
@@ -1697,7 +1710,7 @@ export const bridge = {
   },
 
   selectBenchmarkSuite: async (): Promise<string> => {
-    if (isDesktopApp() && window.pywebview?.api.selectBenchmarkSuite) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.selectBenchmarkSuite) {
       return window.pywebview.api.selectBenchmarkSuite();
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -1705,7 +1718,7 @@ export const bridge = {
   },
 
   runBenchmarkCompare: async (suitePath: string): Promise<BenchmarkCompareResult> => {
-    if (isDesktopApp() && window.pywebview?.api.runBenchmarkCompare) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.runBenchmarkCompare) {
       return window.pywebview.api.runBenchmarkCompare(suitePath);
     }
     console.debug(`[Bridge Mock] runBenchmarkCompare: ${suitePath}`);
