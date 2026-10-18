@@ -57,7 +57,7 @@ from escolio.notes.service import delete_note, get_note_detail, list_notes, rein
 from escolio.providers.answer import test_answer_provider
 from escolio.providers.model_discovery import list_answer_models
 from escolio.retrieval.models import AskResponse
-from escolio.storage.sqlite import init_sqlite
+from escolio.storage.sqlite import init_sqlite, list_corpus_roots
 from escolio.storage.vector import close_vector_stores
 from escolio.tui.actions import (
     ask_corpus,
@@ -111,16 +111,20 @@ class Api:
     def _vault_row(self, vault, base) -> dict:
         db_path = settings_for_vault(vault, base).sqlite_path
         note_count = 0
+        roots: list[dict] = []
         if db_path.exists():
             try:  # leitura pura: nao migra o banco de outra vault
                 connection = sqlite3.connect(f'file:{db_path.as_posix()}?mode=ro', uri=True)
+                connection.row_factory = sqlite3.Row
                 try:
                     note_count = int(connection.execute('SELECT COUNT(*) FROM notes').fetchone()[0])
+                    # Pastas reais da vault (o registro so guarda as da criacao/migracao).
+                    roots = list_corpus_roots(connection)
                 finally:
                     connection.close()
-            except sqlite3.Error:
-                note_count = 0
-        return {**vault.model_dump(), 'note_count': note_count}
+            except sqlite3.Error:  # banco vazio ou de antes da tabela corpus_roots
+                pass
+        return {**vault.model_dump(), 'note_count': note_count, 'roots': roots}
 
     def listVaults(self) -> dict:
         """Vaults cadastradas, com a vault ativa e a contagem de notas de cada uma."""

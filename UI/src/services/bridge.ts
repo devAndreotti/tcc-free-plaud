@@ -421,6 +421,8 @@ export interface Vault {
   sqlite_path: string | null;
   vector_store_dir: string | null;
   note_count?: number;
+  /** Pastas indexadas no banco da vault, com as notas de cada uma (listVaults). */
+  roots?: CorpusRoot[];
 }
 
 export interface VaultList {
@@ -995,8 +997,8 @@ let mockWatcherDirectory: string | null = null;
 
 // ─── Vaults (mock) ──────────────────────────────────────────────────────────
 const MOCK_VAULTS: Vault[] = [
-  { id: 'obsidian', name: 'Obsidian', icon: 'notes', color: 'violet', folders: ['C:/Notas/Obsidian'], embedding_model: 'chroma-default', created_at: '2026-10-18T12:00:00-03:00', sqlite_path: null, vector_store_dir: null, note_count: 42 },
-  { id: 'culinaria', name: 'Culinária', icon: 'layers', color: 'amber', folders: ['C:/Notas/Receitas'], embedding_model: 'chroma-default', created_at: '2026-10-18T12:05:00-03:00', sqlite_path: null, vector_store_dir: null, note_count: 7 },
+  { id: 'obsidian', name: 'Obsidian', icon: 'notes', color: 'violet', folders: ['C:/Notas/Obsidian'], embedding_model: 'chroma-default', created_at: '2026-10-18T12:00:00-03:00', sqlite_path: null, vector_store_dir: null, note_count: 42, roots: [{ root: 'D:\\Notas\\Obsidian', notes_count: 42 }] },
+  { id: 'culinaria', name: 'Culinária', icon: 'layers', color: 'amber', folders: ['C:/Notas/Receitas'], embedding_model: 'chroma-default', created_at: '2026-10-18T12:05:00-03:00', sqlite_path: null, vector_store_dir: null, note_count: 7, roots: [{ root: 'D:\\Notas\\Culinaria', notes_count: 7 }] },
 ];
 let mockActiveVaultId = 'obsidian';
 

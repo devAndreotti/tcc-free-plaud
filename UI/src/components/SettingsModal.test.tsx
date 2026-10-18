@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsModal from './SettingsModal';
+import { VaultsProvider } from '../contexts/VaultsContext';
 
 const bridgeMock = vi.hoisted(() => ({
   getBackendSettings: vi.fn(),
@@ -15,6 +16,7 @@ const bridgeMock = vi.hoisted(() => ({
   startVoiceModelDownload: vi.fn(),
   getVoiceModelDownload: vi.fn(),
   cancelVoiceModelDownload: vi.fn(),
+  listVaults: vi.fn(),
 }));
 
 vi.mock('../services/bridge', () => ({
@@ -41,12 +43,16 @@ const backendSettings = {
   vector_chunks_count: 2,
   settings_presets: [],
   doctor: {
-    status: 'ok',
-    checks: [],
+    status: 'error',
+    checks: [
+      { code: 'sqlite', status: 'ok', message: '2 chunks no SQLite.', action: null, latency_ms: 3, details: {} },
+      { code: 'api_key', status: 'error', message: 'Chave de API não configurada.', action: 'Configure a chave em IA.', latency_ms: null, details: {} },
+      { code: 'audio.device', status: 'warning', message: 'Sem GPU disponível; transcrição em CPU.', action: null, latency_ms: 150, details: {} },
+    ],
     latency_ms: 1,
     ok_count: 1,
-    warning_count: 0,
-    error_count: 0,
+    warning_count: 1,
+    error_count: 1,
   },
   settings_catalog: [
     {
@@ -150,6 +156,26 @@ const moonshineModel = {
   selectable: true,
 };
 
+const notasList = {
+  active: 'notas',
+  vaults: [
+    {
+      id: 'notas',
+      name: 'Notas pessoais',
+      icon: 'notes',
+      color: 'violet',
+      folders: [],
+      embedding_model: null,
+      created_at: '2026-10-18T12:00:00-03:00',
+      sqlite_path: null,
+      vector_store_dir: null,
+    },
+  ],
+};
+
+// O modal lê a vault ativa pelo VaultsProvider, como no app.
+const renderModal = (ui: React.ReactNode) => render(<VaultsProvider>{ui}</VaultsProvider>);
+
 describe('SettingsModal', () => {
   afterEach(() => {
     cleanup();
@@ -167,8 +193,10 @@ describe('SettingsModal', () => {
     bridgeMock.startVoiceModelDownload.mockReset();
     bridgeMock.getVoiceModelDownload.mockReset();
     bridgeMock.cancelVoiceModelDownload.mockReset();
+    bridgeMock.listVaults.mockReset();
 
     bridgeMock.getBackendSettings.mockResolvedValue(backendSettings);
+    bridgeMock.listVaults.mockResolvedValue(notasList);
     bridgeMock.listVoiceModels.mockResolvedValue([]);
     bridgeMock.listAnswerModels.mockResolvedValue({
       provider: 'ollama',
@@ -185,7 +213,7 @@ describe('SettingsModal', () => {
   });
 
   it('abre por padrão na aba Voz com os campos de transcrição', async () => {
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
 
     expect(await screen.findByLabelText('Modelo de transcrição (voz)')).toBeTruthy();
     expect(screen.queryByLabelText('Modelo de resposta')).toBeNull();
@@ -193,7 +221,7 @@ describe('SettingsModal', () => {
 
   it('lista modelos e preenche draft de answer_model ao clicar', async () => {
     const user = userEvent.setup();
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'IA' }));
     await screen.findByLabelText('Modelo de resposta');
@@ -281,7 +309,7 @@ describe('SettingsModal', () => {
       message: 'Modelo baixado e verificado.',
     });
 
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     await user.click(screen.getByRole('radio', { name: 'Moonshine Tiny' }));
@@ -349,7 +377,7 @@ describe('SettingsModal', () => {
       message: 'Modelo baixado e verificado.',
     });
 
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     // silero-vad nunca aparece como opcao de modelo de transcricao.
@@ -375,7 +403,7 @@ describe('SettingsModal', () => {
     const user = userEvent.setup();
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
 
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     // Com Whisper Small selecionado (default do draft), todo idioma esta habilitado.
@@ -398,7 +426,7 @@ describe('SettingsModal', () => {
     const user = userEvent.setup();
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
 
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     // Draft comeca em "pt" (Whisper Small); trocar para Moonshine (so "en")
@@ -412,7 +440,7 @@ describe('SettingsModal', () => {
     const user = userEvent.setup();
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
 
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
     expect(screen.getByText('Nenhuma alteração')).toBeTruthy();
 
@@ -436,7 +464,7 @@ describe('SettingsModal', () => {
       message: 'Servidor indisponivel.',
     });
 
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'IA' }));
     await screen.findByLabelText('Modelo de resposta');
@@ -449,7 +477,7 @@ describe('SettingsModal', () => {
   it('regressão: clique no overlay fora do card chama onClose', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    render(<SettingsModal isOpen onClose={onClose} />);
+    renderModal(<SettingsModal isOpen onClose={onClose} />);
 
     await user.click(screen.getByRole('button', { name: 'Fechar configurações clicando fora' }));
 
@@ -459,7 +487,7 @@ describe('SettingsModal', () => {
   it('regressão: clique dentro do card não chama onClose', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    render(<SettingsModal isOpen onClose={onClose} />);
+    renderModal(<SettingsModal isOpen onClose={onClose} />);
 
     await user.click(screen.getByRole('dialog'));
 
@@ -468,11 +496,32 @@ describe('SettingsModal', () => {
 
   it('regressão: mousedown no card e click no overlay não chama onClose', async () => {
     const onClose = vi.fn();
-    render(<SettingsModal isOpen onClose={onClose} />);
+    renderModal(<SettingsModal isOpen onClose={onClose} />);
 
     fireEvent.mouseDown(screen.getByRole('dialog'));
     fireEvent.click(screen.getByRole('dialog').parentElement as HTMLElement);
 
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('diagnóstico: título com a vault ativa, grupos, rótulos traduzidos e ação do erro', async () => {
+    renderModal(<SettingsModal isOpen initialTab="geral" onClose={vi.fn()} />);
+
+    expect(await screen.findByText('Banco de notas (SQLite)')).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 3, name: /Diagnóstico da vault\s*Notas pessoais/ })).toBeTruthy();
+    for (const title of ['Índice', 'IA', 'Voz']) {
+      expect(screen.getByRole('heading', { level: 4, name: title })).toBeTruthy();
+    }
+    expect(screen.getByText('Configure a chave em IA.')).toBeTruthy();
+    expect(screen.getByText('3 verificações · 1 ms')).toBeTruthy();
+    expect(screen.queryByText(/Corpus:/)).toBeNull();
+  });
+
+  it('diagnóstico: sem vault ativa, o título fica só em Diagnóstico', async () => {
+    bridgeMock.listVaults.mockResolvedValue({ active: '', vaults: [] });
+    renderModal(<SettingsModal isOpen initialTab="geral" onClose={vi.fn()} />);
+
+    await screen.findByText('Banco de notas (SQLite)');
+    expect(screen.getByRole('heading', { level: 3, name: 'Diagnóstico' })).toBeTruthy();
   });
 });

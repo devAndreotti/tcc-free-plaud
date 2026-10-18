@@ -16,6 +16,7 @@ import BenchmarkPanel from './components/BenchmarkPanel';
 import QueuePanel from './components/QueuePanel';
 import { bridge, type AskStrategy, type CorpusRoot } from './services/bridge';
 import { VaultsProvider } from './contexts/VaultsContext';
+import { OPEN_VAULT_MENU_EVENT } from './contexts/VaultsContextObject';
 import { useVaults } from './hooks/useVaults';
 import { QueueProvider } from './contexts/QueueContext';
 
@@ -73,6 +74,9 @@ const syncWithVaults = (chat: ChatState, vaultKey: string, vaultIds: string[]): 
   const tab = newChatTab(vaultKey);
   return { ...next, tabs: [...tabs, tab], activeTabId: tab.id, tabMessages: { ...tabMessages, [tab.id]: [] } };
 };
+
+// Chip da vault no campo de pergunta: abre o seletor de vault da sidebar.
+const openVaultMenu = () => window.dispatchEvent(new Event(OPEN_VAULT_MENU_EVENT));
 
 // Estado de conversa vazia para reutilização
 const EMPTY_MESSAGES: MessageData[] = [];
@@ -378,7 +382,7 @@ function AppContent() {
                     <div ref={messagesEndRef} aria-hidden="true" />
                   </div>
                 ) : (
-                  <WelcomeScreen />
+                  <WelcomeScreen vault={activeVault} onOpenQueue={() => navigate('queue')} />
                 )}
               </main>
             )}
@@ -402,6 +406,8 @@ function AppContent() {
                 corpusRoots={corpusRoots}
                 sourceRoot={activeSourceRoot}
                 onSourceRootChange={chooseSourceRoot}
+                vault={activeVault}
+                onOpenVaultMenu={openVaultMenu}
               />
             )}
           </div>

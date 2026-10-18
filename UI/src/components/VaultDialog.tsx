@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useVaults } from '../hooks/useVaults';
 import type { Vault, VaultColor, VaultIconId } from '../services/bridge';
-import { VAULT_COLOR_OPTIONS, VAULT_ICON_OPTIONS } from '../lib/vaultVisuals';
-import { VaultGlyph, VAULT_ICON_COMPONENTS } from './VaultGlyph';
+import VaultAppearanceFields from './VaultAppearanceFields';
+import { VaultGlyph } from './VaultGlyph';
 import { XIcon } from './Icons';
 
 interface VaultDialogProps {
@@ -47,7 +48,8 @@ const VaultDialog = ({ vault, onClose }: VaultDialogProps) => {
 
   const title = vault ? 'Editar vault' : 'Nova vault';
 
-  return (
+  // Portal no body: abre por cima do modal de Configurações (aba Vaults) e da sidebar.
+  return createPortal(
     <div className="vault-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <form className="vault-dialog" role="dialog" aria-modal="true" aria-labelledby="vault-dialog-title" onSubmit={handleSubmit}>
         <header className="vault-dialog__head">
@@ -70,42 +72,7 @@ const VaultDialog = ({ vault, onClose }: VaultDialogProps) => {
           />
         </label>
 
-        <fieldset className="vault-dialog__field">
-          <legend>Ícone</legend>
-          <div className="vault-dialog__icons">
-            {VAULT_ICON_OPTIONS.map((option) => {
-              const Glyph = VAULT_ICON_COMPONENTS[option.id];
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={`vault-dialog__icon${icon === option.id ? ' vault-dialog__icon--on' : ''}`}
-                  aria-label={`Ícone ${option.label}`}
-                  aria-pressed={icon === option.id}
-                  onClick={() => setIcon(option.id)}
-                >
-                  <Glyph size={16} />
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-
-        <fieldset className="vault-dialog__field">
-          <legend>Cor</legend>
-          <div className="vault-dialog__colors">
-            {VAULT_COLOR_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`vault-dialog__color vault-glyph--${option.id}${color === option.id ? ' vault-dialog__color--on' : ''}`}
-                aria-label={`Cor ${option.label}`}
-                aria-pressed={color === option.id}
-                onClick={() => setColor(option.id)}
-              />
-            ))}
-          </div>
-        </fieldset>
+        <VaultAppearanceFields icon={icon} color={color} onIconChange={setIcon} onColorChange={setColor} />
 
         <div className="vault-dialog__preview">
           <VaultGlyph icon={icon} color={color} size={16} />
@@ -121,7 +88,8 @@ const VaultDialog = ({ vault, onClose }: VaultDialogProps) => {
           </button>
         </footer>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 };
 

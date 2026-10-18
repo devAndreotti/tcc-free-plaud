@@ -38,6 +38,10 @@ export function VaultsProvider({ children }: Readonly<{ children: ReactNode }>) 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial da lista de vaults.
     void refresh();
+    // Indexar ou remover pastas muda as contagens (notas e pastas) mostradas no seletor e na aba Vaults.
+    const onCorpusChanged = () => void refresh();
+    window.addEventListener(CORPUS_CHANGED_EVENT, onCorpusChanged);
+    return () => window.removeEventListener(CORPUS_CHANGED_EVENT, onCorpusChanged);
   }, [refresh]);
 
   const announceSwitch = useCallback(() => {

@@ -8,7 +8,8 @@ import {
   type RefObject,
 } from 'react';
 import { PaperclipIcon, MicIcon, SendIcon, FileIcon, XIcon, LoaderIcon, ChevronDownIcon, CheckIcon } from './Icons';
-import { bridge, type AskStrategy, type AudioJobSnapshot, type CorpusRoot } from '../services/bridge';
+import { bridge, type AskStrategy, type AudioJobSnapshot, type CorpusRoot, type Vault } from '../services/bridge';
+import { VaultGlyph } from './VaultGlyph';
 
 const isAudioJobDone = (snapshot: AudioJobSnapshot) =>
   snapshot.status === 'completed' || snapshot.status === 'failed' || snapshot.status === 'cancelled';
@@ -39,6 +40,9 @@ interface ChatInputProps {
   /** Caminho da pasta escolhida, ou null para "Todas as pastas". */
   sourceRoot?: string | null;
   onSourceRootChange?: (root: string | null) => void;
+  /** Vault que vai responder: aparece no placeholder, na dica e num chip que abre o seletor de vault. */
+  vault?: Vault | null;
+  onOpenVaultMenu?: () => void;
 }
 
 const STRATEGIES: { value: AskStrategy; label: string; hint: string }[] = [
@@ -196,6 +200,8 @@ const ChatInput = ({
   corpusRoots = [],
   sourceRoot = null,
   onSourceRootChange,
+  vault = null,
+  onOpenVaultMenu,
 }: ChatInputProps) => {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
@@ -414,7 +420,7 @@ const ChatInput = ({
           ref={textareaRef}
           id="chat-textarea"
           className="chat-input"
-          placeholder="Pergunte ao seu vault…"
+          placeholder={vault ? `Pergunte à vault ${vault.name}…` : 'Pergunte ao seu vault…'}
           value={text}
           onChange={handleTextChange}
           onKeyDown={handleKeyDown}
@@ -437,6 +443,18 @@ const ChatInput = ({
             <PaperclipIcon size={17} />
           </button>
 
+          {vault && onOpenVaultMenu && (
+            <button
+              type="button"
+              className="strategy__chip composer__vault"
+              aria-label={`Vault da pergunta: ${vault.name}. Trocar vault`}
+              onClick={onOpenVaultMenu}
+            >
+              <VaultGlyph icon={vault.icon} color={vault.color} size={11} />
+              <span className="composer__vault-name">{vault.name}</span>
+              <ChevronDownIcon size={13} />
+            </button>
+          )}
           {strategy && onStrategyChange && <StrategyPicker value={strategy} onChange={onStrategyChange} />}
           {onSourceRootChange && corpusRoots.length >= 2 && (
             <SourcePicker roots={corpusRoots} value={sourceRoot} onChange={onSourceRootChange} />
@@ -489,7 +507,9 @@ const ChatInput = ({
       >
         {micStatus === 'recording' && 'Gravando… clique no microfone para parar.'}
         {micStatus === 'processing' && 'Transcrevendo áudio localmente…'}
-        {micStatus === 'idle' && (micError || 'Respostas usam só o que está indexado no vault. Enter envia, Shift+Enter quebra a linha.')}
+        {micStatus === 'idle' &&
+          (micError ||
+            `Respostas usam só o que está indexado ${vault ? `em ${vault.name}` : 'no vault'}. Enter envia, Shift+Enter quebra a linha.`)}
       </p>
     </section>
   );
