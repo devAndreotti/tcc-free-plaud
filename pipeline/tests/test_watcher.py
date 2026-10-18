@@ -1,6 +1,8 @@
 import time
 from pathlib import Path
 
+import pytest
+
 from escolio.app.config import Settings
 from escolio.corpus.dropped import DroppedFileEvent, DroppedFileIndexer
 from escolio.corpus.service import index_corpus_path
@@ -45,6 +47,18 @@ def _settings(tmp_path: Path) -> Settings:
     )
 
 
+_INDEXERS: list[DroppedFileIndexer] = []
+
+
+@pytest.fixture(autouse=True)
+def _drena_indexadores():
+    # corpus_write_lock é global: trabalho que sobra na fila de um teste (eventos repetidos de
+    # criar/editar) atrasaria o seguinte no runner lento do CI.
+    yield
+    while _INDEXERS:
+        _INDEXERS.pop().join()
+
+
 def _indexer(tmp_path: Path) -> tuple[DroppedFileIndexer, Settings, LocalVectorStore]:
     settings = _settings(tmp_path)
     store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
@@ -54,11 +68,12 @@ def _indexer(tmp_path: Path) -> tuple[DroppedFileIndexer, Settings, LocalVectorS
             path, folder=folder, settings=settings, vector_store=store
         ),
     )
+    _INDEXERS.append(indexer)
     return indexer, settings, store
 
 
 def _wait_for(indexer: DroppedFileIndexer, seen: list[DroppedFileEvent], name: str, status: str, times: int = 1) -> None:
-    deadline = time.monotonic() + 8
+    deadline = time.monotonic() + 30  # teto; um teste verde sai assim que o evento chega
     while time.monotonic() < deadline:
         seen.extend(indexer.poll_events())
         if sum(1 for e in seen if e.name == name and e.status == status) >= times:
