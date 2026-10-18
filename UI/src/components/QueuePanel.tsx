@@ -4,7 +4,8 @@ import type { SettingsTab } from './SettingsModal';
 import { useQueueContext } from '../hooks/useQueueContext';
 import Dropzone, { type DropzoneToast } from './Dropzone';
 import ToastStack from './ToastStack';
-import { FolderIcon, PlayIcon, XCircleIcon } from './Icons';
+import { FolderIcon, LoaderIcon, PlayIcon, XCircleIcon } from './Icons';
+import { notifyCorpusChanged } from '../hooks/useCorpusHealth';
 
 interface QueuePanelProps {
   onOpenSettings?: (tab?: SettingsTab) => void;
@@ -275,6 +276,7 @@ const CorpusRootsPanel = ({ roots, disabled, onReindex, onRemoved }: CorpusRoots
       }
       setMessage(`${basename(root.root)} saiu do corpus: ${notesLabel(result.removed_notes ?? 0)} removidas.`);
       cancelRemove();
+      notifyCorpusChanged();
       onRemoved();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Falha ao tirar a pasta do corpus.');
@@ -324,10 +326,10 @@ const CorpusRootsPanel = ({ roots, disabled, onReindex, onRemoved }: CorpusRoots
                   </p>
                   <label>
                     <span>Digite REMOVER para confirmar</span>
-                    <input value={typed} onChange={(event) => setTyped(event.target.value)} className="mono" autoComplete="off" />
+                    <input value={typed} onChange={(event) => setTyped(event.target.value)} className="mono" autoComplete="off" disabled={busy} />
                   </label>
                   <div className="nd__confirm-actions">
-                    <button type="button" className="btn btn--sm btn--ghost" onClick={cancelRemove}>
+                    <button type="button" className="btn btn--sm btn--ghost" onClick={cancelRemove} disabled={busy}>
                       Cancelar
                     </button>
                     <button
@@ -336,7 +338,8 @@ const CorpusRootsPanel = ({ roots, disabled, onReindex, onRemoved }: CorpusRoots
                       onClick={() => void confirmRemove(root)}
                       disabled={typed !== 'REMOVER' || busy}
                     >
-                      Remover do corpus
+                      {busy && <LoaderIcon size={14} className="spin" />}
+                      {busy ? 'Removendo…' : 'Remover do corpus'}
                     </button>
                   </div>
                 </div>

@@ -14,6 +14,7 @@ from escolio.providers.embed import Embedder
 from escolio.retrieval.models import Chunk
 from escolio.storage.sqlite import (
     delete_note_and_chunks,
+    delete_notes_and_chunks,
     get_all_notes,
     get_notes_by_id,
     init_sqlite,
@@ -205,9 +206,9 @@ def delete_notes_by_source_path(
             if _source_matches(note.source_path, target, folder=folder, recursive=recursive)
             and (not missing_only or not Path(note.source_path).exists())
         ]
-        for note_id in note_ids:
-            resolved_vector_store.delete_by_note_id(note_id)
-            delete_note_and_chunks(resolved_connection, note_id)
+        if note_ids:
+            resolved_vector_store.delete_by_note_ids(note_ids)
+            delete_notes_and_chunks(resolved_connection, note_ids)
     return len(note_ids)
 
 

@@ -388,9 +388,17 @@ def list_note_ids_by_source_path(connection: sqlite3.Connection, source_path: Pa
 
 
 def delete_note_and_chunks(connection: sqlite3.Connection, note_id: str) -> None:
-    connection.execute('DELETE FROM chunks_fts WHERE note_id = ?', (note_id,))
-    connection.execute('DELETE FROM chunks WHERE note_id = ?', (note_id,))
-    connection.execute('DELETE FROM notes WHERE note_id = ?', (note_id,))
+    delete_notes_and_chunks(connection, [note_id])
+
+
+def delete_notes_and_chunks(connection: sqlite3.Connection, note_ids: list[str]) -> None:
+    # ponytail: blocos de 500 por causa do limite de variáveis do SQLite; um commit só no fim.
+    for start in range(0, len(note_ids), 500):
+        block = note_ids[start : start + 500]
+        placeholders = ','.join('?' * len(block))
+        connection.execute(f'DELETE FROM chunks_fts WHERE note_id IN ({placeholders})', block)
+        connection.execute(f'DELETE FROM chunks WHERE note_id IN ({placeholders})', block)
+        connection.execute(f'DELETE FROM notes WHERE note_id IN ({placeholders})', block)
     connection.commit()
 
 

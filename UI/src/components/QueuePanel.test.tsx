@@ -328,4 +328,59 @@ describe('QueuePanel', () => {
     });
     expect(bridgeMock.listCorpusRoots).toHaveBeenCalledTimes(2);
   });
+
+  it('regressao: Remover do corpus mostra Removendo… e desabilita o painel enquanto a remoção roda', async () => {
+    bridgeMock.listCorpusRoots.mockResolvedValue(CORPUS_ROOTS);
+    bridgeMock.removeCorpusRoot.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    renderQueuePanel();
+
+    const row = (await screen.findByText('Culinaria')).closest('li') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Remover' }));
+    await user.type(within(row).getByLabelText('Digite REMOVER para confirmar'), 'REMOVER');
+    await user.click(within(row).getByRole('button', { name: 'Remover do corpus' }));
+
+    const pending = await within(row).findByRole('button', { name: 'Removendo…' });
+    expect((pending as HTMLButtonElement).disabled).toBe(true);
+    expect((within(row).getByLabelText('Digite REMOVER para confirmar') as HTMLInputElement).disabled).toBe(true);
+    expect((within(row).getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('regressao: Remover do corpus mostra N notas removidas, avisa a sidebar e recarrega a lista', async () => {
+    bridgeMock.listCorpusRoots.mockResolvedValueOnce(CORPUS_ROOTS).mockResolvedValue([CORPUS_ROOTS[0]]);
+    bridgeMock.removeCorpusRoot.mockResolvedValue({ ok: true, removed_notes: 7 });
+    const onCorpusChanged = vi.fn();
+    window.addEventListener('escolio:corpus-changed', onCorpusChanged);
+    const user = userEvent.setup();
+    renderQueuePanel();
+
+    const row = (await screen.findByText('Culinaria')).closest('li') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Remover' }));
+    await user.type(within(row).getByLabelText('Digite REMOVER para confirmar'), 'REMOVER');
+    await user.click(within(row).getByRole('button', { name: 'Remover do corpus' }));
+
+    expect(await screen.findByText('Culinaria saiu do corpus: 7 notas removidas.')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.queryByText('Culinaria')).toBeNull();
+    });
+    expect(bridgeMock.listCorpusRoots).toHaveBeenCalledTimes(2);
+    expect(onCorpusChanged).toHaveBeenCalled();
+    window.removeEventListener('escolio:corpus-changed', onCorpusChanged);
+  });
+
+  it('regressao: Remover do corpus sai de Removendo… e mostra o erro quando o bridge rejeita', async () => {
+    bridgeMock.listCorpusRoots.mockResolvedValue(CORPUS_ROOTS);
+    bridgeMock.removeCorpusRoot.mockRejectedValue(new Error('Backend indisponível'));
+    const user = userEvent.setup();
+    renderQueuePanel();
+
+    const row = (await screen.findByText('Culinaria')).closest('li') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Remover' }));
+    await user.type(within(row).getByLabelText('Digite REMOVER para confirmar'), 'REMOVER');
+    await user.click(within(row).getByRole('button', { name: 'Remover do corpus' }));
+
+    expect(await screen.findByText('Backend indisponível')).toBeTruthy();
+    expect(within(row).queryByRole('button', { name: 'Removendo…' })).toBeNull();
+    expect((within(row).getByRole('button', { name: 'Remover do corpus' }) as HTMLButtonElement).disabled).toBe(false);
+  });
 });
