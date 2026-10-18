@@ -1101,7 +1101,7 @@ def _load_structure_chunk_corpus_file(
         document = load_document(path)
         if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
-        note = structure_document(document, source_root=source_root)
+        note = structure_document(document, source_root=source_root, hash_unrooted=True)
         return _PendingCorpusIndex(
             source_path=document.source_path,
             note=note,
@@ -1216,7 +1216,7 @@ def index_corpus_file(
         if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
 
-        note = structure_document(document, source_root=source_root)
+        note = structure_document(document, source_root=source_root, hash_unrooted=True)
         existing_hash = get_note_content_hash(resolved_connection, note.note_id)
         existing_chunk_ids = list_chunk_ids_for_note(resolved_connection, note.note_id)
         chunks_match_config = note_chunks_match_config(

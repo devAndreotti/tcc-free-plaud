@@ -157,3 +157,43 @@ def test_reindex_note_keeps_note_id_from_folder_index(tmp_path: Path) -> None:
     assert result.note_id == note_id
     assert result.status == 'unchanged'  # mesmo id + mesmo conteúdo: nada a refazer
     assert count_notes(connection) == 1
+
+
+def test_regressao_reindex_note_separa_arquivos_unicos_com_mesmo_nome(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    first_dir = tmp_path / 'a'
+    second_dir = tmp_path / 'b'
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first_id = _index_fixture(settings, first_dir / 'notas.md', '# Notas\n\nTexto antigo da pasta a.\n')
+    second_id = _index_fixture(settings, second_dir / 'notas.md', '# Notas\n\nTexto da pasta b.\n')
+    (second_dir / 'notas.md').write_text('# Notas\n\nTexto novo da pasta b editado.\n', encoding='utf-8')
+    connection = connect_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+
+    result = reindex_note(second_id, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+
+    assert first_id != second_id
+    assert count_notes(connection) == 2
+    assert result.ok is True
+    assert result.status == 'success'
+    assert 'Texto novo da pasta b' in get_note_detail(second_id, settings=settings, connection=connection).structured_markdown
+
+
+def test_regressao_reindex_note_aceita_id_antigo_so_slug(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'antiga.md'
+    monkeypatch.setattr('escolio.notes.structurer.build_note_id', lambda path, **kwargs: 'antiga')
+    legacy_id = _index_fixture(settings, source, '# Antiga\n\nTexto antigo da nota legada.\n')
+    monkeypatch.undo()
+    source.write_text('# Antiga\n\nTexto novo da nota legada.\n', encoding='utf-8')
+    connection = connect_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+
+    result = reindex_note(legacy_id, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+
+    assert legacy_id == 'antiga'
+    assert result.ok is True
+    assert result.status == 'success'
+    assert result.note_id.startswith('antiga--')
+    assert count_notes(connection) == 1

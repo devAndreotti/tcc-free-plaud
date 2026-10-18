@@ -11,6 +11,11 @@ def _slug_from_stem(path: Path) -> str:
     return slug.strip('-') or 'note'
 
 
+def _path_key(path: Path) -> str:
+    normalized = unicodedata.normalize('NFKC', path.as_posix()).lower()
+    return re.sub(r'/+', '/', normalized)
+
+
 def _relative_path_key(path: Path, root_path: Path) -> str:
     resolved_path = path.resolve()
     resolved_root = root_path.resolve()
@@ -18,16 +23,20 @@ def _relative_path_key(path: Path, root_path: Path) -> str:
         relative_path = resolved_path.relative_to(resolved_root)
     except ValueError:
         relative_path = resolved_path
-    normalized = unicodedata.normalize('NFKC', relative_path.as_posix()).lower()
-    return re.sub(r'/+', '/', normalized)
+    return _path_key(relative_path)
 
 
-def build_note_id(path: Path, *, root_path: Path | None = None) -> str:
-    """Gera ID de nota estavel; em corpus usa caminho relativo para evitar colisao."""
+def build_note_id(path: Path, *, root_path: Path | None = None, hash_unrooted: bool = False) -> str:
+    """Gera ID de nota estavel; em corpus usa caminho relativo para evitar colisao.
+
+    `hash_unrooted` (corpus): sem raiz, o hash é do caminho absoluto, para que arquivos
+    soltos de mesmo nome não colidam. Sem a flag, o id é só o slug (benchmark e CLI).
+    """
     slug = _slug_from_stem(path)
-    if root_path is None:
+    if root_path is None and not hash_unrooted:
         return slug
-    path_hash = sha256(_relative_path_key(path, root_path).encode('utf-8')).hexdigest()[:10]
+    key = _path_key(path.resolve()) if root_path is None else _relative_path_key(path, root_path)
+    path_hash = sha256(key.encode('utf-8')).hexdigest()[:10]
     return f'{slug}--{path_hash}'
 
 

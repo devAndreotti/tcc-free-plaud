@@ -480,7 +480,7 @@ def _extract_summary(lines: list[str], title_index: int, title: str) -> str:
 
 
 def structure_document(
-    document: IngestedDocument, *, source_root: Path | None = None
+    document: IngestedDocument, *, source_root: Path | None = None, hash_unrooted: bool = False
 ) -> Note:
     """Transforma um documento bruto em uma nota estruturada mínima.
 
@@ -497,7 +497,7 @@ def structure_document(
     title_index, title = _choose_title(lines, fallback_title, document.source_type)
     summary = repair_ocr_summary_text(_extract_summary(lines, title_index, title))
     note = Note(
-        note_id=build_note_id(document.source_path, root_path=source_root),
+        note_id=build_note_id(document.source_path, root_path=source_root, hash_unrooted=hash_unrooted),
         source_type=document.source_type,
         source_path=document.source_path,
         source_name=document.source_path.name,
