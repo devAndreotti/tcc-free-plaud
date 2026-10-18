@@ -491,6 +491,15 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   // O overlay usa display:flex para centralizar o modal de forma confiável.
   return createPortal(
     <div className="modal-overlay">
+      {/* Fundo clicável fecha o modal. Botão nativo atrás do card: arrastar de dentro do card
+          para fora não dispara o clique nele (o click cai no overlay, ancestral comum). */}
+      <button
+        type="button"
+        className="modal-backdrop"
+        aria-label="Fechar configurações clicando fora"
+        tabIndex={-1}
+        onClick={onClose}
+      />
       {/* Janela do modal — filho direto do overlay flex */}
       <div
         ref={modalRef}

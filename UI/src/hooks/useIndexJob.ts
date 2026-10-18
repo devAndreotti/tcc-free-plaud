@@ -26,7 +26,7 @@ export interface QueueState {
   isBusy: boolean;
   watcherActive: boolean;
   chooseFolder: () => Promise<void>;
-  startJob: () => Promise<void>;
+  startJob: (path?: string) => Promise<void>;
   cancelJob: () => Promise<void>;
   toggleWatcher: () => Promise<void>;
 }
@@ -79,15 +79,17 @@ export function useIndexJob(): QueueState {
     }
   }, []);
 
-  const startJob = useCallback(async () => {
-    if (!folderPath.trim()) {
+  // Aceita um caminho explícito (ex.: Reindexar de uma pasta do corpus); sem ele, usa o campo.
+  const startJob = useCallback(async (path?: string) => {
+    const target = (typeof path === 'string' ? path : folderPath).trim();
+    if (!target) {
       setStatus('Escolha uma pasta para indexar.');
       return;
     }
     setIsBusy(true);
     setStatus('');
     try {
-      const created = await bridge.startIndexJob(folderPath.trim(), false);
+      const created = await bridge.startIndexJob(target, false);
       setJob(created);
       if (created.status === 'running') {
         void refreshJob(created.job_id);

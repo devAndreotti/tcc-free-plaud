@@ -438,6 +438,14 @@ def record_corpus_root(connection: sqlite3.Connection, root: Path) -> None:
     connection.commit()
 
 
+def forget_corpus_root(connection: sqlite3.Connection, root: Path | str) -> None:
+    """Esquece a raiz (não toca nas notas). Compara pela mesma chave de caminho usada na indexação."""
+    root_key = _path_key(root)
+    stored = [str(row['root']) for row in connection.execute('SELECT root FROM corpus_roots')]
+    connection.executemany('DELETE FROM corpus_roots WHERE root = ?', [(r,) for r in stored if _path_key(r) == root_key])
+    connection.commit()
+
+
 def list_corpus_roots(connection: sqlite3.Connection) -> list[dict[str, object]]:
     """Pastas indexadas que têm notas, com a quantidade de notas sob cada uma."""
     roots = [str(row['root']) for row in connection.execute('SELECT root FROM corpus_roots ORDER BY root')]

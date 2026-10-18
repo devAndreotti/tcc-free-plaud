@@ -28,7 +28,7 @@ const STRATEGY_LABEL: Record<string, string> = {
 export const TypingIndicator = () => (
   <div className="msg msg--ai fade-in" role="status" aria-label="Buscando no vault">
     <div className="msg__head">
-      <span className="msg__mark" aria-hidden="true">ep</span>
+      <span className="msg__mark" aria-hidden="true">ES</span>
       <span className="msg__searching">
         <span className="msg__spinner" aria-hidden="true" />
         <span>Buscando no vault…</span>
@@ -163,7 +163,7 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
   return (
     <>
       <div className="msg__head">
-        <span className="msg__mark" aria-hidden="true">ep</span>
+        <span className="msg__mark" aria-hidden="true">ES</span>
         <b>Resposta</b>
         {sources.length > 0 && (
           <span className="msg__head-sub">
@@ -174,8 +174,8 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
 
       <div className="msg__answer">
         {claims.length > 0
-          ? claims.map((claim, i) => (
-              <span key={i}>
+          ? claims.map((claim) => (
+              <span key={`${claim.refs.join(',')}:${claim.text}`}>
                 <span
                   className={`msg__claim${claim.support_level === 'partial' ? ' msg__claim--partial' : ''}${claim.refs.includes(hl ?? -1) ? ' is-hl' : ''}`}
                 >
@@ -268,7 +268,7 @@ const MessageBubble = ({ message, onRetry }: MessageBubbleProps) => {
       {ask?.no_answer ? (
         <>
           <div className="msg__head">
-            <span className="msg__mark" aria-hidden="true">ep</span>
+            <span className="msg__mark" aria-hidden="true">ES</span>
             <b>Sem resposta</b>
           </div>
           <NoAnswer ask={ask} onRetry={onRetry} />
@@ -279,7 +279,7 @@ const MessageBubble = ({ message, onRetry }: MessageBubbleProps) => {
       ) : (
         <>
           <div className="msg__head">
-            <span className="msg__mark" aria-hidden="true">ep</span>
+            <span className="msg__mark" aria-hidden="true">ES</span>
             <b>Resposta</b>
           </div>
           <div className="msg__answer">{renderFormattedContent(message.content)}</div>
