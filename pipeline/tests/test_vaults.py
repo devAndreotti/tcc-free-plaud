@@ -278,3 +278,24 @@ def test_vault_api_delete_exige_confirmacao_pelo_nome(tmp_path: Path, monkeypatc
     assert extra.id in [v["id"] for v in api.listVaults()["vaults"]]
     assert api.deleteVault(extra.id, "Extra")["ok"] is True
     assert extra.id not in [v["id"] for v in api.listVaults()["vaults"]]
+
+
+def test_vault_api_delete_da_ativa_com_banco_aberto_apaga_a_pasta(tmp_path: Path, monkeypatch) -> None:
+    # Regressao: no Windows, apagar a vault ativa com o Chroma/SQLite abertos falhava (arquivo em uso).
+    module = _load_ui_main_isolated(monkeypatch, tmp_path)
+    base = _base(tmp_path)
+    load_registry(base)
+    extra = create_vault("Extra", "notes", "rose", [], base)
+    set_active(extra.id, base)
+    api = module.Api()
+    api.runtime.get_vector_store()
+    init_sqlite(api.runtime._settings.sqlite_path).close()
+    folder = settings_for_vault(extra, base).sqlite_path.parent
+    assert folder.exists()
+
+    result = api.deleteVault(extra.id, "Extra")
+
+    assert result["ok"] is True, result
+    assert not folder.exists()
+    assert api.listVaults()["active"] != extra.id
+    assert api.runtime._settings.sqlite_path != settings_for_vault(extra, base).sqlite_path

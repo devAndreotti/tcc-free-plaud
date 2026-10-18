@@ -23,7 +23,7 @@ import { QueueProvider } from './contexts/QueueContext';
 const generateId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-// Estado do chat de uma vault: abas, aba ativa e mensagens/digitação por aba.
+// Conversas: abas (cada uma presa a uma vault), aba ativa e mensagens/digitação por aba.
 interface ChatState {
   tabs: Tab[];
   activeTabId: string | null;
@@ -31,18 +31,47 @@ interface ChatState {
   tabTyping: Record<string, boolean>;
 }
 
-// Conversa nova: uma aba "Nova Conversa" vazia.
+const newChatTab = (vaultId: string): Tab => ({ id: generateId(), label: 'Nova Conversa', type: 'chat', vaultId });
+
+// Abertura: uma "Nova Conversa" vazia, sem vault até a lista de vaults chegar.
 const newChatState = (): ChatState => {
-  const tab: Tab = { id: generateId(), label: 'Nova Conversa', type: 'chat' };
+  const tab = newChatTab('');
   return { tabs: [tab], activeTabId: tab.id, tabMessages: { [tab.id]: [] }, tabTyping: {} };
 };
-
-const EMPTY_CHAT: ChatState = { tabs: [], activeTabId: null, tabMessages: {}, tabTyping: {} };
 
 const withoutKey = <T,>(record: Record<string, T>, key: string): Record<string, T> => {
   const next = { ...record };
   delete next[key];
   return next;
+};
+
+// Ajusta as conversas quando a vault ativa ou a lista de vaults muda (sidebar, criar, excluir, abertura):
+// abas sem vault ganham a ativa, abas de vault excluída fecham, e a aba à vista passa a ser da vault ativa:
+// a última aba dela (uma "Nova Conversa" vazia deixada para trás fecha, para não acumular abas ao alternar);
+// sem aba na vault ativa, a vazia muda de vault junto e a com conversa dá lugar a uma nova.
+const syncWithVaults = (chat: ChatState, vaultKey: string, vaultIds: string[]): ChatState => {
+  if (!vaultKey) return chat;
+  const gone = new Set(chat.tabs.filter((tab) => tab.vaultId && !vaultIds.includes(tab.vaultId)).map((tab) => tab.id));
+  let { tabMessages, tabTyping } = chat;
+  for (const id of gone) {
+    tabMessages = withoutKey(tabMessages, id);
+    tabTyping = withoutKey(tabTyping, id);
+  }
+  const tabs = chat.tabs.filter((tab) => !gone.has(tab.id)).map((tab) => (tab.vaultId ? tab : { ...tab, vaultId: vaultKey }));
+  const next = { ...chat, tabs, tabMessages, tabTyping };
+  const current = tabs.find((tab) => tab.id === chat.activeTabId);
+  if (current?.vaultId === vaultKey) return next;
+  const currentEmpty = current !== undefined && !tabMessages[current.id]?.length;
+  const last = tabs.findLast((tab) => tab.vaultId === vaultKey);
+  if (last) {
+    if (!currentEmpty || current.label !== 'Nova Conversa') return { ...next, activeTabId: last.id };
+    return { ...next, tabs: tabs.filter((tab) => tab.id !== current.id), tabMessages: withoutKey(tabMessages, current.id), activeTabId: last.id };
+  }
+  if (currentEmpty) {
+    return { ...next, tabs: tabs.map((tab) => (tab.id === current.id ? { ...tab, vaultId: vaultKey } : tab)) };
+  }
+  const tab = newChatTab(vaultKey);
+  return { ...next, tabs: [...tabs, tab], activeTabId: tab.id, tabMessages: { ...tabMessages, [tab.id]: [] } };
 };
 
 // Estado de conversa vazia para reutilização
@@ -60,28 +89,35 @@ const readStoredSourceRoot = (): string | null => {
 };
 
 function AppContent() {
-  // Conversas por vault, em memória: cada vault tem suas abas e mensagens.
-  const { active: activeVault, version: vaultVersion } = useVaults();
+  // Conversas em memória; cada aba é de uma vault e mostra o ícone e a cor dela.
+  const { vaults, active: activeVault, version: vaultVersion, select: selectVault } = useVaults();
   const vaultKey = activeVault ? activeVault.id : '';
-  const [chats, setChats] = useState<Record<string, ChatState>>(() => ({ '': newChatState() }));
-  // Vault sem conversa ganha uma "Nova Conversa"; a aberta antes da lista de vaults chegar ('') fica com a primeira vault.
+  const vaultIds = vaults.map((vault) => vault.id);
+  const vaultsKey = `${vaultKey}|${vaultIds.join('|')}`;
+  const [chat, setChat] = useState<ChatState>(newChatState);
   // Ajustado na renderização (não em efeito): o chat nunca pisca vazio, então o campo de mensagem não remonta nem perde o texto.
-  if (!chats[vaultKey]) {
-    const adopted = vaultKey && chats[''] ? chats[''] : newChatState();
-    setChats({ ...withoutKey(chats, ''), [vaultKey]: adopted });
+  const [syncedVaultsKey, setSyncedVaultsKey] = useState(vaultsKey);
+  if (syncedVaultsKey !== vaultsKey) {
+    setSyncedVaultsKey(vaultsKey);
+    setChat(syncWithVaults(chat, vaultKey, vaultIds));
   }
-  const updateChat = useCallback((key: string, update: (chat: ChatState) => ChatState) => {
-    setChats((prev) => (prev[key] ? { ...prev, [key]: update(prev[key]) } : prev));
-  }, []);
-  // Atualiza a conversa que contém a aba: a resposta cai na vault do envio, mesmo depois de trocar de vault.
-  const updateTabChat = useCallback((tabId: string, update: (chat: ChatState) => ChatState) => {
-    setChats((prev) => {
-      const key = Object.keys(prev).find((k) => prev[k].tabs.some((tab) => tab.id === tabId));
-      return key === undefined ? prev : { ...prev, [key]: update(prev[key]) };
-    });
-  }, []);
-  const chat = chats[vaultKey] ?? EMPTY_CHAT;
+  // Atualiza a conversa de uma aba; aba já fechada é ignorada (a resposta tardia não a recria).
+  const updateTab = useCallback((tabId: string, update: (chat: ChatState) => ChatState) => {
+    setChat((prev) => (prev.tabs.some((tab) => tab.id === tabId) ? update(prev) : prev));
+  }, [setChat]);
   const { tabs, activeTabId, tabMessages, tabTyping } = chat;
+  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+
+  // Aba de outra vault à vista (clique, ou vizinha ao fechar uma aba): ativa a vault da conversa.
+  // Até a troca terminar, o envio fica bloqueado, para a pergunta não ir ao corpus errado.
+  const activeTabVault = activeTab?.vaultId ?? '';
+  const switchingVault = activeTabVault !== '' && activeTabVault !== vaultKey;
+  useEffect(() => {
+    if (!switchingVault) return;
+    void selectVault(activeTabVault).then((result) => {
+      if (!result.ok) console.error('[App] Não foi possível ativar a vault da conversa:', result.message);
+    });
+  }, [switchingVault, activeTabVault, selectVault]);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
@@ -170,16 +206,20 @@ function AppContent() {
     scrollToBottom();
   }, [activeMessages, isTyping, scrollToBottom]);
 
-  // Seleciona uma aba pelo id
+  // Seleciona uma aba pelo id (a vault dela vira a ativa)
   const handleSelectTab = useCallback((id: string) => {
-    updateChat(vaultKey, (c) => ({ ...c, activeTabId: id }));
+    setChat((c) => ({ ...c, activeTabId: id }));
     setWorkspaceView('chat');
-  }, [updateChat, vaultKey]);
+  }, [setChat]);
+
+  const handleRenameTab = useCallback((id: string, label: string) => {
+    setChat((c) => ({ ...c, tabs: c.tabs.map((tab) => (tab.id === id ? { ...tab, label } : tab)) }));
+  }, [setChat]);
 
   // Fecha uma aba; limpa seu estado e ativa a vizinha
   const handleCloseTab = useCallback(
     (id: string) => {
-      updateChat(vaultKey, (c) => {
+      setChat((c) => {
         const tabMessages = withoutKey(c.tabMessages, id);
         const tabTyping = withoutKey(c.tabTyping, id);
         if (c.tabs.length === 1) return { ...c, tabs: [], activeTabId: null, tabMessages, tabTyping };
@@ -190,30 +230,30 @@ function AppContent() {
         return { ...c, tabs: next, activeTabId: newActive, tabMessages, tabTyping };
       });
     },
-    [updateChat, vaultKey]
+    [setChat]
   );
 
-  // Abre nova aba de chat com conversa própria e a torna ativa
+  // Abre nova aba de chat na vault ativa e a torna ativa
   const handleNewTab = useCallback(() => {
-    const newTab: Tab = { id: generateId(), label: 'Nova Conversa', type: 'chat' };
-    updateChat(vaultKey, (c) => ({
+    const newTab = newChatTab(vaultKey);
+    setChat((c) => ({
       ...c,
       tabs: [...c.tabs, newTab],
       tabMessages: { ...c.tabMessages, [newTab.id]: [] },
       activeTabId: newTab.id,
     }));
     setWorkspaceView('chat');
-  }, [updateChat, vaultKey]);
+  }, [vaultKey, setChat]);
 
-  // Anexa à conversa da aba (na vault em que ela foi aberta)
+  // Anexa à conversa da aba (na vault dela, mesmo depois de trocar de vault)
   const appendMessage = useCallback((tabId: string, message: MessageData) => {
-    updateTabChat(tabId, (c) => ({ ...c, tabMessages: { ...c.tabMessages, [tabId]: [...(c.tabMessages[tabId] ?? []), message] } }));
-  }, [updateTabChat]);
+    updateTab(tabId, (c) => ({ ...c, tabMessages: { ...c.tabMessages, [tabId]: [...(c.tabMessages[tabId] ?? []), message] } }));
+  }, [updateTab]);
 
   // Pergunta ao corpus e anexa a resposta (estruturada, quando o backend a devolve)
   const askInTab = useCallback(
     async (tabId: string, text: string, askStrategy: AskStrategy, askSourceRoot: string | null) => {
-      updateTabChat(tabId, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: true } }));
+      updateTab(tabId, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: true } }));
       try {
         const ask = await bridge.askCorpus(text, askStrategy, askSourceRoot);
         appendMessage(tabId, {
@@ -233,13 +273,12 @@ function AppContent() {
         });
         console.error('[App] Erro ao chamar bridge.askCorpus:', error);
       } finally {
-        updateTabChat(tabId, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: false } }));
+        updateTab(tabId, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: false } }));
       }
     },
-    [appendMessage, updateTabChat]
+    [appendMessage, updateTab]
   );
 
-  /* eslint-disable react-hooks/preserve-manual-memoization -- o React Compiler não preserva este memo com o estado por vault; as deps estão completas. */
   // Envia mensagem na conversa da aba ativa
   const handleSendMessage = useCallback(
     async (text: string, attachment?: File) => {
@@ -256,13 +295,13 @@ function AppContent() {
       });
       // O nome da primeira pergunta vira o título da aba
       const label = title.length > 32 ? `${title.slice(0, 32)}…` : title;
-      updateTabChat(tabId, (c) => ({
+      updateTab(tabId, (c) => ({
         ...c,
         tabs: c.tabs.map((tab) => (tab.id === tabId && tab.label === 'Nova Conversa' && title ? { ...tab, label } : tab)),
       }));
       await askInTab(tabId, text, strategy, activeSourceRoot);
     },
-    [activeTabId, appendMessage, updateTabChat, askInTab, strategy, activeSourceRoot]
+    [activeTabId, appendMessage, updateTab, askInTab, strategy, activeSourceRoot]
   );
 
   const handleRetry = useCallback(
@@ -271,10 +310,7 @@ function AppContent() {
     },
     [activeTabId, askInTab, activeSourceRoot]
   );
-  /* eslint-enable react-hooks/preserve-manual-memoization */
 
-  // Determina a aba ativa para renderizar a view correta
-  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   const hasMessages = activeMessages.length > 0;
 
   return (
@@ -298,6 +334,8 @@ function AppContent() {
               activeTabId={workspaceView === 'chat' ? activeTabId : null}
               onSelectTab={handleSelectTab}
               onCloseTab={handleCloseTab}
+              onRenameTab={handleRenameTab}
+              vaults={vaults}
               onNewTab={handleNewTab}
               isSettingsOpen={isSettingsOpen}
               settingsTab={settingsTab}
@@ -358,7 +396,7 @@ function AppContent() {
             {workspaceView === 'chat' && activeTab?.type === 'chat' && (
               <ChatInput
                 onSendMessage={handleSendMessage}
-                isLoading={isTyping}
+                isLoading={isTyping || switchingVault}
                 strategy={strategy}
                 onStrategyChange={setStrategy}
                 corpusRoots={corpusRoots}

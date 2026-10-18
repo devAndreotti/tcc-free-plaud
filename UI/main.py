@@ -51,13 +51,14 @@ from escolio.app.settings_presets import apply_settings_preset, list_settings_pr
 from escolio.benchmark.service import run_benchmark_compare
 from escolio.corpus.ask import corpus_vocabulary_stems
 from escolio.corpus.dropped import DroppedFileIndexer
-from escolio.corpus.jobs import cancel_index_job, get_index_job, start_index_job
+from escolio.corpus.jobs import cancel_index_job, get_index_job, index_job_manager, start_index_job
 from escolio.corpus.runtime import CorpusRuntime
 from escolio.notes.service import delete_note, get_note_detail, list_notes, reindex_note
 from escolio.providers.answer import test_answer_provider
 from escolio.providers.model_discovery import list_answer_models
 from escolio.retrieval.models import AskResponse
 from escolio.storage.sqlite import init_sqlite
+from escolio.storage.vector import close_vector_stores
 from escolio.tui.actions import (
     ask_corpus,
     corpus_roots_from_tui,
@@ -151,13 +152,20 @@ class Api:
             return {'ok': False, 'message': f'vault nao encontrada: {vault_id}'}
         if confirm != target.name:
             return {'ok': False, 'message': 'Digite o nome da vault para confirmar a exclusão.'}
-        was_active = load_registry(base).active == vault_id
+        registry = load_registry(base)
+        if len(registry.vaults) == 1:
+            return {'ok': False, 'message': 'Não é possível excluir a única vault.'}
+        if index_job_manager.is_busy():
+            return {'ok': False, 'message': 'Espere a indexação terminar para excluir uma vault.'}
+        # Sai da vault antes de apagar e fecha o Chroma dela: no Windows, arquivo aberto impede apagar a pasta.
+        if registry.active == vault_id:
+            set_active(next(v.id for v in registry.vaults if v.id != vault_id), base)
+            self._activate_vault()
+        close_vector_stores(settings_for_vault(target, base).vector_store_dir)
         try:
             delete_vault(vault_id, base)
         except ValueError as exc:
             return {'ok': False, 'message': str(exc)}
-        if was_active:
-            self._activate_vault()
         return {'ok': True, 'active': load_registry(base).active}
 
     def selectVault(self, vault_id: str) -> dict:

@@ -4196,3 +4196,21 @@
 .vaults-list__delete p { flex-basis: 100%; margin: 0; font-size: 13px; }
 .vaults-list__delete input { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--bg-input-border); background: var(--bg-input); color: var(--text-primary); }
 .vaults-list__footer { display: flex; gap: 8px; margin-top: 12px; }
+
+/* Aba de conversa: ícone da vault menor que o da sidebar; campo de renomear no lugar do nome */
+.tab__icon .vault-glyph {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+.tab__rename {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--accent-blue);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+}

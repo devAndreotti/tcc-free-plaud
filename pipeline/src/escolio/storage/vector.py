@@ -8,6 +8,11 @@ from chromadb.errors import NotFoundError
 from escolio.app.legacy import DEFAULT_CHROMA_COLLECTION, LEGACY_CHROMA_COLLECTION
 from escolio.retrieval.models import Chunk, SearchHit
 
+# Clientes Chroma abertos por pasta. O chromadb reaproveita o sistema por pasta e só solta os arquivos quando
+# todos os clientes dela fecham; excluir uma vault fecha os dela (no Windows, arquivo aberto impede apagar a pasta).
+# ponytail: guarda um cliente leve por ativação da vault; limpar ao trocar se trocas viram milhares.
+_OPEN_CLIENTS: dict[str, list[chromadb.ClientAPI]] = {}
+
 
 def _distance_to_score(distance: float) -> float:
     return 1.0 / (1.0 + max(distance, 0.0))
@@ -59,6 +64,7 @@ class LocalVectorStore:
         self._client = chromadb.PersistentClient(
             path=str(self.base_dir), settings=ChromaSettings(anonymized_telemetry=False)
         )
+        _OPEN_CLIENTS.setdefault(str(self.base_dir.resolve()), []).append(self._client)
         self.collection_name = _resolve_collection_name(self._client, collection_name)
 
     def _collection(self) -> Collection:
@@ -190,3 +196,9 @@ class LocalVectorStore:
                 )
             )
         return hits
+
+
+def close_vector_stores(base_dir: Path) -> None:
+    """Fecha todos os clientes Chroma abertos em `base_dir`, liberando os arquivos para apagar a pasta."""
+    for client in _OPEN_CLIENTS.pop(str(base_dir.resolve()), []):
+        client.close()

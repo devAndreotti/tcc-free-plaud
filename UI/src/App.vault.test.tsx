@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import App from './App';
@@ -7,11 +7,13 @@ import { bridge, type AskResult } from './services/bridge';
 type User = ReturnType<typeof userEvent.setup>;
 
 // Espera a vault ativa carregar: antes disso a conversa ainda não tem dono.
-const waitForVault = () => screen.findByRole('button', { name: /Vault ativa: Obsidian/ });
+const waitForVault = (name: RegExp = /Obsidian/) =>
+  screen.findByRole('button', { name: new RegExp(`Vault ativa: ${name.source}`) });
 
 const switchVault = async (user: User, name: RegExp) => {
   await user.click(await screen.findByRole('button', { name: /Vault ativa:/ }));
   await user.click(screen.getByRole('menuitemradio', { name }));
+  await waitForVault(name);
 };
 
 const send = async (user: User, text: string) => {
@@ -19,7 +21,10 @@ const send = async (user: User, text: string) => {
   await user.click(screen.getByRole('button', { name: 'Enviar mensagem' }));
 };
 
-describe('vault: conversas por vault', () => {
+const tabNamed = (label: string) =>
+  within(screen.getByRole('tablist', { name: 'Abas abertas' })).getByText(label).closest('[role="tab"]') as HTMLElement;
+
+describe('vault: cada conversa pertence a uma vault', () => {
   beforeAll(() => {
     // jsdom não tem ResizeObserver nem canvas (mesmo ajuste de App.test.tsx).
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -34,30 +39,50 @@ describe('vault: conversas por vault', () => {
     void bridge.selectVault('obsidian');
   });
 
-  it('vault: abas da vault A não aparecem na B', async () => {
+  it('vault: a aba mostra o ícone e a cor da vault da conversa', async () => {
     const user = userEvent.setup();
     render(<App />);
     await waitForVault();
-    await send(user, 'Pergunta da Obsidian');
-    expect((await screen.findAllByText('Pergunta da Obsidian')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('tab').querySelector('.vault-glyph--violet')).not.toBeNull();
 
+    // Aba vazia acompanha a troca de vault.
     await switchVault(user, /Culinária/);
-    await waitFor(() => expect(screen.queryAllByText('Pergunta da Obsidian')).toHaveLength(0));
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    expect(screen.getByRole('tab').querySelector('.vault-glyph--amber')).not.toBeNull();
   });
 
-  it('vault: voltar para A restaura as abas e as mensagens', async () => {
+  it('vault: trocar pela sidebar abre a conversa da nova vault e mantém a aba da anterior', async () => {
     const user = userEvent.setup();
     render(<App />);
     await waitForVault();
     await send(user, 'Pergunta da Obsidian');
-    expect((await screen.findAllByText('Pergunta da Obsidian')).length).toBeGreaterThan(0);
+    await screen.findByRole('log', { name: 'Histórico de mensagens' });
 
     await switchVault(user, /Culinária/);
+    await waitFor(() => expect(screen.queryByRole('log', { name: 'Histórico de mensagens' })).toBeNull());
+    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    expect(tabNamed('Pergunta da Obsidian').querySelector('.vault-glyph--violet')).not.toBeNull();
+
+    // Voltar mostra a conversa da Obsidian e fecha a "Nova Conversa" vazia da Culinária.
     await switchVault(user, /Obsidian/);
-    expect((await screen.findAllByText('Pergunta da Obsidian')).length).toBeGreaterThan(0);
+    expect(await within(await screen.findByRole('log')).findByText('Pergunta da Obsidian')).toBeTruthy();
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
   });
 
-  it('vault: resposta enviada em A e resolvida depois da troca cai em A, não em B', async () => {
+  it('vault: clicar na aba de outra vault ativa a vault da conversa', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForVault();
+    await send(user, 'Pergunta da Obsidian');
+    await screen.findByRole('log', { name: 'Histórico de mensagens' });
+    await switchVault(user, /Culinária/);
+
+    await user.click(tabNamed('Pergunta da Obsidian'));
+    expect(await waitForVault(/Obsidian/)).toBeTruthy();
+    expect(await within(screen.getByRole('log')).findByText('Pergunta da Obsidian')).toBeTruthy();
+  });
+
+  it('vault: resposta enviada em A e resolvida depois da troca cai na aba de A', async () => {
     let resolveAsk: (value: AskResult) => void = () => {};
     vi.spyOn(bridge, 'askCorpus').mockImplementation(
       () => new Promise<AskResult>((resolve) => { resolveAsk = resolve; })
@@ -76,7 +101,27 @@ describe('vault: conversas por vault', () => {
     });
     expect(screen.queryByText('Resposta da Obsidian')).toBeNull();
 
-    await switchVault(user, /Obsidian/);
+    await user.click(tabNamed('Pergunta pendente'));
     expect(await screen.findByText('Resposta da Obsidian')).toBeTruthy();
+  });
+
+  it('vault: duplo clique renomeia a conversa; Esc cancela', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForVault();
+
+    await user.dblClick(tabNamed('Nova Conversa'));
+    const field = screen.getByRole('textbox', { name: 'Nome da conversa' });
+    await user.clear(field);
+    await user.type(field, 'Estudos de redes{Enter}');
+    expect(tabNamed('Estudos de redes')).toBeTruthy();
+
+    await user.dblClick(tabNamed('Estudos de redes'));
+    await user.type(screen.getByRole('textbox', { name: 'Nome da conversa' }), ' rascunho{Escape}');
+    expect(tabNamed('Estudos de redes')).toBeTruthy();
+
+    // Nome dado pelo usuário não é trocado pela primeira pergunta.
+    await send(user, 'Qual broker foi adotado?');
+    expect(tabNamed('Estudos de redes')).toBeTruthy();
   });
 });

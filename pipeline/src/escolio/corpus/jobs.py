@@ -206,6 +206,11 @@ class IndexJobManager:
             if self._active_job_id == job_id:
                 self._active_job_id = None
 
+    def is_busy(self) -> bool:
+        with self._lock:
+            active = self._jobs.get(self._active_job_id) if self._active_job_id else None
+            return bool(active and active.thread and active.thread.is_alive())
+
 
 index_job_manager = IndexJobManager()
 
