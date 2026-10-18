@@ -49,6 +49,7 @@ from escolio.storage.sqlite import (
     list_chunk_ids_for_note,
     list_note_ids_by_source_path,
     note_chunks_match_config,
+    record_corpus_root,
     replace_chunks_for_note,
     upsert_note,
 )
@@ -1469,6 +1470,9 @@ def index_corpus_path(
                 results=[],
                 skipped=discovery.skipped,
             )
+
+        # Antes de qualquer arquivo: a pasta vira raiz do corpus mesmo que a reindexação venha toda "unchanged".
+        record_corpus_root(resolved_connection, source_path.resolve())
 
         # Notas de arquivos apagados da pasta saem do índice; só após confirmar a raiz e sem cancelamento.
         removed_count = 0

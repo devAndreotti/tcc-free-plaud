@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 from collections.abc import Iterable
 from datetime import datetime
@@ -49,6 +50,11 @@ CREATE TABLE IF NOT EXISTS chunks (
     pipeline_version TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (note_id, note_version, chunk_index)
+);
+
+CREATE TABLE IF NOT EXISTS corpus_roots (
+    root TEXT PRIMARY KEY,
+    last_indexed_at TEXT
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
@@ -317,12 +323,26 @@ def list_fts_vocabulary(connection: sqlite3.Connection) -> list[str]:
     return [str(row[0]) for row in connection.execute('SELECT term FROM temp.chunks_fts_vocab')]
 
 
-def search_chunks_fts(connection: sqlite3.Connection, match_query: str, *, limit: int) -> list[tuple[Chunk, float]]:
-    """Busca candidatos lexicais via FTS5/BM25."""
+def search_chunks_fts(
+    connection: sqlite3.Connection,
+    match_query: str,
+    *,
+    limit: int,
+    note_ids: frozenset[str] | None = None,
+) -> list[tuple[Chunk, float]]:
+    """Busca candidatos lexicais via FTS5/BM25, opcionalmente restrita a algumas notas."""
     if not match_query.strip() or limit <= 0:
         return []
+    if note_ids is not None and not note_ids:
+        return []
+    scope_sql = ''
+    params: list[object] = [match_query]
+    if note_ids is not None:
+        scope_sql = f"AND c.note_id IN ({', '.join('?' for _ in note_ids)})"
+        params.extend(sorted(note_ids))
+    params.append(limit)
     rows = connection.execute(
-        """
+        f"""
         SELECT
             c.chunk_id, c.note_id, c.note_version, c.chunk_index, c.char_start, c.char_end,
             c.chunk_size, c.overlap, c.chunk_text, c.token_count, c.strategy,
@@ -330,11 +350,11 @@ def search_chunks_fts(connection: sqlite3.Connection, match_query: str, *, limit
             bm25(chunks_fts) AS bm25_score
         FROM chunks_fts
         JOIN chunks AS c ON c.chunk_id = chunks_fts.chunk_id
-        WHERE chunks_fts MATCH ?
+        WHERE chunks_fts MATCH ? {scope_sql}
         ORDER BY bm25_score
         LIMIT ?
         """,
-        (match_query, limit),
+        params,
     ).fetchall()
     return [(_chunk_from_row(row), float(row['bm25_score'])) for row in rows]
 
@@ -391,8 +411,51 @@ def delete_corpus_notes_and_chunks(connection: sqlite3.Connection) -> tuple[int,
     connection.execute('DELETE FROM chunks_fts')
     connection.execute('DELETE FROM chunks')
     connection.execute('DELETE FROM notes')
+    connection.execute('DELETE FROM corpus_roots')
     connection.commit()
     return notes_total, chunks_total
+
+
+def _path_key(path: str | Path) -> str:
+    # Sem tocar no disco. normcase deixa o Windows case-insensitive e unifica '/' e '\\'.
+    return os.path.normcase(os.path.abspath(str(path)))
+
+
+def _is_under_root(path_key: str, root_key: str) -> bool:
+    # Fronteira de separador: 'C:\\x\\cul' não pode casar 'C:\\x\\culinaria'.
+    return path_key == root_key or path_key.startswith(root_key.rstrip(os.sep) + os.sep)
+
+
+def record_corpus_root(connection: sqlite3.Connection, root: Path) -> None:
+    """Registra uma pasta indexada como raiz do corpus (chamador passa o caminho resolvido)."""
+    connection.execute(
+        """
+        INSERT INTO corpus_roots (root, last_indexed_at) VALUES (?, ?)
+        ON CONFLICT(root) DO UPDATE SET last_indexed_at = excluded.last_indexed_at
+        """,
+        (str(root), datetime.now().astimezone().isoformat()),
+    )
+    connection.commit()
+
+
+def list_corpus_roots(connection: sqlite3.Connection) -> list[dict[str, object]]:
+    """Pastas indexadas que têm notas, com a quantidade de notas sob cada uma."""
+    roots = [str(row['root']) for row in connection.execute('SELECT root FROM corpus_roots ORDER BY root')]
+    note_keys = [_path_key(row['source_path']) for row in connection.execute('SELECT source_path FROM notes')]
+    result: list[dict[str, object]] = []
+    for root in roots:
+        root_key = _path_key(root)
+        notes_count = sum(_is_under_root(note_key, root_key) for note_key in note_keys)
+        if notes_count:
+            result.append({'root': root, 'notes_count': notes_count})
+    return result
+
+
+def note_ids_under_root(connection: sqlite3.Connection, root: str) -> set[str]:
+    """Ids das notas cujo arquivo está sob a pasta (incluindo subpastas)."""
+    root_key = _path_key(root)
+    rows = connection.execute('SELECT note_id, source_path FROM notes').fetchall()
+    return {str(row['note_id']) for row in rows if _is_under_root(_path_key(row['source_path']), root_key)}
 
 
 def _note_from_row(row: sqlite3.Row) -> Note:

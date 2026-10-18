@@ -140,14 +140,29 @@ class LocalVectorStore:
             metadatas=metadatas,
         )
 
-    def query(self, query_embedding: list[float], *, top_k: int = 5, note_id: str | None = None) -> list[SearchHit]:
+    def query(
+        self,
+        query_embedding: list[float],
+        *,
+        top_k: int = 5,
+        note_id: str | None = None,
+        note_ids: frozenset[str] | None = None,
+    ) -> list[SearchHit]:
         if top_k <= 0 or self.count() == 0:
             return []
+        if note_ids is not None and not note_ids:
+            return []
 
+        if note_id:
+            where: dict[str, object] | None = {'note_id': note_id}
+        elif note_ids is not None:
+            where = {'note_id': {'$in': sorted(note_ids)}}
+        else:
+            where = None
         result = self._collection().query(
             query_embeddings=[query_embedding],
             n_results=top_k,
-            where={'note_id': note_id} if note_id else None,
+            where=where,
             include=['documents', 'metadatas', 'distances'],
         )
 

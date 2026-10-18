@@ -379,6 +379,12 @@ export interface BenchmarkCompareResult {
 
 export type AskStrategy = 'hybrid' | 'vector' | 'lexical';
 
+/** Pasta indexada do corpus com notas (corpus/service.py: raiz gravada na indexação). */
+export interface CorpusRoot {
+  root: string;
+  notes_count: number;
+}
+
 /** Trecho do corpus que sustenta uma resposta (retrieval/models.py: Citation). */
 export interface AskCitation {
   note_id: string;
@@ -423,7 +429,10 @@ interface PythonApi {
   sendMessage: (message: string, attachment?: string) => Promise<string>;
 
   /** Pergunta ao corpus e devolve a resposta estruturada, com citações por afirmação. */
-  askCorpus?: (message: string, strategy?: AskStrategy) => Promise<AskResult>;
+  askCorpus?: (message: string, strategy?: AskStrategy, sourceRoot?: string) => Promise<AskResult>;
+
+  /** Pastas indexadas com notas, para o seletor de pasta do chat. */
+  listCorpusRoots?: () => Promise<CorpusRoot[]>;
 
   /**
    * Abre o seletor nativo de pasta do sistema operacional.
@@ -580,6 +589,11 @@ const plainAskResult = (query: string, text: string): AskResult => ({
   reason_for_no_answer: null,
   latency_ms: 0,
 });
+
+const MOCK_CORPUS_ROOTS: CorpusRoot[] = [
+  { root: 'D:\\Notas\\Obsidian', notes_count: 42 },
+  { root: 'D:\\Notas\\Culinaria', notes_count: 7 },
+];
 
 const MOCK_CITATIONS: AskCitation[] = [
   {
@@ -928,9 +942,12 @@ export const bridge = {
     return mockSendMessage(message);
   },
 
-  askCorpus: async (message: string, strategy?: AskStrategy): Promise<AskResult> => {
+  askCorpus: async (message: string, strategy?: AskStrategy, sourceRoot?: string | null): Promise<AskResult> => {
     if (isDesktopApp() && window.pywebview?.api.askCorpus) {
-      return window.pywebview.api.askCorpus(message, strategy);
+      // Sem pasta escolhida, o backend recebe só (message, strategy): corpus inteiro.
+      return sourceRoot
+        ? window.pywebview.api.askCorpus(message, strategy, sourceRoot)
+        : window.pywebview.api.askCorpus(message, strategy);
     }
     // Backend antigo (ou mocks de E2E) só expõem sendMessage: vira resposta sem citações.
     if (isDesktopApp() && window.pywebview?.api.sendMessage) {
@@ -1462,6 +1479,14 @@ export const bridge = {
     }
     console.debug('[Bridge Mock] saveBackendSettings:', values);
     return bridge.getBackendSettings();
+  },
+
+  listCorpusRoots: async (): Promise<CorpusRoot[]> => {
+    if (isDesktopApp()) {
+      // Backend sem o método devolve lista vazia, sem pastas inventadas.
+      return window.pywebview?.api.listCorpusRoots ? window.pywebview.api.listCorpusRoots() : [];
+    }
+    return MOCK_CORPUS_ROOTS.map((root) => ({ ...root }));
   },
 
   listNotes: async (): Promise<NoteSummary[]> => {

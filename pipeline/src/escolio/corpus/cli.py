@@ -175,6 +175,7 @@ def ask(
         help='Estrategia de retrieval: lexical, vector ou hybrid.',
     ),
     debug: bool = typer.Option(False, '--debug', help='Inclui sinais de retrieval para tuning do Ask.'),
+    root: str | None = typer.Option(None, '--root', help='Restringe a pergunta às notas sob esta pasta indexada.'),
 ) -> None:
     """Pergunta contra todos os chunks persistidos no corpus local."""
     settings = get_settings()
@@ -205,6 +206,7 @@ def ask(
             strategy=strategy,
             top_k=top_k,
             include_debug=debug,
+            source_root=root,
             answer_provider=get_answer_provider(
                 settings.answer_provider,
                 model=settings.answer_model,

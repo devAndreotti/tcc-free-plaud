@@ -5,9 +5,10 @@ import {
   useCallback,
   type KeyboardEvent,
   type ChangeEvent,
+  type RefObject,
 } from 'react';
 import { PaperclipIcon, MicIcon, SendIcon, FileIcon, XIcon, LoaderIcon, ChevronDownIcon, CheckIcon } from './Icons';
-import { bridge, type AskStrategy, type AudioJobSnapshot } from '../services/bridge';
+import { bridge, type AskStrategy, type AudioJobSnapshot, type CorpusRoot } from '../services/bridge';
 
 const isAudioJobDone = (snapshot: AudioJobSnapshot) =>
   snapshot.status === 'completed' || snapshot.status === 'failed' || snapshot.status === 'cancelled';
@@ -33,6 +34,11 @@ interface ChatInputProps {
   isLoading?: boolean;
   strategy?: AskStrategy;
   onStrategyChange?: (strategy: AskStrategy) => void;
+  /** Pastas indexadas; o seletor de pasta só aparece com duas ou mais. */
+  corpusRoots?: CorpusRoot[];
+  /** Caminho da pasta escolhida, ou null para "Todas as pastas". */
+  sourceRoot?: string | null;
+  onSourceRootChange?: (root: string | null) => void;
 }
 
 const STRATEGIES: { value: AskStrategy; label: string; hint: string }[] = [
@@ -41,17 +47,15 @@ const STRATEGIES: { value: AskStrategy; label: string; hint: string }[] = [
   { value: 'lexical', label: 'Lexical', hint: 'Só palavras exatas (FTS5). A mais rápida.' },
 ];
 
-const StrategyPicker = ({ value, onChange }: { value: AskStrategy; onChange: (s: AskStrategy) => void }) => {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
+/** Fecha um menu flutuante ao clicar fora dele ou apertar Esc. */
+const useDismissOnOutside = (open: boolean, wrapRef: RefObject<HTMLDivElement | null>, close: () => void) => {
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (event: MouseEvent) => {
-      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!wrapRef.current?.contains(event.target as Node)) close();
     };
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') close();
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
@@ -59,7 +63,13 @@ const StrategyPicker = ({ value, onChange }: { value: AskStrategy; onChange: (s:
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, wrapRef, close]);
+};
+
+const StrategyPicker = ({ value, onChange }: { value: AskStrategy; onChange: (s: AskStrategy) => void }) => {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useDismissOnOutside(open, wrapRef, () => setOpen(false));
 
   const current = STRATEGIES.find((s) => s.value === value) ?? STRATEGIES[0];
   return (
@@ -102,7 +112,91 @@ const StrategyPicker = ({ value, onChange }: { value: AskStrategy; onChange: (s:
   );
 };
 
-const ChatInput = ({ onSendMessage, isLoading = false, strategy, onStrategyChange }: ChatInputProps) => {
+const folderName = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+
+// Mesmo padrão visual do StrategyPicker: escolhe a pasta de origem da pergunta (ou todas).
+const SourcePicker = ({
+  roots,
+  value,
+  onChange,
+}: {
+  roots: CorpusRoot[];
+  value: string | null;
+  onChange: (root: string | null) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useDismissOnOutside(open, wrapRef, () => setOpen(false));
+
+  const current = roots.find((root) => root.root === value);
+  const currentLabel = current ? folderName(current.root) : 'Todas as pastas';
+  return (
+    <div className="strategy" ref={wrapRef}>
+      <button
+        type="button"
+        className="strategy__chip"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Pasta de origem: ${currentLabel}`}
+        title={current?.root ?? 'Perguntar em todas as pastas indexadas'}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        Pasta: {currentLabel}
+        <ChevronDownIcon size={13} />
+      </button>
+      {open && (
+        <div className="strategy__menu" role="menu" aria-label="Pasta de origem">
+          <button
+            type="button"
+            role="menuitemradio"
+            aria-checked={value === null}
+            className="strategy__item"
+            onClick={() => {
+              onChange(null);
+              setOpen(false);
+            }}
+          >
+            <CheckIcon size={15} />
+            <span>
+              Todas as pastas
+              <small>Busca em todo o corpus indexado.</small>
+            </span>
+          </button>
+          {roots.map((root) => (
+            <button
+              key={root.root}
+              type="button"
+              role="menuitemradio"
+              aria-checked={root.root === value}
+              className="strategy__item"
+              title={root.root}
+              onClick={() => {
+                onChange(root.root);
+                setOpen(false);
+              }}
+            >
+              <CheckIcon size={15} />
+              <span>
+                {folderName(root.root)}
+                <small>{root.notes_count} notas</small>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ChatInput = ({
+  onSendMessage,
+  isLoading = false,
+  strategy,
+  onStrategyChange,
+  corpusRoots = [],
+  sourceRoot = null,
+  onSourceRootChange,
+}: ChatInputProps) => {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
   const [micStatus, setMicStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
@@ -344,6 +438,9 @@ const ChatInput = ({ onSendMessage, isLoading = false, strategy, onStrategyChang
           </button>
 
           {strategy && onStrategyChange && <StrategyPicker value={strategy} onChange={onStrategyChange} />}
+          {onSourceRootChange && corpusRoots.length >= 2 && (
+            <SourcePicker roots={corpusRoots} value={sourceRoot} onChange={onSourceRootChange} />
+          )}
 
           <span className="composer__grow" />
 

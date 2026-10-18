@@ -88,9 +88,11 @@ def test_desktop_api_ask_corpus_returns_structured_response(monkeypatch) -> None
         latency_ms=42,
     )
     calls = []
+    roots = []
 
-    def fake_ask(question, strategy, runtime):
+    def fake_ask(question, strategy, runtime, source_root=None):
         calls.append(strategy)
+        roots.append(source_root)
         return response
 
     monkeypatch.setattr(module, "ask_corpus", fake_ask)
@@ -98,9 +100,11 @@ def test_desktop_api_ask_corpus_returns_structured_response(monkeypatch) -> None
 
     payload = api.askCorpus("Pergunta?", "lexical")
     api.askCorpus("Pergunta?", "nao-existe")
+    api.askCorpus("Pergunta?", "lexical", "D:\\Notas\\Culinaria")
 
     assert calls[0] == "lexical"
     assert calls[1] == module.get_settings().default_ask_strategy
+    assert roots == [None, None, "D:\\Notas\\Culinaria"]
     assert payload["strategy"] == "lexical"
     assert payload["claims"][0]["support_level"] == "partial"
     assert payload["citations"][0]["char_start"] == 10
