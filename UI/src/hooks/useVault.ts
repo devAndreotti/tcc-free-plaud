@@ -27,6 +27,8 @@ export interface VaultState {
   lastScanAt: Date | null;
   /** Abre o diálogo de seleção, salva o path e escaneia automaticamente */
   selectVault: () => Promise<void>;
+  /** Define um path já conhecido como vault: salva e escaneia */
+  adoptVault: (path: string) => Promise<void>;
   /** Escaneia novamente sem alterar o path atual */
   rescanVault: () => Promise<void>;
   /** Limpa o vault e os nós */
@@ -69,15 +71,19 @@ export function useVault(): VaultState {
       .catch((err) => console.error('[useVault] Erro ao restaurar vault:', err));
   }, [runScan]);
 
-  /** Abre o diálogo nativo, salva o path e dispara a varredura */
+  /** Define o vault, salva o path e dispara a varredura */
+  const adoptVault = useCallback(async (path: string) => {
+    setVaultPath(path);
+    await bridge.saveVaultPath(path);
+    await runScan(path);
+  }, [runScan]);
+
+  /** Abre o diálogo nativo e adota a pasta escolhida */
   const selectVault = useCallback(async () => {
     const selected = await bridge.selectFolder();
     if (!selected) return;
-
-    setVaultPath(selected);
-    await bridge.saveVaultPath(selected);
-    await runScan(selected);
-  }, [runScan]);
+    await adoptVault(selected);
+  }, [adoptVault]);
 
   /** Reescaneia sem mudar o path */
   const rescanVault = useCallback(async () => {
@@ -98,6 +104,7 @@ export function useVault(): VaultState {
     isScanning,
     lastScanAt,
     selectVault,
+    adoptVault,
     rescanVault,
     clearVault,
   };
