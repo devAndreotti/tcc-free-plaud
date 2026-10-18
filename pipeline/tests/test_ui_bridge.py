@@ -550,3 +550,21 @@ def test_desktop_api_indexes_dropped_files(monkeypatch, tmp_path: Path) -> None:
     events = api.pollDroppedFiles()
     assert indexed == ["nota.md"]
     assert events[0]["status"] == "indexed" and events[0]["chunks"] == 2
+
+
+def test_desktop_api_removes_corpus_root_only_with_confirmation_regressao(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    calls: list[str] = []
+
+    def fake_remove(root, *, runtime=None):
+        calls.append(root)
+        return 3
+
+    monkeypatch.setattr(module, "remove_corpus_root_from_tui", fake_remove)
+    api = module.Api()
+
+    assert api.removeCorpusRoot("D:/Notas/Culinaria", "")["status"] == "confirmation_required"
+    assert api.removeCorpusRoot("D:/Notas/Culinaria", "APAGAR")["status"] == "confirmation_required"
+    assert calls == []
+    assert api.removeCorpusRoot("D:/Notas/Culinaria", "REMOVER") == {"ok": True, "removed_notes": 3}
+    assert calls == ["D:/Notas/Culinaria"]

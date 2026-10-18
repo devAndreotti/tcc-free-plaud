@@ -16,6 +16,7 @@ from escolio.app.paths import ensure_runtime_dirs
 from escolio.corpus.ask import answer_corpus_with_citations
 from escolio.corpus.cancellation import CancellationToken
 from escolio.corpus.discovery import discover_corpus_files
+from escolio.corpus.jobs import corpus_write_lock
 from escolio.corpus.models import (
     CorpusCommitMode,
     CorpusIndexBatchResult,
@@ -44,6 +45,7 @@ from escolio.storage.sqlite import (
     count_notes,
     delete_corpus_notes_and_chunks,
     delete_note_and_chunks,
+    forget_corpus_root,
     get_note_content_hash,
     init_sqlite,
     list_chunk_ids,
@@ -607,6 +609,42 @@ def get_corpus_status(
             embedding_model_mismatch_chunk_ids=embedding_model_mismatch_chunk_ids,
             status=status,  # type: ignore[arg-type]
         )
+    finally:
+        if owns_connection:
+            resolved_connection.close()
+
+
+def remove_corpus_root(
+    root: Path | str,
+    *,
+    settings: Settings | None = None,
+    connection: sqlite3.Connection | None = None,
+    vector_store: LocalVectorStore | None = None,
+) -> int:
+    """Tira uma pasta do corpus: remove as notas sob ela (SQLite e Chroma) e esquece a raiz.
+
+    Não apaga nada do disco. Devolve quantas notas foram removidas.
+    """
+    resolved_settings = settings or get_settings()
+    ensure_runtime_dirs(resolved_settings)
+    owns_connection = connection is None
+    resolved_connection = connection or init_sqlite(resolved_settings.sqlite_path)
+    resolved_vector_store = vector_store or LocalVectorStore(
+        resolved_settings.vector_store_dir,
+        collection_name=resolved_settings.vector_collection_name,
+    )
+    try:
+        with corpus_write_lock:
+            removed = delete_notes_by_source_path(
+                root,
+                folder=True,
+                recursive=True,
+                settings=resolved_settings,
+                connection=resolved_connection,
+                vector_store=resolved_vector_store,
+            )
+            forget_corpus_root(resolved_connection, root)
+        return removed
     finally:
         if owns_connection:
             resolved_connection.close()

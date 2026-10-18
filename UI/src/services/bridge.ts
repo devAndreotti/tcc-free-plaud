@@ -385,6 +385,14 @@ export interface CorpusRoot {
   notes_count: number;
 }
 
+/** Resultado de tirar uma pasta do corpus (UI/main.py: removeCorpusRoot). Não apaga arquivos do disco. */
+export interface CorpusRootRemoveResult {
+  ok: boolean;
+  status?: string;
+  removed_notes?: number;
+  message?: string;
+}
+
 /** Trecho do corpus que sustenta uma resposta (retrieval/models.py: Citation). */
 export interface AskCitation {
   note_id: string;
@@ -549,6 +557,9 @@ interface PythonApi {
 
   /** Remove uma nota do corpus, exigindo confirmação textual. */
   deleteNote?: (noteId: string, confirmation: string) => Promise<NoteDeleteResult>;
+
+  /** Tira a pasta do corpus (notas e raiz), exigindo 'REMOVER'. Não apaga arquivos do disco. */
+  removeCorpusRoot?: (root: string, confirmation: string) => Promise<CorpusRootRemoveResult>;
 
   /** Reindexa uma nota a partir do source_path salvo no banco. */
   reindexNote?: (noteId: string) => Promise<NoteReindexResult>;
@@ -1524,6 +1535,19 @@ export const bridge = {
     }
     console.debug(`[Bridge Mock] deleteNote: ${noteId}`);
     return { ok: true, note_id: noteId, deleted_vectors: 2 };
+  },
+
+  removeCorpusRoot: async (root: string, confirmation: string): Promise<CorpusRootRemoveResult> => {
+    if (isDesktopApp() && window.pywebview?.api.removeCorpusRoot) {
+      return window.pywebview.api.removeCorpusRoot(root, confirmation);
+    }
+    if (confirmation !== 'REMOVER') {
+      return { ok: false, status: 'confirmation_required', message: 'Digite REMOVER para confirmar.' };
+    }
+    console.debug(`[Bridge Mock] removeCorpusRoot: ${root}`);
+    const index = MOCK_CORPUS_ROOTS.findIndex((item) => item.root === root);
+    const removed = index >= 0 ? MOCK_CORPUS_ROOTS.splice(index, 1)[0].notes_count : 0;
+    return { ok: true, removed_notes: removed };
   },
 
   reindexNote: async (noteId: string): Promise<NoteReindexResult> => {

@@ -3,9 +3,10 @@ from pathlib import Path
 
 from escolio.app.config import Settings
 from escolio.corpus.ask import answer_corpus_with_citations
-from escolio.corpus.service import index_corpus_path, reset_corpus
+from escolio.corpus.service import index_corpus_path, remove_corpus_root, reset_corpus
 from escolio.retrieval.models import AskResponse
 from escolio.storage.sqlite import (
+    count_notes,
     init_sqlite,
     list_corpus_roots,
     note_ids_under_root,
@@ -198,3 +199,34 @@ def test_ask_hybrid_with_source_root_filters_vector_candidates_regressao(tmp_pat
     assert response.status == 'answer'
     assert _sources(response) == {str(culinaria / 'bolo.md')}
     assert abstained.status == 'no_answer'
+
+
+def test_remove_corpus_root_removes_only_notes_under_root_from_sqlite_and_chroma_regressao(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+    cul = tmp_path / 'cul'
+    culinaria = tmp_path / 'culinaria'
+    _write(cul, 'cafe.md', '# Cafe\n\nNota da pasta cul sobre cafe coado.\n')
+    _write(culinaria, 'bolo.md', '# Bolo\n\nPara o bolo de chocolate misture farinha e cacau.\n')
+    _index(settings, connection, vector_store, cul)
+    _index(settings, connection, vector_store, culinaria)
+    culinaria_ids = note_ids_under_root(connection, str(culinaria.resolve()))
+
+    removed = remove_corpus_root(str(cul.resolve()), settings=settings, connection=connection, vector_store=vector_store)
+
+    assert removed == 1
+    assert note_ids_under_root(connection, str(cul.resolve())) == set()
+    assert note_ids_under_root(connection, str(culinaria.resolve())) == culinaria_ids
+    assert count_notes(connection) == 1
+    assert {record[1]['note_id'] for record in vector_store.list_records()} == culinaria_ids
+    assert {row['root'] for row in connection.execute('SELECT root FROM corpus_roots')} == {str(culinaria.resolve())}
+    assert (cul / 'cafe.md').exists()
+
+
+def test_remove_corpus_root_keeps_other_roots_listed_regressao(tmp_path: Path) -> None:
+    settings, connection, vector_store, obsidian, culinaria = _indexed_corpus(tmp_path)
+
+    remove_corpus_root(str(obsidian.resolve()), settings=settings, connection=connection, vector_store=vector_store)
+
+    assert {row['root'] for row in list_corpus_roots(connection)} == {str(culinaria.resolve())}
