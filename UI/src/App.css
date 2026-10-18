@@ -1945,7 +1945,7 @@
 }
 
 .welcome__title {
-  font: 600 30px/1.2 var(--font-read);
+  font: 600 34px/1.15 var(--font-read);
   letter-spacing: -0.015em;
   color: var(--text-primary);
   text-wrap: balance;
@@ -2441,16 +2441,16 @@
 }
 
 .strategy__chip {
-  height: 28px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 9px 0 11px;
+  padding: 0 10px 0 12px;
   border: 1px solid var(--border-color);
   border-radius: 999px;
-  background: transparent;
+  background: var(--bg-primary);
   color: var(--text-secondary);
-  font: 500 12px var(--font-family);
+  font: 500 12.5px var(--font-family);
   cursor: pointer;
 }
 
@@ -2606,7 +2606,7 @@
    Todos os botões da coluna usam .sb__item: mesmo formato, mesmo estado.
    ============================================================ */
 .sb {
-  width: 232px;
+  width: 264px;
   flex-shrink: 0;
   height: 100vh;
   display: flex;
@@ -2676,24 +2676,24 @@
 .sb__item {
   position: relative;
   width: 100%;
-  height: 36px;
+  height: 40px;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   padding: 0 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-secondary);
-  font: 500 13px var(--font-family);
+  font: 500 14px var(--font-family);
   text-align: left;
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .sb__item svg {
-  width: 18px;
-  height: 18px;
+  width: 19px;
+  height: 19px;
   flex-shrink: 0;
 }
 
@@ -2705,6 +2705,7 @@
 .sb__item--active {
   background: var(--accent-soft);
   color: var(--text-primary);
+  font-weight: 600;
 }
 
 .sb__item--active > svg {
@@ -3114,9 +3115,9 @@
 }
 
 .modal--wide {
-  width: min(760px, calc(100vw - 32px));
+  width: min(1040px, calc(100vw - 32px));
   /* Altura fixa: trocar de aba não faz o modal pular. */
-  height: min(620px, calc(100vh - 64px));
+  height: min(740px, calc(100vh - 64px));
 }
 
 /* Cabeçalho do modal */
@@ -3175,7 +3176,7 @@
 }
 
 .settings-nav {
-  width: 200px;
+  width: 210px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -3188,17 +3189,18 @@
 
 .settings-nav__item {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-columns: 17px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
+  min-height: 40px;
   text-align: left;
-  padding: 8px 10px;
+  padding: 0 12px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 9px;
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-family);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -3214,10 +3216,9 @@
 
 .settings-nav__item--active,
 .settings-nav__item--active:hover {
-  background: var(--bg-surface-hover);
+  background: var(--accent-soft);
   color: var(--text-primary);
-  font-weight: 500;
-  box-shadow: 0 0 0 1px var(--border-color-subtle);
+  font-weight: 600;
 }
 
 .settings-nav__item--active svg {
@@ -3235,7 +3236,7 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: var(--spacing-lg);
+  padding: 22px 28px 26px;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
@@ -4246,8 +4247,8 @@
   color: var(--text-muted);
 }
 .welcome__cta { margin-top: 8px; height: 38px; padding: 0 16px; font-size: 13.5px; }
-.composer__vault { max-width: 220px; padding-left: 4px; color: var(--text-primary); }
-.composer__vault .vault-glyph { width: 20px; height: 20px; border-radius: 999px; }
+.composer__vault { max-width: 220px; padding-left: 5px; color: var(--text-primary); }
+.composer__vault .vault-glyph { width: 22px; height: 22px; border-radius: 999px; }
 .composer__vault-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Modal de criar/editar vault */
@@ -4320,8 +4321,12 @@
 /* Aba Vaults das Configurações: lista à esquerda, detalhe da vault escolhida à direita */
 .vaults-tab__head { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
 .vaults-tab__head > div { flex: 1; min-width: 220px; }
-.vaults-tab__body { display: flex; flex-direction: column; gap: 14px; }
-.vaults-tab__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.vaults-tab { container-type: inline-size; }
+.vaults-tab__body { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.vaults-tab__list { list-style: none; margin: 0; padding: 0; flex: 0 1 260px; display: flex; flex-direction: column; gap: 6px; }
+@container (max-width: 720px) {
+  .vaults-tab__list { flex-basis: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+}
 .vaults-tab__row {
   width: 100%;
   display: flex;
@@ -4337,7 +4342,7 @@
 }
 .vaults-tab__row:hover { background: var(--bg-surface-hover); }
 .vaults-tab__row--on { border-color: var(--accent-blue-light); background: var(--accent-soft); }
-.vaults-tab__row .vault-glyph { width: 32px; height: 32px; border-radius: 8px; }
+.vaults-tab__row .vault-glyph { width: 34px; height: 34px; border-radius: 9px; }
 .vaults-tab__row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
 .vaults-tab__row-text b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vaults-tab__row-text small { font-size: 11px; color: var(--text-muted); }
@@ -4352,6 +4357,7 @@
 }
 .vaults-tab__badge--lg { padding: 5px 12px; font-size: 12px; }
 .vaults-tab__detail {
+  flex: 1 1 420px;
   min-width: 0;
   display: flex;
   flex-direction: column;
