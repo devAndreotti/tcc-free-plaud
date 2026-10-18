@@ -86,6 +86,7 @@ const draftsFrom = (settings: BackendSettings) =>
 
 const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
+  const overlayPressRef = useRef(false);
   const [apiKey, setApiKey] = useState('');
   const [backendSettings, setBackendSettings] = useState<BackendSettings | null>(null);
   const [settingDrafts, setSettingDrafts] = useState<Record<string, string>>({});
@@ -489,8 +490,13 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
 
   // Renderiza diretamente no document.body via Portal.
   // O overlay usa display:flex para centralizar o modal de forma confiável.
+  // Fecha só quando mousedown e click acontecem no overlay (arrastar texto do card para fora não fecha).
   return createPortal(
-    <div className="modal-overlay">
+    <div
+      className="modal-overlay"
+      onMouseDown={(e) => { overlayPressRef.current = e.target === e.currentTarget; }}
+      onClick={(e) => { if (overlayPressRef.current && e.target === e.currentTarget) onClose(); }}
+    >
       {/* Janela do modal — filho direto do overlay flex */}
       <div
         ref={modalRef}

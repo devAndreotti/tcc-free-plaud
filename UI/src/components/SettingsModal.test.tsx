@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsModal from './SettingsModal';
@@ -444,5 +444,35 @@ describe('SettingsModal', () => {
 
     expect((await screen.findAllByText(/offline/)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/Servidor indisponivel/)).length).toBeGreaterThan(0);
+  });
+
+  it('regressão: clique no overlay fora do card chama onClose', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<SettingsModal isOpen onClose={onClose} />);
+
+    await user.click(screen.getByRole('dialog').parentElement as HTMLElement);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('regressão: clique dentro do card não chama onClose', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<SettingsModal isOpen onClose={onClose} />);
+
+    await user.click(screen.getByRole('dialog'));
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('regressão: mousedown no card e click no overlay não chama onClose', async () => {
+    const onClose = vi.fn();
+    render(<SettingsModal isOpen onClose={onClose} />);
+
+    fireEvent.mouseDown(screen.getByRole('dialog'));
+    fireEvent.click(screen.getByRole('dialog').parentElement as HTMLElement);
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
