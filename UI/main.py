@@ -50,7 +50,7 @@ from escolio.providers.answer import test_answer_provider
 from escolio.providers.model_discovery import list_answer_models
 from escolio.retrieval.models import AskResponse
 from escolio.storage.sqlite import init_sqlite
-from escolio.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
+from escolio.tui.actions import ask_corpus, corpus_roots_from_tui, corpus_status_from_tui, index_corpus_folder
 from escolio.tui.audio_actions import (
     cancel_audio_capture,
     cancel_voice_model_download,
@@ -144,16 +144,23 @@ class Api:
         response = ask_corpus(message, settings.default_ask_strategy, runtime=self.runtime)
         return self._format_ask_response(response)
 
-    def askCorpus(self, message: str, strategy: str | None = None) -> dict:
-        """Pergunta ao corpus e devolve a resposta estruturada (afirmações, citações, limitações)."""
+    def askCorpus(self, message: str, strategy: str | None = None, source_root: str | None = None) -> dict:
+        """Pergunta ao corpus e devolve a resposta estruturada (afirmações, citações, limitações).
+
+        source_root restringe a busca às notas sob essa pasta indexada; None usa o corpus inteiro.
+        """
         settings = get_settings()
         resolved = strategy if strategy in ASK_STRATEGIES else settings.default_ask_strategy
-        response = ask_corpus(message, resolved, runtime=self.runtime)
+        response = ask_corpus(message, resolved, runtime=self.runtime, source_root=source_root or None)
         payload = response.model_dump(mode='json', exclude={'debug'})
         payload['strategy'] = resolved
         payload['top_k'] = settings.retrieval_top_k
         payload['answer_provider'] = settings.answer_provider
         return payload
+
+    def listCorpusRoots(self) -> list[dict]:
+        """Pastas indexadas com notas, para o seletor de pasta do chat."""
+        return corpus_roots_from_tui()
 
     def indexVault(self, folder_path: str) -> dict:
         """
@@ -347,7 +354,7 @@ class Api:
 
     def startWatcher(self, folder_path: str) -> dict:
         """Inicia monitoramento continuo da pasta para auto-ingestao de novos arquivos."""
-        return watcher_manager.start(folder_path)
+        return watcher_manager.start(folder_path, self.dropped_files)
 
     def stopWatcher(self) -> dict:
         """Para o monitoramento continuo ativo, se houver."""
@@ -364,10 +371,6 @@ class Api:
     def pollDroppedFiles(self) -> list:
         """Drena os resultados da indexação de arquivos soltos."""
         return [event.model_dump(mode='json') for event in self.dropped_files.poll_events()]
-
-    def pollWatcherEvents(self) -> list:
-        """Drena e retorna eventos de ingestao capturados pelo watcher desde a ultima consulta."""
-        return [event.model_dump(mode="json") for event in watcher_manager.poll_events()]
 
     def startAudioCapture(self) -> dict:
         """Inicia gravacao do microfone padrao do sistema e devolve o job_id."""

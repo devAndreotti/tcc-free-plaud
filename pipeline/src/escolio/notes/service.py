@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -160,6 +161,54 @@ def delete_note(
         deleted_vectors = resolved_vector_store.delete_by_note_id(note_id)
         delete_note_and_chunks(resolved_connection, note_id)
     return NoteDeleteResult(ok=True, note_id=note_id, deleted_vectors=deleted_vectors)
+
+
+def source_key(path: Path | str) -> str:
+    """Chave de comparação de caminho: absoluta e normalizada para o SO (no Windows, sem caixa)."""
+    return os.path.normcase(os.path.abspath(os.path.expanduser(str(path))))
+
+
+def _source_matches(source: str, target: str, *, folder: bool, recursive: bool) -> bool:
+    key = source_key(source)
+    if not folder:
+        return key == target
+    if not recursive:
+        return os.path.dirname(key) == target
+    # Com separador no prefixo, `cul` não casa com `culinaria`.
+    prefix = target if target.endswith(os.sep) else target + os.sep
+    return key.startswith(prefix)
+
+
+def delete_notes_by_source_path(
+    path: Path | str,
+    *,
+    folder: bool = False,
+    recursive: bool = True,
+    missing_only: bool = False,
+    settings: Settings | None = None,
+    connection: sqlite3.Connection | None = None,
+    vector_store: LocalVectorStore | None = None,
+) -> int:
+    """Remove do SQLite/FTS e do Chroma as notas cujo `source_path` é `path` (ou está sob a pasta `path`).
+
+    `missing_only` restringe a remoção a notas cujo arquivo não existe mais no disco.
+    Devolve quantas notas foram removidas.
+    """
+    resolved_settings = settings or get_settings()
+    ensure_runtime_dirs(resolved_settings)
+    resolved_vector_store = _vector_store(resolved_settings, vector_store)
+    target = source_key(path)
+    with _managed_connection(resolved_settings, connection) as resolved_connection:
+        note_ids = [
+            note.note_id
+            for note in get_all_notes(resolved_connection)
+            if _source_matches(note.source_path, target, folder=folder, recursive=recursive)
+            and (not missing_only or not Path(note.source_path).exists())
+        ]
+        for note_id in note_ids:
+            resolved_vector_store.delete_by_note_id(note_id)
+            delete_note_and_chunks(resolved_connection, note_id)
+    return len(note_ids)
 
 
 def reindex_note(

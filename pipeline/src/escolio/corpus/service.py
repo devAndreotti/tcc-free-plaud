@@ -30,12 +30,15 @@ from escolio.corpus.models import (
     ResolvedCorpusCommitMode,
 )
 from escolio.ingest.loaders import PDF_PARSE_FAILED, load_document
+from escolio.ingest.validators import has_indexable_content
 from escolio.notes.schemas import Note
+from escolio.notes.service import delete_notes_by_source_path
 from escolio.notes.structurer import structure_document
 from escolio.providers.embed import Embedder, get_embedder
 from escolio.retrieval.indexer import index_note
 from escolio.retrieval.models import Chunk
 from escolio.storage.sqlite import (
+    corpus_root_for_path,
     count_chunks,
     count_fts_chunks,
     count_notes,
@@ -47,6 +50,7 @@ from escolio.storage.sqlite import (
     list_chunk_ids_for_note,
     list_note_ids_by_source_path,
     note_chunks_match_config,
+    record_corpus_root,
     replace_chunks_for_note,
     upsert_note,
 )
@@ -1098,9 +1102,9 @@ def _load_structure_chunk_corpus_file(
 ) -> _PendingCorpusIndex | _PreparationFailure:
     try:
         document = load_document(path)
-        if not document.raw_text.strip():
+        if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
-        note = structure_document(document, source_root=source_root)
+        note = structure_document(document, source_root=source_root, hash_unrooted=True)
         return _PendingCorpusIndex(
             source_path=document.source_path,
             note=note,
@@ -1212,10 +1216,13 @@ def index_corpus_file(
 
     try:
         document = load_document(source_path)
-        if not document.raw_text.strip():
+        if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
 
-        note = structure_document(document, source_root=source_root)
+        # Arquivo de uma pasta já indexada (watcher, área de soltar) mantém o note_id da Fila.
+        if source_root is None:
+            source_root = corpus_root_for_path(resolved_connection, source_path)
+        note = structure_document(document, source_root=source_root, hash_unrooted=True)
         existing_hash = get_note_content_hash(resolved_connection, note.note_id)
         existing_chunk_ids = list_chunk_ids_for_note(resolved_connection, note.note_id)
         chunks_match_config = note_chunks_match_config(
@@ -1468,6 +1475,22 @@ def index_corpus_path(
                 skipped=discovery.skipped,
             )
 
+        # Antes de qualquer arquivo: a pasta vira raiz do corpus mesmo que a reindexação venha toda "unchanged".
+        record_corpus_root(resolved_connection, source_path.resolve())
+
+        # Notas de arquivos apagados da pasta saem do índice; só após confirmar a raiz e sem cancelamento.
+        removed_count = 0
+        if not _is_cancelled(cancel_token):
+            removed_count = delete_notes_by_source_path(
+                source_path,
+                folder=True,
+                recursive=recursive,
+                missing_only=True,
+                settings=resolved_settings,
+                connection=resolved_connection,
+                vector_store=resolved_vector_store,
+            )
+
         pending_items: list[_PendingCorpusIndex] = []
         results: list[CorpusIndexResult] = []
         indexed_count = 0
@@ -1520,6 +1543,7 @@ def index_corpus_path(
                 failed_count=0,
                 skipped_count=skipped_count,
                 unchanged_count=0,
+                removed_count=removed_count,
                 commit_mode_requested=commit_mode_requested,
                 commit_mode_resolved=commit_mode_resolved,
                 results=[],
@@ -1932,6 +1956,7 @@ def index_corpus_path(
             failed_count=failed_count,
             skipped_count=len(discovery.skipped),
             unchanged_count=unchanged_count,
+            removed_count=removed_count,
             commit_mode_requested=commit_mode_requested,
             commit_mode_resolved=commit_mode_resolved,
             results=results,

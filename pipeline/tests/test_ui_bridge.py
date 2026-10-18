@@ -88,9 +88,11 @@ def test_desktop_api_ask_corpus_returns_structured_response(monkeypatch) -> None
         latency_ms=42,
     )
     calls = []
+    roots = []
 
-    def fake_ask(question, strategy, runtime):
+    def fake_ask(question, strategy, runtime, source_root=None):
         calls.append(strategy)
+        roots.append(source_root)
         return response
 
     monkeypatch.setattr(module, "ask_corpus", fake_ask)
@@ -98,9 +100,11 @@ def test_desktop_api_ask_corpus_returns_structured_response(monkeypatch) -> None
 
     payload = api.askCorpus("Pergunta?", "lexical")
     api.askCorpus("Pergunta?", "nao-existe")
+    api.askCorpus("Pergunta?", "lexical", "D:\\Notas\\Culinaria")
 
     assert calls[0] == "lexical"
     assert calls[1] == module.get_settings().default_ask_strategy
+    assert roots == [None, None, "D:\\Notas\\Culinaria"]
     assert payload["strategy"] == "lexical"
     assert payload["claims"][0]["support_level"] == "partial"
     assert payload["citations"][0]["char_start"] == 10
@@ -223,8 +227,9 @@ def test_desktop_api_exposes_watcher_methods(monkeypatch, tmp_path: Path) -> Non
     module = _load_ui_main(monkeypatch)
     calls: list[str] = []
 
-    def fake_start(folder_path):
+    def fake_start(folder_path, indexer):
         calls.append(f"start:{folder_path}")
+        assert indexer is api.dropped_files
         return {"ok": True, "active": True, "directory": str(folder_path)}
 
     def fake_stop():
@@ -234,36 +239,14 @@ def test_desktop_api_exposes_watcher_methods(monkeypatch, tmp_path: Path) -> Non
     def fake_status():
         return {"active": True, "directory": str(tmp_path)}
 
-    def fake_poll():
-        event = SimpleNamespace(
-            model_dump=lambda mode="json": {
-                "ingestion_id": "ing-1",
-                "correlation_id": "watch-1",
-                "source_path": str(tmp_path / "nota.txt"),
-                "source_type": "txt",
-                "detected_media_type": "text/plain",
-                "status": "success",
-                "size_bytes": 10,
-                "content_sha256": "abc",
-                "error_code": None,
-                "message": "ok",
-                "warnings": [],
-                "created_at": "2026-05-26T10:00:00+00:00",
-            }
-        )
-        return [event]
-
     monkeypatch.setattr(module.watcher_manager, "start", fake_start)
     monkeypatch.setattr(module.watcher_manager, "stop", fake_stop)
     monkeypatch.setattr(module.watcher_manager, "status", fake_status)
-    monkeypatch.setattr(module.watcher_manager, "poll_events", fake_poll)
 
     api = module.Api()
 
     assert api.startWatcher(str(tmp_path))["active"] is True
     assert api.getWatcherStatus()["directory"] == str(tmp_path)
-    events = api.pollWatcherEvents()
-    assert events[0]["status"] == "success"
     assert api.stopWatcher()["active"] is False
     assert calls == [f"start:{tmp_path}", "stop"]
 

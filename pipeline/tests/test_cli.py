@@ -252,7 +252,7 @@ def test_corpus_index_cli_persists_file(monkeypatch, tmp_path: Path) -> None:
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload['status'] == 'success'
-    assert payload['note_id'] == 'documento-com-espaco'
+    assert payload['note_id'].startswith('documento-com-espaco--')
     assert payload['chunks_indexed'] >= 1
     assert payload['embedding_model'] == 'fake-hash'
 

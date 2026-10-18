@@ -233,6 +233,14 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         recommended='pt',
     ),
     SettingSpec(
+        key='audio_input_device',
+        label='Microfone',
+        description='Dispositivo usado para gravar a pergunta por voz. "Padrão do sistema" segue o microfone padrão do Windows.',
+        group=AUDIO_GROUP,
+        value_type='string',
+        layer='simple',
+    ),
+    SettingSpec(
         key='audio_device',
         label='Device de transcrição',
         description='Onde roda o modelo de voz quando ele suporta device.',

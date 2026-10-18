@@ -14,6 +14,7 @@ from escolio.retrieval.models import (
     AskDebug,
     AskDebugTimings,
     AskResponse,
+    Chunk,
     Citation,
     SearchHit,
     UsedSource,
@@ -48,6 +49,7 @@ from escolio.storage.sqlite import (
     list_chunk_ids,
     list_chunks,
     list_fts_vocabulary,
+    note_ids_under_root,
     search_chunks_fts,
 )
 from escolio.storage.vector import LocalVectorStore
@@ -442,6 +444,7 @@ def fts_lexical_search_hits(
     *,
     top_k: int = 5,
     candidate_limit: int | None = None,
+    note_ids: frozenset[str] | None = None,
 ) -> list[SearchHit]:
     """Busca lexical do corpus via FTS5/BM25, com fallback Python se FTS falhar."""
     if top_k <= 0:
@@ -461,9 +464,10 @@ def fts_lexical_search_hits(
             connection,
             match_query,
             limit=candidate_limit or max(top_k * 4, 40),
+            note_ids=note_ids,
         )
     except sqlite3.OperationalError:
-        return lexical_search_hits(query, list_chunks(connection), top_k=top_k)
+        return lexical_search_hits(query, _chunks_in_scope(connection, note_ids), top_k=top_k)
 
     scored: list[SearchHit] = []
     for rank, (chunk, bm25_score) in enumerate(candidate_rows, start=1):
@@ -483,7 +487,14 @@ def fts_lexical_search_hits(
 
     if scored:
         return scored[:top_k]
-    return lexical_search_hits(query, list_chunks(connection), top_k=top_k)
+    return lexical_search_hits(query, _chunks_in_scope(connection, note_ids), top_k=top_k)
+
+
+def _chunks_in_scope(connection: sqlite3.Connection, note_ids: frozenset[str] | None) -> list[Chunk]:
+    chunks = list_chunks(connection)
+    if note_ids is None:
+        return chunks
+    return [chunk for chunk in chunks if chunk.note_id in note_ids]
 
 
 def _trim_claim_preserving_query_terms(question: str, query_terms: list[str], claim_text: str) -> str:
@@ -599,16 +610,18 @@ def retrieve_corpus_hits(
     strategy: RetrievalStrategy,
     vector_store: LocalVectorStore | None,
     embedder: Embedder | None,
+    note_ids: frozenset[str] | None = None,
 ) -> tuple[list[SearchHit], int]:
+    # O escopo entra na consulta (FTS: IN; Chroma: $in), então a pasta nunca fica sem candidatos por pool curto.
     if strategy == 'lexical':
-        return fts_lexical_search_hits(connection, question, top_k=top_k), 0
+        return fts_lexical_search_hits(connection, question, top_k=top_k, note_ids=note_ids), 0
 
     if vector_store is None or embedder is None:
         raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector e strategy=hybrid.')
 
     candidate_pool_size = max(top_k * 8, 24)
     if strategy == 'vector':
-        vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size)
+        vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size, note_ids=note_ids)
         filtered_hits, stale_count = _filter_hits_to_persisted_chunks(vector_hits, valid_chunk_ids)
         return filtered_hits[:top_k], stale_count
 
@@ -617,8 +630,9 @@ def retrieve_corpus_hits(
             connection,
             question,
             top_k=max(top_k * 3, top_k),
+            note_ids=note_ids,
         )
-        vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size)
+        vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size, note_ids=note_ids)
         filtered_vector_hits, stale_count = _filter_hits_to_persisted_chunks(vector_hits, valid_chunk_ids)
         return (
             fuse_hits_by_rank(
@@ -647,8 +661,9 @@ def answer_corpus_with_citations(
     max_claims: int = 3,
     answer_provider: AnswerProvider | None = None,
     include_debug: bool = False,
+    source_root: str | None = None,
 ) -> AskResponse:
-    """Responde usando todo o corpus persistido, mantendo citacoes por chunk."""
+    """Responde usando todo o corpus persistido (ou só a pasta `source_root`), mantendo citacoes por chunk."""
     started_at = perf_counter()
     query_terms = normalize_query_terms(question)
     named_query_terms = extract_named_query_terms(question)
@@ -706,6 +721,12 @@ def answer_corpus_with_citations(
     if count_chunks(connection) == 0:
         return _no_answer('empty_corpus', ['O corpus persistido ainda não contém chunks indexados.'], [])
 
+    note_ids: frozenset[str] | None = None
+    if source_root:
+        note_ids = frozenset(note_ids_under_root(connection, source_root))
+        if not note_ids:
+            return _no_answer('source_root_without_notes', ['Nenhuma nota indexada está na pasta escolhida.'], [])
+
     # Um termo de conteúdo que não está em nenhuma nota quase sempre é o assunto da pergunta
     # ("senha", "Splunk", "orçamento"): os outros termos acham trechos parecidos e o chat responderia
     # outra coisa. No benchmark, separa 6 de 10 negativas sem recusar nenhuma das 39 positivas.
@@ -730,6 +751,7 @@ def answer_corpus_with_citations(
         strategy=strategy,
         vector_store=vector_store,
         embedder=embedder,
+        note_ids=note_ids,
     )
     hits = _dedupe_hits(raw_hits)
     stale_limitations = (

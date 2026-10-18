@@ -2,6 +2,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { bridge } from './services/bridge';
 
 // O app roda sobre o bridge em modo mock (sem pywebview), como no navegador de desenvolvimento.
 describe('App', () => {
@@ -58,5 +59,24 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: 'Abrir painel de grafos' }));
     expect(await screen.findByRole('button', { name: 'Fechar painel de grafos' })).toBeTruthy();
+  });
+
+  it('lista as pastas do corpus no seletor e envia a pasta escolhida na pergunta (regressao)', async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    const askSpy = vi.spyOn(bridge, 'askCorpus');
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Pasta de origem: Todas as pastas' }));
+    const menu = await screen.findByRole('menu', { name: 'Pasta de origem' });
+    expect(within(menu).getByRole('menuitemradio', { name: /Obsidian/ }).getAttribute('title')).toBe('D:\\Notas\\Obsidian');
+    await user.click(within(menu).getByRole('menuitemradio', { name: /Culinaria/ }));
+
+    await user.type(screen.getByRole('textbox', { name: 'Campo de mensagem' }), 'Como fazer bolo de chocolate?');
+    await user.click(screen.getByRole('button', { name: 'Enviar mensagem' }));
+
+    expect(askSpy).toHaveBeenCalledWith('Como fazer bolo de chocolate?', 'hybrid', 'D:\\Notas\\Culinaria');
+    expect(window.localStorage.getItem('escolio:chat:sourceRoot')).toBe('D:\\Notas\\Culinaria');
+    askSpy.mockRestore();
   });
 });

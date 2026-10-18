@@ -4,11 +4,17 @@ from escolio.app.config import Settings
 from escolio.corpus.service import index_corpus_file
 from escolio.notes.service import (
     delete_note,
+    delete_notes_by_source_path,
     get_note_detail,
     list_notes,
     reindex_note,
 )
-from escolio.storage.sqlite import connect_sqlite, count_chunks, count_notes
+from escolio.storage.sqlite import (
+    connect_sqlite,
+    count_chunks,
+    count_notes,
+    get_all_notes,
+)
 from escolio.storage.vector import LocalVectorStore
 
 
@@ -40,6 +46,10 @@ def _settings(tmp_path: Path) -> Settings:
         default_chunk_size=120,
         default_chunk_overlap=20,
     )
+
+
+def _store(settings: Settings) -> LocalVectorStore:
+    return LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
 
 
 def _index_fixture(settings: Settings, source: Path, text: str) -> str:
@@ -157,3 +167,78 @@ def test_reindex_note_keeps_note_id_from_folder_index(tmp_path: Path) -> None:
     assert result.note_id == note_id
     assert result.status == 'unchanged'  # mesmo id + mesmo conteúdo: nada a refazer
     assert count_notes(connection) == 1
+
+
+def test_regressao_reindex_note_separa_arquivos_unicos_com_mesmo_nome(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    first_dir = tmp_path / 'a'
+    second_dir = tmp_path / 'b'
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first_id = _index_fixture(settings, first_dir / 'notas.md', '# Notas\n\nTexto antigo da pasta a.\n')
+    second_id = _index_fixture(settings, second_dir / 'notas.md', '# Notas\n\nTexto da pasta b.\n')
+    (second_dir / 'notas.md').write_text('# Notas\n\nTexto novo da pasta b editado.\n', encoding='utf-8')
+    connection = connect_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+
+    result = reindex_note(second_id, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+
+    assert first_id != second_id
+    assert count_notes(connection) == 2
+    assert result.ok is True
+    assert result.status == 'success'
+    assert 'Texto novo da pasta b' in get_note_detail(second_id, settings=settings, connection=connection).structured_markdown
+
+
+def test_regressao_reindex_note_aceita_id_antigo_so_slug(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'antiga.md'
+    monkeypatch.setattr('escolio.notes.structurer.build_note_id', lambda path, **kwargs: 'antiga')
+    legacy_id = _index_fixture(settings, source, '# Antiga\n\nTexto antigo da nota legada.\n')
+    monkeypatch.undo()
+    source.write_text('# Antiga\n\nTexto novo da nota legada.\n', encoding='utf-8')
+    connection = connect_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+
+    result = reindex_note(legacy_id, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+
+    assert legacy_id == 'antiga'
+    assert result.ok is True
+    assert result.status == 'success'
+    assert result.note_id.startswith('antiga--')
+    assert count_notes(connection) == 1
+
+
+def test_regressao_delete_por_pasta_nao_apaga_pasta_irma_com_mesmo_prefixo(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    cul = tmp_path / 'vault' / 'cul'
+    irma = tmp_path / 'vault' / 'culinaria'
+    cul.mkdir(parents=True)
+    irma.mkdir(parents=True)
+    _index_fixture(settings, cul / 'receita.md', '# Receita\n\nBolo de cenoura.\n')
+    _index_fixture(settings, irma / 'outra.md', '# Outra\n\nNota de culinaria.\n')
+
+    removed = delete_notes_by_source_path(cul, folder=True, settings=settings, vector_store=_store(settings))
+
+    connection = connect_sqlite(settings.sqlite_path)
+    try:
+        assert removed == 1
+        assert [Path(note.source_path).name for note in get_all_notes(connection)] == ['outra.md']
+    finally:
+        connection.close()
+
+
+def test_regressao_delete_por_arquivo_remove_so_a_nota_do_caminho(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    (tmp_path / 'vault').mkdir()
+    keep = _index_fixture(settings, tmp_path / 'vault' / 'fica.md', '# Fica\n\nNota que continua.\n')
+    _index_fixture(settings, tmp_path / 'vault' / 'some.md', '# Some\n\nNota que sai.\n')
+
+    removed = delete_notes_by_source_path(tmp_path / 'vault' / 'some.md', settings=settings, vector_store=_store(settings))
+
+    connection = connect_sqlite(settings.sqlite_path)
+    try:
+        assert removed == 1
+        assert [note.note_id for note in get_all_notes(connection)] == [keep]
+    finally:
+        connection.close()

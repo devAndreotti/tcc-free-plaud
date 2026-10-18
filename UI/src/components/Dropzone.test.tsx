@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Dropzone from './Dropzone';
 
 const bridgeMock = vi.hoisted(() => ({
-  pollWatcherEvents: vi.fn(),
   indexDroppedFiles: vi.fn(),
   pollDroppedFiles: vi.fn(),
 }));
@@ -33,8 +32,6 @@ describe('Dropzone', () => {
   });
 
   beforeEach(() => {
-    bridgeMock.pollWatcherEvents.mockReset();
-    bridgeMock.pollWatcherEvents.mockResolvedValue([]);
     bridgeMock.indexDroppedFiles.mockReset();
     bridgeMock.indexDroppedFiles.mockImplementation((names: string[]) => Promise.resolve({ queued: names, missing: [] }));
     bridgeMock.pollDroppedFiles.mockReset();
@@ -112,23 +109,10 @@ describe('Dropzone', () => {
     expect(region.className).not.toContain('dropzone--active');
   });
 
-  it('consulta eventos do watcher e dispara toast de sucesso', async () => {
+  it('regressao: evento indexed do watcher chega pela fila de drops e vira toast', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    bridgeMock.pollWatcherEvents.mockResolvedValue([
-      {
-        ingestion_id: 'ing-1',
-        correlation_id: 'corr-1',
-        source_path: 'C:\\Vault\\nota.md',
-        source_type: 'markdown',
-        detected_media_type: null,
-        status: 'success',
-        size_bytes: 10,
-        content_sha256: null,
-        error_code: null,
-        message: null,
-        warnings: [],
-        created_at: '2026-05-26T10:00:00+00:00',
-      },
+    bridgeMock.pollDroppedFiles.mockResolvedValue([
+      { name: 'nota.md', source_path: 'C:\\Vault\\nota.md', status: 'indexed', chunks: 2, error_code: null, message: null },
     ]);
     const onToast = vi.fn();
 
@@ -140,9 +124,28 @@ describe('Dropzone', () => {
 
     await waitFor(() => {
       expect(onToast).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'ing-1', status: 'success' })
+        expect.objectContaining({ status: 'success', message: 'nota.md entrou no corpus (2 chunks).' })
       );
     });
-    expect(screen.getByText('nota.md')).toBeTruthy();
+  });
+
+  it('regressao: evento removed do watcher vira toast "removido do corpus"', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    bridgeMock.pollDroppedFiles.mockResolvedValue([
+      { name: 'nota.md', source_path: 'C:\\Vault\\nota.md', status: 'removed', chunks: 0, error_code: null, message: null },
+    ]);
+    const onToast = vi.fn();
+
+    render(<Dropzone watchDirectory="C:\\Vault" onToast={onToast} />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    await waitFor(() => {
+      expect(onToast).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'success', message: 'nota.md removido do corpus.' })
+      );
+    });
   });
 });

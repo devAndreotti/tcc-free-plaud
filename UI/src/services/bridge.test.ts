@@ -23,10 +23,6 @@ describe('bridge watcher and audio (mock mode)', () => {
     expect(await bridge.getWatcherStatus()).toEqual({ active: false, directory: null });
   });
 
-  it('returns empty ingestion events by default', async () => {
-    expect(await bridge.pollWatcherEvents()).toEqual([]);
-  });
-
   it('exercises audio capture mock methods', async () => {
     const started = await bridge.startAudioCapture();
     expect(started.status).toBe('recording');
@@ -108,7 +104,6 @@ describe('isDesktopApp (lazy PyWebView detection)', () => {
     await bridge.startWatcher('C:\\Vault');
     await bridge.stopWatcher();
     await bridge.getWatcherStatus();
-    await bridge.pollWatcherEvents();
     await bridge.indexDroppedFiles(['nota.md']);
     await bridge.pollDroppedFiles();
     await bridge.getBackendSettings();
@@ -149,7 +144,6 @@ describe('isDesktopApp (lazy PyWebView detection)', () => {
       'startWatcher',
       'stopWatcher',
       'getWatcherStatus',
-      'pollWatcherEvents',
       'indexDroppedFiles',
       'pollDroppedFiles',
       'getBackendSettings',
@@ -199,5 +193,27 @@ describe('askCorpus', () => {
     expect(result.answer).toBe('texto simples');
     expect(result.claims).toEqual([]);
     expect(result.no_answer).toBe(false);
+  });
+
+  it('repassa a pasta de origem escolhida ao askCorpus do backend (regressao)', async () => {
+    const calls: unknown[][] = [];
+    (window as unknown as { pywebview: { api: unknown } }).pywebview = {
+      api: {
+        askCorpus: (...args: unknown[]) => {
+          calls.push(args);
+          return Promise.resolve({ query: 'q', status: 'answer', claims: [], citations: [] });
+        },
+      },
+    };
+    await bridge.askCorpus('q', 'hybrid', 'D:\\Notas\\Culinaria');
+    expect(calls).toEqual([['q', 'hybrid', 'D:\\Notas\\Culinaria']]);
+  });
+
+  it('lista as pastas do corpus pelo backend quando existe (regressao)', async () => {
+    const roots = [{ root: 'D:\\Notas\\Culinaria', notes_count: 3 }];
+    (window as unknown as { pywebview: { api: unknown } }).pywebview = {
+      api: { listCorpusRoots: () => Promise.resolve(roots) },
+    };
+    expect(await bridge.listCorpusRoots()).toEqual(roots);
   });
 });

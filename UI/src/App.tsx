@@ -14,7 +14,7 @@ import GraphPanel from './components/GraphPanel';
 import NotesPanel from './components/NotesPanel';
 import BenchmarkPanel from './components/BenchmarkPanel';
 import QueuePanel from './components/QueuePanel';
-import { bridge, type AskStrategy } from './services/bridge';
+import { bridge, type AskStrategy, type CorpusRoot } from './services/bridge';
 import { VaultProvider } from './contexts/VaultContext';
 import { QueueProvider } from './contexts/QueueContext';
 
@@ -31,6 +31,17 @@ const INITIAL_TAB: Tab = {
 
 // Estado de conversa vazia para reutilização
 const EMPTY_MESSAGES: MessageData[] = [];
+
+// Última pasta escolhida no seletor de pasta do chat (null = todas).
+const SOURCE_ROOT_STORAGE_KEY = 'escolio:chat:sourceRoot';
+
+const readStoredSourceRoot = (): string | null => {
+  try {
+    return window.localStorage.getItem(SOURCE_ROOT_STORAGE_KEY);
+  } catch {
+    return null; // armazenamento indisponível: a escolha vale só nesta sessão
+  }
+};
 
 function App() {
   // Gerenciamento de abas
@@ -49,6 +60,38 @@ function App() {
   const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('chat');
   const [strategy, setStrategy] = useState<AskStrategy>('hybrid');
+  const [sourceRoot, setSourceRoot] = useState<string | null>(readStoredSourceRoot);
+  const [corpusRoots, setCorpusRoots] = useState<CorpusRoot[]>([]);
+
+  // Recarrega as pastas ao trocar de tela: uma indexação feita na Fila aparece no seletor ao voltar ao chat.
+  useEffect(() => {
+    let active = true;
+    bridge
+      .listCorpusRoots()
+      .then((roots) => {
+        if (active) setCorpusRoots(roots);
+      })
+      .catch(() => {
+        if (active) setCorpusRoots([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [workspaceView]);
+
+  const chooseSourceRoot = useCallback((root: string | null) => {
+    setSourceRoot(root);
+    try {
+      if (root) window.localStorage.setItem(SOURCE_ROOT_STORAGE_KEY, root);
+      else window.localStorage.removeItem(SOURCE_ROOT_STORAGE_KEY);
+    } catch {
+      // sem persistência: a escolha continua valendo nesta sessão
+    }
+  }, []);
+
+  // Só vale com seletor visível (duas ou mais pastas) e se a pasta ainda estiver indexada.
+  const activeSourceRoot =
+    corpusRoots.length >= 2 && sourceRoot && corpusRoots.some((root) => root.root === sourceRoot) ? sourceRoot : null;
 
   const openSettings = useCallback((tab?: SettingsTab) => {
     setSettingsTab(tab);
@@ -147,10 +190,10 @@ function App() {
 
   // Pergunta ao corpus e anexa a resposta (estruturada, quando o backend a devolve)
   const askInTab = useCallback(
-    async (tabId: string, text: string, askStrategy: AskStrategy) => {
+    async (tabId: string, text: string, askStrategy: AskStrategy, askSourceRoot: string | null) => {
       setTabTyping((prev) => ({ ...prev, [tabId]: true }));
       try {
-        const ask = await bridge.askCorpus(text, askStrategy);
+        const ask = await bridge.askCorpus(text, askStrategy, askSourceRoot);
         appendMessage(tabId, {
           id: `msg-${generateId()}`,
           role: 'assistant',
@@ -194,16 +237,16 @@ function App() {
             : tab
         )
       );
-      await askInTab(activeTabId, text, strategy);
+      await askInTab(activeTabId, text, strategy, activeSourceRoot);
     },
-    [activeTabId, appendMessage, askInTab, strategy]
+    [activeTabId, appendMessage, askInTab, strategy, activeSourceRoot]
   );
 
   const handleRetry = useCallback(
     (query: string, retryStrategy: AskStrategy) => {
-      if (activeTabId) void askInTab(activeTabId, query, retryStrategy);
+      if (activeTabId) void askInTab(activeTabId, query, retryStrategy, activeSourceRoot);
     },
-    [activeTabId, askInTab]
+    [activeTabId, askInTab, activeSourceRoot]
   );
 
   // Determina a aba ativa para renderizar a view correta
@@ -294,6 +337,9 @@ function App() {
                 isLoading={isTyping}
                 strategy={strategy}
                 onStrategyChange={setStrategy}
+                corpusRoots={corpusRoots}
+                sourceRoot={activeSourceRoot}
+                onSourceRootChange={chooseSourceRoot}
               />
             )}
           </div>

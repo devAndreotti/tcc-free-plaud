@@ -44,7 +44,7 @@ export interface WatcherStatus {
 export interface DroppedFileEvent {
   name: string;
   source_path: string;
-  status: 'indexed' | 'unchanged' | 'failed';
+  status: 'indexed' | 'unchanged' | 'failed' | 'removed';
   chunks: number;
   error_code: string | null;
   message: string | null;
@@ -56,27 +56,13 @@ export interface DroppedFilesEnqueueResult {
   missing: string[];
 }
 
-export interface WatcherIngestionEvent {
-  ingestion_id: string;
-  correlation_id: string;
-  source_path: string;
-  source_type: string | null;
-  detected_media_type: string | null;
-  status: "success" | "failed";
-  size_bytes: number;
-  content_sha256: string | null;
-  error_code: string | null;
-  message: string | null;
-  warnings: string[];
-  created_at: string;
-}
-
 export interface IndexVaultResult {
   ok: boolean;
   status: string;
   total_found: number;
   indexed_count: number;
   unchanged_count: number;
+  removed_count: number;
   failed_count: number;
   skipped_count: number;
 }
@@ -393,6 +379,12 @@ export interface BenchmarkCompareResult {
 
 export type AskStrategy = 'hybrid' | 'vector' | 'lexical';
 
+/** Pasta indexada do corpus com notas (corpus/service.py: raiz gravada na indexação). */
+export interface CorpusRoot {
+  root: string;
+  notes_count: number;
+}
+
 /** Trecho do corpus que sustenta uma resposta (retrieval/models.py: Citation). */
 export interface AskCitation {
   note_id: string;
@@ -437,7 +429,10 @@ interface PythonApi {
   sendMessage: (message: string, attachment?: string) => Promise<string>;
 
   /** Pergunta ao corpus e devolve a resposta estruturada, com citações por afirmação. */
-  askCorpus?: (message: string, strategy?: AskStrategy) => Promise<AskResult>;
+  askCorpus?: (message: string, strategy?: AskStrategy, sourceRoot?: string) => Promise<AskResult>;
+
+  /** Pastas indexadas com notas, para o seletor de pasta do chat. */
+  listCorpusRoots?: () => Promise<CorpusRoot[]>;
 
   /**
    * Abre o seletor nativo de pasta do sistema operacional.
@@ -476,9 +471,6 @@ interface PythonApi {
 
   /** Consulta se ha monitoramento ativo e qual pasta esta sendo observada. */
   getWatcherStatus?: () => Promise<WatcherStatus>;
-
-  /** Drena eventos de ingestao capturados pelo watcher desde a ultima consulta. */
-  pollWatcherEvents?: () => Promise<WatcherIngestionEvent[]>;
 
   /** Indexa no corpus os arquivos soltos na área de soltar (pelo nome; o caminho fica no Python). */
   indexDroppedFiles?: (names: string[]) => Promise<DroppedFilesEnqueueResult>;
@@ -597,6 +589,11 @@ const plainAskResult = (query: string, text: string): AskResult => ({
   reason_for_no_answer: null,
   latency_ms: 0,
 });
+
+const MOCK_CORPUS_ROOTS: CorpusRoot[] = [
+  { root: 'D:\\Notas\\Obsidian', notes_count: 42 },
+  { root: 'D:\\Notas\\Culinaria', notes_count: 7 },
+];
 
 const MOCK_CITATIONS: AskCitation[] = [
   {
@@ -823,6 +820,7 @@ const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobS
     total_found: 5,
     indexed_count: 5,
     unchanged_count: 0,
+    removed_count: 0,
     failed_count: 0,
     skipped_count: 0,
   },
@@ -944,9 +942,12 @@ export const bridge = {
     return mockSendMessage(message);
   },
 
-  askCorpus: async (message: string, strategy?: AskStrategy): Promise<AskResult> => {
+  askCorpus: async (message: string, strategy?: AskStrategy, sourceRoot?: string | null): Promise<AskResult> => {
     if (isDesktopApp() && window.pywebview?.api.askCorpus) {
-      return window.pywebview.api.askCorpus(message, strategy);
+      // Sem pasta escolhida, o backend recebe só (message, strategy): corpus inteiro.
+      return sourceRoot
+        ? window.pywebview.api.askCorpus(message, strategy, sourceRoot)
+        : window.pywebview.api.askCorpus(message, strategy);
     }
     // Backend antigo (ou mocks de E2E) só expõem sendMessage: vira resposta sem citações.
     if (isDesktopApp() && window.pywebview?.api.sendMessage) {
@@ -1025,6 +1026,7 @@ export const bridge = {
       total_found: 5,
       indexed_count: 5,
       unchanged_count: 0,
+      removed_count: 0,
       failed_count: 0,
       skipped_count: 0,
     };
@@ -1147,13 +1149,6 @@ export const bridge = {
       return window.pywebview.api.getWatcherStatus();
     }
     return { active: mockWatcherActive, directory: mockWatcherDirectory };
-  },
-
-  pollWatcherEvents: async (): Promise<WatcherIngestionEvent[]> => {
-    if (isDesktopApp() && window.pywebview?.api.pollWatcherEvents) {
-      return window.pywebview.api.pollWatcherEvents();
-    }
-    return [];
   },
 
   indexDroppedFiles: async (names: string[]): Promise<DroppedFilesEnqueueResult> => {
@@ -1335,6 +1330,22 @@ export const bridge = {
           ],
           recommended: 'auto',
         }),
+        mockSettingRow({
+          index: 8,
+          key: 'audio_input_device',
+          label: 'Microfone',
+          description: 'Dispositivo usado para gravar a pergunta por voz. "Padrão do sistema" segue o microfone padrão do Windows.',
+          group: 'Áudio',
+          value_type: 'string',
+          layer: 'simple',
+          value: null,
+          display_value: 'vazio',
+          options: [
+            { value: '', label: 'Padrão do sistema' },
+            { value: 'Headset (QCY H3 Pro)', label: 'Headset (QCY H3 Pro)' },
+          ],
+          recommended: null,
+        }),
       ],
     };
   },
@@ -1468,6 +1479,14 @@ export const bridge = {
     }
     console.debug('[Bridge Mock] saveBackendSettings:', values);
     return bridge.getBackendSettings();
+  },
+
+  listCorpusRoots: async (): Promise<CorpusRoot[]> => {
+    if (isDesktopApp()) {
+      // Backend sem o método devolve lista vazia, sem pastas inventadas.
+      return window.pywebview?.api.listCorpusRoots ? window.pywebview.api.listCorpusRoots() : [];
+    }
+    return MOCK_CORPUS_ROOTS.map((root) => ({ ...root }));
   },
 
   listNotes: async (): Promise<NoteSummary[]> => {

@@ -117,7 +117,7 @@ def has_obsidian_signals(text: str) -> bool:
     return any(signal in text for signal in OBSIDIAN_SIGNAL_PATTERNS)
 
 
-def _extract_frontmatter(text: str) -> tuple[dict[str, object], str]:
+def extract_frontmatter(text: str) -> tuple[dict[str, object], str]:
     if not text.startswith('---\n'):
         return {}, text
 
@@ -390,7 +390,7 @@ def _clean_markdown_segment(text: str) -> str:
 
 
 def clean_obsidian_text(raw_text: str) -> str:
-    frontmatter, body = _extract_frontmatter(raw_text)
+    frontmatter, body = extract_frontmatter(raw_text)
     rendered_frontmatter = _render_frontmatter(frontmatter)
 
     pieces: list[str] = []

@@ -1,12 +1,17 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import QueuePanel from './QueuePanel';
 import { QueueProvider } from '../contexts/QueueContext';
+import { VaultProvider } from '../contexts/VaultContext';
 
 // QueuePanel agora depende do QueueContext — todo render precisa do Provider.
-const renderQueuePanel = () => render(<QueueProvider><QueuePanel /></QueueProvider>);
+// QueueProvider consome o VaultContext, por isso fica dentro do VaultProvider (como em App.tsx).
+const Providers = ({ children }: { children: ReactNode }) => (
+  <VaultProvider><QueueProvider>{children}</QueueProvider></VaultProvider>
+);
+const renderQueuePanel = () => render(<Providers><QueuePanel /></Providers>);
 
 const bridgeMock = vi.hoisted(() => ({
   selectFolder: vi.fn(),
@@ -15,7 +20,9 @@ const bridgeMock = vi.hoisted(() => ({
   cancelIndexJob: vi.fn(),
   startWatcher: vi.fn(),
   stopWatcher: vi.fn(),
-  pollWatcherEvents: vi.fn(),
+  loadVaultPath: vi.fn(),
+  saveVaultPath: vi.fn(),
+  scanVault: vi.fn(),
 }));
 
 vi.mock('../services/bridge', () => ({
@@ -70,7 +77,12 @@ describe('QueuePanel', () => {
     bridgeMock.cancelIndexJob.mockReset();
     bridgeMock.startWatcher.mockReset();
     bridgeMock.stopWatcher.mockReset();
-    bridgeMock.pollWatcherEvents.mockReset();
+    bridgeMock.loadVaultPath.mockReset();
+    bridgeMock.saveVaultPath.mockReset();
+    bridgeMock.scanVault.mockReset();
+    bridgeMock.loadVaultPath.mockResolvedValue('');
+    bridgeMock.saveVaultPath.mockResolvedValue(true);
+    bridgeMock.scanVault.mockResolvedValue([]);
 
     bridgeMock.selectFolder.mockResolvedValue('C:\\Vault');
     bridgeMock.startIndexJob.mockResolvedValue(runningJob);
@@ -78,7 +90,6 @@ describe('QueuePanel', () => {
     bridgeMock.cancelIndexJob.mockResolvedValue({ ...runningJob, status: 'cancelled', cancel_requested: true });
     bridgeMock.startWatcher.mockResolvedValue({ ok: true, active: true, directory: 'C:\\Vault' });
     bridgeMock.stopWatcher.mockResolvedValue({ ok: true, active: false, directory: null });
-    bridgeMock.pollWatcherEvents.mockResolvedValue([]);
   });
 
   it('cria job e mostra progresso consultado do backend', async () => {
@@ -143,7 +154,7 @@ describe('QueuePanel', () => {
         { source_path: 'Audio/aula-07.m4a', message: 'Modelo de voz não instalado.', error_code: 'AUDIO_MODEL_NOT_READY' },
       ],
     });
-    render(<QueueProvider><QueuePanel onOpenSettings={onOpenSettings} /></QueueProvider>);
+    render(<Providers><QueuePanel onOpenSettings={onOpenSettings} /></Providers>);
 
     await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
     await user.click(screen.getByRole('button', { name: 'Indexar' }));
@@ -185,12 +196,12 @@ describe('QueuePanel', () => {
     const Harness = () => {
       const [showQueue, setShowQueue] = useState(true);
       return (
-        <QueueProvider>
+        <Providers>
           <button type="button" onClick={() => setShowQueue((prev) => !prev)}>
             alternar aba
           </button>
           {showQueue && <QueuePanel />}
-        </QueueProvider>
+        </Providers>
       );
     };
 
@@ -221,5 +232,44 @@ describe('QueuePanel', () => {
     expect(await screen.findByText('job-queue-1')).toBeTruthy();
 
     vi.useRealTimers();
+  });
+
+  it('indexar com vault vazio adota a pasta indexada como vault', async () => {
+    const user = userEvent.setup();
+    renderQueuePanel();
+
+    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
+    await user.click(screen.getByRole('button', { name: 'Indexar' }));
+
+    await waitFor(() => expect(bridgeMock.startIndexJob).toHaveBeenCalled());
+    expect(bridgeMock.saveVaultPath).toHaveBeenCalledWith('C:\\Vault');
+    expect(bridgeMock.scanVault).toHaveBeenCalledWith('C:\\Vault');
+  });
+
+  it('indexar não troca um vault já configurado em Configurações', async () => {
+    bridgeMock.loadVaultPath.mockResolvedValue('D:\\Escolhido');
+    const user = userEvent.setup();
+    renderQueuePanel();
+    await waitFor(() => expect(bridgeMock.scanVault).toHaveBeenCalledWith('D:\\Escolhido'));
+
+    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
+    await user.click(screen.getByRole('button', { name: 'Indexar' }));
+
+    await waitFor(() => expect(bridgeMock.startIndexJob).toHaveBeenCalled());
+    expect(bridgeMock.saveVaultPath).not.toHaveBeenCalled();
+  });
+
+  it('reescaneia o vault quando o job da pasta do vault conclui', async () => {
+    bridgeMock.loadVaultPath.mockResolvedValue('C:\\Vault');
+    bridgeMock.getIndexJob.mockResolvedValue({ ...runningJob, status: 'success', finished_at: '2026-05-26T10:01:00+00:00' });
+    const user = userEvent.setup();
+    renderQueuePanel();
+    await waitFor(() => expect(bridgeMock.scanVault).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
+    await user.click(screen.getByRole('button', { name: 'Indexar' }));
+
+    await waitFor(() => expect(bridgeMock.scanVault).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    expect(bridgeMock.saveVaultPath).not.toHaveBeenCalled();
   });
 });
