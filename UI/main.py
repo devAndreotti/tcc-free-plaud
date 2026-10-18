@@ -18,6 +18,7 @@ Integração atual:
 """
 
 import os
+import sqlite3
 import sys
 import threading
 import json
@@ -34,7 +35,15 @@ PIPELINE_SRC = REPO_ROOT / 'pipeline' / 'src'
 if PIPELINE_SRC.exists() and str(PIPELINE_SRC) not in sys.path:
     sys.path.insert(0, str(PIPELINE_SRC))
 
-from escolio.app.config import get_settings
+from escolio.app.config import base_settings, get_settings, settings_for_vault
+from escolio.app.vaults import (
+    active_vault,
+    create_vault,
+    delete_vault,
+    load_registry,
+    set_active,
+    update_vault,
+)
 from escolio.app.doctor import run_doctor
 from escolio.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
 from escolio.app.settings_catalog import save_catalog_setting, save_catalog_settings, settings_catalog_payload
@@ -84,8 +93,82 @@ class Api:
     """
 
     def __init__(self) -> None:
-        self.runtime = CorpusRuntime()
+        self.runtime: CorpusRuntime | None = None
+        self.dropped_files: DroppedFileIndexer | None = None
+        self._activate_vault(stop_watcher=False)
+
+    def _activate_vault(self, stop_watcher: bool = True) -> None:
+        """Recria runtime e indexador de drop a partir da vault ativa e para o watcher da anterior."""
+        base = base_settings()
+        settings = settings_for_vault(active_vault(base), base)
+        if stop_watcher:
+            watcher_manager.stop()
+        self.runtime = CorpusRuntime(settings)
         self.dropped_files = DroppedFileIndexer(runtime=self.runtime)
+        get_settings.cache_clear()
+
+    def _vault_row(self, vault, base) -> dict:
+        db_path = settings_for_vault(vault, base).sqlite_path
+        note_count = 0
+        if db_path.exists():
+            try:  # leitura pura: nao migra o banco de outra vault
+                connection = sqlite3.connect(f'file:{db_path.as_posix()}?mode=ro', uri=True)
+                try:
+                    note_count = int(connection.execute('SELECT COUNT(*) FROM notes').fetchone()[0])
+                finally:
+                    connection.close()
+            except sqlite3.Error:
+                note_count = 0
+        return {**vault.model_dump(), 'note_count': note_count}
+
+    def listVaults(self) -> dict:
+        """Vaults cadastradas, com a vault ativa e a contagem de notas de cada uma."""
+        base = base_settings()
+        registry = load_registry(base)
+        return {'active': registry.active, 'vaults': [self._vault_row(v, base) for v in registry.vaults]}
+
+    def createVault(self, name: str, icon: str, color: str, folders: list[str]) -> dict:
+        try:
+            vault = create_vault(name, icon, color, folders or [], base_settings())
+        except ValueError as exc:
+            return {'ok': False, 'message': str(exc)}
+        return {'ok': True, 'vault': vault.model_dump()}
+
+    def updateVault(self, vault_id: str, patch: dict) -> dict:
+        allowed = {key: patch[key] for key in ('name', 'icon', 'color', 'folders') if key in patch}
+        try:
+            vault = update_vault(vault_id, base_settings(), **allowed)
+        except ValueError as exc:
+            return {'ok': False, 'message': str(exc)}
+        return {'ok': True, 'vault': vault.model_dump()}
+
+    def deleteVault(self, vault_id: str, confirm: str = '') -> dict:
+        """Exclui a vault. `confirm` precisa ser igual ao nome dela. Nunca apaga pastas de origem."""
+        base = base_settings()
+        try:
+            target = next(v for v in load_registry(base).vaults if v.id == vault_id)
+        except StopIteration:
+            return {'ok': False, 'message': f'vault nao encontrada: {vault_id}'}
+        if confirm != target.name:
+            return {'ok': False, 'message': 'Digite o nome da vault para confirmar a exclusão.'}
+        was_active = load_registry(base).active == vault_id
+        try:
+            delete_vault(vault_id, base)
+        except ValueError as exc:
+            return {'ok': False, 'message': str(exc)}
+        if was_active:
+            self._activate_vault()
+        return {'ok': True, 'active': load_registry(base).active}
+
+    def selectVault(self, vault_id: str) -> dict:
+        """Ativa a vault e refaz o runtime. Um job em andamento segue com o runtime antigo."""
+        base = base_settings()
+        try:
+            vault = set_active(vault_id, base)
+        except ValueError as exc:
+            return {'ok': False, 'message': str(exc)}
+        self._activate_vault()
+        return {'ok': True, 'vault': vault.model_dump()}
 
     def _warmup(self) -> None:
         """Abre o Chroma, carrega o embedding e o vocabulário do corpus antes da primeira pergunta (~8 s a frio)."""

@@ -1,8 +1,10 @@
 import importlib.util
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
+from escolio.app.config import Settings
 from escolio.app.doctor_models import DoctorCheck, DoctorReport
 from escolio.providers.answer import AnswerProviderTestResult
 from escolio.providers.model_discovery import ModelDiscoveryResult, ModelInfo
@@ -21,6 +23,15 @@ def _load_ui_main(monkeypatch):
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
+    # Api() le o registro de vaults: isola em diretorio temporario, nunca no data/ real.
+    isolated = Path(tempfile.mkdtemp(prefix="escolio-ui-bridge-"))
+    module.base_settings = lambda: Settings(
+        data_dir=isolated / "data",
+        results_dir=isolated / "data" / "results",
+        sqlite_path=isolated / "data" / "results" / "escolio.sqlite3",
+        vector_store_dir=isolated / "data" / "results" / "vector_store",
+        notes_dir=isolated / "notes",
+    )
     return module
 
 
