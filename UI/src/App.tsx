@@ -63,23 +63,22 @@ function AppContent() {
   // Conversas por vault, em memória: cada vault tem suas abas e mensagens.
   const { active: activeVault, version: vaultVersion } = useVaults();
   const vaultKey = activeVault ? activeVault.id : '';
-  const [chats, setChats] = useState<Record<string, ChatState>>({});
-  // Vault que adotou a conversa iniciada antes da lista de vaults: respostas pendentes ('') vão para ela.
-  const bootVaultRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (chats[vaultKey]) return;
-    if (vaultKey && chats['']) bootVaultRef.current = vaultKey;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- vault sem conversa começa com uma "Nova Conversa" vazia.
-    setChats((prev) => {
-      if (prev[vaultKey]) return prev;
-      // Conversa iniciada antes da lista de vaults chegar fica com a primeira vault carregada.
-      const adopted = vaultKey && prev[''] ? prev[''] : newChatState();
-      return { ...withoutKey(prev, ''), [vaultKey]: adopted };
-    });
-  }, [chats, vaultKey]);
+  const [chats, setChats] = useState<Record<string, ChatState>>(() => ({ '': newChatState() }));
+  // Vault sem conversa ganha uma "Nova Conversa"; a aberta antes da lista de vaults chegar ('') fica com a primeira vault.
+  // Ajustado na renderização (não em efeito): o chat nunca pisca vazio, então o campo de mensagem não remonta nem perde o texto.
+  if (!chats[vaultKey]) {
+    const adopted = vaultKey && chats[''] ? chats[''] : newChatState();
+    setChats({ ...withoutKey(chats, ''), [vaultKey]: adopted });
+  }
   const updateChat = useCallback((key: string, update: (chat: ChatState) => ChatState) => {
-    const target = key === '' && bootVaultRef.current ? bootVaultRef.current : key;
-    setChats((prev) => (prev[target] ? { ...prev, [target]: update(prev[target]) } : prev));
+    setChats((prev) => (prev[key] ? { ...prev, [key]: update(prev[key]) } : prev));
+  }, []);
+  // Atualiza a conversa que contém a aba: a resposta cai na vault do envio, mesmo depois de trocar de vault.
+  const updateTabChat = useCallback((tabId: string, update: (chat: ChatState) => ChatState) => {
+    setChats((prev) => {
+      const key = Object.keys(prev).find((k) => prev[k].tabs.some((tab) => tab.id === tabId));
+      return key === undefined ? prev : { ...prev, [key]: update(prev[key]) };
+    });
   }, []);
   const chat = chats[vaultKey] ?? EMPTY_CHAT;
   const { tabs, activeTabId, tabMessages, tabTyping } = chat;
@@ -206,19 +205,18 @@ function AppContent() {
     setWorkspaceView('chat');
   }, [updateChat, vaultKey]);
 
-  // Anexa à conversa da vault `key` (a que estava ativa no envio, mesmo se trocou depois)
-  const appendMessage = useCallback((key: string, tabId: string, message: MessageData) => {
-    updateChat(key, (c) => ({ ...c, tabMessages: { ...c.tabMessages, [tabId]: [...(c.tabMessages[tabId] ?? []), message] } }));
-  }, [updateChat]);
+  // Anexa à conversa da aba (na vault em que ela foi aberta)
+  const appendMessage = useCallback((tabId: string, message: MessageData) => {
+    updateTabChat(tabId, (c) => ({ ...c, tabMessages: { ...c.tabMessages, [tabId]: [...(c.tabMessages[tabId] ?? []), message] } }));
+  }, [updateTabChat]);
 
-  /* eslint-disable react-hooks/preserve-manual-memoization -- o React Compiler não preserva este memo com o estado por vault; as deps estão completas. */
   // Pergunta ao corpus e anexa a resposta (estruturada, quando o backend a devolve)
   const askInTab = useCallback(
-    async (key: string, tabId: string, text: string, askStrategy: AskStrategy, askSourceRoot: string | null) => {
-      updateChat(key, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: true } }));
+    async (tabId: string, text: string, askStrategy: AskStrategy, askSourceRoot: string | null) => {
+      updateTabChat(tabId, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: true } }));
       try {
         const ask = await bridge.askCorpus(text, askStrategy, askSourceRoot);
-        appendMessage(key, tabId, {
+        appendMessage(tabId, {
           id: `msg-${generateId()}`,
           role: 'assistant',
           content: ask.answer ?? '',
@@ -227,7 +225,7 @@ function AppContent() {
         });
       } catch (error) {
         // Exibe erro como mensagem do assistente para não travar a UI
-        appendMessage(key, tabId, {
+        appendMessage(tabId, {
           id: `msg-${generateId()}`,
           role: 'assistant',
           content: 'Ocorreu um erro ao processar sua mensagem. Tente novamente.',
@@ -235,13 +233,14 @@ function AppContent() {
         });
         console.error('[App] Erro ao chamar bridge.askCorpus:', error);
       } finally {
-        updateChat(key, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: false } }));
+        updateTabChat(tabId, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: false } }));
       }
     },
-    [appendMessage, updateChat]
+    [appendMessage, updateTabChat]
   );
 
-  // Envia mensagem na conversa da aba ativa; a vault é a do momento do envio
+  /* eslint-disable react-hooks/preserve-manual-memoization -- o React Compiler não preserva este memo com o estado por vault; as deps estão completas. */
+  // Envia mensagem na conversa da aba ativa
   const handleSendMessage = useCallback(
     async (text: string, attachment?: File) => {
       if (!activeTabId) return;
@@ -249,7 +248,7 @@ function AppContent() {
       const tabId = activeTabId;
       const title = text.trim();
 
-      appendMessage(vaultKey, tabId, {
+      appendMessage(tabId, {
         id: `msg-${generateId()}`,
         role: 'user',
         content: text || `[Arquivo: ${attachment?.name}]`,
@@ -257,23 +256,23 @@ function AppContent() {
       });
       // O nome da primeira pergunta vira o título da aba
       const label = title.length > 32 ? `${title.slice(0, 32)}…` : title;
-      updateChat(vaultKey, (c) => ({
+      updateTabChat(tabId, (c) => ({
         ...c,
         tabs: c.tabs.map((tab) => (tab.id === tabId && tab.label === 'Nova Conversa' && title ? { ...tab, label } : tab)),
       }));
-      await askInTab(vaultKey, tabId, text, strategy, activeSourceRoot);
+      await askInTab(tabId, text, strategy, activeSourceRoot);
     },
-    [activeTabId, vaultKey, appendMessage, updateChat, askInTab, strategy, activeSourceRoot]
+    [activeTabId, appendMessage, updateTabChat, askInTab, strategy, activeSourceRoot]
   );
 
   const handleRetry = useCallback(
     (query: string, retryStrategy: AskStrategy) => {
-      if (activeTabId) void askInTab(vaultKey, activeTabId, query, retryStrategy, activeSourceRoot);
+      if (activeTabId) void askInTab(activeTabId, query, retryStrategy, activeSourceRoot);
     },
-    [activeTabId, vaultKey, askInTab, activeSourceRoot]
+    [activeTabId, askInTab, activeSourceRoot]
   );
-
   /* eslint-enable react-hooks/preserve-manual-memoization */
+
   // Determina a aba ativa para renderizar a view correta
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   const hasMessages = activeMessages.length > 0;
