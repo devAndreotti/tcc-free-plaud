@@ -38,6 +38,16 @@ describe('vaultGraph (regressão do grafo bagunçado)', () => {
     }
   });
 
+  it('posições iniciais são determinísticas e nenhum nó nasce sobre outro', () => {
+    const vault = [note('A/x.md'), note('A/y.md'), note('B/z.md'), note('raiz.md')];
+    const a = buildGraph(vault, 400, 400).nodes;
+    const b = buildGraph(vault, 400, 400).nodes;
+    expect(a.map((n) => [n.x, n.y])).toEqual(b.map((n) => [n.x, n.y]));
+
+    const spots = new Set(a.map((n) => `${n.x},${n.y}`));
+    expect(spots.size).toBe(a.length);
+  });
+
   it('fitCamera enquadra todos os nós dentro do canvas, mesmo espalhados', () => {
     const { nodes } = buildGraph([note('A/x.md'), note('B/y.md')], 320, 900);
     nodes[0].x = -5000; nodes[0].y = -3000;

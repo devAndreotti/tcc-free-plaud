@@ -27,6 +27,53 @@ function themeColors(el: Element) {
   };
 }
 
+type Colors = ReturnType<typeof themeColors>;
+type Ctx = CanvasRenderingContext2D;
+
+// ─── Desenho de um frame (funções internas, fora do componente) ──────────────
+
+function nodeColor(n: SimNode, colors: Colors, hoveredId: string | null): string {
+  if (n.id === hoveredId) return colors.hover;
+  if (n.kind === 'folder') return colors.folder;
+  return colors.node;
+}
+
+function drawEdges(ctx: Ctx, nodes: SimNode[], edges: SimEdge[], colors: Colors, cam: Camera) {
+  const map = new Map(nodes.map((n) => [n.id, n]));
+  ctx.strokeStyle = colors.edge;
+  ctx.lineWidth   = 0.8 / cam.scale;
+  ctx.beginPath();
+  for (const e of edges) {
+    const a = map.get(e.source), b = map.get(e.target);
+    if (!a || !b) continue;
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke();
+}
+
+function drawNodes(ctx: Ctx, nodes: SimNode[], colors: Colors, hoveredId: string | null) {
+  for (const n of nodes) {
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, nodeRadius(n), 0, Math.PI * 2);
+    ctx.fillStyle = nodeColor(n, colors, hoveredId);
+    ctx.fill();
+  }
+}
+
+// Rótulos das pastas só com zoom suficiente para não se sobreporem (1º nível antes dos demais)
+function drawFolderLabels(ctx: Ctx, nodes: SimNode[], colors: Colors, cam: Camera) {
+  ctx.fillStyle = colors.label;
+  ctx.font = `${11 / cam.scale}px sans-serif`;
+  ctx.textAlign = 'center';
+  for (const n of nodes) {
+    if (n.kind !== 'folder' || n.depth === 0) continue;
+    const minScale = n.depth === 1 ? 0.45 : 1.2;
+    if (cam.scale < minScale) continue;
+    ctx.fillText(n.label, n.x, n.y - (nodeRadius(n) + 4) / cam.scale);
+  }
+}
+
 // ─── Componente ──────────────────────────────────────────────────────────────
 
 interface ForceGraphProps { vaultNodes: MarkdownNode[] }
@@ -67,35 +114,9 @@ const ForceGraph = ({ vaultNodes }: ForceGraphProps) => {
     ctx.translate(cam.x, cam.y);
     ctx.scale(cam.scale, cam.scale);
 
-    const map = new Map(nodes.map((n) => [n.id, n]));
-
-    ctx.strokeStyle = colors.edge;
-    ctx.lineWidth   = 0.8 / cam.scale;
-    ctx.beginPath();
-    for (const e of edges) {
-      const a = map.get(e.source), b = map.get(e.target);
-      if (!a || !b) continue;
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-    }
-    ctx.stroke();
-
-    for (const n of nodes) {
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, nodeRadius(n), 0, Math.PI * 2);
-      ctx.fillStyle = n.id === hovered.current ? colors.hover : n.kind === 'folder' ? colors.folder : colors.node;
-      ctx.fill();
-    }
-
-    // Rótulos das pastas só com zoom suficiente para não se sobreporem (1º nível antes dos demais)
-    ctx.fillStyle = colors.label;
-    ctx.font = `${11 / cam.scale}px sans-serif`;
-    ctx.textAlign = 'center';
-    for (const n of nodes) {
-      if (n.kind !== 'folder' || n.depth === 0) continue;
-      if (cam.scale < (n.depth === 1 ? 0.45 : 1.2)) continue;
-      ctx.fillText(n.label, n.x, n.y - (nodeRadius(n) + 4) / cam.scale);
-    }
+    drawEdges(ctx, nodes, edges, colors, cam);
+    drawNodes(ctx, nodes, colors, hovered.current);
+    drawFolderLabels(ctx, nodes, colors, cam);
 
     ctx.restore();
   }, []);

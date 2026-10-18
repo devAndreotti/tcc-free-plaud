@@ -49,7 +49,7 @@ const JobCard = ({ job, onCancel, busy, onOpenSettings }: {
   job: IndexJobSnapshot;
   onCancel: () => void;
   busy: boolean;
-  onOpenSettings?: QueuePanelProps['onOpenSettings'];
+  onOpenSettings: QueuePanelProps['onOpenSettings'];
 }) => {
   const progress = job.progress;
   const total = progress?.total_found ?? job.result?.total_found ?? 0;
@@ -97,7 +97,7 @@ const JobCard = ({ job, onCancel, busy, onOpenSettings }: {
 
       <ol className="job__steps" aria-label="Etapas">
         {STEPS.map((step, i) => {
-          const state = i < current ? 'done' : i === current && running ? 'active' : 'todo';
+          const state = stepState(i, current, running);
           return (
             <li key={step.label} className={`job__step job__step--${state}`} aria-current={state === 'active' ? 'step' : undefined}>
               <span className="job__step-dot" aria-hidden="true" />
@@ -164,11 +164,7 @@ const JobCard = ({ job, onCancel, busy, onOpenSettings }: {
         <div>
           <dt>Modo de commit</dt>
           <dd className="mono job__commit">
-            {progress
-              ? progress.commit_mode_requested === progress.commit_mode_resolved || !progress.commit_mode_resolved
-                ? progress.commit_mode_requested || '—'
-                : `${progress.commit_mode_requested} → ${progress.commit_mode_resolved}`
-              : '—'}
+            {commitModeText(progress)}
           </dd>
         </div>
       </dl>
@@ -221,7 +217,31 @@ const JobCard = ({ job, onCancel, busy, onOpenSettings }: {
   );
 };
 
-const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+const stepState = (i: number, current: number, running: boolean) => {
+  if (i < current) return 'done';
+  return i === current && running ? 'active' : 'todo';
+};
+
+const commitModeText = (progress: IndexJobSnapshot['progress']) => {
+  if (!progress) return '—';
+  const { commit_mode_requested: requested, commit_mode_resolved: resolved } = progress;
+  if (requested === resolved || !resolved) return requested || '—';
+  return `${requested} → ${resolved}`;
+};
+
+const basename = (path: string) => path.split(/[\\/]/).findLast(Boolean) ?? path;
+
+const QueueIdle = ({ busy }: { busy: boolean }) => busy ? (
+  <div className="card queue__empty">
+    <div className="job__bar job__bar--indeterminate" role="status" aria-label="Preparando indexação" />
+    <p>Preparando o job de indexação…</p>
+  </div>
+) : (
+  <div className="card queue__empty">
+    <p><b>Nenhum job nesta sessão.</b></p>
+    <p>Escolha a pasta do vault e clique em Indexar. Notas que não mudaram desde a última vez são puladas pelo hash.</p>
+  </div>
+);
 
 const notesLabel = (count: number) => `${count} ${count === 1 ? 'nota' : 'notas'}`;
 
@@ -441,16 +461,8 @@ const QueuePanel = ({ onOpenSettings }: QueuePanelProps) => {
 
         {job ? (
           <JobCard job={job} onCancel={cancelJob} busy={isBusy} onOpenSettings={onOpenSettings} />
-        ) : isBusy ? (
-          <div className="card queue__empty">
-            <div className="job__bar job__bar--indeterminate" role="status" aria-label="Preparando indexação" />
-            <p>Preparando o job de indexação…</p>
-          </div>
         ) : (
-          <div className="card queue__empty">
-            <p><b>Nenhum job nesta sessão.</b></p>
-            <p>Escolha a pasta do vault e clique em Indexar. Notas que não mudaram desde a última vez são puladas pelo hash.</p>
-          </div>
+          <QueueIdle busy={isBusy} />
         )}
 
         <Dropzone watchDirectory={watcherActive ? folderPath : null} onToast={addToast} />

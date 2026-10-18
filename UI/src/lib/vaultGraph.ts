@@ -34,11 +34,12 @@ const NOTE_EDGE_LEN = 26;  // nota ↔ pasta
 const DIR_EDGE_LEN  = 70;  // pasta ↔ pasta-mãe
 const MAX_SPEED     = 30;
 const FIT_PADDING   = 24;
+const GOLDEN_ANGLE  = 2.399963; // radianos (~137,5°): espalha nós novos sem alinhá-los
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function folderOf(path: string): string {
-  const parts = path.replace(/\\/g, '/').split('/');
+  const parts = path.replaceAll('\\', '/').split('/');
   return parts.slice(0, -1).join('/');
 }
 
@@ -57,11 +58,13 @@ export function buildGraph(
   const cx = logW / 2;
   const cy = logH / 2;
   const kept = new Map(previous.map((n) => [n.id, n]));
-  const place = (id: string): Pick<SimNode, 'x' | 'y' | 'vx' | 'vy'> => {
+  // Posição nova: espiral de ângulo áureo pelo índice do nó (determinística, sem Math.random)
+  const place = (id: string, i: number): Pick<SimNode, 'x' | 'y' | 'vx' | 'vy'> => {
     const old = kept.get(id); // rescan do mesmo vault não embaralha o desenho
-    return old
-      ? { x: old.x, y: old.y, vx: 0, vy: 0 }
-      : { x: cx + (Math.random() - 0.5) * logW * 0.5, y: cy + (Math.random() - 0.5) * logH * 0.5, vx: 0, vy: 0 };
+    if (old) return { x: old.x, y: old.y, vx: 0, vy: 0 };
+    const angle = i * GOLDEN_ANGLE;
+    const r = 8 * Math.sqrt(i);
+    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), vx: 0, vy: 0 };
   };
 
   const nodes: SimNode[] = [];
@@ -74,7 +77,7 @@ export function buildGraph(
     if (folders.has(dir)) return id;
     folders.add(dir);
     const parts = dir ? dir.split('/') : [];
-    nodes.push({ id, label: parts.at(-1) ?? 'vault', kind: 'folder', depth: parts.length, degree: 0, ...place(id) });
+    nodes.push({ id, label: parts.at(-1) ?? 'vault', kind: 'folder', depth: parts.length, degree: 0, ...place(id, nodes.length) });
     if (dir) edges.push({ source: ensureFolder(parts.slice(0, -1).join('/')), target: id });
     return id;
   };
@@ -83,7 +86,7 @@ export function buildGraph(
     const dir = folderOf(n.path);
     const folderId = ensureFolder(dir);
     const depth = dir ? dir.split('/').length + 1 : 1;
-    nodes.push({ id: n.id, label: n.name, kind: 'note', depth, degree: 0, ...place(n.id) });
+    nodes.push({ id: n.id, label: n.name, kind: 'note', depth, degree: 0, ...place(n.id, nodes.length) });
     edges.push({ source: folderId, target: n.id });
   }
 
@@ -140,7 +143,7 @@ export function tick(nodes: SimNode[], edges: SimEdge[], cx: number, cy: number)
     const a = map.get(e.source), b = map.get(e.target);
     if (!a || !b) continue;
     const dx = b.x - a.x, dy = b.y - a.y;
-    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const dist = Math.hypot(dx, dy) || 1;
     const rest = b.kind === 'folder' ? DIR_EDGE_LEN : NOTE_EDGE_LEN;
     const delta = (dist - rest) * ATTRACTION;
     const fx = (dx / dist) * delta, fy = (dy / dist) * delta;
