@@ -451,6 +451,14 @@ def list_corpus_roots(connection: sqlite3.Connection) -> list[dict[str, object]]
     return result
 
 
+def corpus_root_for_path(connection: sqlite3.Connection, path: Path) -> Path | None:
+    """Pasta indexada mais funda que contém o arquivo, para ele manter o mesmo note_id da Fila."""
+    path_key = _path_key(path)
+    roots = [str(row['root']) for row in connection.execute('SELECT root FROM corpus_roots')]
+    matches = [root for root in roots if _is_under_root(path_key, _path_key(root))]
+    return Path(max(matches, key=len)) if matches else None
+
+
 def note_ids_under_root(connection: sqlite3.Connection, root: str) -> set[str]:
     """Ids das notas cujo arquivo está sob a pasta (incluindo subpastas)."""
     root_key = _path_key(root)

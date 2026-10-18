@@ -42,6 +42,7 @@ from escolio.storage.sqlite import (
     count_fts_chunks,
     count_notes,
     delete_corpus_notes_and_chunks,
+    corpus_root_for_path,
     delete_note_and_chunks,
     get_note_content_hash,
     init_sqlite,
@@ -1218,6 +1219,9 @@ def index_corpus_file(
         if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
 
+        # Arquivo de uma pasta já indexada (watcher, área de soltar) mantém o note_id da Fila.
+        if source_root is None:
+            source_root = corpus_root_for_path(resolved_connection, source_path)
         note = structure_document(document, source_root=source_root, hash_unrooted=True)
         existing_hash = get_note_content_hash(resolved_connection, note.note_id)
         existing_chunk_ids = list_chunk_ids_for_note(resolved_connection, note.note_id)

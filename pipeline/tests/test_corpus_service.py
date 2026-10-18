@@ -575,6 +575,27 @@ def test_regressao_indexacao_de_pasta_remove_nota_de_arquivo_apagado(tmp_path: P
     assert result.removed_count == 1
 
 
+def test_regressao_arquivo_de_pasta_indexada_mantem_note_id_ao_ser_indexado_sozinho(tmp_path: Path) -> None:
+    # Watcher e área de soltar indexam um arquivo por vez; o id tem de ser o mesmo da Fila.
+    settings = _settings(tmp_path)
+    root = tmp_path / 'vault'
+    (root / 'sub').mkdir(parents=True)
+    source = root / 'sub' / 'nota.md'
+    source.write_text('# Nota\n\nTexto original da vault.\n', encoding='utf-8')
+    folder_id = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True).results[0].note_id
+
+    source.write_text('# Nota\n\nTexto editado no Obsidian.\n', encoding='utf-8')
+    single = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
+
+    assert single.status == 'success'
+    assert single.note_id == folder_id == build_note_id(source, root_path=root)
+    connection = connect_sqlite(settings.sqlite_path)
+    try:
+        assert count_notes(connection) == 1
+    finally:
+        connection.close()
+
+
 def test_regressao_indexacao_de_pasta_nao_mexe_em_notas_fora_da_raiz(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     outside = tmp_path / 'outra-pasta'
