@@ -40,6 +40,7 @@ USER_SETTING_FIELDS = {
     "audio_model",
     "audio_language",
     "audio_device",
+    "audio_input_device",
 }
 
 
@@ -97,6 +98,7 @@ class Settings(BaseSettings):
     audio_model: str = Field(default="whisper-small")
     audio_language: str = Field(default="pt")
     audio_device: Literal["cpu", "cuda", "auto"] = Field(default="auto")
+    audio_input_device: str | None = Field(default=None)
     workspace_dir: Path = Field(default=Path(__file__).resolve().parents[4])
     data_dir: Path = Field(default=Path(__file__).resolve().parents[4] / "data")
     notes_dir: Path = Field(

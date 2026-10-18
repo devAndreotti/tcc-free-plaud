@@ -65,6 +65,35 @@ describe('ChatInput - gravação de áudio', () => {
     expect(screen.getByRole('button', { name: 'Gravar áudio' })).toBeTruthy();
   });
 
+  it('avisa quando a gravação termina sem fala detectada', async () => {
+    const user = userEvent.setup();
+    bridgeMock.startAudioCapture.mockResolvedValue({
+      job_id: 'audio-silent',
+      status: 'recording',
+      source_path: 'C:\\audio-silent.wav',
+      samples_captured: 0,
+      error_code: null,
+      message: null,
+      result: null,
+    });
+    bridgeMock.stopAudioCapture.mockResolvedValue({
+      job_id: 'audio-silent',
+      status: 'completed',
+      source_path: 'C:\\audio-silent.wav',
+      samples_captured: 16000,
+      error_code: null,
+      message: null,
+      result: { text: '', language: 'pt', duration_seconds: 1 },
+    });
+
+    render(<ChatInput onSendMessage={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Gravar áudio' }));
+    await user.click(await screen.findByRole('button', { name: 'Parar gravação' }));
+
+    expect(await screen.findByText(/Nenhuma fala detectada no áudio/)).toBeTruthy();
+  });
+
   it('mostra mensagem de erro quando o microfone falha ao iniciar', async () => {
     const user = userEvent.setup();
     bridgeMock.startAudioCapture.mockRejectedValue(new Error('Dispositivo de audio indisponivel.'));

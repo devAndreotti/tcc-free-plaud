@@ -14,6 +14,7 @@ from escolio.app.settings_specs import (
     SETTING_SPECS,
     SettingSpec,
 )
+from escolio.ingest.audio_capture import list_input_devices
 from escolio.providers.audio_catalog import load_catalog
 from escolio.providers.voice_model_meta import ui_meta_for
 
@@ -52,7 +53,32 @@ def _display_value(settings: Settings, spec: SettingSpec) -> str:
     return 'vazio' if value is None or value == '' else str(value)
 
 
+def _input_device_names() -> list[str] | None:
+    try:
+        return list_input_devices()
+    except Exception:
+        return None
+
+
+def _options_for(spec: SettingSpec, settings: Settings) -> list[dict[str, Any]]:
+    if spec.key != 'audio_input_device':
+        return [option.model_dump() for option in spec.options]
+    options: list[dict[str, Any]] = [{'value': '', 'label': 'Padrão do sistema'}]
+    names = _input_device_names()
+    if names is None:
+        return options
+    options += [{'value': name, 'label': name} for name in names]
+    saved = settings.audio_input_device
+    if saved and saved not in names:
+        options.append({'value': saved, 'label': f'{saved} (não encontrado)'})
+    return options
+
+
 def _warning_for(settings: Settings, spec: SettingSpec) -> str | None:
+    if spec.key == 'audio_input_device' and settings.audio_input_device:
+        names = _input_device_names()
+        if names is not None and settings.audio_input_device not in names:
+            return f'Microfone "{settings.audio_input_device}" não está conectado; a gravação vai falhar até reconectar ou escolher outro.'
     if spec.key == 'embedding_model' and settings.embedding_model == 'fake-hash':
         return 'fake-hash é modelo de teste; use chroma-default ou sentence-transformer real.'
     if spec.key == 'embedding_device' and settings.embedding_model == 'chroma-default':
@@ -89,7 +115,7 @@ def settings_catalog_payload(settings: Settings | None = None) -> list[dict[str,
                 'storage': spec.storage,
                 'value': _setting_value(resolved, spec),
                 'display_value': _display_value(resolved, spec),
-                'options': [option.model_dump() for option in spec.options],
+                'options': _options_for(spec, resolved),
                 'recommended': spec.recommended,
                 'secret': spec.secret,
                 'placeholder': spec.placeholder,
