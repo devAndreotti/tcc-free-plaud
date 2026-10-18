@@ -62,3 +62,23 @@ def test_excecao_no_runner_vira_falha_e_nao_derruba_a_fila(tmp_path: Path) -> No
     assert events['explode.md'].status == 'failed'
     assert events['explode.md'].message == 'embedder caiu'
     assert events['ok.md'].status == 'indexed'
+
+
+def test_regressao_stage_guarda_arquivos_de_mesmo_nome_de_pastas_diferentes(tmp_path: Path) -> None:
+    calls: list[Path] = []
+
+    def runner(path: Path) -> CorpusIndexBatchResult:
+        calls.append(path)
+        return _batch(path, 'success', chunks_indexed=1)
+
+    indexer = DroppedFileIndexer(runner=runner)
+    first = tmp_path / 'a' / 'notas.md'
+    second = tmp_path / 'b' / 'notas.md'
+    indexer.stage([str(first), str(second)])
+
+    result = indexer.enqueue(['notas.md', 'notas.md'])
+    indexer.join()
+
+    assert result.queued == ['notas.md', 'notas.md']
+    assert result.missing == []
+    assert calls == [first, second]

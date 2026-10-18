@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 from queue import Queue
@@ -69,7 +70,8 @@ class DroppedFileIndexer:
     def __init__(self, runner: DroppedFileRunner | None = None, runtime: CorpusRuntime | None = None) -> None:
         self._runner = runner or _default_runner(runtime)
         self._lock = Lock()
-        self._staged: dict[str, Path] = {}
+        self._staged: dict[str, deque[Path]] = {}
+        self._staged_order: deque[str] = deque()  # um nome por caminho staged, do mais antigo ao mais novo
         self._events: list[DroppedFileEvent] = []
         self._queue: Queue[Path] = Queue()
         self._worker: Thread | None = None
@@ -78,18 +80,29 @@ class DroppedFileIndexer:
         with self._lock:
             for raw in paths:
                 path = Path(raw)
-                self._staged[path.name] = path
-            while len(self._staged) > _MAX_STAGED:
-                self._staged.pop(next(iter(self._staged)))
+                self._staged.setdefault(path.name, deque()).append(path)
+                self._staged_order.append(path.name)
+            while len(self._staged_order) > _MAX_STAGED:
+                self._pop_staged(self._staged_order.popleft())
+
+    def _pop_staged(self, name: str) -> Path | None:
+        queue = self._staged.get(name)
+        if not queue:
+            return None
+        path = queue.popleft()
+        if not queue:
+            del self._staged[name]
+        return path
 
     def enqueue(self, names: list[str]) -> EnqueueResult:
         result = EnqueueResult()
         with self._lock:
             for name in names:
-                path = self._staged.pop(name, None)
+                path = self._pop_staged(name)
                 if path is None:
                     result.missing.append(name)
                     continue
+                self._staged_order.remove(name)
                 result.queued.append(name)
                 if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
                     self._events.append(

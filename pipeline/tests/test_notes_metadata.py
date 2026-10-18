@@ -20,3 +20,14 @@ def test_build_note_id_uses_relative_path_hash_for_corpus_root() -> None:
     assert first_id != second_id
     assert first_id == build_note_id(first, root_path=root)
     assert len(first_id.rsplit('--', maxsplit=1)[1]) == 10
+
+
+def test_regressao_build_note_id_sem_raiz_distingue_caminhos_com_mesmo_nome() -> None:
+    first = build_note_id(Path('/tmp/a/notas.md'), hash_unrooted=True)
+    second = build_note_id(Path('/tmp/b/notas.md'), hash_unrooted=True)
+
+    assert first.startswith('notas--')
+    assert second.startswith('notas--')
+    assert first != second
+    assert first == build_note_id(Path('/tmp/a/notas.md'), hash_unrooted=True)
+    assert build_note_id(Path('/tmp/A/Notas.md'), hash_unrooted=True) == first

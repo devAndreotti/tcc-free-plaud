@@ -76,15 +76,15 @@ def test_index_corpus_file_persists_note_chunks_and_embeddings(tmp_path: Path) -
     result = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
 
     assert result.status == 'success'
-    assert result.note_id == 'plataforma'
+    assert result.note_id == build_note_id(source, hash_unrooted=True)
     assert result.chunks_indexed >= 1
     assert result.embedding_model == 'fake-hash'
     assert result.vector_collection_name == 'corpus_service_test'
     assert result.vector_entries_count == result.chunks_indexed
 
     connection = connect_sqlite(settings.sqlite_path)
-    note_row = connection.execute('SELECT note_id, source_path FROM notes WHERE note_id = ?', ('plataforma',)).fetchone()
-    chunk_rows = connection.execute('SELECT chunk_id FROM chunks WHERE note_id = ?', ('plataforma',)).fetchall()
+    note_row = connection.execute('SELECT note_id, source_path FROM notes WHERE note_id = ?', (result.note_id,)).fetchone()
+    chunk_rows = connection.execute('SELECT chunk_id FROM chunks WHERE note_id = ?', (result.note_id,)).fetchall()
 
     assert note_row['source_path'] == str(source)
     assert len(chunk_rows) == result.chunks_indexed
@@ -106,8 +106,8 @@ def test_index_corpus_file_is_idempotent_for_same_file(tmp_path: Path) -> None:
     second = index_corpus_file(source, settings=settings, embedder=second_embedder)
 
     connection = connect_sqlite(settings.sqlite_path)
-    note_count = connection.execute('SELECT COUNT(*) AS total FROM notes WHERE note_id = ?', ('reindexavel',)).fetchone()
-    chunk_count = connection.execute('SELECT COUNT(*) AS total FROM chunks WHERE note_id = ?', ('reindexavel',)).fetchone()
+    note_count = connection.execute('SELECT COUNT(*) AS total FROM notes WHERE note_id = ?', (first.note_id,)).fetchone()
+    chunk_count = connection.execute('SELECT COUNT(*) AS total FROM chunks WHERE note_id = ?', (first.note_id,)).fetchone()
 
     assert first.status == 'success'
     assert second.status == 'unchanged'
@@ -282,7 +282,7 @@ def test_index_corpus_path_replaces_legacy_file_note_id_for_same_source_path(tmp
     ]
 
     assert legacy.status == 'success'
-    assert legacy.note_id == 'migravel'
+    assert legacy.note_id == build_note_id(source, hash_unrooted=True)
     assert migrated.status == 'success'
     assert migrated.results[0].note_id == new_note_id
     assert note_ids == [new_note_id]
@@ -468,3 +468,53 @@ def test_index_corpus_path_non_recursive_skips_nested_files(tmp_path: Path) -> N
     assert result.indexed_count == 1
     assert result.skipped_count == 1
     assert result.skipped[0].reason == 'directory_requires_recursive'
+
+
+def test_regressao_arquivos_unicos_com_mesmo_nome_nao_se_sobrescrevem(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    first_dir = tmp_path / 'a'
+    second_dir = tmp_path / 'b'
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first = first_dir / 'notas.md'
+    second = second_dir / 'notas.md'
+    first.write_text('# Notas\n\nFerias de julho da equipe financeira.\n', encoding='utf-8')
+    second.write_text('# Notas\n\nMigracao do cluster de banco de dados.\n', encoding='utf-8')
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+
+    first_result = index_corpus_file(first, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+    second_result = index_corpus_file(second, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+
+    assert first_result.status == 'success'
+    assert second_result.status == 'success'
+    assert first_result.note_id != second_result.note_id
+    assert count_notes(connection) == 2
+    found_note_ids = {
+        hit.chunk.note_id
+        for text in ('Ferias de julho', 'Migracao do cluster')
+        for hit in vector_store.query(FakeEmbedder().embed([text])[0], top_k=5)
+    }
+    assert found_note_ids == {first_result.note_id, second_result.note_id}
+
+
+def test_regressao_nota_com_id_so_slug_e_substituida_sem_duplicata(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    source = root / 'legada.md'
+    source.write_text('# Legada\n\nNota gravada com o id antigo, so pelo slug.\n', encoding='utf-8')
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+    monkeypatch.setattr('escolio.notes.structurer.build_note_id', lambda path, **kwargs: 'legada')
+    legacy = index_corpus_file(source, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+    monkeypatch.undo()
+
+    current = index_corpus_file(source, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+    note_ids = [row['note_id'] for row in connection.execute('SELECT note_id FROM notes').fetchall()]
+
+    assert legacy.note_id == 'legada'
+    assert current.status == 'success'
+    assert note_ids == [current.note_id]
+    assert count_notes(connection) == 1
+    assert vector_store.count() == current.chunks_indexed
