@@ -3424,6 +3424,15 @@
   gap: 6px;
 }
 
+/* O nome da vault no título sai do caixa-alta do título da seção. */
+.settings-section__title--vault .vault-glyph { width: 20px; height: 20px; border-radius: 5px; }
+.settings-section__title--vault > span:last-child {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
 .doctor__summary {
   display: flex;
   align-items: center;

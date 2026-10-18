@@ -451,6 +451,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   if (!isOpen) return null;
 
   const doctor = backendSettings?.doctor;
+  const doctorTotal = doctor ? doctor.ok_count + doctor.warning_count + doctor.error_count : 0;
   const audioRows = backendSettings?.settings_catalog.filter((row) => row.group === 'Áudio' && !row.secret) ?? [];
   const audioModelRow = audioRows.find((row) => row.key === 'audio_model') ?? null;
   const audioLanguageRow = audioRows.find((row) => row.key === 'audio_language') ?? null;
@@ -552,7 +553,13 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   <>
                     <div className={`doctor__summary doctor__summary--${doctor.status}`}>
                       <span className="doctor__summary-icon" aria-hidden="true">
-                        {doctor.status === 'ok' ? <CheckCircleIcon size={18} /> : <AlertTriangleIcon size={18} />}
+                        {doctor.status === 'ok' ? (
+                          <CheckCircleIcon size={18} />
+                        ) : doctor.status === 'error' ? (
+                          <XCircleIcon size={18} />
+                        ) : (
+                          <AlertTriangleIcon size={18} />
+                        )}
                       </span>
                       <div>
                         <b>
@@ -563,7 +570,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                               : 'Tudo certo'}
                         </b>
                         <span className="doctor__summary-meta">
-                          {doctor.ok_count + doctor.warning_count + doctor.error_count} verificações · {doctor.latency_ms} ms
+                          {doctorTotal} {doctorTotal === 1 ? 'verificação' : 'verificações'} · {doctor.latency_ms} ms
                         </span>
                       </div>
                       <button type="button" className="btn btn--sm" onClick={handleRerunDoctor} disabled={isRunningDoctor}>
