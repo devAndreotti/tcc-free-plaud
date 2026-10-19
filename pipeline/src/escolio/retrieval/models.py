@@ -112,6 +112,11 @@ class AskResponse(BaseModel):
     answer: str | None
     # True quando `answer` é o texto do provider generativo (validado); False é a junção dos claims.
     generated: bool = False
+    # Motivo do validador quando a resposta gerada foi tentada e não aceita (abstenção, troca pela extrativa ou
+    # provider_error); None se foi aceita ou não houve provedor.
+    answer_discard_reason: str | None = None
+    # provider.model quando há provedor de resposta; None sem provedor.
+    answer_model: str | None = None
     # chunk_id principal de cada contexto [n] (índice n-1); vazio fora da resposta gerada aceita.
     answer_sources: list[str] = Field(default_factory=list)
     claims: list[AnswerClaim] = Field(default_factory=list)

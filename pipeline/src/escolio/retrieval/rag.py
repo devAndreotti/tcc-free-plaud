@@ -731,6 +731,8 @@ def _build_no_answer(
     used_sources: list[UsedSource],
     latency_ms: int,
     debug: AskDebug | None = None,
+    answer_discard_reason: str | None = None,
+    answer_model: str | None = None,
 ) -> AskResponse:
     return AskResponse(
         query=question,
@@ -744,6 +746,8 @@ def _build_no_answer(
         used_sources=used_sources,
         latency_ms=latency_ms,
         debug=debug,
+        answer_discard_reason=answer_discard_reason,
+        answer_model=answer_model,
     )
 
 

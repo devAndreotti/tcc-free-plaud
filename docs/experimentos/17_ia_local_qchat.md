@@ -91,6 +91,24 @@ O prompt da V2 está em `GROUNDED_SYSTEM_PROMPT` (`pipeline/src/escolio/provider
 
 O `benchmark compare` com qchat (híbrida, vetorial e léxica) não terminou: o Claude Code encerrou o processo por falta de memória, e o arquivo gerado ficou incompleto. As tabelas da correção vêm da busca léxica, com as saídas cruas. Rodar de novo com memória livre e atualizar a seção de resultados.
 
+## Probe com a validação nova (2026-10-19)
+
+Busca léxica sobre as 73 perguntas (39 positivas, 34 negativas), `qchat:latest`, temperatura 0,2, `top_k` 3, uma rodada por variante. A validação já inclui a abstenção por `NAO_ENCONTRADO` em qualquer posição e o descarte `echoed_title`. Script fora do repositório: `C:\Users\ricar\.claude\jobs\2a72c0ca\tmp\qualidade\probe_qualidade.py`.
+
+| Variante do prompt | Positivas: frase completa (≥ 8 palavras) | Positivas: frase curta | Título copiado | Só marcador | `NAO_ENCONTRADO` | Gerada aceita | Rejeitada pela validação | Abstenção | Negativas respondidas com texto |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| V2 (prompt atual) | 24 | 11 | 0 | 0 | 4 | 31 | 4 | 4 | 1 de 34 |
+
+- Latência p50 da resposta: 3,1 s.
+- Motivos de descarte nas positivas: `generated_no_answer_sentinel` 4, `unsupported_anchor` 3, `unsupported_number` 1.
+- A negativa respondida foi aceita: a resposta dá uma data ("Data agendada para 22 de abril de 2025 [1]") e não nomeia a equipe que a pergunta pede.
+- Lidas as respostas aceitas: a maioria responde à pergunta ("A estratégia recomendada para documentos sem estrutura formal é o chunking semântico [1]"). Quatro problemas aparecem:
+  - "DECISÕES TOMADAS" para uma pergunta de prazo: linha de seção do corpo da nota, sem `#`, que a regra de título não cobre.
+  - "A biblioteca que detecta o encoding do arquivo é a `file_hash`": resposta que não responde à pergunta; `file_hash` aparece no contexto, mas o trecho fala do cálculo do hash.
+  - Marcadores que não são `[n]` ficam no texto: "[7c6cfb14a5]" (id de trecho copiado do cabeçalho) e "[4.3]".
+  - Texto com letras separadas: "Cust o estim ado mens al (licença): R$ 18.700".
+- Não medidas nesta rodada: V3 e V4. A V3 foi tentada duas vezes: na primeira, com 1,19 GB livres, a checagem de memória barrou o processo antes de começar; na segunda, começou com 1,57 GB livres e o Claude Code a interrompeu durante a execução, por memória crítica, sem gravar saída. A V4 não foi tentada. Sem medição, o prompt não mudou.
+
 ## Interpretação técnica (corrigida)
 
 - A validação não bloqueava `[1]`. A taxa "aceitas" da primeira rodada (38/38) não tinha significado.

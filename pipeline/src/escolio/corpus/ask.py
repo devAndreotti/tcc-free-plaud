@@ -8,7 +8,12 @@ from pydantic import BaseModel, Field
 
 from escolio.notes.readable import readable_chunk_text
 from escolio.notes.schemas import Note
-from escolio.providers.answer import NO_ANSWER_SENTINEL, AnswerProvider
+from escolio.providers.answer import AnswerProvider
+from escolio.providers.answer_quality import (
+    contains_token_sequence,
+    is_echoed_title,
+    is_no_answer_sentinel,
+)
 from escolio.providers.embed import Embedder
 from escolio.retrieval.debug import build_ask_debug
 from escolio.retrieval.models import (
@@ -325,7 +330,7 @@ def validate_generated_answer(
             reason='empty_generated_answer',
             limitations=['Resposta generativa ignorada: o modelo devolveu só marcações de fonte, sem texto.'],
         )
-    if cleaned_answer.startswith('NAO_ENCONTRADO') or cleaned_answer == NO_ANSWER_SENTINEL:
+    if is_no_answer_sentinel(cleaned_answer, contexts):
         return GeneratedAnswerValidation(
             action='no_answer',
             reason='generated_no_answer_sentinel',
@@ -343,6 +348,12 @@ def validate_generated_answer(
             action='fallback_extractive',
             reason='echoed_context_metadata',
             limitations=['Resposta generativa ignorada: o modelo repetiu os metadados do contexto em vez de responder.'],
+        )
+    if is_echoed_title(cleaned_answer, contexts):
+        return GeneratedAnswerValidation(
+            action='fallback_extractive',
+            reason='echoed_title',
+            limitations=['Resposta generativa ignorada: o modelo copiou um título do contexto em vez de responder.'],
         )
 
     support_text = _normalized_support_text(contexts, claims)
@@ -383,13 +394,6 @@ def validate_generated_answer(
 
 def _normalized_anchor_tokens(text: str) -> list[str]:
     return [token.casefold() for token in TOKEN_PATTERN.findall(text)]
-
-
-def _contains_token_sequence(tokens: list[str], sequence: list[str]) -> bool:
-    if not sequence or len(sequence) > len(tokens):
-        return False
-    width = len(sequence)
-    return any(tokens[index : index + width] == sequence for index in range(len(tokens) - width + 1))
 
 
 def _has_conflicting_short_anchor(tokens: list[str], prefix: list[str], expected_anchor: str) -> bool:
@@ -450,9 +454,9 @@ def _short_anchor_score_delta(question: str, hit: SearchHit, note: Note | None) 
     evidence_tokens = _anchor_evidence_tokens(hit, note)
     delta = 0.0
     for sequence in sequences:
-        if _contains_token_sequence(evidence_tokens, sequence):
+        if contains_token_sequence(evidence_tokens, sequence):
             delta += SHORT_ANCHOR_EXACT_BOOST
-        elif len(sequence) > 2 and _contains_token_sequence(evidence_tokens, sequence[-2:]):
+        elif len(sequence) > 2 and contains_token_sequence(evidence_tokens, sequence[-2:]):
             delta += SHORT_ANCHOR_TAIL_BOOST
 
         if _has_conflicting_short_anchor(evidence_tokens, sequence[:-1], sequence[-1]):
@@ -766,6 +770,7 @@ def answer_corpus_with_citations(
         limitations: list[str],
         used_sources: list[UsedSource],
         rejected_hits: list[SearchHit] | None = None,
+        discard_reason: str | None = None,
     ) -> AskResponse:
         return _build_no_answer(
             question=question,
@@ -774,6 +779,8 @@ def answer_corpus_with_citations(
             used_sources=used_sources,
             latency_ms=int((perf_counter() - started_at) * 1000),
             debug=_debug_payload(reason=reason, rejected_hits=rejected_hits),
+            answer_discard_reason=discard_reason,
+            answer_model=provider_model,
         )
 
     if not query_terms:
@@ -943,6 +950,7 @@ def answer_corpus_with_citations(
 
     generated = False
     answer_sources: list[str] = []
+    discard_reason: str | None = None
     if answer_provider is not None:
         try:
             context_started_at = perf_counter()
@@ -972,10 +980,13 @@ def answer_corpus_with_citations(
                     _with_stale_limitations(validation.limitations),
                     cited_sources,
                     rejected_hits=hits,
+                    discard_reason=validation.reason or 'generated_answer_rejected',
                 )
             else:
+                discard_reason = validation.reason
                 limitations.extend(validation.limitations)
         except Exception as exc:
+            discard_reason = 'provider_error'
             limitations.append(_provider_failure_limitation(exc))
 
     return AskResponse(
@@ -992,4 +1003,6 @@ def answer_corpus_with_citations(
         used_sources=cited_sources,
         latency_ms=int((perf_counter() - started_at) * 1000),
         debug=_debug_payload(hits=hits),
+        answer_discard_reason=discard_reason,
+        answer_model=provider_model,
     )
