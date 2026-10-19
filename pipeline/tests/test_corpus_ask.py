@@ -3,6 +3,7 @@ from pathlib import Path
 from escolio.app.config import Settings
 from escolio.corpus.ask import (
     answer_corpus_with_citations,
+    build_answer_context_items,
     build_answer_contexts,
     validate_generated_answer,
 )
@@ -225,6 +226,59 @@ def test_build_answer_contexts_includes_clean_chunk_evidence_and_budget(tmp_path
     assert 'metadata repetida' not in context
     assert len(context) <= 420
     assert sum(len(item) for item in contexts) <= 460
+
+
+def _search_hit(chunk_id: str, text: str) -> SearchHit:
+    return SearchHit(chunk=_chunk(chunk_id, 'note-1', text), score=1.0, matched_terms=[], term_coverage=0.0, strategy='lexical')
+
+
+def _answer_claim(chunk_id: str, text: str) -> AnswerClaim:
+    citation = Citation(
+        note_id='note-1', note_version=1, chunk_id=chunk_id, snippet=text, source_path=None, char_start=0, char_end=len(text)
+    )
+    return AnswerClaim(text=text, citations=[citation], support_level='direct')
+
+
+def test_build_answer_context_items_adds_extra_hits_in_rank_order_without_duplicates() -> None:
+    claim_text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    hits = [
+        _search_hit('chunk-1', claim_text),
+        _search_hit('chunk-3', '---\ntitle: so frontmatter\n---\n'),  # sem texto legível: não vira contexto
+        _search_hit('chunk-2', 'O runbook do broker fica com a equipe de Plataforma.'),
+    ]
+
+    items = build_answer_context_items([_answer_claim('chunk-1', claim_text)], hits, {})
+
+    assert [chunk_id for _, chunk_id in items] == ['chunk-1', 'chunk-2']
+    assert items[0][0].startswith('[1]\n') and 'claim_extrativo:' in items[0][0]
+    assert items[1][0].startswith('[2]\n') and 'chunk_id: chunk-2' in items[1][0]
+    assert 'claim_extrativo' not in items[1][0]
+    assert 'runbook do broker' in items[1][0]
+
+
+def test_build_answer_contexts_extra_hits_stop_at_total_budget() -> None:
+    long_text = 'Texto de apoio sobre o broker da plataforma. ' * 40
+    hits = [_search_hit(f'chunk-{index}', long_text) for index in range(1, 5)]
+
+    contexts = build_answer_contexts([], hits, {}, max_total_chars=1000, max_context_chars=600)
+
+    assert len(contexts) == 2
+    assert all(len(context) <= 600 for context in contexts)
+    assert sum(len(context) for context in contexts) <= 1000
+
+
+def test_validate_generated_answer_ignora_marcadores_de_fonte() -> None:
+    claim_text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    contexts = [f'[1]\nsource_path: \ntitle: \nnote_id: note-1\nchunk_id: chunk-1\ntrecho:\n{claim_text}']
+
+    validation = validate_generated_answer(
+        'Qual broker?',
+        f'{claim_text} [1] [7]',
+        contexts,
+        [_answer_claim('chunk-1', claim_text)],
+    )
+
+    assert validation.action == 'accept'
 
 
 def test_validate_generated_answer_rejects_unsupported_numbers(tmp_path: Path) -> None:
@@ -629,6 +683,60 @@ def test_answer_corpus_sem_callback_continua_usando_answer(tmp_path: Path) -> No
 
     assert response.generated is True
     assert provider.answer_calls == 1
+
+
+def test_answer_corpus_accepted_answer_lists_extra_chunks_as_sources(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+    provider = FakeAnswerProvider()
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+    )
+
+    _, contexts = provider.calls[0]
+    claim_ids = [claim.citations[0].chunk_id for claim in response.claims]
+    assert response.generated is True
+    assert len(contexts) > len(claim_ids)  # o corpus tem hit fora dos claims
+    assert response.answer_sources[: len(claim_ids)] == claim_ids
+    assert [citation.chunk_id for citation in response.citations] == response.answer_sources
+
+
+def test_answer_corpus_rejected_answer_has_no_answer_sources(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=UnsupportedNumberAnswerProvider(),
+    )
+
+    assert response.generated is False
+    assert response.answer_sources == []
+    assert [citation.chunk_id for citation in response.citations] == [claim.citations[0].chunk_id for claim in response.claims]
+
+
+def test_answer_corpus_drops_only_markers_without_context(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+    provider = StreamingAnswerProvider(
+        'RabbitMQ foi adotado como message broker padrao do pipeline. [1] Ele segue o padrao da equipe. [9]'
+    )
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+    )
+
+    assert response.generated is True
+    assert response.answer == 'RabbitMQ foi adotado como message broker padrao do pipeline. [1] Ele segue o padrao da equipe.'
 
 
 def test_answer_corpus_abstains_when_question_term_is_not_in_any_note(tmp_path: Path) -> None:

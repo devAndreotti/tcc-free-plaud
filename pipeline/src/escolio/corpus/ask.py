@@ -87,6 +87,9 @@ def corpus_vocabulary_stems(connection: sqlite3.Connection) -> frozenset[str] | 
     return stems
 TEAM_ANSWER_PATTERN = re.compile(r'\bequipe\s+(?:de|da|do|dos|das)\s+[0-9A-Za-zÀ-ÖØ-öø-ÿ_-]+')
 CONTEXT_METADATA_KEYS = ('source_path:', 'note_id:', 'chunk_id:', 'claim_extrativo:')
+# Marcador [n] que o modelo põe no fim das frases, com o espaço antes dele.
+# ponytail: só [n]; "[1, 2]" não vira fonte. Aceitar lista se o modelo passar a escrever assim.
+ANSWER_MARKER_PATTERN = re.compile(r'[ \t]*\[(\d+)\]')
 ANSWER_CONTEXT_TOTAL_CHAR_BUDGET = 6000
 ANSWER_CONTEXT_MAX_CHARS = 1500
 GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*[A-Za-zÀ-ÖØ-öø-ÿ%]{1,8})?')
@@ -179,21 +182,31 @@ def _clip_context_text(text: str, max_chars: int) -> str:
     return f'{text[: max_chars - len(marker)].rstrip()}{marker}'
 
 
-def build_answer_contexts(
+def _without_answer_markers(text: str) -> str:
+    return ANSWER_MARKER_PATTERN.sub('', text)
+
+
+def _drop_unknown_answer_markers(text: str, context_count: int) -> str:
+    """Mantém [n] só para contextos que existem; marcador inventado some sem derrubar a resposta."""
+    return ANSWER_MARKER_PATTERN.sub(
+        lambda match: match.group() if 1 <= int(match.group(1)) <= context_count else '',
+        text,
+    )
+
+
+def build_answer_context_items(
     claims: list[AnswerClaim],
     hits: list[SearchHit],
     note_lookup: dict[str, Note],
     *,
     max_total_chars: int = ANSWER_CONTEXT_TOTAL_CHAR_BUDGET,
     max_context_chars: int = ANSWER_CONTEXT_MAX_CHARS,
-) -> list[str]:
-    """Monta contexto generativo com evidencia citavel real e budget fixo."""
+) -> list[tuple[str, str]]:
+    """Contextos (texto, chunk_id principal): claims primeiro, depois os demais hits em ordem de ranking, até o budget."""
     hit_by_chunk_id = {hit.chunk.chunk_id: hit for hit in hits}
-    contexts: list[str] = []
-    total_chars = 0
-    for index, claim in enumerate(claims, start=1):
-        if total_chars >= max_total_chars:
-            break
+    blocks: list[tuple[str, list[str], str]] = []  # (cabeçalho sem [n], trechos, chunk_id principal)
+    used_chunk_ids: set[str] = set()
+    for claim in claims:
         citation = claim.citations[0] if claim.citations else None
         if citation is None:
             continue
@@ -209,9 +222,7 @@ def build_answer_contexts(
             evidence = readable_chunk_text(raw_text)
             if evidence:
                 evidence_parts.append(evidence)
-
-        header = (
-            f'[{index}]\n'
+        body = (
             f'source_path: {source_path}\n'
             f'title: {title}\n'
             f'note_id: {citation.note_id}\n'
@@ -219,14 +230,55 @@ def build_answer_contexts(
             f'claim_extrativo: {claim.text}\n'
             'trecho:\n'
         )
-        remaining_total = max_total_chars - total_chars
-        allowed_context_chars = min(max_context_chars, remaining_total)
-        evidence_budget = max(0, allowed_context_chars - len(header))
-        evidence_text = _clip_context_text('\n\n'.join(evidence_parts), evidence_budget)
-        context = _clip_context_text(f'{header}{evidence_text}', allowed_context_chars)
-        contexts.append(context)
+        blocks.append((body, evidence_parts, citation.chunk_id))
+        used_chunk_ids.update(item.chunk_id for item in claim.citations)
+
+    for hit in hits:
+        evidence = readable_chunk_text(hit.chunk.chunk_text)
+        if hit.chunk.chunk_id in used_chunk_ids or not evidence:
+            continue
+        used_chunk_ids.add(hit.chunk.chunk_id)
+        note = note_lookup.get(hit.chunk.note_id)
+        body = (
+            f'source_path: {str(note.source_path) if note else ""}\n'
+            f'title: {note.title if note else ""}\n'
+            f'note_id: {hit.chunk.note_id}\n'
+            f'chunk_id: {hit.chunk.chunk_id}\n'
+            'trecho:\n'
+        )
+        blocks.append((body, [evidence], hit.chunk.chunk_id))
+
+    items: list[tuple[str, str]] = []
+    total_chars = 0
+    for body, evidence_parts, chunk_id in blocks:
+        header = f'[{len(items) + 1}]\n{body}'
+        allowed_context_chars = min(max_context_chars, max_total_chars - total_chars)
+        if allowed_context_chars <= len(header):
+            break
+        evidence_text = _clip_context_text('\n\n'.join(evidence_parts), allowed_context_chars - len(header))
+        context = f'{header}{evidence_text}'
+        items.append((context, chunk_id))
         total_chars += len(context)
-    return contexts
+    return items
+
+
+def build_answer_contexts(
+    claims: list[AnswerClaim],
+    hits: list[SearchHit],
+    note_lookup: dict[str, Note],
+    *,
+    max_total_chars: int = ANSWER_CONTEXT_TOTAL_CHAR_BUDGET,
+    max_context_chars: int = ANSWER_CONTEXT_MAX_CHARS,
+) -> list[str]:
+    """Monta contexto generativo com evidencia citavel real e budget fixo (só os textos)."""
+    items = build_answer_context_items(
+        claims,
+        hits,
+        note_lookup,
+        max_total_chars=max_total_chars,
+        max_context_chars=max_context_chars,
+    )
+    return [context for context, _ in items]
 
 
 def _normalized_support_text(contexts: list[str], claims: list[AnswerClaim]) -> str:
@@ -277,7 +329,8 @@ def validate_generated_answer(
 ) -> GeneratedAnswerValidation:
     """Valida se resposta gerativa pode substituir a resposta extrativa."""
     _ = question
-    cleaned_answer = answer.strip()
+    # Os [n] são só ponteiros para o contexto: número, anchor e sobreposição são checados sem eles.
+    cleaned_answer = _without_answer_markers(answer).strip()
     if cleaned_answer.startswith('NAO_ENCONTRADO') or cleaned_answer == NO_ANSWER_SENTINEL:
         return GeneratedAnswerValidation(
             action='no_answer',
@@ -889,16 +942,14 @@ def answer_corpus_with_citations(
     limitations: list[str] = list(stale_limitations)
     if any(claim.support_level == 'partial' for claim in claims):
         limitations.append('Parte da resposta depende de evidência parcial recuperada.')
-    if len(citations) == 1:
-        limitations.append('A resposta se apoia em um único chunk recuperado.')
-    if len(cited_sources) > 1:
-        limitations.append('A resposta combina evidência de multiplos arquivos do corpus.')
 
     generated = False
+    answer_sources: list[str] = []
     if answer_provider is not None:
         try:
             context_started_at = perf_counter()
-            answer_contexts = build_answer_contexts(claims, hits, note_lookup)
+            context_items = build_answer_context_items(claims, hits, note_lookup)
+            answer_contexts = [context for context, _ in context_items]
             stage_timings.context_build_ms = _elapsed_ms(context_started_at)
 
             provider_started_at = perf_counter()
@@ -914,8 +965,16 @@ def answer_corpus_with_citations(
             validation = validate_generated_answer(question, generated_answer, answer_contexts, claims)
             stage_timings.validation_ms = _elapsed_ms(validation_started_at)
             if validation.action == 'accept':
-                answer = generated_answer
+                answer = _drop_unknown_answer_markers(generated_answer, len(answer_contexts))
                 generated = True
+                answer_sources = [chunk_id for _, chunk_id in context_items]
+                # Chunks extras (sem claim) que entraram no contexto também são fontes da resposta.
+                claim_chunk_ids = {citation.chunk_id for citation in citations}
+                extra_hits = [
+                    hit for hit in hits if hit.chunk.chunk_id in answer_sources and hit.chunk.chunk_id not in claim_chunk_ids
+                ]
+                citations = [*citations, *(_citation_from_corpus_hit(hit, note_lookup) for hit in extra_hits)]
+                cited_sources = _summarize_corpus_sources(_hits_for_citations(hits, citations), note_lookup)
             elif validation.action == 'no_answer':
                 return _no_answer(
                     validation.reason or 'generated_answer_rejected',
@@ -928,12 +987,19 @@ def answer_corpus_with_citations(
         except Exception as exc:
             limitations.append(_provider_failure_limitation(exc))
 
+    # Depois da geração: a resposta pode ter usado mais chunks que os claims.
+    if len(citations) == 1:
+        limitations.append('A resposta se apoia em um único chunk recuperado.')
+    if len(cited_sources) > 1:
+        limitations.append('A resposta combina evidência de multiplos arquivos do corpus.')
+
     return AskResponse(
         query=question,
         status='answer',
         no_answer=False,
         answer=answer,
         generated=generated,
+        answer_sources=answer_sources,
         claims=claims,
         citations=citations,
         limitations=limitations,

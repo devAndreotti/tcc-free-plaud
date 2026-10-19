@@ -112,6 +112,8 @@ class AskResponse(BaseModel):
     answer: str | None
     # True quando `answer` é o texto do provider generativo (validado); False é a junção dos claims.
     generated: bool = False
+    # chunk_id principal de cada contexto [n] (índice n-1); vazio fora da resposta gerada aceita.
+    answer_sources: list[str] = Field(default_factory=list)
     claims: list[AnswerClaim] = Field(default_factory=list)
     citations: list[Citation] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)

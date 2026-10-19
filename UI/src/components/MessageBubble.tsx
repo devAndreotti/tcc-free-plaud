@@ -69,7 +69,7 @@ export const TypingIndicator = ({ stage, partial = '', model }: TypingIndicatorP
   );
 };
 
-function renderFormattedContent(text: string, tail: ReactNode = null) {
+function renderFormattedContent(text: string, tail: ReactNode = null, inline: (line: string) => ReactNode = (line) => line) {
   // A chave é a posição da linha no texto: a mensagem é estática, não se reordena.
   let offset = 0;
   const lines = text.split('\n');
@@ -79,15 +79,23 @@ function renderFormattedContent(text: string, tail: ReactNode = null) {
     // O trecho final (o cursor, enquanto a IA escreve) entra na última linha, colado no texto.
     const end = i === lines.length - 1 ? tail : null;
     if (line.startsWith('- ') || line.startsWith('* ')) {
-      return <div key={key} className="msg__li">{line.substring(2)}{end}</div>;
+      return <div key={key} className="msg__li">{inline(line.substring(2))}{end}</div>;
     }
-    if (line.startsWith('### ')) return <div key={key} className="msg__h3">{line.substring(4)}{end}</div>;
-    if (line.startsWith('## ')) return <div key={key} className="msg__h2">{line.substring(3)}{end}</div>;
-    if (line.startsWith('# ')) return <div key={key} className="msg__h1">{line.substring(2)}{end}</div>;
+    if (line.startsWith('### ')) return <div key={key} className="msg__h3">{inline(line.substring(4))}{end}</div>;
+    if (line.startsWith('## ')) return <div key={key} className="msg__h2">{inline(line.substring(3))}{end}</div>;
+    if (line.startsWith('# ')) return <div key={key} className="msg__h1">{inline(line.substring(2))}{end}</div>;
     if (!line.trim()) return <div key={key} className="msg__gap">{end}</div>;
-    return <div key={key}>{line}{end}</div>;
+    return <div key={key}>{inline(line)}{end}</div>;
   });
 }
+
+/** Corta o texto gerado nos marcadores [n]: `ref` é o índice da fonte; sem fonte, o marcador não aparece. */
+const splitRefs = (text: string, refOf: (n: number) => number): Array<string | { ref: number }> =>
+  text.split(/[ \t]*\[(\d+)\]/).flatMap((part, i): Array<string | { ref: number }> => {
+    if (i % 2 === 0) return part ? [part] : [];
+    const ref = refOf(Number(part));
+    return ref >= 0 ? [{ ref }] : [];
+  });
 
 const noteTitle = (citation: AskCitation) => {
   const raw = citation.source_path ?? citation.note_id;
@@ -191,6 +199,9 @@ const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?
   const noteCount = new Set(sources.map((s) => s.note_id)).size;
   // Resposta escrita pela IA (validada contra os trechos): mostra o texto dela no lugar dos claims.
   const showClaims = claims.length > 0 && !(ask.generated && ask.answer);
+  // Com answer_sources, os [n] do texto viram botões da fonte (índice em `sources`); sem fonte, somem.
+  const withRefs = Boolean(ask.generated && ask.answer && ask.answer_sources?.length);
+  const refOf = (n: number) => sources.findIndex((s) => s.chunk_id === ask.answer_sources?.[n - 1]);
 
   // A fonte em destaque aqui também aparece no grafo ao lado: a nota e as pastas de onde veio.
   const highlight = (i: number | null) => {
@@ -198,8 +209,27 @@ const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?
     focusNoteInGraph(i === null ? null : sources[i]?.note_id ?? null);
   };
 
+  const refButton = (ref: number, key: number, partial = false) => (
+    <button
+      key={key}
+      type="button"
+      className={`msg__ref${hl === ref ? ' is-hl' : ''}`}
+      aria-label={`Fonte ${ref + 1}${partial ? ', apoio parcial' : ''}`}
+      onMouseEnter={() => highlight(ref)}
+      onMouseLeave={() => highlight(null)}
+      onFocus={() => highlight(ref)}
+      onBlur={() => highlight(null)}
+    >
+      {ref + 1}
+    </button>
+  );
+
   const copyText = [
-    showClaims ? claims.map((c) => `${c.text} ${c.refs.map((r) => `[${r + 1}]`).join('')}`).join(' ') : ask.answer ?? '',
+    showClaims
+      ? claims.map((c) => `${c.text} ${c.refs.map((r) => `[${r + 1}]`).join('')}`).join(' ')
+      : withRefs
+        ? splitRefs(ask.answer ?? '', refOf).map((part) => (typeof part === 'string' ? part : ` [${part.ref + 1}]`)).join('')
+        : ask.answer ?? '',
     sources.length ? `\n\nFontes:\n${sources.map((s, i) => `[${i + 1}] ${s.source_path ?? s.note_id} (${s.char_start}–${s.char_end})`).join('\n')}` : '',
   ].join('');
 
@@ -224,23 +254,12 @@ const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?
                 >
                   {claim.text}
                 </span>
-                {claim.refs.map((ref) => (
-                  <button
-                    key={ref}
-                    type="button"
-                    className={`msg__ref${hl === ref ? ' is-hl' : ''}`}
-                    aria-label={`Fonte ${ref + 1}${claim.support_level === 'partial' ? ', apoio parcial' : ''}`}
-                    onMouseEnter={() => highlight(ref)}
-                    onMouseLeave={() => highlight(null)}
-                    onFocus={() => highlight(ref)}
-                    onBlur={() => highlight(null)}
-                  >
-                    {ref + 1}
-                  </button>
-                ))}{' '}
+                {claim.refs.map((ref) => refButton(ref, ref, claim.support_level === 'partial'))}{' '}
               </span>
             ))
-          : renderFormattedContent(ask.answer ?? '')}
+          : renderFormattedContent(ask.answer ?? '', null, withRefs
+              ? (line) => splitRefs(line, refOf).map((part, i) => (typeof part === 'string' ? part : refButton(part.ref, i)))
+              : undefined)}
       </div>
 
       {showClaims && claims.some((c) => c.support_level === 'partial') && (
