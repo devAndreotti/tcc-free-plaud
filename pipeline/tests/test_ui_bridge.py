@@ -1,6 +1,8 @@
 import importlib.util
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -653,3 +655,178 @@ def test_desktop_api_save_conversations_devolve_erro_de_validacao(monkeypatch) -
 
     assert api.saveConversations({}) == {"ok": False, "message": 'Conversas: "tabs" precisa ser uma lista.'}
     assert api.saveConversations({"tabs": []}) == {"ok": True}
+
+
+def _ask_response(answer: str) -> AskResponse:
+    return AskResponse(
+        query="Pergunta?",
+        status="answer",
+        no_answer=False,
+        answer=answer,
+        claims=[],
+        citations=[],
+        limitations=[],
+        reason_for_no_answer=None,
+        used_sources=[],
+        latency_ms=7,
+    )
+
+
+def _consulta_ate_fim(api, ask_id: str, pronto=lambda snapshot: False) -> dict:
+    """Consulta o job até terminar (ou até `pronto` valer). done/error já saem do registro."""
+    fim = time.monotonic() + 5.0
+    while True:
+        snapshot = api.pollAsk(ask_id)
+        if snapshot["stage"] in ("done", "error") or pronto(snapshot) or time.monotonic() > fim:
+            return snapshot
+        time.sleep(0.01)
+
+
+def _espera(pronto, limite: float = 5.0) -> None:
+    fim = time.monotonic() + limite
+    while not pronto() and time.monotonic() < fim:
+        time.sleep(0.01)
+
+
+def _settings_do_provider(tmp_path: Path, provider: str) -> Settings:
+    return Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        notes_dir=tmp_path / "data" / "corpus" / "notes",
+        results_dir=tmp_path / "data" / "results",
+        sqlite_path=tmp_path / "data" / "results" / "escolio.sqlite3",
+        vector_store_dir=tmp_path / "data" / "results" / "vector_store",
+        answer_provider=provider,
+    )
+
+
+def test_desktop_api_start_ask_mostra_etapas_e_texto_parcial_ate_done(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    liberar_busca = threading.Event()
+    liberar_escrita = threading.Event()
+
+    def fake_ask(question, strategy, runtime, source_root=None, on_answer_delta=None):
+        liberar_busca.wait(5)
+        on_answer_delta("Resposta ")
+        liberar_escrita.wait(5)
+        on_answer_delta("curta.")
+        return _ask_response("Resposta curta.")
+
+    monkeypatch.setattr(module, "ask_corpus", fake_ask)
+    api = module.Api()
+
+    ask_id = api.startAsk("Pergunta?", "lexical")["ask_id"]
+    assert api.pollAsk(ask_id)["stage"] == "retrieving"
+
+    liberar_busca.set()
+    parcial = _consulta_ate_fim(api, ask_id, pronto=lambda s: s["partial"] == "Resposta ")
+    assert parcial["stage"] == "writing"
+
+    liberar_escrita.set()
+    final = _consulta_ate_fim(api, ask_id)
+    assert final["stage"] == "done"
+    assert final["partial"] == "Resposta curta."
+    assert final["error"] is None
+    assert final["result"]["answer"] == "Resposta curta."
+    assert final["result"]["strategy"] == "lexical"
+    assert final["result"]["answer_model"] == module.get_settings().answer_model
+    assert api.pollAsk(ask_id)["error"] == "Pergunta não encontrada."
+
+
+def test_desktop_api_start_ask_sem_streaming_vai_direto_para_done(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    monkeypatch.setattr(
+        module,
+        "ask_corpus",
+        lambda question, strategy, runtime, source_root=None, on_answer_delta=None: _ask_response("Trecho direto."),
+    )
+    api = module.Api()
+
+    final = _consulta_ate_fim(api, api.startAsk("Pergunta?", "lexical")["ask_id"])
+
+    assert final["stage"] == "done"
+    assert final["partial"] == ""
+    assert final["result"]["answer"] == "Trecho direto."
+
+
+def test_desktop_api_poll_ask_id_desconhecido_devolve_erro(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+
+    assert module.Api().pollAsk("nao-existe") == {
+        "ask_id": "nao-existe",
+        "stage": "error",
+        "partial": "",
+        "result": None,
+        "error": "Pergunta não encontrada.",
+    }
+
+
+def test_desktop_api_start_ask_falha_vira_stage_error(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+
+    def fake_ask(question, strategy, runtime, source_root=None, on_answer_delta=None):
+        raise ValueError("Pergunta vazia.")
+
+    monkeypatch.setattr(module, "ask_corpus", fake_ask)
+    api = module.Api()
+    ask_id = api.startAsk("   ", "lexical")["ask_id"]
+
+    final = _consulta_ate_fim(api, ask_id)
+
+    assert final == {"ask_id": ask_id, "stage": "error", "partial": "", "result": None, "error": "Pergunta vazia."}
+
+
+def test_desktop_api_start_ask_descarta_resposta_antiga_que_ninguem_consultou(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    monkeypatch.setattr(module, "ask_corpus", lambda *args, **kwargs: _ask_response("ok"))
+    api = module.Api()
+    agora = time.monotonic()
+    api._ask_jobs["antiga"] = {
+        "ask_id": "antiga", "stage": "done", "partial": "", "result": {}, "error": None, "finished_at": agora - 601,
+    }
+    api._ask_jobs["recente"] = {
+        "ask_id": "recente", "stage": "done", "partial": "", "result": {}, "error": None, "finished_at": agora - 60,
+    }
+
+    api.startAsk("Pergunta?", "lexical")
+
+    assert "antiga" not in api._ask_jobs
+    assert "recente" in api._ask_jobs
+
+
+def test_desktop_api_warm_answer_model_so_dispara_para_ollama_e_nao_empilha(monkeypatch, tmp_path: Path) -> None:
+    module = _load_ui_main(monkeypatch)
+    liberar = threading.Event()
+    aquecidos: list[str] = []
+
+    def fake_warm(settings) -> bool:
+        aquecidos.append(settings.answer_provider)
+        liberar.wait(5)
+        return True
+
+    monkeypatch.setattr(module, "warm_up_answer_model", fake_warm)
+    api = module.Api()
+
+    monkeypatch.setattr(module, "get_settings", lambda: _settings_do_provider(tmp_path, "lmstudio"))
+    assert api.warmAnswerModel() == {"ok": True, "started": False}
+
+    monkeypatch.setattr(module, "get_settings", lambda: _settings_do_provider(tmp_path, "ollama"))
+    assert api.warmAnswerModel() == {"ok": True, "started": True}
+    assert api.warmAnswerModel() == {"ok": True, "started": False}  # ainda aquecendo
+
+    liberar.set()
+    _espera(lambda: not api._warming)
+    assert aquecidos == ["ollama"]
+    assert api.warmAnswerModel() == {"ok": True, "started": True}  # terminou: pode aquecer de novo
+
+
+def test_desktop_api_warm_answer_model_nunca_levanta_excecao(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    api = module.Api()
+
+    def settings_quebrado():
+        raise RuntimeError("settings corrompido")
+
+    monkeypatch.setattr(module, "get_settings", settings_quebrado)
+
+    assert api.warmAnswerModel() == {"ok": False, "started": False}
