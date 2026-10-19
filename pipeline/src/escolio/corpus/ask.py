@@ -202,10 +202,13 @@ def build_answer_context_items(
     max_total_chars: int = ANSWER_CONTEXT_TOTAL_CHAR_BUDGET,
     max_context_chars: int = ANSWER_CONTEXT_MAX_CHARS,
 ) -> list[tuple[str, str]]:
-    """Contextos (texto, chunk_id principal): claims primeiro, depois os demais hits em ordem de ranking, até o budget."""
+    """Contextos (texto, chunk_id principal) dos claims, até o budget; o [n] de cada um é a posição na lista.
+
+    Só os claims: com os demais hits junto, o qchat (3B) recusou 8 de 39 positivas em vez de 2 e a
+    accuracy caiu de 0,932 para 0,781 (docs/experimentos/17_ia_local_qchat.md).
+    """
     hit_by_chunk_id = {hit.chunk.chunk_id: hit for hit in hits}
     blocks: list[tuple[str, list[str], str]] = []  # (cabeçalho sem [n], trechos, chunk_id principal)
-    used_chunk_ids: set[str] = set()
     for claim in claims:
         citation = claim.citations[0] if claim.citations else None
         if citation is None:
@@ -231,22 +234,6 @@ def build_answer_context_items(
             'trecho:\n'
         )
         blocks.append((body, evidence_parts, citation.chunk_id))
-        used_chunk_ids.update(item.chunk_id for item in claim.citations)
-
-    for hit in hits:
-        evidence = readable_chunk_text(hit.chunk.chunk_text)
-        if hit.chunk.chunk_id in used_chunk_ids or not evidence:
-            continue
-        used_chunk_ids.add(hit.chunk.chunk_id)
-        note = note_lookup.get(hit.chunk.note_id)
-        body = (
-            f'source_path: {str(note.source_path) if note else ""}\n'
-            f'title: {note.title if note else ""}\n'
-            f'note_id: {hit.chunk.note_id}\n'
-            f'chunk_id: {hit.chunk.chunk_id}\n'
-            'trecho:\n'
-        )
-        blocks.append((body, [evidence], hit.chunk.chunk_id))
 
     items: list[tuple[str, str]] = []
     total_chars = 0
@@ -942,6 +929,10 @@ def answer_corpus_with_citations(
     limitations: list[str] = list(stale_limitations)
     if any(claim.support_level == 'partial' for claim in claims):
         limitations.append('Parte da resposta depende de evidência parcial recuperada.')
+    if len(citations) == 1:
+        limitations.append('A resposta se apoia em um único chunk recuperado.')
+    if len(cited_sources) > 1:
+        limitations.append('A resposta combina evidência de multiplos arquivos do corpus.')
 
     generated = False
     answer_sources: list[str] = []
@@ -968,13 +959,6 @@ def answer_corpus_with_citations(
                 answer = _drop_unknown_answer_markers(generated_answer, len(answer_contexts))
                 generated = True
                 answer_sources = [chunk_id for _, chunk_id in context_items]
-                # Chunks extras (sem claim) que entraram no contexto também são fontes da resposta.
-                claim_chunk_ids = {citation.chunk_id for citation in citations}
-                extra_hits = [
-                    hit for hit in hits if hit.chunk.chunk_id in answer_sources and hit.chunk.chunk_id not in claim_chunk_ids
-                ]
-                citations = [*citations, *(_citation_from_corpus_hit(hit, note_lookup) for hit in extra_hits)]
-                cited_sources = _summarize_corpus_sources(_hits_for_citations(hits, citations), note_lookup)
             elif validation.action == 'no_answer':
                 return _no_answer(
                     validation.reason or 'generated_answer_rejected',
@@ -986,12 +970,6 @@ def answer_corpus_with_citations(
                 limitations.extend(validation.limitations)
         except Exception as exc:
             limitations.append(_provider_failure_limitation(exc))
-
-    # Depois da geração: a resposta pode ter usado mais chunks que os claims.
-    if len(citations) == 1:
-        limitations.append('A resposta se apoia em um único chunk recuperado.')
-    if len(cited_sources) > 1:
-        limitations.append('A resposta combina evidência de multiplos arquivos do corpus.')
 
     return AskResponse(
         query=question,

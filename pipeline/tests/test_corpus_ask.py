@@ -239,32 +239,19 @@ def _answer_claim(chunk_id: str, text: str) -> AnswerClaim:
     return AnswerClaim(text=text, citations=[citation], support_level='direct')
 
 
-def test_build_answer_context_items_adds_extra_hits_in_rank_order_without_duplicates() -> None:
+def test_build_answer_context_items_usa_so_os_trechos_dos_claims() -> None:
+    # Hit fora dos claims não entra: no experimento 17 ele fazia o qchat recusar perguntas que sabia responder.
     claim_text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
     hits = [
         _search_hit('chunk-1', claim_text),
-        _search_hit('chunk-3', '---\ntitle: so frontmatter\n---\n'),  # sem texto legível: não vira contexto
         _search_hit('chunk-2', 'O runbook do broker fica com a equipe de Plataforma.'),
     ]
 
     items = build_answer_context_items([_answer_claim('chunk-1', claim_text)], hits, {})
 
-    assert [chunk_id for _, chunk_id in items] == ['chunk-1', 'chunk-2']
+    assert [chunk_id for _, chunk_id in items] == ['chunk-1']
     assert items[0][0].startswith('[1]\n') and 'claim_extrativo:' in items[0][0]
-    assert items[1][0].startswith('[2]\n') and 'chunk_id: chunk-2' in items[1][0]
-    assert 'claim_extrativo' not in items[1][0]
-    assert 'runbook do broker' in items[1][0]
-
-
-def test_build_answer_contexts_extra_hits_stop_at_total_budget() -> None:
-    long_text = 'Texto de apoio sobre o broker da plataforma. ' * 40
-    hits = [_search_hit(f'chunk-{index}', long_text) for index in range(1, 5)]
-
-    contexts = build_answer_contexts([], hits, {}, max_total_chars=1000, max_context_chars=600)
-
-    assert len(contexts) == 2
-    assert all(len(context) <= 600 for context in contexts)
-    assert sum(len(context) for context in contexts) <= 1000
+    assert 'runbook do broker' not in items[0][0]
 
 
 def test_validate_generated_answer_ignora_marcadores_de_fonte() -> None:
@@ -685,7 +672,7 @@ def test_answer_corpus_sem_callback_continua_usando_answer(tmp_path: Path) -> No
     assert provider.answer_calls == 1
 
 
-def test_answer_corpus_accepted_answer_lists_extra_chunks_as_sources(tmp_path: Path) -> None:
+def test_answer_corpus_accepted_answer_lists_claim_chunks_as_sources(tmp_path: Path) -> None:
     connection = _indexed_connection(tmp_path)
     provider = FakeAnswerProvider()
 
@@ -700,9 +687,9 @@ def test_answer_corpus_accepted_answer_lists_extra_chunks_as_sources(tmp_path: P
     _, contexts = provider.calls[0]
     claim_ids = [claim.citations[0].chunk_id for claim in response.claims]
     assert response.generated is True
-    assert len(contexts) > len(claim_ids)  # o corpus tem hit fora dos claims
-    assert response.answer_sources[: len(claim_ids)] == claim_ids
-    assert [citation.chunk_id for citation in response.citations] == response.answer_sources
+    assert len(contexts) == len(claim_ids)  # o corpus tem hit fora dos claims, e ele não vai para o modelo
+    assert response.answer_sources == claim_ids
+    assert [citation.chunk_id for citation in response.citations] == claim_ids
 
 
 def test_answer_corpus_rejected_answer_has_no_answer_sources(tmp_path: Path) -> None:
