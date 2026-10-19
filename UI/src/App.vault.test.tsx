@@ -84,6 +84,8 @@ describe('vault: cada conversa pertence a uma vault', () => {
 
   it('vault: resposta enviada em A e resolvida depois da troca cai na aba de A', async () => {
     let resolveAsk: (value: AskResult) => void = () => {};
+    // Sem streaming: o teste segura a resposta do askCorpus (o mock do navegador responde em streaming).
+    vi.spyOn(bridge, 'supportsAskStreaming').mockResolvedValue(false);
     vi.spyOn(bridge, 'askCorpus').mockImplementation(
       () => new Promise<AskResult>((resolve) => { resolveAsk = resolve; })
     );

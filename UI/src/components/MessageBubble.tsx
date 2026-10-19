@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import type { AskCitation, AskResult, AskStrategy } from '../services/bridge';
+import { useMemo, useState, type ReactNode } from 'react';
+import type { AskCitation, AskResult, AskStage, AskStrategy } from '../services/bridge';
 import { focusNoteInGraph } from '../lib/vaultGraph';
 import { AlertTriangleIcon, CopyIcon, SearchIcon } from './Icons';
 
@@ -26,32 +26,64 @@ const STRATEGY_LABEL: Record<string, string> = {
   lexical: 'lexical',
 };
 
-export const TypingIndicator = () => (
-  <div className="msg msg--ai fade-in" role="status" aria-label="Buscando no vault">
-    <div className="msg__head">
-      <span className="msg__mark" aria-hidden="true">ES</span>
-      <span className="msg__searching">
-        <span className="msg__spinner" aria-hidden="true" />
-        <span>Buscando no vault…</span>
-      </span>
-    </div>
-  </div>
-);
+interface TypingIndicatorProps {
+  /** Estágio da pergunta da aba; sem ele, ou buscando, mostra a busca no vault. */
+  stage?: AskStage;
+  /** Texto que a IA já escreveu (estágio writing). */
+  partial?: string;
+  /** Modelo que escreve a resposta, para o cabeçalho. */
+  model?: string;
+}
 
-function renderFormattedContent(text: string) {
+export const TypingIndicator = ({ stage, partial = '', model }: TypingIndicatorProps) => {
+  if (stage !== 'writing') {
+    return (
+      <div className="msg msg--ai fade-in" role="status" aria-label="Buscando no vault">
+        <div className="msg__head">
+          <span className="msg__mark" aria-hidden="true">ES</span>
+          <span className="msg__searching">
+            <span className="msg__spinner" aria-hidden="true" />
+            <span>Buscando no vault…</span>
+          </span>
+        </div>
+      </div>
+    );
+  }
+  const header = model ? `Escrevendo com ${model}…` : 'Escrevendo a resposta…';
+  return (
+    <div className="msg msg--ai fade-in" role="status" aria-label={header}>
+      <div className="msg__head">
+        <span className="msg__mark" aria-hidden="true">ES</span>
+        <span className="msg__searching">
+          <span className="msg__spinner" aria-hidden="true" />
+          <span>{header}</span>
+        </span>
+      </div>
+      {/* aria-live off: o texto muda a cada consulta; a resposta final é anunciada pelo histórico. */}
+      <div className="msg__answer" aria-live="off">
+        {renderFormattedContent(partial, <span className="msg__cursor" aria-hidden="true" />)}
+      </div>
+    </div>
+  );
+};
+
+function renderFormattedContent(text: string, tail: ReactNode = null) {
   // A chave é a posição da linha no texto: a mensagem é estática, não se reordena.
   let offset = 0;
-  return text.split('\n').map((line) => {
+  const lines = text.split('\n');
+  return lines.map((line, i) => {
     const key = `l${offset}`;
     offset += line.length + 1;
+    // O trecho final (o cursor, enquanto a IA escreve) entra na última linha, colado no texto.
+    const end = i === lines.length - 1 ? tail : null;
     if (line.startsWith('- ') || line.startsWith('* ')) {
-      return <div key={key} className="msg__li">{line.substring(2)}</div>;
+      return <div key={key} className="msg__li">{line.substring(2)}{end}</div>;
     }
-    if (line.startsWith('### ')) return <div key={key} className="msg__h3">{line.substring(4)}</div>;
-    if (line.startsWith('## ')) return <div key={key} className="msg__h2">{line.substring(3)}</div>;
-    if (line.startsWith('# ')) return <div key={key} className="msg__h1">{line.substring(2)}</div>;
-    if (!line.trim()) return <div key={key} className="msg__gap" />;
-    return <div key={key}>{line}</div>;
+    if (line.startsWith('### ')) return <div key={key} className="msg__h3">{line.substring(4)}{end}</div>;
+    if (line.startsWith('## ')) return <div key={key} className="msg__h2">{line.substring(3)}{end}</div>;
+    if (line.startsWith('# ')) return <div key={key} className="msg__h1">{line.substring(2)}{end}</div>;
+    if (!line.trim()) return <div key={key} className="msg__gap">{end}</div>;
+    return <div key={key}>{line}{end}</div>;
   });
 }
 

@@ -503,6 +503,19 @@ export interface AskResult {
   generated?: boolean;
 }
 
+/** Estágio de uma pergunta em streaming: buscando trechos, escrevendo a resposta, ou terminada. */
+export type AskStage = 'retrieving' | 'writing' | 'done' | 'error';
+
+/** Estado de uma pergunta iniciada com startAsk (pollAsk). */
+export interface AskProgress {
+  ask_id: string;
+  stage: AskStage;
+  /** Texto gerado até agora. Se a validação rejeitar no fim, result.generated vem false e vale a resposta extrativa. */
+  partial: string;
+  result: AskResult | null;
+  error: string | null;
+}
+
 /** Provedor, modelo e URL que estão na tela de Configurações, ainda sem salvar. */
 export interface AnswerDraft {
   provider?: string;
@@ -545,6 +558,15 @@ interface PythonApi {
 
   /** Pergunta ao corpus e devolve a resposta estruturada, com citações por afirmação. */
   askCorpus?: (message: string, strategy?: AskStrategy, sourceRoot?: string) => Promise<AskResult>;
+
+  /** Inicia a pergunta em segundo plano e devolve o id para acompanhar com pollAsk. */
+  startAsk?: (message: string, strategy?: AskStrategy, sourceRoot?: string) => Promise<{ ask_id: string }>;
+
+  /** Estado da pergunta: estágio, texto gerado até agora e, ao terminar, o resultado. */
+  pollAsk?: (askId: string) => Promise<AskProgress>;
+
+  /** Carrega o modelo de resposta na memória, para a primeira pergunta não esperar. */
+  warmAnswerModel?: () => Promise<{ ok: boolean; started: boolean }>;
 
   /** Pastas indexadas com notas, para o seletor de pasta do chat. */
   listCorpusRoots?: () => Promise<CorpusRoot[]>;
@@ -810,6 +832,33 @@ const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'):
           latency_ms: 2400,
         }),
   };
+};
+
+// Perguntas em andamento no modo navegador: cada pollAsk avança um estágio, como o backend.
+const mockAskJobs = new Map<string, { message: string; strategy: AskStrategy; polls: number; result?: AskResult }>();
+let mockAskSeq = 0;
+const MOCK_WORDS_PER_POLL = 4;
+
+const mockStartAsk = (message: string, strategy: AskStrategy = 'hybrid'): { ask_id: string } => {
+  const ask_id = `mock-ask-${++mockAskSeq}`;
+  mockAskJobs.set(ask_id, { message, strategy, polls: 0 });
+  return { ask_id };
+};
+
+// 1º poll: buscando trechos. Com a IA ligada, os polls seguintes revelam a resposta gerada aos poucos.
+const mockPollAsk = async (askId: string): Promise<AskProgress> => {
+  const job = mockAskJobs.get(askId);
+  if (!job) return { ask_id: askId, stage: 'error', partial: '', result: null, error: 'Pergunta não encontrada.' };
+  job.polls += 1;
+  if (job.polls === 1) return { ask_id: askId, stage: 'retrieving', partial: '', result: null, error: null };
+  const result = (job.result ??= await mockAskCorpus(job.message, job.strategy));
+  const words = (result.answer ?? '').split(' ');
+  const shown = (job.polls - 1) * MOCK_WORDS_PER_POLL;
+  if (mockAnswer.provider !== 'extractive' && shown < words.length) {
+    return { ask_id: askId, stage: 'writing', partial: words.slice(0, shown).join(' '), result: null, error: null };
+  }
+  mockAskJobs.delete(askId);
+  return { ask_id: askId, stage: 'done', partial: '', result, error: null };
 };
 
 const mockSendMessage = async (message: string): Promise<string> => {
@@ -1231,6 +1280,38 @@ export const bridge = {
       return plainAskResult(message, await window.pywebview.api.sendMessage(message));
     }
     return mockAskCorpus(message, strategy);
+  },
+
+  /** Inicia a pergunta em segundo plano; a tela acompanha o progresso com pollAsk. */
+  startAsk: async (message: string, strategy?: AskStrategy, sourceRoot?: string | null): Promise<{ ask_id: string }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startAsk) {
+      return sourceRoot
+        ? window.pywebview.api.startAsk(message, strategy, sourceRoot)
+        : window.pywebview.api.startAsk(message, strategy);
+    }
+    return mockStartAsk(message, strategy);
+  },
+
+  /** Estado de uma pergunta iniciada com startAsk. */
+  pollAsk: async (askId: string): Promise<AskProgress> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.pollAsk) {
+      return window.pywebview.api.pollAsk(askId);
+    }
+    return mockPollAsk(askId);
+  },
+
+  /** Aquece o modelo de resposta (Ollama): a próxima pergunta não espera o carregamento. */
+  warmAnswerModel: async (): Promise<{ ok: boolean; started: boolean }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.warmAnswerModel) {
+      return window.pywebview.api.warmAnswerModel();
+    }
+    return { ok: true, started: mockAnswer.provider === 'ollama' };
+  },
+
+  /** true quando o backend responde em streaming (startAsk e pollAsk); sem isso a tela usa askCorpus. */
+  supportsAskStreaming: async (): Promise<boolean> => {
+    if (await whenDesktopReady()) return Boolean(window.pywebview?.api.startAsk);
+    return true;
   },
 
   /**

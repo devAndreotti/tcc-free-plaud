@@ -231,3 +231,48 @@ describe('askCorpus', () => {
     expect(await bridge.listCorpusRoots()).toEqual(roots);
   });
 });
+
+describe('streaming de resposta (startAsk / pollAsk)', () => {
+  afterEach(async () => {
+    delete (window as unknown as { pywebview?: unknown }).pywebview;
+    await bridge.saveBackendSettings({ answer_provider: 'extractive' });
+  });
+
+  it('no navegador a tela usa streaming', async () => {
+    expect(await bridge.supportsAskStreaming()).toBe(true);
+  });
+
+  it('backend sem startAsk cai no askCorpus', async () => {
+    (window as unknown as { pywebview: { api: unknown } }).pywebview = {
+      api: { askCorpus: () => Promise.resolve({ query: 'q', status: 'answer', claims: [], citations: [] }) },
+    };
+    expect(await bridge.supportsAskStreaming()).toBe(false);
+  });
+
+  it('sem IA: retrieving e depois done com o resultado', async () => {
+    const { ask_id } = await bridge.startAsk('q');
+    expect((await bridge.pollAsk(ask_id)).stage).toBe('retrieving');
+    const done = await bridge.pollAsk(ask_id);
+    expect(done.stage).toBe('done');
+    expect(done.result?.answer).toContain('(mock)');
+    // Depois de done o job some: consultar de novo devolve erro.
+    expect((await bridge.pollAsk(ask_id)).stage).toBe('error');
+  });
+
+  it('com IA: writing com o texto crescendo até done', async () => {
+    await bridge.saveBackendSettings({ answer_provider: 'ollama' });
+    const { ask_id } = await bridge.startAsk('q');
+    expect((await bridge.pollAsk(ask_id)).stage).toBe('retrieving');
+    let progress = await bridge.pollAsk(ask_id);
+    expect(progress.stage).toBe('writing');
+    const partials: string[] = [];
+    while (progress.stage === 'writing') {
+      partials.push(progress.partial);
+      progress = await bridge.pollAsk(ask_id);
+    }
+    expect(progress.stage).toBe('done');
+    expect(progress.result?.generated).toBe(true);
+    expect(partials.length).toBeGreaterThan(1);
+    expect(partials[partials.length - 1].length).toBeGreaterThan(partials[0].length);
+  });
+});
