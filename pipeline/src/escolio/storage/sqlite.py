@@ -386,6 +386,13 @@ def get_note_content_hash(connection: sqlite3.Connection, note_id: str) -> str |
     return str(row['content_hash'])
 
 
+def get_note_title(connection: sqlite3.Connection, note_id: str) -> str | None:
+    row = connection.execute('SELECT title FROM notes WHERE note_id = ?', (note_id,)).fetchone()
+    if row is None:
+        return None
+    return str(row['title'])
+
+
 def list_note_ids_by_source_path(connection: sqlite3.Connection, source_path: Path | str) -> list[str]:
     rows = connection.execute(
         'SELECT note_id FROM notes WHERE source_path = ? ORDER BY note_id',
