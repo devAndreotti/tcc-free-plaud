@@ -187,4 +187,89 @@ describe('MessageBubble com resposta estruturada', () => {
     expect(screen.getByText(limitation)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Buscar só por palavra-chave' })).toBeNull();
   });
+
+  it('clicar no título ou no corpo do card abre a nota no trecho citado', async () => {
+    const user = userEvent.setup();
+    const onOpenSource = vi.fn();
+    const a = cite(1, 'Projetos/Arquitetura.md');
+    render(<MessageBubble message={answer({ claims: [{ text: 'Afirmação.', citations: [a], support_level: 'direct' }], citations: [a] })} onOpenSource={onOpenSource} />);
+
+    await user.click(screen.getByRole('button', { name: 'Abrir Arquitetura no trecho citado' }));
+    expect(onOpenSource).toHaveBeenLastCalledWith('nota-1', 'nota-1::v1::ofs-1');
+
+    await user.click(screen.getByText('Trecho 1'));
+    expect(onOpenSource).toHaveBeenCalledTimes(2);
+    expect(onOpenSource).toHaveBeenLastCalledWith('nota-1', 'nota-1::v1::ofs-1');
+  });
+
+  it('Enter e Espaço com o card focado abrem a nota no trecho citado', async () => {
+    const user = userEvent.setup();
+    const onOpenSource = vi.fn();
+    const a = cite(1, 'Projetos/Arquitetura.md');
+    const { container } = render(
+      <MessageBubble message={answer({ claims: [{ text: 'Afirmação.', citations: [a], support_level: 'direct' }], citations: [a] })} onOpenSource={onOpenSource} />
+    );
+
+    (container.querySelector('.msg__source') as HTMLElement).focus();
+    await user.keyboard('{Enter}');
+    expect(onOpenSource).toHaveBeenCalledTimes(1);
+    expect(onOpenSource).toHaveBeenLastCalledWith('nota-1', 'nota-1::v1::ofs-1');
+
+    await user.keyboard(' ');
+    expect(onOpenSource).toHaveBeenCalledTimes(2);
+  });
+
+  it('marcadores [n] do texto gerado viram os botões da fonte certa, pelo answer_sources', async () => {
+    const user = userEvent.setup();
+    const a = cite(1, 'Projetos/Arquitetura.md');
+    const b = cite(2, 'Projetos/Pipeline.md');
+    const { container } = render(
+      <MessageBubble
+        message={answer({ answer: 'Primeira frase. [1] Segunda frase. [2]', generated: true, answer_sources: [b.chunk_id, a.chunk_id], citations: [a, b] })}
+      />
+    );
+
+    // [1] é o contexto do chunk b, que a lista mostra como fonte 2 (e [2] é a fonte 1).
+    expect(container.querySelector('.msg__answer')?.textContent).toBe('Primeira frase.2 Segunda frase.1');
+    await user.hover(screen.getByRole('button', { name: 'Fonte 2' }));
+    const cards = container.querySelectorAll('.msg__source');
+    expect(cards[1].classList.contains('is-hl')).toBe(true);
+    expect(cards[0].classList.contains('is-hl')).toBe(false);
+  });
+
+  it('marcador sem fonte some do texto gerado', () => {
+    const a = cite(1, 'Projetos/Arquitetura.md');
+    const { container } = render(
+      <MessageBubble message={answer({ answer: 'Primeira frase. [1] Frase sem fonte. [5]', generated: true, answer_sources: [a.chunk_id], citations: [a] })} />
+    );
+
+    expect(container.querySelector('.msg__answer')?.textContent).toBe('Primeira frase.1 Frase sem fonte.');
+    expect(screen.queryByRole('button', { name: 'Fonte 5' })).toBeNull();
+  });
+
+  it('sem answer_sources, o texto gerado aparece como veio, com os [n]', () => {
+    const a = cite(1, 'Projetos/Arquitetura.md');
+    const { container } = render(<MessageBubble message={answer({ answer: 'Primeira frase. [1]', generated: true, citations: [a] })} />);
+
+    expect(container.querySelector('.msg__answer')?.textContent).toBe('Primeira frase. [1]');
+  });
+
+  it('Copiar mantém os [n] com a numeração das fontes', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const a = cite(1, 'Projetos/Arquitetura.md');
+    const b = cite(2, 'Projetos/Pipeline.md');
+    render(
+      <MessageBubble
+        message={answer({ answer: 'Primeira frase. [1] Segunda frase. [2]', generated: true, answer_sources: [b.chunk_id, a.chunk_id], citations: [a, b] })}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Copiar resposta com as fontes' }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      'Primeira frase. [2] Segunda frase. [1]\n\nFontes:\n[1] Projetos/Arquitetura.md (100–180)\n[2] Projetos/Pipeline.md (200–280)'
+    );
+  });
 });

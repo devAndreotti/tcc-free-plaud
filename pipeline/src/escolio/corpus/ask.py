@@ -1,5 +1,6 @@
 import re
 import sqlite3
+from collections.abc import Callable
 from time import perf_counter
 from typing import Literal
 
@@ -86,6 +87,9 @@ def corpus_vocabulary_stems(connection: sqlite3.Connection) -> frozenset[str] | 
     return stems
 TEAM_ANSWER_PATTERN = re.compile(r'\bequipe\s+(?:de|da|do|dos|das)\s+[0-9A-Za-zÀ-ÖØ-öø-ÿ_-]+')
 CONTEXT_METADATA_KEYS = ('source_path:', 'note_id:', 'chunk_id:', 'claim_extrativo:')
+# Marcador [n] que o modelo põe no fim das frases, com o espaço antes dele.
+# ponytail: só [n]; "[1, 2]" não vira fonte. Aceitar lista se o modelo passar a escrever assim.
+ANSWER_MARKER_PATTERN = re.compile(r'[ \t]*\[(\d+)\]')
 ANSWER_CONTEXT_TOTAL_CHAR_BUDGET = 6000
 ANSWER_CONTEXT_MAX_CHARS = 1500
 GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*[A-Za-zÀ-ÖØ-öø-ÿ%]{1,8})?')
@@ -178,21 +182,34 @@ def _clip_context_text(text: str, max_chars: int) -> str:
     return f'{text[: max_chars - len(marker)].rstrip()}{marker}'
 
 
-def build_answer_contexts(
+def _without_answer_markers(text: str) -> str:
+    return ANSWER_MARKER_PATTERN.sub('', text)
+
+
+def _drop_unknown_answer_markers(text: str, context_count: int) -> str:
+    """Mantém [n] só para contextos que existem; marcador inventado some sem derrubar a resposta."""
+    return ANSWER_MARKER_PATTERN.sub(
+        lambda match: match.group() if 1 <= int(match.group(1)) <= context_count else '',
+        text,
+    )
+
+
+def build_answer_context_items(
     claims: list[AnswerClaim],
     hits: list[SearchHit],
     note_lookup: dict[str, Note],
     *,
     max_total_chars: int = ANSWER_CONTEXT_TOTAL_CHAR_BUDGET,
     max_context_chars: int = ANSWER_CONTEXT_MAX_CHARS,
-) -> list[str]:
-    """Monta contexto generativo com evidencia citavel real e budget fixo."""
+) -> list[tuple[str, str]]:
+    """Contextos (texto, chunk_id principal) dos claims, até o budget; o [n] de cada um é a posição na lista.
+
+    Só os claims: com os demais hits junto, o qchat (3B) recusou 8 de 39 positivas em vez de 2 e a
+    accuracy caiu de 0,932 para 0,781 (docs/experimentos/17_ia_local_qchat.md).
+    """
     hit_by_chunk_id = {hit.chunk.chunk_id: hit for hit in hits}
-    contexts: list[str] = []
-    total_chars = 0
-    for index, claim in enumerate(claims, start=1):
-        if total_chars >= max_total_chars:
-            break
+    blocks: list[tuple[str, list[str], str]] = []  # (cabeçalho sem [n], trechos, chunk_id principal)
+    for claim in claims:
         citation = claim.citations[0] if claim.citations else None
         if citation is None:
             continue
@@ -208,9 +225,7 @@ def build_answer_contexts(
             evidence = readable_chunk_text(raw_text)
             if evidence:
                 evidence_parts.append(evidence)
-
-        header = (
-            f'[{index}]\n'
+        body = (
             f'source_path: {source_path}\n'
             f'title: {title}\n'
             f'note_id: {citation.note_id}\n'
@@ -218,14 +233,39 @@ def build_answer_contexts(
             f'claim_extrativo: {claim.text}\n'
             'trecho:\n'
         )
-        remaining_total = max_total_chars - total_chars
-        allowed_context_chars = min(max_context_chars, remaining_total)
-        evidence_budget = max(0, allowed_context_chars - len(header))
-        evidence_text = _clip_context_text('\n\n'.join(evidence_parts), evidence_budget)
-        context = _clip_context_text(f'{header}{evidence_text}', allowed_context_chars)
-        contexts.append(context)
+        blocks.append((body, evidence_parts, citation.chunk_id))
+
+    items: list[tuple[str, str]] = []
+    total_chars = 0
+    for body, evidence_parts, chunk_id in blocks:
+        header = f'[{len(items) + 1}]\n{body}'
+        allowed_context_chars = min(max_context_chars, max_total_chars - total_chars)
+        if allowed_context_chars <= len(header):
+            break
+        evidence_text = _clip_context_text('\n\n'.join(evidence_parts), allowed_context_chars - len(header))
+        context = f'{header}{evidence_text}'
+        items.append((context, chunk_id))
         total_chars += len(context)
-    return contexts
+    return items
+
+
+def build_answer_contexts(
+    claims: list[AnswerClaim],
+    hits: list[SearchHit],
+    note_lookup: dict[str, Note],
+    *,
+    max_total_chars: int = ANSWER_CONTEXT_TOTAL_CHAR_BUDGET,
+    max_context_chars: int = ANSWER_CONTEXT_MAX_CHARS,
+) -> list[str]:
+    """Monta contexto generativo com evidencia citavel real e budget fixo (só os textos)."""
+    items = build_answer_context_items(
+        claims,
+        hits,
+        note_lookup,
+        max_total_chars=max_total_chars,
+        max_context_chars=max_context_chars,
+    )
+    return [context for context, _ in items]
 
 
 def _normalized_support_text(contexts: list[str], claims: list[AnswerClaim]) -> str:
@@ -276,7 +316,8 @@ def validate_generated_answer(
 ) -> GeneratedAnswerValidation:
     """Valida se resposta gerativa pode substituir a resposta extrativa."""
     _ = question
-    cleaned_answer = answer.strip()
+    # Os [n] são só ponteiros para o contexto: número, anchor e sobreposição são checados sem eles.
+    cleaned_answer = _without_answer_markers(answer).strip()
     if cleaned_answer.startswith('NAO_ENCONTRADO') or cleaned_answer == NO_ANSWER_SENTINEL:
         return GeneratedAnswerValidation(
             action='no_answer',
@@ -674,6 +715,7 @@ def answer_corpus_with_citations(
     answer_provider: AnswerProvider | None = None,
     include_debug: bool = False,
     source_root: str | None = None,
+    on_answer_delta: Callable[[str], None] | None = None,
 ) -> AskResponse:
     """Responde usando todo o corpus persistido (ou só a pasta `source_root`), mantendo citacoes por chunk."""
     started_at = perf_counter()
@@ -893,15 +935,20 @@ def answer_corpus_with_citations(
         limitations.append('A resposta combina evidência de multiplos arquivos do corpus.')
 
     generated = False
+    answer_sources: list[str] = []
     if answer_provider is not None:
         try:
             context_started_at = perf_counter()
-            answer_contexts = build_answer_contexts(claims, hits, note_lookup)
+            context_items = build_answer_context_items(claims, hits, note_lookup)
+            answer_contexts = [context for context, _ in context_items]
             stage_timings.context_build_ms = _elapsed_ms(context_started_at)
 
             provider_started_at = perf_counter()
             try:
-                generated_answer = answer_provider.answer(question, answer_contexts)
+                if on_answer_delta is not None and hasattr(answer_provider, 'answer_stream'):
+                    generated_answer = answer_provider.answer_stream(question, answer_contexts, on_answer_delta)
+                else:
+                    generated_answer = answer_provider.answer(question, answer_contexts)
             finally:
                 stage_timings.provider_ms = _elapsed_ms(provider_started_at)
 
@@ -909,8 +956,9 @@ def answer_corpus_with_citations(
             validation = validate_generated_answer(question, generated_answer, answer_contexts, claims)
             stage_timings.validation_ms = _elapsed_ms(validation_started_at)
             if validation.action == 'accept':
-                answer = generated_answer
+                answer = _drop_unknown_answer_markers(generated_answer, len(answer_contexts))
                 generated = True
+                answer_sources = [chunk_id for _, chunk_id in context_items]
             elif validation.action == 'no_answer':
                 return _no_answer(
                     validation.reason or 'generated_answer_rejected',
@@ -929,6 +977,7 @@ def answer_corpus_with_citations(
         no_answer=False,
         answer=answer,
         generated=generated,
+        answer_sources=answer_sources,
         claims=claims,
         citations=citations,
         limitations=limitations,

@@ -33,6 +33,8 @@ const describeAudioFailure = (errorCode: string | null, message: string | null):
 // Props do componente de input de chat
 interface ChatInputProps {
   onSendMessage: (text: string, attachment?: File) => void;
+  /** Campo de mensagem ganhou foco (a tela aquece o modelo de resposta). */
+  onFocus?: () => void;
   isLoading?: boolean;
   strategy?: AskStrategy;
   onStrategyChange?: (strategy: AskStrategy) => void;
@@ -254,6 +256,7 @@ const SourcePicker = ({
 
 const ChatInput = ({
   onSendMessage,
+  onFocus,
   isLoading = false,
   strategy,
   onStrategyChange,
@@ -485,6 +488,7 @@ const ChatInput = ({
           value={text}
           onChange={handleTextChange}
           onKeyDown={handleKeyDown}
+          onFocus={onFocus}
           rows={2}
           aria-label="Campo de mensagem"
           aria-multiline="true"

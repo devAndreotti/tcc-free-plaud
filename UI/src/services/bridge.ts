@@ -501,6 +501,21 @@ export interface AskResult {
   answer_model?: string;
   /** true quando `answer` foi escrito pela IA e passou na validação contra os trechos. */
   generated?: boolean;
+  /** chunk_id principal de cada contexto [n] (índice n-1), só quando a resposta gerada foi aceita. */
+  answer_sources?: string[];
+}
+
+/** Estágio de uma pergunta em streaming: buscando trechos, escrevendo a resposta, ou terminada. */
+export type AskStage = 'retrieving' | 'writing' | 'done' | 'error';
+
+/** Estado de uma pergunta iniciada com startAsk (pollAsk). */
+export interface AskProgress {
+  ask_id: string;
+  stage: AskStage;
+  /** Texto gerado até agora. Se a validação rejeitar no fim, result.generated vem false e vale a resposta extrativa. */
+  partial: string;
+  result: AskResult | null;
+  error: string | null;
 }
 
 /** Provedor, modelo e URL que estão na tela de Configurações, ainda sem salvar. */
@@ -545,6 +560,15 @@ interface PythonApi {
 
   /** Pergunta ao corpus e devolve a resposta estruturada, com citações por afirmação. */
   askCorpus?: (message: string, strategy?: AskStrategy, sourceRoot?: string) => Promise<AskResult>;
+
+  /** Inicia a pergunta em segundo plano e devolve o id para acompanhar com pollAsk. */
+  startAsk?: (message: string, strategy?: AskStrategy, sourceRoot?: string) => Promise<{ ask_id: string }>;
+
+  /** Estado da pergunta: estágio, texto gerado até agora e, ao terminar, o resultado. */
+  pollAsk?: (askId: string) => Promise<AskProgress>;
+
+  /** Carrega o modelo de resposta na memória, para a primeira pergunta não esperar. */
+  warmAnswerModel?: () => Promise<{ ok: boolean; started: boolean }>;
 
   /** Pastas indexadas com notas, para o seletor de pasta do chat. */
   listCorpusRoots?: () => Promise<CorpusRoot[]>;
@@ -803,13 +827,42 @@ const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'):
       ? {}
       : {
           answer:
-            '(mock) Cada nota guarda uma versão, e o id de cada chunk carrega essa versão. Ao indexar de novo, o hash decide: ' +
-            'se o conteúdo não mudou, a nota fica como está; se mudou, ela volta para a fila e é quebrada em chunks outra vez.',
+            '(mock) Cada nota guarda uma versão, e o id de cada chunk carrega essa versão. [1] ' +
+            'Ao indexar de novo, o hash decide: se o conteúdo não mudou, a nota fica como está. [2] ' +
+            'Se mudou, ela volta para a fila e é quebrada em chunks outra vez. [3]',
           answer_model: mockAnswer.model,
+          answer_sources: MOCK_CITATIONS.map((citation) => citation.chunk_id),
           generated: true,
           latency_ms: 2400,
         }),
   };
+};
+
+// Perguntas em andamento no modo navegador: cada pollAsk avança um estágio, como o backend.
+const mockAskJobs = new Map<string, { message: string; strategy: AskStrategy; polls: number; result?: AskResult }>();
+let mockAskSeq = 0;
+const MOCK_WORDS_PER_POLL = 4;
+
+const mockStartAsk = (message: string, strategy: AskStrategy = 'hybrid'): { ask_id: string } => {
+  const ask_id = `mock-ask-${++mockAskSeq}`;
+  mockAskJobs.set(ask_id, { message, strategy, polls: 0 });
+  return { ask_id };
+};
+
+// 1º poll: buscando trechos. Com a IA ligada, os polls seguintes revelam a resposta gerada aos poucos.
+const mockPollAsk = async (askId: string): Promise<AskProgress> => {
+  const job = mockAskJobs.get(askId);
+  if (!job) return { ask_id: askId, stage: 'error', partial: '', result: null, error: 'Pergunta não encontrada.' };
+  job.polls += 1;
+  if (job.polls === 1) return { ask_id: askId, stage: 'retrieving', partial: '', result: null, error: null };
+  const result = (job.result ??= await mockAskCorpus(job.message, job.strategy));
+  const words = (result.answer ?? '').split(' ');
+  const shown = (job.polls - 1) * MOCK_WORDS_PER_POLL;
+  if (mockAnswer.provider !== 'extractive' && shown < words.length) {
+    return { ask_id: askId, stage: 'writing', partial: words.slice(0, shown).join(' '), result: null, error: null };
+  }
+  mockAskJobs.delete(askId);
+  return { ask_id: askId, stage: 'done', partial: '', result, error: null };
 };
 
 const mockSendMessage = async (message: string): Promise<string> => {
@@ -848,24 +901,51 @@ const mockSettingRow = (row: MockSettingRow): SettingRow => ({
   ...row,
 });
 
-// Notas do grafo no modo navegador; as duas primeiras são as citadas por MOCK_CITATIONS.
-const mockVaultNote = (note_id: string, title: string, rel: string): NoteDetail => ({
+// Notas do grafo no modo navegador. As duas primeiras são as citadas por MOCK_CITATIONS: trazem os trechos citados
+// (mesmo chunk_id, snippet e offsets) no lugar do chunk genérico, para o destaque aparecer.
+const mockVaultNote = (note_id: string, title: string, rel: string, cited: NoteChunkSummary[] = []): NoteDetail => ({
   note_id,
   title,
   source_type: 'md',
   source_path: `D:\\Notas\\Obsidian\\${rel}`,
   created_at: '2026-10-18T12:00:00-03:00',
   tags: ['md'],
-  chunk_count: 1,
+  chunk_count: Math.max(cited.length, 1),
   structured_markdown: `# ${title}\n\n(mock) Nota de exemplo do modo navegador.`,
-  chunks: [
-    { chunk_id: `${note_id}::v1::0000`, chunk_index: 0, char_start: 0, char_end: 42, token_count: 8, snippet: '(mock) Nota de exemplo do modo navegador.' },
-  ],
+  chunks: cited.length
+    ? cited
+    : [{ chunk_id: `${note_id}::v1::0000`, chunk_index: 0, char_start: 0, char_end: 42, token_count: 8, snippet: '(mock) Nota de exemplo do modo navegador.' }],
 });
 
 const MOCK_VAULT_NOTES: NoteDetail[] = [
-  mockVaultNote('arquitetura--3f9a1c', 'Arquitetura do índice', 'Projetos\\escolio\\Arquitetura do índice.md'),
-  mockVaultNote('pipeline--b21e07', 'Pipeline de ingestão', 'Projetos\\escolio\\Pipeline de ingestão.md'),
+  mockVaultNote('arquitetura--3f9a1c', 'Arquitetura do índice', 'Projetos\\escolio\\Arquitetura do índice.md', [
+    {
+      chunk_id: 'arquitetura--3f9a1c::v1::ofs-000680-001480::9a41',
+      chunk_index: 0,
+      char_start: 680,
+      char_end: 1480,
+      token_count: 180,
+      snippet: 'O id de um chunk junta o id da nota, a versão e o deslocamento no texto.',
+    },
+    {
+      chunk_id: 'arquitetura--3f9a1c::v1::ofs-001360-002160::77c0',
+      chunk_index: 1,
+      char_start: 1360,
+      char_end: 2160,
+      token_count: 180,
+      snippet: 'Se o hash não mudou desde a última indexação, a nota entra como inalterada.',
+    },
+  ]),
+  mockVaultNote('pipeline--b21e07', 'Pipeline de ingestão', 'Projetos\\escolio\\Pipeline de ingestão.md', [
+    {
+      chunk_id: 'pipeline--b21e07::v2::ofs-000000-000800::1c3d',
+      chunk_index: 0,
+      char_start: 0,
+      char_end: 800,
+      token_count: 180,
+      snippet: 'Notas alteradas voltam para a fila e passam de novo pelo chunking.',
+    },
+  ]),
   mockVaultNote('roadmap--5c1d', 'Roadmap', 'Projetos\\escolio\\Roadmap.md'),
   mockVaultNote('benchmark--8e2a', 'Benchmark de busca', 'Projetos\\escolio\\Benchmark de busca.md'),
   mockVaultNote('vlan--11aa', 'VLAN', 'Estudos\\Redes\\VLAN.md'),
@@ -1231,6 +1311,38 @@ export const bridge = {
       return plainAskResult(message, await window.pywebview.api.sendMessage(message));
     }
     return mockAskCorpus(message, strategy);
+  },
+
+  /** Inicia a pergunta em segundo plano; a tela acompanha o progresso com pollAsk. */
+  startAsk: async (message: string, strategy?: AskStrategy, sourceRoot?: string | null): Promise<{ ask_id: string }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startAsk) {
+      return sourceRoot
+        ? window.pywebview.api.startAsk(message, strategy, sourceRoot)
+        : window.pywebview.api.startAsk(message, strategy);
+    }
+    return mockStartAsk(message, strategy);
+  },
+
+  /** Estado de uma pergunta iniciada com startAsk. */
+  pollAsk: async (askId: string): Promise<AskProgress> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.pollAsk) {
+      return window.pywebview.api.pollAsk(askId);
+    }
+    return mockPollAsk(askId);
+  },
+
+  /** Aquece o modelo de resposta (Ollama): a próxima pergunta não espera o carregamento. */
+  warmAnswerModel: async (): Promise<{ ok: boolean; started: boolean }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.warmAnswerModel) {
+      return window.pywebview.api.warmAnswerModel();
+    }
+    return { ok: true, started: mockAnswer.provider === 'ollama' };
+  },
+
+  /** true quando o backend responde em streaming (startAsk e pollAsk); sem isso a tela usa askCorpus. */
+  supportsAskStreaming: async (): Promise<boolean> => {
+    if (await whenDesktopReady()) return Boolean(window.pywebview?.api.startAsk);
+    return true;
   },
 
   /**

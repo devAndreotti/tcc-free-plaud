@@ -113,7 +113,7 @@ export function buildGraph(
     for (const l of links) {
       if (l.source === l.target || !noteIds.has(l.source) || !noteIds.has(l.target)) continue;
       // A → B e B → A viram uma linha só: o desenho e a mola não dependem do sentido
-      const key = JSON.stringify([l.source, l.target].sort());
+      const key = JSON.stringify(l.source < l.target ? [l.source, l.target] : [l.target, l.source]);
       if (seen.has(key)) continue;
       seen.add(key);
       edges.push({ source: l.source, target: l.target, kind: 'link' });

@@ -18,7 +18,9 @@ _YAML_LINE = (
 # Frontmatter completo, com "---" de abertura. Só vale se todas as linhas forem YAML: "---" de régua depois de prosa não conta.
 # ponytail: trecho que começa no meio de um frontmatter maior que o chunk (raro, >680 caracteres) mantém o fim do YAML;
 # tirar "linhas que parecem YAML até um ---" apagaria listas e "Status: ..." reais antes de uma régua.
-FRONTMATTER_PATTERN = re.compile(rf'\A\s*---[ \t]*\r?\n(?:{_YAML_LINE})*?---[ \t]*(?:\r?\n|\Z)')
+# *+ (possessivo): nenhuma linha YAML engole o "---" de fecho, e sem fecho o padrão desiste na hora. Com * ou *?,
+# "  - item" casa como lista e como continuação, e um trecho cortado no meio de uma lista longa travava (2^n).
+FRONTMATTER_PATTERN = re.compile(rf'\A\s*---[ \t]*\r?\n(?:{_YAML_LINE})*+---[ \t]*(?:\r?\n|\Z)')
 # Bloco ```dataviewjs inteiro; se o trecho cortou no meio, vai até o fim.
 DATAVIEW_BLOCK_PATTERN = re.compile(r'```[ \t]*dataview(?:js)?\b.*?(?:```|\Z)', re.DOTALL | re.IGNORECASE)
 BLOCKQUOTE_MARKER_PATTERN = re.compile(r'^[ \t]*(?:>[ \t]?)+', re.MULTILINE)

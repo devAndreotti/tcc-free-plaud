@@ -56,6 +56,7 @@ def ask_corpus(
     settings: Settings | None = None,
     runtime: CorpusRuntime | None = None,
     source_root: str | None = None,
+    on_answer_delta: Callable[[str], None] | None = None,
 ) -> AskResponse:
     cleaned_question = question.strip()
     if not cleaned_question:
@@ -91,7 +92,7 @@ def ask_corpus(
             embedder=embedder,
             strategy=strategy,
             top_k=resolved_settings.retrieval_top_k,
-            source_root=source_root,
+            source_root=source_root, on_answer_delta=on_answer_delta,
             answer_provider=get_answer_provider(
                 resolved_settings.answer_provider,
                 model=resolved_settings.answer_model,

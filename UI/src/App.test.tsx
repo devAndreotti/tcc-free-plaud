@@ -70,6 +70,8 @@ describe('App', () => {
     const user = userEvent.setup();
     window.localStorage.clear();
     const askSpy = vi.spyOn(bridge, 'askCorpus');
+    // Sem streaming: esta regressão cobre o caminho askCorpus (o mock do navegador responde em streaming).
+    const streamingSpy = vi.spyOn(bridge, 'supportsAskStreaming').mockResolvedValue(false);
     render(<App />);
 
     await user.click(await screen.findByRole('button', { name: 'Pasta de origem: Todas as pastas' }));
@@ -83,5 +85,24 @@ describe('App', () => {
     expect(askSpy).toHaveBeenCalledWith('Como fazer bolo de chocolate?', 'hybrid', 'D:\\Notas\\Culinaria');
     expect(window.localStorage.getItem('escolio:chat:sourceRoot')).toBe('D:\\Notas\\Culinaria');
     askSpy.mockRestore();
+    streamingSpy.mockRestore();
+  });
+
+  it('clicar numa fonte da resposta abre a nota na tela Notas, com o trecho citado destacado', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole('button', { name: /Vault ativa: Obsidian/ });
+
+    await user.type(screen.getByRole('textbox', { name: 'Campo de mensagem' }), 'Como funciona o id de um chunk?');
+    await user.click(screen.getByRole('button', { name: 'Enviar mensagem' }));
+    const history = await screen.findByRole('log', { name: 'Histórico de mensagens' });
+    await within(history).findByRole('article', { name: 'Resposta' }, { timeout: 5000 });
+
+    // Duas fontes são da mesma nota: a primeira é o trecho "O id de um chunk junta…".
+    await user.click(within(history).getAllByRole('button', { name: 'Abrir Arquitetura do índice no trecho citado' })[0]);
+
+    expect(await screen.findByRole('heading', { name: 'Notas' })).toBeTruthy();
+    expect(await screen.findByText('trecho citado')).toBeTruthy();
+    expect(document.querySelector('.reader__chunk--cited')?.textContent).toContain('O id de um chunk junta');
   });
 });

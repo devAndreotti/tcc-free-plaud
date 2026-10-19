@@ -14,7 +14,7 @@ import GraphPanel from './components/GraphPanel';
 import NotesPanel from './components/NotesPanel';
 import BenchmarkPanel from './components/BenchmarkPanel';
 import QueuePanel from './components/QueuePanel';
-import { bridge, type AskStrategy, type CorpusRoot } from './services/bridge';
+import { bridge, type AskResult, type AskStage, type AskStrategy, type CorpusRoot } from './services/bridge';
 import { VaultsProvider } from './contexts/VaultsContext';
 import { useVaults } from './hooks/useVaults';
 import { QueueProvider } from './contexts/QueueContext';
@@ -23,6 +23,11 @@ import { fromSavedConversations, toSavedConversations, type ConversationSnapshot
 // Gera ID único para mensagens e abas
 const generateId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+// Intervalo entre consultas de uma pergunta em streaming.
+const ASK_POLL_MS = 150;
+// O Ollama descarrega o modelo após 5 min parado: o aquecimento roda no máximo a cada 4 min.
+const WARM_INTERVAL_MS = 4 * 60 * 1000;
 
 // Conversas: abas (cada uma presa a uma vault), aba ativa e mensagens/digitação por aba.
 interface ChatState {
@@ -119,6 +124,11 @@ function AppContent() {
     setChat((prev) => (prev.tabs.some((tab) => tab.id === tabId) ? update(prev) : prev));
   }, [setChat]);
   const { tabs, activeTabId, tabMessages, tabTyping } = chat;
+  // Abas do último render: o laço de uma pergunta em streaming para quando a aba dela fecha.
+  const tabsRef = useRef(tabs);
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
 
   // Aba de outra vault à vista (clique, ou vizinha ao fechar uma aba): ativa a vault da conversa.
@@ -177,9 +187,9 @@ function AppContent() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
   const [healthKey, setHealthKey] = useState(0);
   const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
-  // Nota pedida pelo grafo; a tela Notas a abre ao montar. `at` muda a cada clique, então clicar de novo na mesma nota reabre.
+  // Nota pedida pelo grafo ou por uma fonte do chat (com o trecho citado); a tela Notas a abre ao montar. `at` muda a cada clique, então clicar de novo na mesma nota reabre.
   // Navegar pela sidebar limpa o pedido.
-  const [pendingNote, setPendingNote] = useState<{ noteId: string; at: number } | null>(null);
+  const [pendingNote, setPendingNote] = useState<{ noteId: string; chunkId?: string; at: number } | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('chat');
   const [strategy, setStrategy] = useState<AskStrategy>('hybrid');
   const [sourceRoot, setSourceRoot] = useState<string | null>(readStoredSourceRoot);
@@ -230,9 +240,9 @@ function AppContent() {
     setWorkspaceView(view);
   }, []);
 
-  // Clique numa nota do grafo: vai para Notas e abre o detalhe dela
-  const handleOpenNote = useCallback((noteId: string) => {
-    setPendingNote((prev) => ({ noteId, at: (prev?.at ?? 0) + 1 }));
+  // Clique numa nota do grafo, ou numa fonte do chat (com o trecho citado): vai para Notas e abre o detalhe dela
+  const handleOpenNote = useCallback((noteId: string, chunkId?: string) => {
+    setPendingNote((prev) => ({ noteId, chunkId, at: (prev?.at ?? 0) + 1 }));
     setWorkspaceView('notes');
   }, []);
 
@@ -250,6 +260,9 @@ function AppContent() {
   // Mensagens e estado de digitação da aba ativa
   const activeMessages = activeTabId ? (tabMessages[activeTabId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES;
   const isTyping = activeTabId ? (tabTyping[activeTabId] ?? false) : false;
+  // Progresso de cada aba (estágio e texto escrito até agora). Fica fora do ChatState: não vai para o arquivo de conversas.
+  const [askProgress, setAskProgress] = useState<Record<string, { stage: AskStage; partial: string }>>({});
+  const activeProgress = activeTabId ? askProgress[activeTabId] : undefined;
 
   // Mantém o scroll sempre no final da lista de mensagens da aba ativa
   const scrollToBottom = useCallback(() => {
@@ -258,7 +271,7 @@ function AppContent() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [activeMessages, isTyping, scrollToBottom]);
+  }, [activeMessages, isTyping, activeProgress?.partial, scrollToBottom]);
 
   // Seleciona uma aba pelo id (a vault dela vira a ativa)
   const handleSelectTab = useCallback((id: string) => {
@@ -304,12 +317,55 @@ function AppContent() {
     updateTab(tabId, (c) => ({ ...c, tabMessages: { ...c.tabMessages, [tabId]: [...(c.tabMessages[tabId] ?? []), message] } }));
   }, [updateTab]);
 
-  // Pergunta ao corpus e anexa a resposta (estruturada, quando o backend a devolve)
+  // Modelo que escreve a resposta, para o cabeçalho "Escrevendo com …". Lido ao abrir e de novo ao fechar Configurações
+  // (healthKey muda), sem uma chamada por pergunta.
+  const [answerModel, setAnswerModel] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    bridge
+      .getBackendSettings()
+      .then((settings) => setAnswerModel(settings.answer_model))
+      .catch(() => setAnswerModel(undefined));
+  }, [healthKey]);
+
+  // Aquece o modelo de resposta: ao abrir o app e ao focar o campo, no máximo uma vez a cada 4 min.
+  const lastWarmRef = useRef<number | null>(null);
+  const warmAnswerModel = useCallback(() => {
+    const now = Date.now();
+    if (lastWarmRef.current !== null && now - lastWarmRef.current < WARM_INTERVAL_MS) return;
+    lastWarmRef.current = now;
+    bridge.warmAnswerModel().catch((error: unknown) => console.error('[App] Não foi possível pré-carregar o modelo:', error));
+  }, []);
+  useEffect(() => {
+    warmAnswerModel();
+  }, [warmAnswerModel]);
+
+  // Espera uma pergunta em streaming terminar, mostrando o texto que a IA já escreveu. Devolve null se a aba fechar no meio.
+  const streamAsk = useCallback(
+    async (tabId: string, text: string, askStrategy: AskStrategy, askSourceRoot: string | null): Promise<AskResult | null> => {
+      const { ask_id: askId } = await bridge.startAsk(text, askStrategy, askSourceRoot);
+      for (;;) {
+        if (!tabsRef.current.some((tab) => tab.id === tabId)) return null;
+        const progress = await bridge.pollAsk(askId);
+        if (progress.stage === 'done' && progress.result) return progress.result;
+        if (progress.stage === 'done' || progress.stage === 'error') {
+          throw new Error(progress.error ?? 'Pergunta sem resposta.');
+        }
+        setAskProgress((prev) => ({ ...prev, [tabId]: { stage: progress.stage, partial: progress.partial } }));
+        await new Promise((resolve) => window.setTimeout(resolve, ASK_POLL_MS));
+      }
+    },
+    []
+  );
+
+  // Pergunta ao corpus e anexa a resposta (estruturada, quando o backend a devolve). Com streaming, a tela mostra o texto enquanto a IA escreve.
   const askInTab = useCallback(
     async (tabId: string, text: string, askStrategy: AskStrategy, askSourceRoot: string | null) => {
       updateTab(tabId, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: true } }));
       try {
-        const ask = await bridge.askCorpus(text, askStrategy, askSourceRoot);
+        const ask = (await bridge.supportsAskStreaming())
+          ? await streamAsk(tabId, text, askStrategy, askSourceRoot)
+          : await bridge.askCorpus(text, askStrategy, askSourceRoot);
+        if (!ask) return; // aba fechada no meio: a resposta não tem para onde ir
         appendMessage(tabId, {
           id: `msg-${generateId()}`,
           role: 'assistant',
@@ -325,12 +381,13 @@ function AppContent() {
           content: 'Ocorreu um erro ao processar sua mensagem. Tente novamente.',
           timestamp: new Date(),
         });
-        console.error('[App] Erro ao chamar bridge.askCorpus:', error);
+        console.error('[App] Erro ao perguntar ao corpus:', error);
       } finally {
+        setAskProgress((prev) => withoutKey(prev, tabId));
         updateTab(tabId, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: false } }));
       }
     },
-    [appendMessage, updateTab]
+    [appendMessage, updateTab, streamAsk]
   );
 
   // Envia mensagem na conversa da aba ativa
@@ -400,7 +457,7 @@ function AppContent() {
             />
 
             {/* View ativa conforme a aba selecionada */}
-            {workspaceView === 'notes' && <NotesPanel key={pendingNote ? `nota-${pendingNote.at}` : `lista-${vaultVersion}`} initialNoteId={pendingNote?.noteId ?? null} />}
+            {workspaceView === 'notes' && <NotesPanel key={pendingNote ? `nota-${pendingNote.at}` : `lista-${vaultVersion}`} initialNoteId={pendingNote?.noteId ?? null} initialChunkId={pendingNote?.chunkId ?? null} />}
 
             {workspaceView === 'benchmark' && <BenchmarkPanel />}
 
@@ -422,11 +479,11 @@ function AppContent() {
                     aria-live="polite"
                   >
                     {activeMessages.map((message) => (
-                      <MessageBubble key={message.id} message={message} onRetry={handleRetry} />
+                      <MessageBubble key={message.id} message={message} onRetry={handleRetry} onOpenSource={handleOpenNote} />
                     ))}
 
                     {/* Indicador de digitação da aba ativa */}
-                    {isTyping && <TypingIndicator />}
+                    {isTyping && <TypingIndicator stage={activeProgress?.stage} partial={activeProgress?.partial} model={answerModel} />}
 
                     {/* Âncora de scroll para o final */}
                     <div ref={messagesEndRef} aria-hidden="true" />
@@ -450,6 +507,7 @@ function AppContent() {
             {workspaceView === 'chat' && activeTab?.type === 'chat' && (
               <ChatInput
                 onSendMessage={handleSendMessage}
+                onFocus={warmAnswerModel}
                 isLoading={isTyping || switchingVault}
                 strategy={strategy}
                 onStrategyChange={setStrategy}

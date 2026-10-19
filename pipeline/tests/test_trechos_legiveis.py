@@ -1,8 +1,10 @@
+import time
 from pathlib import Path
 
 from escolio.corpus.ask import _build_corpus_claims, _citation_from_corpus_hit
 from escolio.ingest.loaders import load_document
 from escolio.notes.readable import readable_chunk_text
+from escolio.notes.service import _chunk_summary
 from escolio.notes.structurer import structure_document
 from escolio.retrieval.models import Chunk, SearchHit
 from escolio.retrieval.search import normalize_query_terms
@@ -52,6 +54,14 @@ def test_readable_chunk_text_remove_frontmatter_callout_wikilink_e_dataview() ->
     )
 
 
+def test_resumo_do_trecho_na_tela_de_notas_sai_legivel() -> None:
+    assert _chunk_summary(_hit('c1', CHUNK_CISCO).chunk).snippet == (
+        '**Cisco — Trilha de Cursos e Certificações** Este arquivo centraliza os cursos em switches e VLAN.'
+    )
+    # Trecho que é só frontmatter não fica vazio.
+    assert _chunk_summary(_hit('c2', '---\ntype: index\n---\n').chunk).snippet == '--- type: index ---'
+
+
 def test_readable_chunk_text_nao_apaga_lista_ou_chave_valor_antes_de_regra_horizontal() -> None:
     # Regressão: "parece YAML" no começo do trecho não é frontmatter (só o bloco aberto por --- no início da nota é).
     lista = '- Instale o Docker\n- Rode o compose\n\n---\n\n## Próximos passos'
@@ -59,6 +69,15 @@ def test_readable_chunk_text_nao_apaga_lista_ou_chave_valor_antes_de_regra_horiz
 
     assert readable_chunk_text(lista) == lista
     assert readable_chunk_text(ata) == ata
+
+
+def test_frontmatter_sem_fecho_com_lista_longa_nao_trava() -> None:
+    # Regressão: trecho cortado no meio de um frontmatter grande (sem o --- de fecho) levava 2^n passos; 24 itens eram ~30 s.
+    chunk = '---\ntags:\n' + '  - item\n' * 24 + 'texto da nota'
+
+    start = time.perf_counter()
+    assert readable_chunk_text(chunk).endswith('texto da nota')
+    assert time.perf_counter() - start < 1.0
 
 
 def test_readable_chunk_text_mantem_regra_horizontal_depois_de_prosa() -> None:

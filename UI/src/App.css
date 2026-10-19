@@ -1237,6 +1237,12 @@
   background: var(--accent-soft);
 }
 
+/* Trecho citado numa resposta do chat. Mesma especificidade do :nth-child(even) acima, mas vem depois: esta regra vence. */
+.reader__chunk.reader__chunk--cited {
+  background: var(--accent-soft);
+  border-left-color: var(--accent-blue-light);
+}
+
 .reader__chunk-label {
   position: absolute;
   right: calc(100% + 16px);
@@ -2091,6 +2097,23 @@
   animation: spin 0.8s linear infinite;
 }
 
+/* Cursor da resposta em escrita: pisca no fim do texto; com reduce motion fica parado. */
+.msg__cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 3px;
+  vertical-align: text-bottom;
+  background: var(--accent-blue-light);
+  animation: blink 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg__cursor {
+    animation: none;
+  }
+}
+
 .msg__answer {
   font: 16.5px/1.72 var(--font-read);
   color: var(--text-primary);
@@ -2222,6 +2245,38 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.msg__source-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.msg__source-open svg {
+  flex: none;
+}
+
+.msg__source-open:hover {
+  color: var(--accent-blue-light);
+}
+
+.msg__source[tabindex] {
+  cursor: pointer;
+}
+
+.msg__source:focus-visible,
+.msg__source-open:focus-visible {
+  outline: 2px solid var(--accent-blue-light);
+  outline-offset: 2px;
 }
 
 .msg__source-path {

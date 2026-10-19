@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from escolio.app.config import Settings, get_settings
 from escolio.app.paths import ensure_runtime_dirs
 from escolio.notes.metadata import find_note_root
+from escolio.notes.readable import readable_chunk_text
 from escolio.providers.embed import Embedder
 from escolio.retrieval.models import Chunk
 from escolio.storage.sqlite import (
@@ -102,7 +103,8 @@ def _summary_from_note(note, *, chunk_count: int) -> NoteSummary:
 
 
 def _chunk_summary(chunk: Chunk) -> NoteChunkSummary:
-    snippet = chunk.chunk_text.replace('\n', ' ').strip()
+    # Mesmo texto legível do chat; trecho que é só frontmatter aparece como está, para não ficar vazio.
+    snippet = (readable_chunk_text(chunk.chunk_text) or chunk.chunk_text).replace('\n', ' ').strip()
     return NoteChunkSummary(
         chunk_id=chunk.chunk_id,
         chunk_index=chunk.chunk_index,

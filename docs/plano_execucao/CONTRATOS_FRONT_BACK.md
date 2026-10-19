@@ -55,6 +55,8 @@ type AskResponse = {
   reason_for_no_answer: string | null
   used_sources: UsedSource[]
   latency_ms: number
+  generated: boolean        // true quando `answer` veio da IA e passou na validação
+  answer_sources: string[]  // chunk_id de cada [n] da resposta gerada, na ordem
 }
 ```
 
@@ -236,6 +238,12 @@ interface BackendBridge {
   listExperiments(): Promise<ExperimentRunSummary[]>
   loadConversations(): Promise<SavedConversations | null>
   saveConversations(payload: SavedConversations): Promise<{ ok: boolean; message?: string }>
+  listNoteLinks(): Promise<{ source: string; target: string }[]>  // [[links]] entre notas, por note_id
+  // Pergunta em segundo plano: pollAsk devolve { ask_id, stage: 'retrieving' | 'writing' | 'done' | 'error',
+  // partial (texto gerado até agora), result (AskResponse no fim), error }.
+  startAsk(message: string, strategy?: AskStrategy, sourceRoot?: string): Promise<{ ask_id: string }>
+  pollAsk(askId: string): Promise<AskProgress>
+  warmAnswerModel(): Promise<{ ok: boolean; started: boolean }>  // carrega o modelo local antes da 1ª pergunta
 }
 ```
 
