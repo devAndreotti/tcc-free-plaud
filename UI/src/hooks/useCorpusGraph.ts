@@ -3,12 +3,13 @@
  *
  * Cada nota vira um MarkdownNode: id = note_id e path = nome da raiz do corpus que a contém +
  * caminho relativo à raiz. Nota fora de qualquer raiz cai na pasta "Soltas".
+ * Junto vêm as ligações [[...]] entre essas notas (links), só as que apontam para notas do grafo.
  */
 
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { QueueContext } from '../contexts/QueueContextObject';
 import { bridge, type CorpusRoot, type NoteSummary } from '../services/bridge';
-import type { MarkdownNode } from '../lib/vaultGraph';
+import type { MarkdownNode, VaultLink } from '../lib/vaultGraph';
 
 // Mesmo evento que notifyCorpusChanged() (hooks/useCorpusHealth) dispara após indexar/apagar
 const CORPUS_CHANGED = 'escolio:corpus-changed';
@@ -41,19 +42,34 @@ export function buildCorpusNodes(notes: NoteSummary[], roots: CorpusRoot[]): Mar
   });
 }
 
+// Ligações entre notas; falha ao lê-las não pode apagar o grafo de pastas e notas
+async function readLinks(): Promise<VaultLink[]> {
+  try {
+    return (await bridge.listNoteLinks?.()) ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export function useCorpusGraph() {
   const [nodes, setNodes] = useState<MarkdownNode[]>([]);
+  const [links, setLinks] = useState<VaultLink[]>([]);
   const job = useContext(QueueContext)?.job;
   // Id do job que acabou de terminar (status diferente de running); muda uma vez por job
   const jobDone = job && job.status !== 'running' ? job.job_id : null;
 
   const refresh = useCallback(async () => {
     try {
-      const [notes, roots] = await Promise.all([
+      const [notes, roots, noteLinks] = await Promise.all([
         bridge.listNotes?.() ?? [],
         bridge.listCorpusRoots?.() ?? [],
+        readLinks(),
       ]);
-      setNodes(buildCorpusNodes(notes, roots));
+      const built = buildCorpusNodes(notes, roots);
+      // Link para nota fora do grafo (apagada, de outra vault) não vira aresta solta
+      const ids = new Set(built.map((n) => n.id));
+      setNodes(built);
+      setLinks(noteLinks.filter((l) => ids.has(l.source) && ids.has(l.target)));
     } catch {
       // Mantém o grafo anterior: uma falha de leitura não deve apagar o desenho
     }
@@ -73,5 +89,5 @@ export function useCorpusGraph() {
     if (jobDone) void refresh();
   }, [jobDone, refresh]);
 
-  return { nodes, refresh };
+  return { nodes, links, refresh };
 }

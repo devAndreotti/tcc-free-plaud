@@ -48,6 +48,7 @@ from escolio.storage.sqlite import (
     delete_note_and_chunks,
     forget_corpus_root,
     get_note_content_hash,
+    get_note_title,
     init_sqlite,
     list_chunk_ids,
     list_chunk_ids_for_note,
@@ -1177,6 +1178,7 @@ def _resolve_prepared_corpus_file(
         )
 
     existing_hash = get_note_content_hash(connection, prepared.note.note_id)
+    existing_title = get_note_title(connection, prepared.note.note_id)
     existing_chunk_ids = list_chunk_ids_for_note(connection, prepared.note.note_id)
     chunks_match_config = note_chunks_match_config(
         connection,
@@ -1184,7 +1186,13 @@ def _resolve_prepared_corpus_file(
         chunk_size=chunk_size,
         overlap=overlap,
     )
-    if existing_hash == prepared.note.content_hash and chunks_match_config and vector_store.has_chunk_ids(existing_chunk_ids):
+    # Título recalculado (ex.: regra de frontmatter) também conta como mudança: sem isso a nota nunca seria corrigida.
+    if (
+        existing_hash == prepared.note.content_hash
+        and existing_title == prepared.note.title
+        and chunks_match_config
+        and vector_store.has_chunk_ids(existing_chunk_ids)
+    ):
         return _unchanged_result(
             prepared.note,
             source_path=prepared.source_path,
@@ -1274,6 +1282,7 @@ def index_corpus_file(
             source_root = corpus_root_for_path(resolved_connection, source_path)
         note = structure_document(document, source_root=source_root, hash_unrooted=True)
         existing_hash = get_note_content_hash(resolved_connection, note.note_id)
+        existing_title = get_note_title(resolved_connection, note.note_id)
         existing_chunk_ids = list_chunk_ids_for_note(resolved_connection, note.note_id)
         chunks_match_config = note_chunks_match_config(
             resolved_connection,
@@ -1283,6 +1292,7 @@ def index_corpus_file(
         )
         if (
             existing_hash == note.content_hash
+            and existing_title == note.title
             and chunks_match_config
             and resolved_vector_store.has_chunk_ids(existing_chunk_ids)
         ):

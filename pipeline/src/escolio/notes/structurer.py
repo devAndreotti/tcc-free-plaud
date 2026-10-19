@@ -7,6 +7,7 @@ from escolio.ingest.models import IngestedDocument
 from escolio.notes.markdown import render_note_markdown
 from escolio.notes.metadata import build_note_id
 from escolio.notes.normalizer import normalize_text, repair_ocr_summary_text
+from escolio.notes.readable import strip_frontmatter
 from escolio.notes.schemas import Note
 
 GENERIC_TITLE_TERMS = {
@@ -215,6 +216,11 @@ def _looks_generic_title(title: str) -> bool:
     return _normalize_for_match(title) in GENERIC_TITLE_TERMS
 
 
+def _is_bare_yaml_key(line: str) -> bool:
+    # "tags:" sozinho é chave de frontmatter que escapou, não título.
+    return re.fullmatch(r"[a-z][\w-]*:", line.strip()) is not None
+
+
 def _finalize_title(
     candidate: str, fallback: str, allow_sentence_title: bool = True
 ) -> str:
@@ -228,6 +234,7 @@ def _finalize_title(
         or _is_salutation_line(stripped)
         or _looks_like_contact_line(stripped)
         or _looks_like_signature_line(stripped)
+        or _is_bare_yaml_key(stripped)
         or (
             _looks_like_metadata_line(stripped)
             and not _is_heading_line(stripped)
@@ -297,7 +304,19 @@ def _has_substantive_content_before_heading(
     return bool(candidates)
 
 
-def _choose_title(lines: list[str], fallback: str, source_type: str) -> tuple[int, str]:
+def _choose_title(
+    lines: list[str], fallback: str, source_type: str, has_frontmatter: bool = False
+) -> tuple[int, str]:
+    if has_frontmatter:
+        # Com frontmatter, só vale um H1 do corpo; sem ele, o nome do arquivo.
+        # ponytail: callout ou H2 que poderia ser título fica de fora; upgrade: primeiro título não genérico.
+        for index, line in enumerate(lines):
+            if _is_markdown_h1_line(line):
+                title = _finalize_title(line, fallback)
+                if title:
+                    return index, title
+        return -1, fallback
+
     if source_type == "md":
         for index, line in enumerate(lines):
             if _is_markdown_h1_line(line):
@@ -492,9 +511,10 @@ def structure_document(
         if document.cleaned_text is not None
         else document.raw_text
     )
-    lines = normalized_text.splitlines()
+    body_text, has_frontmatter = strip_frontmatter(normalized_text)
+    lines = body_text.splitlines()
     fallback_title = _humanize_fallback_title(document.source_path.stem)
-    title_index, title = _choose_title(lines, fallback_title, document.source_type)
+    title_index, title = _choose_title(lines, fallback_title, document.source_type, has_frontmatter)
     summary = repair_ocr_summary_text(_extract_summary(lines, title_index, title))
     note = Note(
         note_id=build_note_id(document.source_path, root_path=source_root, hash_unrooted=hash_unrooted),

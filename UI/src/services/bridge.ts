@@ -323,6 +323,11 @@ export interface NoteSummary {
   chunk_count: number;
 }
 
+export interface NoteLink {
+  source: string;
+  target: string;
+}
+
 export interface NoteChunkSummary {
   chunk_id: string;
   chunk_index: number;
@@ -505,6 +510,30 @@ export interface AnswerDraft {
   baseUrl?: string;
 }
 
+/** Aba salva: o mesmo formato de Tab (Header.tsx), sem importar componentes para dentro da ponte. */
+export interface SavedTab {
+  id: string;
+  label: string;
+  type: 'chat' | 'graph';
+  vaultId?: string;
+}
+
+/** Mensagem salva: o timestamp vai como texto ISO e volta a ser Date na tela. */
+export interface SavedMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  ask?: AskResult;
+}
+
+/** Conversas salvas entre aberturas: conversations.json no backend, localStorage no navegador. */
+export interface SavedConversations {
+  tabs: SavedTab[];
+  activeTabId: string | null;
+  tabMessages: Record<string, SavedMessage[]>;
+}
+
 interface PythonApi {
   /**
    * Envia mensagem do usuário para o backend Python.
@@ -631,8 +660,17 @@ interface PythonApi {
   /** Salva varios settings do catalogo numa unica escrita atomica; retorna o BackendSettings atualizado. */
   saveBackendSettings?: (values: Record<string, string>) => Promise<BackendSettings>;
 
+  /** Conversas salvas na abertura anterior; null quando não há nenhuma. */
+  loadConversations?: () => Promise<SavedConversations | null>;
+
+  /** Grava as conversas; ok false traz o motivo quando o backend recusa o payload. */
+  saveConversations?: (payload: SavedConversations) => Promise<{ ok: boolean; message?: string }>;
+
   /** Lista notas indexadas no corpus. */
   listNotes?: () => Promise<NoteSummary[]>;
+
+  /** Ligações [[...]] entre as notas indexadas (arestas do grafo). */
+  listNoteLinks?: () => Promise<NoteLink[]>;
 
   /** Retorna detalhe operacional de uma nota indexada. */
   getNoteDetail?: (noteId: string) => Promise<NoteDetail>;
@@ -838,6 +876,17 @@ const MOCK_VAULT_NOTES: NoteDetail[] = [
   mockVaultNote('zustand--66ff', 'Zustand', 'Estudos\\Front\\Zustand.md'),
   mockVaultNote('diario-29--77aa', 'Segunda-feira, 29 de Junho', 'Diário\\2026-06-29.md'),
   mockVaultNote('diario-30--88bb', 'Terça-feira, 30 de Junho', 'Diário\\2026-06-30.md'),
+];
+
+// Ligações [[...]] entre as notas de exemplo do modo navegador (aba Links do grafo)
+const MOCK_NOTE_LINKS: NoteLink[] = [
+  { source: 'arquitetura--3f9a1c', target: 'pipeline--b21e07' },
+  { source: 'pipeline--b21e07', target: 'arquitetura--3f9a1c' },
+  { source: 'vlan--11aa', target: 'mac--22bb' },
+  { source: 'ospf--33cc', target: 'vlan--11aa' },
+  { source: 'docker--44dd', target: 'linux--55ee' },
+  { source: 'roadmap--5c1d', target: 'benchmark--8e2a' },
+  { source: 'roadmap--5c1d', target: 'arquitetura--3f9a1c' },
 ];
 
 const MOCK_NOTES: NoteDetail[] = [
@@ -1148,6 +1197,9 @@ let mockActiveVaultId = 'obsidian';
 
 const mockVaultId = (name: string): string =>
   name.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'vault';
+
+// Conversas no navegador (sem PyWebView): o localStorage guarda o que o backend guardaria em conversations.json.
+export const CONVERSATIONS_STORAGE_KEY = 'escolio:conversations';
 
 export const bridge = {
   /**
@@ -1736,6 +1788,32 @@ export const bridge = {
     return bridge.getBackendSettings();
   },
 
+  /** Conversas salvas na abertura anterior (backend); no navegador, o localStorage. */
+  loadConversations: async (): Promise<SavedConversations | null> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.loadConversations) {
+      return window.pywebview.api.loadConversations();
+    }
+    try {
+      const raw = window.localStorage.getItem(CONVERSATIONS_STORAGE_KEY);
+      return raw === null ? null : (JSON.parse(raw) as SavedConversations);
+    } catch {
+      return null;
+    }
+  },
+
+  /** Grava as conversas (backend, ou localStorage no navegador). */
+  saveConversations: async (payload: SavedConversations): Promise<{ ok: boolean; message?: string }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.saveConversations) {
+      return window.pywebview.api.saveConversations(payload);
+    }
+    try {
+      window.localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(payload));
+      return { ok: true };
+    } catch {
+      return { ok: false, message: 'Armazenamento do navegador indisponível.' };
+    }
+  },
+
   listCorpusRoots: async (): Promise<CorpusRoot[]> => {
     if ((await whenDesktopReady())) {
       // Backend sem o método devolve lista vazia, sem pastas inventadas.
@@ -1758,6 +1836,14 @@ export const bridge = {
       tags: note.tags,
       chunk_count: note.chunk_count,
     }));
+  },
+
+  listNoteLinks: async (): Promise<NoteLink[]> => {
+    if (await whenDesktopReady()) {
+      // Backend sem o método devolve lista vazia: o grafo mostra só pastas e notas.
+      return window.pywebview?.api.listNoteLinks ? window.pywebview.api.listNoteLinks() : [];
+    }
+    return MOCK_NOTE_LINKS.map((link) => ({ ...link }));
   },
 
   getNoteDetail: async (noteId: string): Promise<NoteDetail> => {

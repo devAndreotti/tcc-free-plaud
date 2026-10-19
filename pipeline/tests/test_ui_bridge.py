@@ -9,6 +9,7 @@ from escolio.app.doctor_models import DoctorCheck, DoctorReport
 from escolio.providers.answer import AnswerProviderTestResult
 from escolio.providers.model_discovery import ModelDiscoveryResult, ModelInfo
 from escolio.retrieval.models import AnswerClaim, AskResponse, Citation, UsedSource
+from escolio.storage.sqlite import init_sqlite
 
 
 def _load_ui_main(monkeypatch):
@@ -513,6 +514,27 @@ def test_desktop_api_exposes_notes_methods(monkeypatch) -> None:
     assert api.reindexNote("nota-1")["chunks_indexed"] == 2
 
 
+def test_desktop_api_lists_note_links_from_active_vault(monkeypatch, tmp_path: Path) -> None:
+    module = _load_ui_main(monkeypatch)
+    api = module.Api()  # o construtor limpa o cache de get_settings: patcha depois
+    db_path = tmp_path / "escolio.sqlite3"
+    monkeypatch.setattr(module, "get_settings", lambda: Settings(results_dir=tmp_path, sqlite_path=db_path))
+    connection = init_sqlite(db_path)
+    connection.executemany(
+        "INSERT INTO notes (note_id, note_version, source_type, source_path, source_name, title, summary, "
+        "raw_text, normalized_text, structured_markdown, content_hash, provider, model, created_at) "
+        "VALUES (?, 1, 'md', ?, ?, ?, '', ?, '', '', '', '', '', '2026-10-18T12:00:00')",
+        [
+            ("switch", "V/Redes/Switch.md", "Switch.md", "Switch", ""),
+            ("ospf", "V/Redes/OSPF.md", "OSPF.md", "OSPF", "- [[switch|o switch]]"),
+        ],
+    )
+    connection.commit()
+    connection.close()
+
+    assert api.listNoteLinks() == [{"source": "ospf", "target": "switch"}]
+
+
 def test_desktop_api_runs_benchmark_compare(monkeypatch) -> None:
     module = _load_ui_main(monkeypatch)
     calls: list[str] = []
@@ -617,3 +639,17 @@ def test_desktop_api_removes_corpus_root_only_with_confirmation_regressao(monkey
     assert calls == []
     assert api.removeCorpusRoot("D:/Notas/Culinaria", "REMOVER") == {"ok": True, "removed_notes": 3}
     assert calls == ["D:/Notas/Culinaria"]
+
+
+def test_desktop_api_save_conversations_devolve_erro_de_validacao(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+
+    def fake_save(payload: dict) -> None:
+        if "tabs" not in payload:
+            raise ValueError('Conversas: "tabs" precisa ser uma lista.')
+
+    monkeypatch.setattr(module, "save_conversations", fake_save)
+    api = module.Api()
+
+    assert api.saveConversations({}) == {"ok": False, "message": 'Conversas: "tabs" precisa ser uma lista.'}
+    assert api.saveConversations({"tabs": []}) == {"ok": True}

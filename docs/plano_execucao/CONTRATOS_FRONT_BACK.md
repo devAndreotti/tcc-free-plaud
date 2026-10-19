@@ -234,6 +234,8 @@ interface BackendBridge {
   getIndexJob(jobId: string): Promise<IndexJobSnapshot>
   cancelIndexJob(jobId: string): Promise<IndexJobSnapshot>
   listExperiments(): Promise<ExperimentRunSummary[]>
+  loadConversations(): Promise<SavedConversations | null>
+  saveConversations(payload: SavedConversations): Promise<{ ok: boolean; message?: string }>
 }
 ```
 

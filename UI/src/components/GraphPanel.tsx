@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import ForceGraph from './ForceGraph';
 import { GraphIcon, XIcon } from './Icons';
 import { useCorpusGraph } from '../hooks/useCorpusGraph';
+import type { GraphMode } from '../lib/vaultGraph';
 
 // Props do painel lateral de grafos
 interface GraphPanelProps {
@@ -15,14 +16,42 @@ const MIN_WIDTH = 220;
 const MAX_WIDTH = 700;
 const DEFAULT_WIDTH = 320;
 
+// Modos do seletor (ordem dos botões) e a chave do localStorage que lembra a escolha
+const MODE_STORAGE_KEY = 'escolio:graph:mode';
+const GRAPH_MODES: { id: GraphMode; label: string }[] = [
+  { id: 'pastas', label: 'Pastas' },
+  { id: 'links', label: 'Links' },
+  { id: 'ambos', label: 'Ambos' },
+];
+
+// Último modo escolhido; sem acesso ao armazenamento (modo privado, bloqueado) vale o padrão
+function readStoredMode(): GraphMode {
+  try {
+    const saved = window.localStorage.getItem(MODE_STORAGE_KEY);
+    if (saved === 'pastas' || saved === 'links' || saved === 'ambos') return saved;
+  } catch {
+    // sem armazenamento: segue no padrão
+  }
+  return 'ambos';
+}
+
 // Painel lateral direito para visualização de grafos
 const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [isResizingActive, setIsResizingActive] = useState(false);
   const isResizing = useRef(false);
 
-  // Notas indexadas da vault ativa; recarrega ao abrir o painel
-  const { nodes, refresh } = useCorpusGraph();
+  // Notas indexadas da vault ativa e as ligações entre elas; recarrega ao abrir o painel
+  const { nodes, links, refresh } = useCorpusGraph();
+  const [mode, setMode] = useState<GraphMode>(readStoredMode);
+  const chooseMode = (next: GraphMode) => {
+    setMode(next);
+    try {
+      window.localStorage.setItem(MODE_STORAGE_KEY, next);
+    } catch {
+      // sem armazenamento a escolha vale só nesta sessão
+    }
+  };
   useEffect(() => {
     if (isOpen) void refresh();
   }, [isOpen, refresh]);
@@ -95,6 +124,19 @@ const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
           Grafo
           {nodes.length > 0 && <span className="graph-panel__count mono">{nodes.length}</span>}
         </span>
+        <div className="graph-panel__modes" role="group" aria-label="O que o grafo mostra">
+          {GRAPH_MODES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className="graph-panel__mode"
+              aria-pressed={mode === option.id}
+              onClick={() => chooseMode(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           className="btn-icon"
@@ -110,7 +152,7 @@ const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
 
       {/* Corpo do painel — grafo de força interativo */}
       <div className="graph-panel__body">
-        <ForceGraph vaultNodes={nodes} onOpenNote={onOpenNote} />
+        <ForceGraph vaultNodes={nodes} links={links} mode={mode} onOpenNote={onOpenNote} />
       </div>
     </aside>
   );

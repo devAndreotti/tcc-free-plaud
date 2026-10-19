@@ -94,3 +94,64 @@ describe('vaultGraph.tick (regressão da física)', () => {
     }
   });
 });
+
+describe('vaultGraph.buildGraph por modo (pastas, links, ambos)', () => {
+  const vault = [note('A/x.md'), note('A/y.md'), note('B/z.md'), note('solta.md')];
+  const links = [
+    { source: 'A/x.md', target: 'B/z.md' },
+    { source: 'B/z.md', target: 'A/x.md' }, // mesma ligação nos dois sentidos: conta uma vez
+    { source: 'A/x.md', target: 'fora.md' }, // nota que não está no vault: ignorada
+  ];
+
+  it('pastas: árvore como antes e nenhuma ligação', () => {
+    const { nodes, edges } = buildGraph(vault, 400, 400, [], links, 'pastas');
+    expect(nodes.filter((n) => n.kind === 'folder')).toHaveLength(3);
+    expect(nodes).toHaveLength(7);
+    expect(edges).toHaveLength(6);
+    expect(edges.some((e) => e.kind === 'link')).toBe(false);
+  });
+
+  it('links: só notas e as ligações; notas sem ligação continuam no grafo', () => {
+    const { nodes, edges } = buildGraph(vault, 400, 400, [], links, 'links');
+    expect(nodes.every((n) => n.kind === 'note')).toBe(true);
+    expect(nodes).toHaveLength(4);
+    expect(nodes.find((n) => n.id === 'solta.md')?.degree).toBe(0);
+    expect(edges).toEqual([{ source: 'A/x.md', target: 'B/z.md', kind: 'link' }]);
+  });
+
+  it('ambos: árvore e ligações juntas', () => {
+    const { nodes, edges } = buildGraph(vault, 400, 400, [], links, 'ambos');
+    expect(nodes).toHaveLength(7);
+    expect(edges).toHaveLength(7);
+    expect(edges.filter((e) => e.kind === 'link')).toEqual([{ source: 'A/x.md', target: 'B/z.md', kind: 'link' }]);
+  });
+
+  it('o padrão é ambos: sem ligações o grafo é só a árvore', () => {
+    expect(buildGraph(vault, 400, 400).edges).toHaveLength(6);
+    expect(buildGraph(vault, 400, 400, [], links).edges).toHaveLength(7);
+  });
+});
+
+describe('vaultGraph: ligações entre notas', () => {
+  const vault = [note('A/x.md'), note('B/z.md')];
+  const links = [{ source: 'A/x.md', target: 'B/z.md' }];
+
+  it('pathToRoot ignora ligações: a nota sobe só pela árvore', () => {
+    const { nodes, edges } = buildGraph(vault, 400, 400, [], links, 'ambos');
+    expect(pathToRoot('B/z.md', nodes, edges)).toEqual(['B/z.md', 'dir:B', 'dir:']);
+  });
+
+  it('no modo links, pathToRoot devolve só a nota', () => {
+    const { nodes, edges } = buildGraph(vault, 400, 400, [], links, 'links');
+    expect(pathToRoot('B/z.md', nodes, edges)).toEqual(['B/z.md']);
+  });
+
+  it('a ligação aproxima as duas notas a ~60 px (repouso próprio), mais que nota ↔ pasta (~26)', () => {
+    const { nodes, edges } = buildGraph(vault, 400, 400, [], links, 'links');
+    for (let i = 0; i < 400; i++) tick(nodes, edges, 200, 200);
+    const [a, b] = nodes;
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    expect(dist).toBeGreaterThan(50);
+    expect(dist).toBeLessThan(80);
+  });
+});

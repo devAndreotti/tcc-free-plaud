@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from escolio.notes.readable import readable_chunk_text
 from escolio.notes.schemas import Note
 from escolio.providers.answer import NO_ANSWER_SENTINEL, AnswerProvider
 from escolio.providers.embed import Embedder
@@ -84,7 +85,6 @@ def corpus_vocabulary_stems(connection: sqlite3.Connection) -> frozenset[str] | 
         _VOCABULARY_STEMS[key] = stems
     return stems
 TEAM_ANSWER_PATTERN = re.compile(r'\bequipe\s+(?:de|da|do|dos|das)\s+[0-9A-Za-zÀ-ÖØ-öø-ÿ_-]+')
-FRONTMATTER_PATTERN = re.compile(r'\A\s*---\s*\r?\n.*?\r?\n---\s*\r?\n', re.DOTALL)
 CONTEXT_METADATA_KEYS = ('source_path:', 'note_id:', 'chunk_id:', 'claim_extrativo:')
 ANSWER_CONTEXT_TOTAL_CHAR_BUDGET = 6000
 ANSWER_CONTEXT_MAX_CHARS = 1500
@@ -132,7 +132,7 @@ def _citation_from_corpus_hit(hit: SearchHit, note_lookup: dict[str, Note]) -> C
         note_id=chunk.note_id,
         note_version=chunk.note_version,
         chunk_id=chunk.chunk_id,
-        snippet=_shorten_snippet(chunk.chunk_text),
+        snippet=_shorten_snippet(readable_chunk_text(chunk.chunk_text)),
         source_path=str(note.source_path) if note else None,
         char_start=chunk.char_start,
         char_end=chunk.char_end,
@@ -165,12 +165,6 @@ def _summarize_corpus_sources(hits: list[SearchHit], note_lookup: dict[str, Note
 def _hits_for_citations(hits: list[SearchHit], citations: list[Citation]) -> list[SearchHit]:
     cited_chunk_ids = {citation.chunk_id for citation in citations}
     return [hit for hit in hits if hit.chunk.chunk_id in cited_chunk_ids]
-
-
-def _clean_chunk_text_for_answer_context(text: str) -> str:
-    cleaned = FRONTMATTER_PATTERN.sub('', text, count=1).strip()
-    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
-    return cleaned
 
 
 def _clip_context_text(text: str, max_chars: int) -> str:
@@ -211,7 +205,7 @@ def build_answer_contexts(
         for item in claim.citations:
             cited_hit = hit_by_chunk_id.get(item.chunk_id)
             raw_text = cited_hit.chunk.chunk_text if cited_hit else item.snippet
-            evidence = _clean_chunk_text_for_answer_context(raw_text)
+            evidence = readable_chunk_text(raw_text)
             if evidence:
                 evidence_parts.append(evidence)
 

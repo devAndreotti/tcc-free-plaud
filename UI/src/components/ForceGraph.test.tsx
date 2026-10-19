@@ -176,4 +176,12 @@ describe('ForceGraph', () => {
     fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
     expect(() => fireEvent.mouseUp(canvas, { clientX: p.x, clientY: p.y })).not.toThrow();
   });
+
+  it('zoom pela roda não é passivo: o preventDefault da página vale', () => {
+    const { container } = render(<ForceGraph vaultNodes={[note('A/x.md')]} />);
+    const canvas = container.querySelector('canvas')!;
+    const wheel = new WheelEvent('wheel', { deltaY: -100, clientX: 50, clientY: 50, cancelable: true });
+    canvas.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+  });
 });

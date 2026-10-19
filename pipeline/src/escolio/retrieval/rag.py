@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal
 
+from escolio.notes.readable import readable_chunk_text
 from escolio.notes.schemas import Note
 from escolio.providers.embed import Embedder
 from escolio.retrieval.debug import build_ask_debug
@@ -515,8 +516,9 @@ def _question_needs_multiple_claims(question: str) -> bool:
 
 def _rank_claim_candidates(chunk_text: str, question: str, query_terms: list[str]) -> list[tuple[tuple[int, ...], str]]:
     candidate_query_terms = _claim_query_terms(query_terms)
-    sentence_candidates = _sentence_candidates(chunk_text)
-    line_candidates = _line_candidates(chunk_text)
+    readable_text = readable_chunk_text(chunk_text)
+    sentence_candidates = _sentence_candidates(readable_text)
+    line_candidates = _line_candidates(readable_text)
     candidates = list(dict.fromkeys([*sentence_candidates, *line_candidates]))
     if not candidates:
         return []
@@ -580,7 +582,7 @@ def _citation_from_hit(note: Note, hit: SearchHit) -> Citation:
         note_id=chunk.note_id,
         note_version=chunk.note_version,
         chunk_id=chunk.chunk_id,
-        snippet=_shorten_snippet(chunk.chunk_text),
+        snippet=_shorten_snippet(readable_chunk_text(chunk.chunk_text)),
         source_path=str(note.source_path),
         char_start=chunk.char_start,
         char_end=chunk.char_end,

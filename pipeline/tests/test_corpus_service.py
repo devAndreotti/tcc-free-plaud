@@ -627,3 +627,27 @@ def test_regressao_indexacao_nao_recursiva_so_remove_filhos_diretos(tmp_path: Pa
 
     assert _notes_by_name(settings) == ['s.md']
     assert result.removed_count == 1
+
+
+def test_regressao_reindexa_nota_com_titulo_salvo_errado_mesmo_com_conteudo_igual(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'Trilha Cisco.md'
+    source.write_text(
+        '---\ntype: index\ntags:\n  - tema/cisco\n---\n\nTrilha de cursos Cisco para o time de rede.\n',
+        encoding='utf-8',
+    )
+    first = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
+    connection = connect_sqlite(settings.sqlite_path)
+    connection.execute('UPDATE notes SET title = ? WHERE note_id = ?', ('tags:', first.note_id))
+    connection.commit()
+
+    second_embedder = CountingEmbedder()
+    second = index_corpus_file(source, settings=settings, embedder=second_embedder)
+    third = index_corpus_file(source, settings=settings, embedder=CountingEmbedder())
+
+    title = connection.execute('SELECT title FROM notes WHERE note_id = ?', (first.note_id,)).fetchone()['title']
+    assert first.status == 'success'
+    assert second.status == 'success'
+    assert second_embedder.calls == 1
+    assert title == 'Trilha Cisco'
+    assert third.status == 'unchanged'
