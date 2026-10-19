@@ -1,4 +1,4 @@
-from escolio.providers.answer_quality import is_echoed_title, is_no_answer_sentinel
+from escolio.providers.answer_quality import is_echoed_question, is_echoed_title, is_no_answer_sentinel
 
 CISCO_CONTEXT = (
     '[1]\nsource_path: cisco.md\ntitle: Cisco — Trilha de Cursos e Certificações\nnote_id: cisco\nchunk_id: cisco::1\n'
@@ -72,3 +72,23 @@ def test_claim_com_frase_da_nota_nao_conta_como_titulo() -> None:
     contexto = '[1]\nsource_path: prazo.md\nclaim_extrativo: O prazo de entrega é de 15 dias úteis.\ntrecho:\nTexto.'
 
     assert not is_echoed_title('O prazo de entrega é de 15 dias úteis', [contexto])
+
+
+def test_pergunta_devolvida_como_resposta_e_eco() -> None:
+    # Medido com qchat na V3: a IA respondia com a própria pergunta, com ou sem o marcador [n].
+    pergunta = 'Quantos bytes do arquivo sao usados para calcular o file_hash?'
+
+    assert is_echoed_question(pergunta, 'Quantos bytes do arquivo sao usados para calcular o file_hash?')
+    assert is_echoed_question('Para qual versao do PostgreSQL o banco sera atualizado?', 'Para qual versao do PostgreSQL o banco sera atualizado?')
+    assert is_echoed_question('Qual o prazo de entrega?', 'Qual o prazo de entrega, em dias?')
+
+
+def test_resposta_legitima_nao_e_eco_da_pergunta() -> None:
+    # Palavra fora da pergunta ("tmpfs") ou valor novo ("30s") mostra que a resposta traz informação.
+    assert not is_echoed_question('Qual tipo de volume fica em memoria e nao persiste?', 'tmpfs: em memória, não persiste')
+    assert not is_echoed_question('Qual o valor do REDIS_TIMEOUT em staging?', 'O valor do REDIS_TIMEOUT em staging é 30s')
+    assert not is_echoed_question(
+        'Quantos registros a tabela eventos atingiu em fevereiro de 2025?',
+        'A tabela eventos atingiu 180 milhões de registros em fevereiro de 2025',
+    )
+    assert not is_echoed_question('Quem e responsavel pelo teste em staging?', 'Rafael')

@@ -11,6 +11,7 @@ from escolio.notes.schemas import Note
 from escolio.providers.answer import AnswerProvider
 from escolio.providers.answer_quality import (
     contains_token_sequence,
+    is_echoed_question,
     is_echoed_title,
     is_no_answer_sentinel,
 )
@@ -320,7 +321,6 @@ def validate_generated_answer(
     claims: list[AnswerClaim],
 ) -> GeneratedAnswerValidation:
     """Valida se resposta gerativa pode substituir a resposta extrativa."""
-    _ = question
     # Os [n] são só ponteiros para o contexto: número, anchor e sobreposição são checados sem eles.
     cleaned_answer = _without_answer_markers(answer).strip()
     # O qchat às vezes devolve só "[1]": sem os marcadores não sobra texto, e nada abaixo recusaria.
@@ -354,6 +354,12 @@ def validate_generated_answer(
             action='fallback_extractive',
             reason='echoed_title',
             limitations=['Resposta generativa ignorada: o modelo copiou um título do contexto em vez de responder.'],
+        )
+    if is_echoed_question(question, cleaned_answer):
+        return GeneratedAnswerValidation(
+            action='fallback_extractive',
+            reason='echoed_question',
+            limitations=['Resposta generativa ignorada: o modelo repetiu a pergunta em vez de responder.'],
         )
 
     support_text = _normalized_support_text(contexts, claims)

@@ -96,6 +96,7 @@ Hoje o backend pode devolver, entre outros, motivos como:
 - `generated_generic_no_answer`: negativa genérica da IA, com sugestão de consultar documentação; vira abstenção
 - `echoed_context_metadata`: a IA repetiu metadados do trecho (`source_path:`, `note_id:`, ...); volta para a extrativa
 - `echoed_title`: a IA só copiou um título ou cabeçalho do contexto, em até 10 palavras; volta para a extrativa
+- `echoed_question`: a IA devolveu a própria pergunta (termina em `?`, ou só usa palavras dela); volta para a extrativa
 - `unsupported_number`: número que não aparece nos contextos; volta para a extrativa
 - `unsupported_anchor`: nome próprio ou sigla que não aparece nos contextos; volta para a extrativa
 - `low_claim_overlap`: pouca sobreposição com os trechos citáveis; volta para a extrativa

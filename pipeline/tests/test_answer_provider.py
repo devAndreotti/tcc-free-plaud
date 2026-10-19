@@ -95,7 +95,7 @@ def test_grounded_chat_messages_forbid_external_knowledge_and_define_sentinel() 
     assert 'Nao complete lacunas' in system_prompt
     assert 'NAO_ENCONTRADO' in system_prompt
     assert 'nao sustentam resposta' in system_prompt
-    assert 'Escreva a resposta em frases completas' in system_prompt
+    assert 'Responda a PERGUNTA em uma frase completa' in system_prompt
     assert 'Nunca responda so com colchetes' in system_prompt
     assert 'Preserve numeros, nomes e termos tecnicos exatamente' in system_prompt
     assert 'seja criativo' not in system_prompt.lower()
