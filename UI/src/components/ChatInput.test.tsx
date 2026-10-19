@@ -8,6 +8,8 @@ const bridgeMock = vi.hoisted(() => ({
   getAudioCapture: vi.fn(),
   stopAudioCapture: vi.fn(),
   cancelAudioCapture: vi.fn(),
+  listAnswerModels: vi.fn(),
+  saveBackendSettings: vi.fn(),
 }));
 
 vi.mock('../services/bridge', () => ({
@@ -195,29 +197,95 @@ describe('ChatInput - gravação de áudio', () => {
   });
 });
 
-describe('ChatInput - estratégia de busca', () => {
+describe('ChatInput - resposta da barra', () => {
+  const models = [
+    { id: 'qwen2.5:3b', label: 'qwen2.5:3b', provider: 'ollama', details: { parameter_size: '3.1B', quantization_level: 'Q4_K_M' } },
+    { id: 'nomic-embed-text:latest', label: 'nomic-embed-text:latest', provider: 'ollama', details: {} },
+    { id: 'qchat:latest', label: 'qchat:latest', provider: 'ollama', details: {} },
+  ];
+
+  beforeEach(() => {
+    bridgeMock.listAnswerModels.mockReset().mockResolvedValue({ provider: 'ollama', base_url: null, status: 'ok', models, latency_ms: 5, cached: false, message: null });
+    bridgeMock.saveBackendSettings.mockReset();
+  });
+
   afterEach(() => {
     cleanup();
   });
 
-  it('troca a estratégia pelo menu e fecha com Esc ou clique fora', async () => {
+  it('não tem mais a pílula de estratégia Híbrida', () => {
+    render(<ChatInput onSendMessage={vi.fn()} answerProvider="extractive" onAnswerSaved={vi.fn()} />);
+
+    expect(screen.queryByText('Híbrida')).toBeNull();
+  });
+
+  it('sem IA, mostra Só trechos e o texto de apoio sem modelo', () => {
+    render(<ChatInput onSendMessage={vi.fn()} answerProvider="extractive" answerModel="qchat:latest" onAnswerSaved={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Como responder: Só trechos' }).getAttribute('aria-haspopup')).toBe('listbox');
+    expect(screen.getByText('Mostra as frases dos seus trechos. Nenhum modelo é chamado.')).toBeTruthy();
+  });
+
+  it('com IA, mostra o modelo curto com o selo IA e o texto de apoio da IA', () => {
+    render(<ChatInput onSendMessage={vi.fn()} answerProvider="ollama" answerModel="qchat:latest" onAnswerSaved={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Como responder: qchat' }).textContent).toContain('IA');
+    expect(screen.getByText(/A IA escreve a resposta a partir dos trechos/)).toBeTruthy();
+  });
+
+  it('o menu lista Só trechos e os modelos, com o recomendado primeiro e sem embedding', async () => {
     const user = userEvent.setup();
-    const onStrategyChange = vi.fn();
-    render(<ChatInput onSendMessage={vi.fn()} strategy="hybrid" onStrategyChange={onStrategyChange} />);
+    render(<ChatInput onSendMessage={vi.fn()} answerProvider="ollama" answerModel="qchat:latest" onAnswerSaved={vi.fn()} />);
 
-    const chip = screen.getByRole('button', { name: 'Estratégia de busca: Híbrida' });
-    await user.click(chip);
-    expect(screen.getByRole('menuitemradio', { name: /Híbrida/ }).getAttribute('aria-checked')).toBe('true');
-    await user.click(screen.getByRole('menuitemradio', { name: /Vetorial/ }));
-    expect(onStrategyChange).toHaveBeenCalledWith('vector');
-    expect(screen.queryByRole('menu')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Como responder: qchat' }));
+    await screen.findByRole('option', { name: /qwen2\.5:3b/ });
+    const options = screen.getAllByRole('option');
 
-    await user.click(chip);
+    expect(bridgeMock.listAnswerModels).toHaveBeenCalledWith({ provider: 'ollama' });
+    expect(options).toHaveLength(3);
+    expect(options[0].textContent).toContain('Só trechos');
+    expect(options[1].textContent).toContain('recomendado');
+    expect(options[1].getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByText(/nomic-embed/)).toBeNull();
+  });
+
+  it('escolher um modelo salva answer_provider e answer_model e devolve o que o backend salvou', async () => {
+    const user = userEvent.setup();
+    const saved = { answer_provider: 'ollama', answer_model: 'qwen2.5:3b' };
+    bridgeMock.saveBackendSettings.mockResolvedValue(saved);
+    const onAnswerSaved = vi.fn();
+    render(<ChatInput onSendMessage={vi.fn()} answerProvider="ollama" answerModel="qchat:latest" onAnswerSaved={onAnswerSaved} />);
+
+    await user.click(screen.getByRole('button', { name: 'Como responder: qchat' }));
+    await user.click(await screen.findByRole('option', { name: /qwen2\.5:3b/ }));
+
+    await waitFor(() =>
+      expect(bridgeMock.saveBackendSettings).toHaveBeenCalledWith({ answer_provider: 'ollama', answer_model: 'qwen2.5:3b' })
+    );
+    expect(onAnswerSaved).toHaveBeenCalledWith(saved);
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('escolher Só trechos salva só o provedor extractive', async () => {
+    const user = userEvent.setup();
+    bridgeMock.saveBackendSettings.mockResolvedValue({ answer_provider: 'extractive' });
+    render(<ChatInput onSendMessage={vi.fn()} answerProvider="ollama" answerModel="qchat:latest" onAnswerSaved={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Como responder: qchat' }));
+    await user.click(await screen.findByRole('option', { name: /Só trechos/ }));
+
+    await waitFor(() => expect(bridgeMock.saveBackendSettings).toHaveBeenCalledWith({ answer_provider: 'extractive' }));
+  });
+
+  it('Esc fecha o menu sem salvar nada', async () => {
+    const user = userEvent.setup();
+    render(<ChatInput onSendMessage={vi.fn()} answerProvider="ollama" answerModel="qchat:latest" onAnswerSaved={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Como responder: qchat' }));
+    expect(screen.getByRole('listbox')).toBeTruthy();
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('menu')).toBeNull();
 
-    await user.click(chip);
-    await user.click(document.body);
-    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(bridgeMock.saveBackendSettings).not.toHaveBeenCalled();
   });
 });

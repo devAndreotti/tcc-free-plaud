@@ -109,7 +109,8 @@ describe('MessageBubble com resposta estruturada', () => {
 
     expect(screen.getByText('Docker compartilha o kernel do host; a VM traz um SO inteiro.')).toBeTruthy();
     expect(screen.queryByText('Docker vs Máquinas Virtuais - [!note]')).toBeNull();
-    expect(screen.getByText('ollama · qchat:latest')).toBeTruthy();
+    expect(screen.getByText('Escrita pela IA · qchat:latest')).toBeTruthy();
+    expect(screen.queryByText(/ollama/)).toBeNull();
     expect(screen.getByText('Docker')).toBeTruthy(); // a fonte continua listada
   });
 
@@ -271,5 +272,54 @@ describe('MessageBubble com resposta estruturada', () => {
     expect(writeText).toHaveBeenCalledWith(
       'Primeira frase. [2] Segunda frase. [1]\n\nFontes:\n[1] Projetos/Arquitetura.md (100–180)\n[2] Projetos/Pipeline.md (200–280)'
     );
+  });
+});
+
+describe('MessageBubble - rodapé da resposta', () => {
+  afterEach(() => cleanup());
+
+  it('resposta só com trechos mostra o selo neutro, sem detalhes técnicos', () => {
+    const { container } = render(<MessageBubble message={answer({ answer_provider: 'extractive' })} />);
+
+    expect(screen.getByText('Só trechos · sem IA')).toBeTruthy();
+    expect(container.querySelector('details')).toBeNull();
+  });
+
+  it('IA descartada: motivo em português, código e limitações do modelo nos detalhes; a limitação de busca fica na caixa', () => {
+    const a = cite(1, 'Projetos/Arquitetura.md');
+    const { container } = render(
+      <MessageBubble
+        message={answer({
+          answer_provider: 'ollama',
+          answer_model: 'qchat:latest',
+          generated: false,
+          answer_discard_reason: 'unsupported_anchor',
+          claims: [{ text: 'Afirmação dos trechos.', citations: [a], support_level: 'direct' }],
+          citations: [a],
+          limitations: [
+            'A resposta se apoia em um único chunk recuperado.',
+            'unsupported_anchor: resposta generativa ignorada por anchor sem suporte: NAO_ENCONTRADO.',
+          ],
+        })}
+      />
+    );
+
+    expect(screen.getByText('IA descartada · mostramos o trecho')).toBeTruthy();
+    expect(screen.getByText('A IA citou algo que não está nos trechos')).toBeTruthy();
+    expect(screen.getByText('Afirmação dos trechos.')).toBeTruthy();
+    expect(screen.getByText('Detalhes técnicos')).toBeTruthy();
+    const details = container.querySelector('details')?.textContent ?? '';
+    expect(details).toContain('unsupported_anchor');
+    expect(details).toContain('resposta generativa ignorada por anchor');
+    const limits = container.querySelector('.msg__limits')?.textContent ?? '';
+    expect(limits).toContain('A resposta se apoia em um único chunk recuperado.');
+    expect(limits).not.toContain('unsupported_anchor');
+    expect(screen.queryByText(/ollama/)).toBeNull();
+  });
+
+  it('motivo que o app não conhece cai na frase genérica', () => {
+    render(<MessageBubble message={answer({ answer_provider: 'ollama', generated: false, answer_discard_reason: 'motivo_novo' })} />);
+
+    expect(screen.getByText('A IA não respondeu com texto a partir dos trechos.')).toBeTruthy();
   });
 });

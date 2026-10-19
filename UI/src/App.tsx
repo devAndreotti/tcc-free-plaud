@@ -14,7 +14,7 @@ import GraphPanel from './components/GraphPanel';
 import NotesPanel from './components/NotesPanel';
 import BenchmarkPanel from './components/BenchmarkPanel';
 import QueuePanel from './components/QueuePanel';
-import { bridge, type AskResult, type AskStage, type AskStrategy, type CorpusRoot } from './services/bridge';
+import { bridge, type AskResult, type AskStage, type AskStrategy, type BackendSettings, type CorpusRoot } from './services/bridge';
 import { VaultsProvider } from './contexts/VaultsContext';
 import { useVaults } from './hooks/useVaults';
 import { QueueProvider } from './contexts/QueueContext';
@@ -28,6 +28,9 @@ const generateId = () =>
 const ASK_POLL_MS = 150;
 // O Ollama descarrega o modelo após 5 min parado: o aquecimento roda no máximo a cada 4 min.
 const WARM_INTERVAL_MS = 4 * 60 * 1000;
+
+const isAskStrategy = (value: unknown): value is AskStrategy =>
+  value === 'hybrid' || value === 'vector' || value === 'lexical';
 
 // Conversas: abas (cada uma presa a uma vault), aba ativa e mensagens/digitação por aba.
 interface ChatState {
@@ -317,15 +320,19 @@ function AppContent() {
     updateTab(tabId, (c) => ({ ...c, tabMessages: { ...c.tabMessages, [tabId]: [...(c.tabMessages[tabId] ?? []), message] } }));
   }, [updateTab]);
 
-  // Modelo que escreve a resposta, para o cabeçalho "Escrevendo com …". Lido ao abrir e de novo ao fechar Configurações
-  // (healthKey muda), sem uma chamada por pergunta.
-  const [answerModel, setAnswerModel] = useState<string | undefined>(undefined);
+  // Provedor e modelo que escrevem a resposta (barra do chat e cabeçalho "Escrevendo com …") e a estratégia padrão.
+  // Lidos ao abrir, ao fechar Configurações (healthKey muda) e ao trocar o modelo na barra; não há chamada por pergunta.
+  const [answerConfig, setAnswerConfig] = useState<{ provider: string; model: string | null } | null>(null);
+  const applyBackendSettings = useCallback((settings: BackendSettings) => {
+    setAnswerConfig({ provider: settings.answer_provider, model: settings.answer_model });
+    if (isAskStrategy(settings.default_ask_strategy)) setStrategy(settings.default_ask_strategy);
+  }, []);
   useEffect(() => {
     bridge
       .getBackendSettings()
-      .then((settings) => setAnswerModel(settings.answer_model))
-      .catch(() => setAnswerModel(undefined));
-  }, [healthKey]);
+      .then(applyBackendSettings)
+      .catch(() => setAnswerConfig(null));
+  }, [healthKey, applyBackendSettings]);
 
   // Aquece o modelo de resposta: ao abrir o app e ao focar o campo, no máximo uma vez a cada 4 min.
   const lastWarmRef = useRef<number | null>(null);
@@ -483,7 +490,7 @@ function AppContent() {
                     ))}
 
                     {/* Indicador de digitação da aba ativa */}
-                    {isTyping && <TypingIndicator stage={activeProgress?.stage} partial={activeProgress?.partial} model={answerModel} />}
+                    {isTyping && <TypingIndicator stage={activeProgress?.stage} partial={activeProgress?.partial} model={answerConfig?.model ?? undefined} />}
 
                     {/* Âncora de scroll para o final */}
                     <div ref={messagesEndRef} aria-hidden="true" />
@@ -509,8 +516,9 @@ function AppContent() {
                 onSendMessage={handleSendMessage}
                 onFocus={warmAnswerModel}
                 isLoading={isTyping || switchingVault}
-                strategy={strategy}
-                onStrategyChange={setStrategy}
+                answerProvider={answerConfig?.provider}
+                answerModel={answerConfig?.model}
+                onAnswerSaved={applyBackendSettings}
                 corpusRoots={corpusRoots}
                 sourceRoot={activeSourceRoot}
                 onSourceRootChange={chooseSourceRoot}

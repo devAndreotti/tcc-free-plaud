@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { AskCitation, AskResult, AskStage, AskStrategy } from '../services/bridge';
 import { focusNoteInGraph } from '../lib/vaultGraph';
-import { AlertTriangleIcon, CopyIcon, ExternalIcon, SearchIcon } from './Icons';
+import { AlertTriangleIcon, CopyIcon, ExternalIcon, ListIcon, SearchIcon, SparkleIcon } from './Icons';
 
 export type MessageRole = 'user' | 'assistant';
 
@@ -138,7 +138,6 @@ const AnswerMeta = ({ ask, copyText }: { ask: AskResult; copyText?: string }) =>
   const parts = [
     ask.strategy ? STRATEGY_LABEL[ask.strategy] ?? ask.strategy : null,
     ask.top_k ? `top-${ask.top_k}` : null,
-    ask.generated ? [ask.answer_provider, ask.answer_model].filter(Boolean).join(' · ') : ask.answer_provider ?? null,
     ask.latency_ms ? `${ask.latency_ms} ms` : null,
   ].filter(Boolean);
 
@@ -193,8 +192,71 @@ const NoAnswer = ({ ask, onRetry }: { ask: AskResult; onRetry?: MessageBubblePro
   </div>
 );
 
+// Motivos do descarte da IA, em português (o código bruto fica nos detalhes técnicos).
+const DISCARD_TEXT = new Map<string, string>([
+  ['generated_no_answer_sentinel', 'A IA disse que os trechos não respondem'],
+  ['generated_generic_no_answer', 'A IA disse que os trechos não respondem'],
+  ['echoed_context_metadata', 'A IA repetiu o cabeçalho da nota'],
+  ['unsupported_number', 'A IA citou algo que não está nos trechos'],
+  ['unsupported_anchor', 'A IA citou algo que não está nos trechos'],
+  ['low_claim_overlap', 'A IA escreveu longe dos trechos'],
+  ['empty_generated_answer', 'A IA devolveu só [n], sem texto'],
+  ['echoed_title', 'A IA copiou um título em vez de responder'],
+  ['provider_error', 'A IA falhou; mostramos o trecho'],
+]);
+
+// Limitações que vêm da tentativa do modelo (descarte, falha do provedor): vão para os detalhes técnicos.
+const MODEL_LIMITATION = /^(Resposta generativa ignorada|Provider de resposta falhou|unsupported_)/;
+
+/** Quem escreveu a resposta, sempre visível: a IA, só os trechos, ou a IA que foi descartada. */
+const AnswerFooter = ({ ask }: { ask: AskResult }) => {
+  if (ask.generated) {
+    return (
+      <div className="msg__footer">
+        <span className="msg__seal msg__seal--ai">
+          <SparkleIcon size={13} />
+          Escrita pela IA · {ask.answer_model ?? 'IA'}
+        </span>
+      </div>
+    );
+  }
+  if (!ask.answer_provider || ask.answer_provider === 'extractive') {
+    return (
+      <div className="msg__footer">
+        <span className="msg__seal">
+          <ListIcon size={13} />
+          Só trechos · sem IA
+        </span>
+      </div>
+    );
+  }
+  const modelLimits = ask.limitations.filter((item) => MODEL_LIMITATION.test(item));
+  return (
+    <div className="msg__footer">
+      <span className="msg__seal msg__seal--warn">
+        <AlertTriangleIcon size={13} />
+        IA descartada · mostramos o trecho
+      </span>
+      <p className="msg__discard-why">
+        {(ask.answer_discard_reason && DISCARD_TEXT.get(ask.answer_discard_reason)) ||
+          'A IA não respondeu com texto a partir dos trechos.'}
+      </p>
+      <details className="msg__details">
+        <summary>Detalhes técnicos</summary>
+        <div className="mono">
+          <div>{ask.answer_discard_reason ?? 'sem código'}</div>
+          {modelLimits.map((item) => (
+            <div key={item}>{item}</div>
+          ))}
+        </div>
+      </details>
+    </div>
+  );
+};
+
 const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?: MessageBubbleProps['onOpenSource'] }) => {
   const { claims, sources, support } = useSources(ask);
+  const limits = ask.limitations.filter((item) => !MODEL_LIMITATION.test(item));
   const [hl, setHl] = useState<number | null>(null);
   const noteCount = new Set(sources.map((s) => s.note_id)).size;
   // Resposta escrita pela IA (validada contra os trechos): mostra o texto dela no lugar dos claims.
@@ -317,16 +379,17 @@ const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?
         </ol>
       )}
 
-      {ask.limitations.length > 0 && (
+      {limits.length > 0 && (
         <div className="msg__limits">
           <AlertTriangleIcon size={15} />
           <div>
-            <b>{ask.limitations.length === 1 ? 'Limitação' : 'Limitações'}</b>
-            {ask.limitations.map((item) => <p key={item}>{item}</p>)}
+            <b>{limits.length === 1 ? 'Limitação' : 'Limitações'}</b>
+            {limits.map((item) => <p key={item}>{item}</p>)}
           </div>
         </div>
       )}
 
+      <AnswerFooter ask={ask} />
       <AnswerMeta ask={ask} copyText={copyText} />
     </>
   );

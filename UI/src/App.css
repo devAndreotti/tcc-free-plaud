@@ -2344,6 +2344,62 @@
   opacity: 0.5;
 }
 
+/* Rodapé da resposta: quem escreveu (IA, só trechos ou IA descartada) fica sempre visível. */
+.msg__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.msg__seal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.msg__seal--ai {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
+  color: var(--accent-blue-light);
+}
+
+.msg__seal--warn {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+}
+
+.msg__discard-why {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.msg__details {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.msg__details summary {
+  width: max-content;
+  cursor: pointer;
+}
+
+.msg__details .mono {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  word-break: break-all;
+}
+
 .msg__action {
   margin-left: auto;
   display: inline-flex;
@@ -2632,6 +2688,133 @@
 .input-footer--error { color: var(--err); }
 .input-footer--recording { color: var(--rec-red); }
 .input-footer--processing { color: var(--text-secondary); }
+
+/* Seletor de resposta da barra: pílula (só trechos ou modelo com selo IA) e menu com as legendas da memória. */
+.answer__chip--ai {
+  border-color: color-mix(in srgb, var(--accent-blue) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.answer__chip--ai > svg {
+  color: var(--accent-blue-light);
+}
+
+.answer__badge,
+.answer__tag {
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-blue-light);
+  background: color-mix(in srgb, var(--accent-blue) 18%, transparent);
+}
+
+.answer__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.answer__dot--on {
+  background: var(--ok);
+}
+
+.answer__dot--off {
+  background: none;
+  border: 1px solid var(--text-muted);
+  box-sizing: border-box;
+}
+
+.answer__menu {
+  width: 340px;
+  max-width: calc(100vw - 48px);
+}
+
+.answer__item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 15px;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text-primary);
+  font: 500 13px var(--font-family);
+  text-align: left;
+  cursor: pointer;
+}
+
+.answer__item > svg:first-child {
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+
+.answer__item > svg:last-child {
+  margin-top: 2px;
+  color: var(--accent-blue-light);
+}
+
+.answer__item:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+}
+
+.answer__item[aria-selected='true'] {
+  background: color-mix(in srgb, var(--accent-blue) 14%, transparent);
+}
+
+.answer__item:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.answer__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.answer__item small {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.answer__status {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.answer__status--error {
+  color: var(--err);
+}
+
+.answer__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 10px 12px 8px;
+  border-top: 1px solid var(--border-color);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.answer__legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 
 /* ============================================================
    ARQUIVO ANEXADO
