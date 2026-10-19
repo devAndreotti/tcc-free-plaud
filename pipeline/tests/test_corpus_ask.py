@@ -80,6 +80,17 @@ class GenericNoAnswerProvider:
         return 'Nao consegui recuperar essa informacao. Voce pode verificar a documentacao oficial.'
 
 
+class ReplyAnswerProvider:
+    provider_name = 'reply'
+    model = 'fake-model'
+
+    def __init__(self, reply: str) -> None:
+        self.reply = reply
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        return self.reply
+
+
 class FailingAnswerProvider:
     provider_name = 'failing'
 
@@ -381,6 +392,41 @@ def test_validate_generated_answer_ignora_eco_do_cabecalho_do_contexto() -> None
 
     assert validation.action == 'fallback_extractive'
     assert validation.reason == 'echoed_context_metadata'
+
+
+def test_validate_generated_answer_sentinela_no_meio_vira_abstencao() -> None:
+    validation = validate_generated_answer(
+        'Qual message broker foi adotado?',
+        'RabbitMQ foi adotado como message broker padrao do pipeline. '
+        'NAO_ENCONTRADO: os dados recuperados nao sustentam resposta.',
+        ['RabbitMQ foi adotado como message broker padrao do pipeline.'],
+        [],
+    )
+
+    assert validation.action == 'no_answer'
+    assert validation.reason == 'generated_no_answer_sentinel'
+
+
+def test_validate_generated_answer_sentinela_no_meio_so_abstem_sem_a_palavra_no_contexto() -> None:
+    contexto = 'O modo de busca devolve NAO_ENCONTRADO quando nada casa com a pergunta.'
+
+    validation = validate_generated_answer(
+        'O que o modo de busca devolve?',
+        'O modo de busca devolve NAO_ENCONTRADO quando nada casa [1].',
+        [contexto],
+        [_answer_claim('chunk-1', contexto)],
+    )
+
+    assert validation.action == 'accept'
+
+
+def test_validate_generated_answer_titulo_copiado_vira_extrativa() -> None:
+    contexto = '[1]\nsource_path: cisco.md\ntitle: Cisco — Trilha de Cursos e Certificações\ntrecho:\nA trilha reúne cursos.'
+
+    validation = validate_generated_answer('sobre cisco', 'Cisco — Trilha de Cursos e Certificações [1]', [contexto], [])
+
+    assert validation.action == 'fallback_extractive'
+    assert validation.reason == 'echoed_title'
 
 
 def test_answer_corpus_with_citations_stitches_multiple_files(tmp_path: Path) -> None:
@@ -904,6 +950,47 @@ def test_answer_corpus_turns_generic_generated_no_answer_into_no_answer(tmp_path
 
     assert response.status == 'no_answer'
     assert response.reason_for_no_answer == 'generated_generic_no_answer'
+
+
+def test_answer_corpus_preenche_motivo_do_descarte_e_modelo(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    def responder(provider=None):
+        return answer_corpus_with_citations(
+            'Qual message broker foi adotado?',
+            connection=connection,
+            strategy='lexical',
+            top_k=4,
+            answer_provider=provider,
+        )
+
+    sem_provedor = responder()
+    assert (sem_provedor.answer_model, sem_provedor.answer_discard_reason) == (None, None)
+
+    aceita = responder(FakeAnswerProvider())
+    assert (aceita.generated, aceita.answer_model, aceita.answer_discard_reason) == (True, 'fake-model', None)
+
+    copia_titulo = responder(ReplyAnswerProvider('Contexto base [1]'))
+    assert (copia_titulo.generated, copia_titulo.answer_discard_reason) == (False, 'echoed_title')
+    assert copia_titulo.answer_model == 'fake-model'
+
+    sentinela_no_meio = responder(
+        ReplyAnswerProvider(
+            'RabbitMQ foi adotado como message broker padrao do pipeline. '
+            'NAO_ENCONTRADO: os dados recuperados nao sustentam resposta.'
+        )
+    )
+    assert sentinela_no_meio.status == 'no_answer'
+    assert sentinela_no_meio.answer_discard_reason == 'generated_no_answer_sentinel'
+
+    falha = FailingAnswerProvider()
+    falha.model = 'fake-qchat'
+    falhou = responder(falha)
+    assert (falhou.generated, falhou.answer_discard_reason, falhou.answer_model) == (False, 'provider_error', 'fake-qchat')
 
 
 def test_answer_corpus_does_not_call_answer_provider_without_hits(tmp_path: Path) -> None:

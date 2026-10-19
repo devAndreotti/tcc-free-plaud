@@ -496,11 +496,14 @@ export interface AskResult {
   latency_ms: number;
   strategy?: string;
   top_k?: number;
-  answer_provider?: string;
-  /** Modelo configurado no provedor generativo (ex.: qchat). */
-  answer_model?: string;
+  /** Provedor que escreveu a resposta; 'extractive' quando não houve IA. */
+  answer_provider?: string | null;
+  /** Modelo que escreveu a resposta (ex.: qchat:latest); null quando não houve provedor. */
+  answer_model?: string | null;
   /** true quando `answer` foi escrito pela IA e passou na validação contra os trechos. */
   generated?: boolean;
+  /** Motivo pelo qual a resposta gerada foi descartada (ex.: unsupported_anchor); só vem com generated = false. */
+  answer_discard_reason?: string | null;
   /** chunk_id principal de cada contexto [n] (índice n-1), só quando a resposta gerada foi aceita. */
   answer_sources?: string[];
 }
@@ -803,6 +806,19 @@ const MOCK_LOCAL_MODELS: ModelInfo[] = [
   { id: 'deepseek-r1:1.5b', label: 'deepseek-r1:1.5b', provider: 'ollama', details: { parameter_size: '1.8B', quantization_level: 'Q4_K_M', size: 1117322768 } },
 ];
 
+// Modo navegador: com a IA ligada, uma pergunta com "descart" mostra o rodapé de IA descartada.
+const mockDiscardedAnswer = (): Partial<AskResult> => ({
+  answer: null,
+  answer_model: mockAnswer.model,
+  generated: false,
+  answer_discard_reason: 'unsupported_anchor',
+  limitations: [
+    'A resposta se apoia em um único chunk recuperado.',
+    'unsupported_anchor: resposta generativa ignorada por anchor sem suporte: NAO_ENCONTRADO.',
+  ],
+  latency_ms: 2400,
+});
+
 const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'): Promise<AskResult> => {
   await new Promise((resolve) => setTimeout(resolve, 700));
   const [c1, c2, c3] = MOCK_CITATIONS;
@@ -825,7 +841,9 @@ const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'):
     answer_provider: mockAnswer.provider,
     ...(mockAnswer.provider === 'extractive'
       ? {}
-      : {
+      : /descart/i.test(message)
+        ? mockDiscardedAnswer()
+        : {
           answer:
             '(mock) Cada nota guarda uma versão, e o id de cada chunk carrega essa versão. [1] ' +
             'Ao indexar de novo, o hash decide: se o conteúdo não mudou, a nota fica como está. [2] ' +

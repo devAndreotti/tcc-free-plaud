@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typer.testing import CliRunner
 
 from escolio.app.config import Settings
-from escolio.benchmark.answer_metrics import generation_discard_reason, limitation_code
+from escolio.benchmark.answer_metrics import generation_discard_reason
 from escolio.benchmark.datasets import load_benchmark_suite
 from escolio.benchmark.runners import (
     BenchmarkAnswerMetrics,
@@ -112,10 +112,11 @@ def _linha(**campos) -> BenchmarkQueryResult:
     return BenchmarkQueryResult(sample_id='s', question='q', hit_at_k=0, reciprocal_rank=0.0, latency_ms=0, **campos)
 
 
-def test_limitacao_da_validacao_vira_o_mesmo_codigo_do_motivo() -> None:
+def test_motivos_da_validacao_sao_os_codigos_do_descarte() -> None:
     casos = {
         'empty_generated_answer': ('[1]', 'O prazo e curto.'),
         'echoed_context_metadata': ('Resposta: source_path: nota.md', 'O prazo e curto.'),
+        'echoed_title': ('Cisco - Trilha de Cursos [1]', '# Cisco - Trilha de Cursos\nA trilha reune cursos.'),
         'unsupported_number': ('O limite e 987654 requisicoes por minuto.', 'O limite e 10 requisicoes por minuto.'),
         'unsupported_anchor': ('O padrao adotado e o Zorbax.', 'O padrao adotado e o Kafka.'),
         'low_claim_overlap': ('alfa beta gamma delta epsilon', 'O timeout do Redis esta configurado.'),
@@ -123,24 +124,22 @@ def test_limitacao_da_validacao_vira_o_mesmo_codigo_do_motivo() -> None:
     for motivo, (resposta, contexto) in casos.items():
         validacao = validate_generated_answer('pergunta', resposta, [contexto], [])
         assert validacao.reason == motivo
-        assert limitation_code(validacao.limitations) == motivo
 
 
-def test_motivo_do_descarte_respeita_provider_aceite_e_abstencao() -> None:
+def test_motivo_do_descarte_vem_do_campo_da_resposta_e_respeita_provider() -> None:
     def resposta(**campos) -> AskResponse:
         base = {'query': 'q', 'status': 'answer', 'no_answer': False, 'answer': 'x', 'latency_ms': 1}
         return AskResponse(**{**base, **campos})
 
-    assert generation_discard_reason(resposta(limitations=['unsupported_number: x']), has_provider=False) is None
+    assert generation_discard_reason(resposta(answer_discard_reason='unsupported_number'), has_provider=False) is None
     assert generation_discard_reason(resposta(generated=True), has_provider=True) is None
-    assert generation_discard_reason(
-        resposta(limitations=['Provider de resposta falhou; usando resposta extrativa. Erro: TimeoutError.']),
-        has_provider=True,
-    ) == 'provider_error'
+    assert generation_discard_reason(resposta(answer_discard_reason='provider_error'), has_provider=True) == 'provider_error'
+    assert generation_discard_reason(resposta(answer_discard_reason='echoed_title'), has_provider=True) == 'echoed_title'
     assert generation_discard_reason(
         AskResponse(
             query='q', status='no_answer', no_answer=True, answer=None,
-            reason_for_no_answer='generated_generic_no_answer', latency_ms=1,
+            reason_for_no_answer='generated_generic_no_answer', answer_discard_reason='generated_generic_no_answer',
+            latency_ms=1,
         ),
         has_provider=True,
     ) == 'generated_generic_no_answer'

@@ -5,12 +5,13 @@ import {
   useCallback,
   type KeyboardEvent,
   type ChangeEvent,
-  type RefObject,
 } from 'react';
 import { PaperclipIcon, MicIcon, SendIcon, FileIcon, XIcon, LoaderIcon, ChevronDownIcon, CheckIcon } from './Icons';
-import { bridge, type AskStrategy, type AudioJobSnapshot, type CorpusRoot, type Vault } from '../services/bridge';
+import { bridge, type AudioJobSnapshot, type BackendSettings, type CorpusRoot, type Vault } from '../services/bridge';
 import { VaultGlyph } from './VaultGlyph';
 import { vaultMeta } from '../lib/vaultVisuals';
+import { useDismissOnOutside } from '../hooks/useDismissOnOutside';
+import { AnswerPicker } from './AnswerPicker';
 
 const isAudioJobDone = (snapshot: AudioJobSnapshot) =>
   snapshot.status === 'completed' || snapshot.status === 'failed' || snapshot.status === 'cancelled';
@@ -30,14 +31,19 @@ const describeAudioFailure = (errorCode: string | null, message: string | null):
   return message ?? 'Falha ao transcrever áudio.';
 };
 
+const HINT_EXTRACTIVE = 'Mostra as frases dos seus trechos. Nenhum modelo é chamado.';
+const HINT_AI = 'A IA escreve a resposta a partir dos trechos e marca as fontes. Se ela não responder com texto, você vê o trecho original.';
+
 // Props do componente de input de chat
 interface ChatInputProps {
   onSendMessage: (text: string, attachment?: File) => void;
   /** Campo de mensagem ganhou foco (a tela aquece o modelo de resposta). */
   onFocus?: () => void;
   isLoading?: boolean;
-  strategy?: AskStrategy;
-  onStrategyChange?: (strategy: AskStrategy) => void;
+  /** Provedor e modelo de resposta salvos; com onAnswerSaved, a barra mostra o seletor de resposta. */
+  answerProvider?: string;
+  answerModel?: string | null;
+  onAnswerSaved?: (settings: BackendSettings) => void;
   /** Pastas indexadas; o seletor de pasta só aparece com duas ou mais. */
   corpusRoots?: CorpusRoot[];
   /** Caminho da pasta escolhida, ou null para "Todas as pastas". */
@@ -49,80 +55,9 @@ interface ChatInputProps {
   onVaultChange?: (vaultId: string) => void;
 }
 
-const STRATEGIES: { value: AskStrategy; label: string; hint: string }[] = [
-  { value: 'hybrid', label: 'Híbrida', hint: 'Palavra-chave e significado combinados.' },
-  { value: 'vector', label: 'Vetorial', hint: 'Por significado, mesmo sem as palavras exatas.' },
-  { value: 'lexical', label: 'Lexical', hint: 'Só palavras exatas (FTS5). A mais rápida.' },
-];
-
-/** Fecha um menu flutuante ao clicar fora dele ou apertar Esc. */
-const useDismissOnOutside = (open: boolean, wrapRef: RefObject<HTMLDivElement | null>, close: () => void) => {
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDown = (event: MouseEvent) => {
-      if (!wrapRef.current?.contains(event.target as Node)) close();
-    };
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') close();
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open, wrapRef, close]);
-};
-
-const StrategyPicker = ({ value, onChange }: { value: AskStrategy; onChange: (s: AskStrategy) => void }) => {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  useDismissOnOutside(open, wrapRef, () => setOpen(false));
-
-  const current = STRATEGIES.find((s) => s.value === value) ?? STRATEGIES[0];
-  return (
-    <div className="strategy" ref={wrapRef}>
-      <button
-        type="button"
-        className="strategy__chip"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={`Estratégia de busca: ${current.label}`}
-        onClick={() => setOpen((prev) => !prev)}
-      >
-        {current.label}
-        <ChevronDownIcon size={13} />
-      </button>
-      {open && (
-        <div className="strategy__menu" role="menu" aria-label="Estratégia de busca">
-          {STRATEGIES.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={option.value === value}
-              className="strategy__item"
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-            >
-              <CheckIcon size={15} />
-              <span>
-                {option.label}
-                <small>{option.hint}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
 const folderName = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
-// Mesmo padrão do StrategyPicker: troca a vault da pergunta num menu ancorado no próprio chip.
+// Troca a vault da pergunta num menu ancorado no próprio chip.
 const VaultPicker = ({
   vaults,
   value,
@@ -180,7 +115,7 @@ const VaultPicker = ({
   );
 };
 
-// Mesmo padrão visual do StrategyPicker: escolhe a pasta de origem da pergunta (ou todas).
+// Escolhe a pasta de origem da pergunta (ou todas), no mesmo estilo dos outros seletores da barra.
 const SourcePicker = ({
   roots,
   value,
@@ -258,8 +193,9 @@ const ChatInput = ({
   onSendMessage,
   onFocus,
   isLoading = false,
-  strategy,
-  onStrategyChange,
+  answerProvider,
+  answerModel = null,
+  onAnswerSaved,
   corpusRoots = [],
   sourceRoot = null,
   onSourceRootChange,
@@ -509,7 +445,7 @@ const ChatInput = ({
           </button>
 
           {vault && onVaultChange && <VaultPicker vaults={vaults.length ? vaults : [vault]} value={vault} onChange={onVaultChange} />}
-          {strategy && onStrategyChange && <StrategyPicker value={strategy} onChange={onStrategyChange} />}
+          {answerProvider && onAnswerSaved && <AnswerPicker provider={answerProvider} model={answerModel} onSaved={onAnswerSaved} />}
           {onSourceRootChange && corpusRoots.length >= 2 && (
             <SourcePicker roots={corpusRoots} value={sourceRoot} onChange={onSourceRootChange} />
           )}
@@ -562,8 +498,7 @@ const ChatInput = ({
         {micStatus === 'recording' && 'Gravando… clique no microfone para parar.'}
         {micStatus === 'processing' && 'Transcrevendo áudio localmente…'}
         {micStatus === 'idle' &&
-          (micError ||
-            `Respostas usam só o que está indexado ${vault ? `em ${vault.name}` : 'no vault'}. Enter envia, Shift+Enter quebra a linha.`)}
+          (micError || (answerProvider && answerProvider !== 'extractive' ? HINT_AI : HINT_EXTRACTIVE))}
       </p>
     </section>
   );

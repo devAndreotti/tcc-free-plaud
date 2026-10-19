@@ -1,6 +1,6 @@
 # Experimento 17: IA local (qchat) contra a resposta extrativa
 
-> **Correção (2026-10-19):** a medição de 2026-10-19 abaixo vale para a abstenção, mas não para o texto gerado. Com a instrução de `[n]` do prompt antigo, o qchat respondeu só o marcador (`[1]`) em 34 de 39 perguntas positivas, e a validação aceitava isso. A seção "Correção" traz as saídas cruas e a decisão. A medição oficial com o prompt novo está pendente.
+> **Correção (2026-10-19):** a medição de 2026-10-19 abaixo vale para a abstenção, mas não para o texto gerado. Com a instrução de `[n]` do prompt antigo, o qchat respondeu só o marcador (`[1]`) em 34 de 39 perguntas positivas, e a validação aceitava isso. A seção "Correção" traz as saídas cruas e a decisão. A medição oficial com o prompt e a validação atuais está na seção "Medição oficial (2026-10-19, Emerald)".
 
 ## Objetivo
 
@@ -87,9 +87,59 @@ Adotada a V2. O modelo escreve texto, mantém as citações `[n]` (item 8 do pla
 
 O prompt da V2 está em `GROUNDED_SYSTEM_PROMPT` (`pipeline/src/escolio/providers/answer.py`). Respostas sem texto agora caem para a extrativa (`empty_generated_answer`).
 
-### Medição oficial: pendente
+### Medição oficial (2026-10-19, Emerald)
 
-O `benchmark compare` com qchat (híbrida, vetorial e léxica) não terminou: o Claude Code encerrou o processo por falta de memória, e o arquivo gerado ficou incompleto. As tabelas da correção vêm da busca léxica, com as saídas cruas. Rodar de novo com memória livre e atualizar a seção de resultados.
+Rodada completa do `benchmark compare` no código da branch `feat/seletor-e-qualidade` (commit `f25e096`), com o prompt V2 e a validação atual.
+
+- **Máquina:** Emerald-Fusion, GTX 1060 6 GB (37/37 camadas na GPU), Ollama 0.40.3.
+- **Modelo:** `qchat:latest` criado com o Modelfile do PC e base `qwen2.5:3b`, o mesmo blob (`sha256-5ee4f07c…`).
+- **Extrativo:** igual à base (léxica 1,0 / 0,822; vetorial 0,974 / 0,808; híbrida 0,974 / 0,808).
+- **Tempo:** o run qchat inteiro levou 132 s. Não compare com os tempos do PC, que rodou sob pressão de memória.
+
+| Estratégia | Positivas com texto gerado | Negativas com texto gerado (erro) | Positivas respondidas | Accuracy | MRR | p50 | p95 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| lexical | 32/39 | 2/34 | 0,897 | 0,890 | 0,914 | 835 ms | 1277 ms |
+| vetorial | 31/39 | 3/34 | 0,872 | 0,890 | 0,936 | 614 ms | 1122 ms |
+| híbrida | 33/39 | 2/34 | 0,923 | 0,918 | 0,942 | 422 ms | 1110 ms |
+
+Na híbrida, comparada ao extrativo:
+- Positivas respondidas: 36/39 contra 38/39. São 2 a menos.
+- Negativas respondidas: 3/34 contra 13/34. O modelo se abstém mais.
+- Accuracy: 0,918 contra 0,808.
+
+Motivos de descarte na híbrida (todas as perguntas): `generated_no_answer_sentinel` 12, `unsupported_number` 2, `unsupported_anchor` 2. `empty_generated_answer` e `echoed_title`: 0.
+
+Positivas sem texto na híbrida (6):
+- "Quando o componente MAJOR deve ser incrementado?": a recuperação se absteve antes de chamar o modelo.
+- "O que acontece quando dois arquivos tem conteudo identico?" e "Qual e o valor total do contrato?": `NAO_ENCONTRADO`.
+- "Qual o custo mensal estimado do Datadog?" e "Qual modelo de embedding foi usado nos experimentos?": `unsupported_anchor`.
+- "Qual e o prazo de confidencialidade apos o encerramento da vigencia?": `unsupported_number`.
+
+Negativas com texto na híbrida (2). São erros do modelo que a validação não pegou:
+- "Qual versao do dbt e usada no guia de modelagem de dados?"
+- "Qual equipe vai migrar os microservicos legados e em qual data?"
+
+Critério combinado para o merge (≥ 30 positivas com texto, zero `empty_generated_answer`, ≤ 3 negativas com texto): atendido nas três estratégias.
+
+Limite: uma rodada por estratégia, com temperatura 0,2. Diferença de 1 ou 2 perguntas está no ruído.
+
+## Probe com a validação nova (2026-10-19)
+
+Busca léxica sobre as 73 perguntas (39 positivas, 34 negativas), `qchat:latest`, temperatura 0,2, `top_k` 3, uma rodada por variante. A validação já inclui a abstenção por `NAO_ENCONTRADO` em qualquer posição e o descarte `echoed_title`. Script fora do repositório: `C:\Users\ricar\.claude\jobs\2a72c0ca\tmp\qualidade\probe_qualidade.py`.
+
+| Variante do prompt | Positivas: frase completa (≥ 8 palavras) | Positivas: frase curta | Título copiado | Só marcador | `NAO_ENCONTRADO` | Gerada aceita | Rejeitada pela validação | Abstenção | Negativas respondidas com texto |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| V2 (prompt atual) | 24 | 11 | 0 | 0 | 4 | 31 | 4 | 4 | 1 de 34 |
+
+- Latência p50 da resposta: 3,1 s.
+- Motivos de descarte nas positivas: `generated_no_answer_sentinel` 4, `unsupported_anchor` 3, `unsupported_number` 1.
+- A negativa respondida foi aceita: a resposta dá uma data ("Data agendada para 22 de abril de 2025 [1]") e não nomeia a equipe que a pergunta pede.
+- Lidas as respostas aceitas: a maioria responde à pergunta ("A estratégia recomendada para documentos sem estrutura formal é o chunking semântico [1]"). Quatro problemas aparecem:
+  - "DECISÕES TOMADAS" para uma pergunta de prazo: linha de seção do corpo da nota, sem `#`, que a regra de título não cobre.
+  - "A biblioteca que detecta o encoding do arquivo é a `file_hash`": resposta que não responde à pergunta; `file_hash` aparece no contexto, mas o trecho fala do cálculo do hash.
+  - Marcadores que não são `[n]` ficam no texto: "[7c6cfb14a5]" (id de trecho copiado do cabeçalho) e "[4.3]".
+  - Texto com letras separadas: "Cust o estim ado mens al (licença): R$ 18.700".
+- Não medidas nesta rodada: V3 e V4. A V3 foi tentada duas vezes: na primeira, com 1,19 GB livres, a checagem de memória barrou o processo antes de começar; na segunda, começou com 1,57 GB livres e o Claude Code a interrompeu durante a execução, por memória crítica, sem gravar saída. A V4 não foi tentada. Sem medição, o prompt não mudou.
 
 ## Interpretação técnica (corrigida)
 
@@ -101,7 +151,5 @@ O `benchmark compare` com qchat (híbrida, vetorial e léxica) não terminou: o 
 
 ## Próximos passos
 
-- Medição oficial com qchat (`benchmark compare --answer-provider ollama`) quando houver memória livre; atualizar a seção de resultados.
 - Repetir a medição três vezes para medir a variação.
-- Ver a negativa respondida por engano com a V2.
-- Ver por que `contrato-01` e `ingest-03` são recusadas.
+- Ver as 2 negativas com texto na híbrida e as 6 positivas sem texto (lista acima).
