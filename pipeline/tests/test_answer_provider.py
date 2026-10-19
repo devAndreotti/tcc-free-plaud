@@ -96,6 +96,7 @@ def test_grounded_chat_messages_forbid_external_knowledge_and_define_sentinel() 
     assert 'NAO_ENCONTRADO' in system_prompt
     assert 'nao sustentam resposta' in system_prompt
     assert 'Cada frase factual precisa estar suportada' in system_prompt
+    assert 'numero do CONTEXTO entre colchetes, ex.: [1] ou [2]' in system_prompt
     assert 'Preserve numeros, nomes e termos tecnicos exatamente' in system_prompt
     assert 'seja criativo' not in system_prompt.lower()
     assert 'PERGUNTA:\nQual broker?' in user_prompt

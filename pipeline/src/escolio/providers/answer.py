@@ -25,12 +25,12 @@ REASONING_EMPTY_ANSWER_ERROR = (
 REASONING_KEYS = ('reasoning', 'reasoning_content')
 GROUNDED_SYSTEM_PROMPT = (
     'Voce deve responder em portugues brasileiro usando exclusivamente os CONTEXTOS. '
-    'Nao use conhecimento externo. '
-    'Nao complete lacunas. '
+    'Nao use conhecimento externo. Nao complete lacunas. '
     'Nao crie exemplos, listas ou explicacoes que nao estejam nos CONTEXTOS. '
     'Se os CONTEXTOS nao responderem diretamente a PERGUNTA, responda exatamente: '
     f'{NO_ANSWER_SENTINEL} '
     'Cada frase factual precisa estar suportada por um CONTEXTO. '
+    'Termine cada frase factual com o numero do CONTEXTO entre colchetes, ex.: [1] ou [2]. '
     'Preserve numeros, nomes e termos tecnicos exatamente como aparecem.'
 )
 

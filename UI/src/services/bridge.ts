@@ -501,6 +501,8 @@ export interface AskResult {
   answer_model?: string;
   /** true quando `answer` foi escrito pela IA e passou na validação contra os trechos. */
   generated?: boolean;
+  /** chunk_id principal de cada contexto [n] (índice n-1), só quando a resposta gerada foi aceita. */
+  answer_sources?: string[];
 }
 
 /** Estágio de uma pergunta em streaming: buscando trechos, escrevendo a resposta, ou terminada. */
@@ -825,9 +827,11 @@ const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'):
       ? {}
       : {
           answer:
-            '(mock) Cada nota guarda uma versão, e o id de cada chunk carrega essa versão. Ao indexar de novo, o hash decide: ' +
-            'se o conteúdo não mudou, a nota fica como está; se mudou, ela volta para a fila e é quebrada em chunks outra vez.',
+            '(mock) Cada nota guarda uma versão, e o id de cada chunk carrega essa versão. [1] ' +
+            'Ao indexar de novo, o hash decide: se o conteúdo não mudou, a nota fica como está. [2] ' +
+            'Se mudou, ela volta para a fila e é quebrada em chunks outra vez. [3]',
           answer_model: mockAnswer.model,
+          answer_sources: MOCK_CITATIONS.map((citation) => citation.chunk_id),
           generated: true,
           latency_ms: 2400,
         }),
