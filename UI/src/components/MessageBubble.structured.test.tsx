@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import MessageBubble, { type MessageData } from './MessageBubble';
 import type { AskCitation, AskResult } from '../services/bridge';
+import { GRAPH_FOCUS_EVENT } from '../lib/vaultGraph';
 
 const cite = (n: number, path: string): AskCitation => ({
   note_id: `nota-${n}`,
@@ -74,6 +75,42 @@ describe('MessageBubble com resposta estruturada', () => {
 
     await user.hover(screen.getByRole('button', { name: 'Fonte 1' }));
     expect(container.querySelector('.msg__source')?.classList.contains('is-hl')).toBe(true);
+  });
+
+  it('passar o mouse na fonte avisa o grafo qual nota destacar, e sair solta o destaque', async () => {
+    const user = userEvent.setup();
+    const focused: (string | null)[] = [];
+    const onFocus = (e: Event) => focused.push((e as CustomEvent<string | null>).detail);
+    window.addEventListener(GRAPH_FOCUS_EVENT, onFocus);
+    const a = cite(1, 'Estudos/Cisco/Cisco.md');
+    render(<MessageBubble message={answer({ claims: [{ text: 'Afirmação.', citations: [a], support_level: 'direct' }], citations: [a] })} />);
+
+    await user.hover(screen.getByText('Trecho 1'));
+    await user.unhover(screen.getByText('Trecho 1'));
+    window.removeEventListener(GRAPH_FOCUS_EVENT, onFocus);
+
+    expect(focused).toEqual(['nota-1', null]);
+  });
+
+  it('resposta escrita pela IA aparece no lugar dos trechos, com o modelo no rodapé', () => {
+    const a = cite(1, 'Estudos/Infra/Docker.md');
+    render(
+      <MessageBubble
+        message={answer({
+          answer: 'Docker compartilha o kernel do host; a VM traz um SO inteiro.',
+          generated: true,
+          answer_provider: 'ollama',
+          answer_model: 'qchat:latest',
+          claims: [{ text: 'Docker vs Máquinas Virtuais - [!note]', citations: [a], support_level: 'partial' }],
+          citations: [a],
+        })}
+      />
+    );
+
+    expect(screen.getByText('Docker compartilha o kernel do host; a VM traz um SO inteiro.')).toBeTruthy();
+    expect(screen.queryByText('Docker vs Máquinas Virtuais - [!note]')).toBeNull();
+    expect(screen.getByText('ollama · qchat:latest')).toBeTruthy();
+    expect(screen.getByText('Docker')).toBeTruthy(); // a fonte continua listada
   });
 
   it('explica a falta de resposta e oferece buscar por palavra-chave', async () => {

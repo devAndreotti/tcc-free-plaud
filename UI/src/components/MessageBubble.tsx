@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { AskCitation, AskResult, AskStrategy } from '../services/bridge';
+import { focusNoteInGraph } from '../lib/vaultGraph';
 import { AlertTriangleIcon, CopyIcon, SearchIcon } from './Icons';
 
 export type MessageRole = 'user' | 'assistant';
@@ -95,7 +96,7 @@ const AnswerMeta = ({ ask, copyText }: { ask: AskResult; copyText?: string }) =>
   const parts = [
     ask.strategy ? STRATEGY_LABEL[ask.strategy] ?? ask.strategy : null,
     ask.top_k ? `top-${ask.top_k}` : null,
-    ask.answer_provider ?? null,
+    ask.generated ? [ask.answer_provider, ask.answer_model].filter(Boolean).join(' · ') : ask.answer_provider ?? null,
     ask.latency_ms ? `${ask.latency_ms} ms` : null,
   ].filter(Boolean);
 
@@ -154,9 +155,17 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
   const { claims, sources, support } = useSources(ask);
   const [hl, setHl] = useState<number | null>(null);
   const noteCount = new Set(sources.map((s) => s.note_id)).size;
+  // Resposta escrita pela IA (validada contra os trechos): mostra o texto dela no lugar dos claims.
+  const showClaims = claims.length > 0 && !(ask.generated && ask.answer);
+
+  // A fonte em destaque aqui também aparece no grafo ao lado: a nota e as pastas de onde veio.
+  const highlight = (i: number | null) => {
+    setHl(i);
+    focusNoteInGraph(i === null ? null : sources[i]?.note_id ?? null);
+  };
 
   const copyText = [
-    claims.length ? claims.map((c) => `${c.text} ${c.refs.map((r) => `[${r + 1}]`).join('')}`).join(' ') : ask.answer ?? '',
+    showClaims ? claims.map((c) => `${c.text} ${c.refs.map((r) => `[${r + 1}]`).join('')}`).join(' ') : ask.answer ?? '',
     sources.length ? `\n\nFontes:\n${sources.map((s, i) => `[${i + 1}] ${s.source_path ?? s.note_id} (${s.char_start}–${s.char_end})`).join('\n')}` : '',
   ].join('');
 
@@ -173,7 +182,7 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
       </div>
 
       <div className="msg__answer">
-        {claims.length > 0
+        {showClaims
           ? claims.map((claim) => (
               <span key={`${claim.refs.join(',')}:${claim.text}`}>
                 <span
@@ -187,10 +196,10 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
                     type="button"
                     className={`msg__ref${hl === ref ? ' is-hl' : ''}`}
                     aria-label={`Fonte ${ref + 1}${claim.support_level === 'partial' ? ', apoio parcial' : ''}`}
-                    onMouseEnter={() => setHl(ref)}
-                    onMouseLeave={() => setHl(null)}
-                    onFocus={() => setHl(ref)}
-                    onBlur={() => setHl(null)}
+                    onMouseEnter={() => highlight(ref)}
+                    onMouseLeave={() => highlight(null)}
+                    onFocus={() => highlight(ref)}
+                    onBlur={() => highlight(null)}
                   >
                     {ref + 1}
                   </button>
@@ -200,7 +209,7 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
           : renderFormattedContent(ask.answer ?? '')}
       </div>
 
-      {claims.some((c) => c.support_level === 'partial') && (
+      {showClaims && claims.some((c) => c.support_level === 'partial') && (
         <div className="msg__legend">
           <span><i className="msg__legend-line" />apoio direto</span>
           <span><i className="msg__legend-line msg__legend-line--dotted" />apoio parcial</span>
@@ -213,8 +222,8 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
             <li
               key={source.chunk_id}
               className={`msg__source${hl === i ? ' is-hl' : ''}`}
-              onMouseEnter={() => setHl(i)}
-              onMouseLeave={() => setHl(null)}
+              onMouseEnter={() => highlight(i)}
+              onMouseLeave={() => highlight(null)}
             >
               <span className="msg__source-n mono">{i + 1}</span>
               <div className="msg__source-body">

@@ -128,7 +128,7 @@ class Settings(BaseSettings):
     answer_provider: Literal[
         "extractive", "openai-compatible", "ollama", "lmstudio"
     ] = Field(default="extractive")
-    answer_model: str = Field(default="llama3.1:8b")
+    answer_model: str = Field(default="qwen2.5:3b")
     answer_base_url: str | None = Field(default=None)
     answer_api_key: str | None = Field(default=None, exclude=True, repr=False)
     answer_temperature: float = Field(default=0.2, ge=0.0, le=2.0)

@@ -7,7 +7,17 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { MarkdownNode } from '../lib/vaultGraph';
-import { buildGraph, fitCamera, nodeRadius, tick, type Camera, type SimEdge, type SimNode } from '../lib/vaultGraph';
+import {
+  GRAPH_FOCUS_EVENT,
+  buildGraph,
+  fitCamera,
+  nodeRadius,
+  pathToRoot,
+  tick,
+  type Camera,
+  type SimEdge,
+  type SimNode,
+} from '../lib/vaultGraph';
 import { GraphIcon } from './Icons';
 
 interface Tooltip  { label: string; x: number; y: number }
@@ -24,6 +34,10 @@ function themeColors(el: Element) {
     folder: v('--accent-blue'),
     label: v('--text-secondary'),
     hover: v('--accent-blue-light'),
+    focus: v('--accent-blue-light'),
+    bg: v('--bg-primary'),
+    tipBg: v('--tip-bg'),
+    tipFg: v('--tip-fg'),
   };
 }
 
@@ -74,6 +88,66 @@ function drawFolderLabels(ctx: Ctx, nodes: SimNode[], colors: Colors, cam: Camer
   }
 }
 
+// Nota em foco (hover numa fonte do chat) e o caminho de pastas até a raiz. Tamanhos em px de
+// tela (÷ scale) para o destaque aparecer em qualquer zoom; viewW prende a pílula no painel.
+function drawFocus(ctx: Ctx, chain: string[], nodes: SimNode[], colors: Colors, cam: Camera, viewW: number) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const path = chain.map((id) => byId.get(id)).filter((n): n is SimNode => n !== undefined);
+  const [target] = path;
+  if (!target) return;
+  const px = 1 / cam.scale;
+  const radius = (n: SimNode) => Math.max(nodeRadius(n), (n === target ? 6 : 4) * px);
+
+  ctx.strokeStyle = colors.focus;
+  ctx.lineWidth = 2 * px;
+  ctx.beginPath();
+  path.forEach((n, i) => (i === 0 ? ctx.moveTo(n.x, n.y) : ctx.lineTo(n.x, n.y)));
+  ctx.stroke();
+
+  ctx.fillStyle = colors.focus;
+  ctx.globalAlpha = 0.25;
+  ctx.beginPath();
+  ctx.arc(target.x, target.y, 14 * px, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  for (const n of path) {
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, radius(n), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Nomes das pastas do caminho, com contorno da cor do fundo para a linha não cortar a letra
+  ctx.font = `${11 * px}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 3 * px;
+  ctx.strokeStyle = colors.bg;
+  for (const n of path.slice(1)) {
+    if (n.depth === 0) continue; // a raiz não tem nome
+    const y = n.y - radius(n) - 5 * px;
+    ctx.strokeText(n.label, n.x, y);
+    ctx.fillText(n.label, n.x, y);
+  }
+
+  // Nome da nota numa pílula acima dela, sem sair pelas bordas do painel
+  const label = target.label.length > 42 ? `${target.label.slice(0, 41)}…` : target.label;
+  ctx.font = `600 ${12 * px}px sans-serif`;
+  const w = ctx.measureText(label).width + 16 * px;
+  const h = 22 * px;
+  const minX = (6 - cam.x) * px;
+  const maxX = (viewW - 6 - cam.x) * px - w;
+  const left = Math.max(minX, Math.min(maxX, target.x - w / 2));
+  const top = target.y - 18 * px - h;
+  ctx.fillStyle = colors.tipBg;
+  ctx.beginPath();
+  ctx.roundRect(left, top, w, h, 6 * px);
+  ctx.fill();
+  ctx.fillStyle = colors.tipFg;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, left + w / 2, top + h / 2);
+  ctx.textBaseline = 'alphabetic';
+}
+
 // ─── Componente ──────────────────────────────────────────────────────────────
 
 interface ForceGraphProps {
@@ -109,6 +183,8 @@ const ForceGraph = ({ vaultNodes, onOpenNote }: ForceGraphProps) => {
   const graphRef   = useRef<{ nodes: SimNode[]; edges: SimEdge[] }>({ nodes: [], edges: [] });
   const dragRef    = useRef({ active: false, startX: 0, startY: 0, camX: 0, camY: 0 });
   const hovered    = useRef<string | null>(null);
+  const focused    = useRef<string | null>(null); // nota da fonte sob o mouse no chat
+  const panRef     = useRef<number>(0);
 
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
 
@@ -131,12 +207,58 @@ const ForceGraph = ({ vaultNodes, onOpenNote }: ForceGraphProps) => {
     ctx.translate(cam.x, cam.y);
     ctx.scale(cam.scale, cam.scale);
 
+    // Com uma fonte em foco, o resto do grafo recua para o caminho dela aparecer
+    const chain = focused.current ? pathToRoot(focused.current, nodes, edges) : [];
+    ctx.globalAlpha = chain.length > 0 ? 0.3 : 1;
     drawEdges(ctx, nodes, edges, colors, cam);
     drawNodes(ctx, nodes, colors, hovered.current);
     drawFolderLabels(ctx, nodes, colors, cam);
+    ctx.globalAlpha = 1;
+    if (chain.length > 0) drawFocus(ctx, chain, nodes, colors, cam, logW.current);
 
     ctx.restore();
   }, []);
+
+  // ── Nota fora da área visível (após zoom ou arrasto): a câmera desliza até ela, sem mudar o zoom
+  const panIntoView = useCallback((n: SimNode) => {
+    const cam = camRef.current;
+    const margin = 48;
+    const sx = n.x * cam.scale + cam.x;
+    const sy = n.y * cam.scale + cam.y;
+    if (sx > margin && sx < logW.current - margin && sy > margin && sy < logH.current - margin) return;
+
+    const from = { x: cam.x, y: cam.y };
+    const to = { x: logW.current / 2 - n.x * cam.scale, y: logH.current / 2 - n.y * cam.scale };
+    const duration = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 240;
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = duration ? Math.min(1, (now - start) / duration) : 1;
+      const ease = 1 - (1 - t) ** 3;
+      camRef.current.x = from.x + (to.x - from.x) * ease;
+      camRef.current.y = from.y + (to.y - from.y) * ease;
+      draw();
+      if (t < 1) panRef.current = requestAnimationFrame(step);
+    };
+    cancelAnimationFrame(panRef.current);
+    panRef.current = requestAnimationFrame(step);
+  }, [draw]);
+
+  // ── Hover numa fonte da resposta (MessageBubble) destaca a nota e o caminho dela ──
+  useEffect(() => {
+    const onFocus = (e: Event) => {
+      const id = (e as CustomEvent<string | null>).detail;
+      focused.current = id;
+      const target = id ? graphRef.current.nodes.find((n) => n.id === id) : undefined;
+      // Enquadrando o grafo inteiro, a nota já está na tela; só com zoom ela pode estar fora
+      if (target && !autoFitRef.current) panIntoView(target);
+      draw();
+    };
+    window.addEventListener(GRAPH_FOCUS_EVENT, onFocus);
+    return () => {
+      window.removeEventListener(GRAPH_FOCUS_EVENT, onFocus);
+      cancelAnimationFrame(panRef.current);
+    };
+  }, [draw, panIntoView]);
 
   // ── Loop de simulação (finito) ──────────────────────────────────────────
   const startLoop = useCallback((iters: number) => {

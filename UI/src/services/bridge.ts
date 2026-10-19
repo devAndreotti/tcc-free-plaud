@@ -492,6 +492,17 @@ export interface AskResult {
   strategy?: string;
   top_k?: number;
   answer_provider?: string;
+  /** Modelo configurado no provedor generativo (ex.: qchat). */
+  answer_model?: string;
+  /** true quando `answer` foi escrito pela IA e passou na validação contra os trechos. */
+  generated?: boolean;
+}
+
+/** Provedor, modelo e URL que estão na tela de Configurações, ainda sem salvar. */
+export interface AnswerDraft {
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
 }
 
 interface PythonApi {
@@ -601,11 +612,15 @@ interface PythonApi {
   /** Aplica preset em uma escrita transacional e limpa runtime. */
   applySettingsPreset?: (name: string) => Promise<SettingPresetResult>;
 
-  /** Testa provider LLM com prompt sintetico, sem usar corpus. */
-  testAnswerProvider?: () => Promise<AnswerProviderTestResult>;
+  /** Testa provider LLM com prompt sintetico, sem usar corpus; null usa o valor salvo. */
+  testAnswerProvider?: (
+    provider?: string | null,
+    model?: string | null,
+    baseUrl?: string | null
+  ) => Promise<AnswerProviderTestResult>;
 
-  /** Lista modelos expostos pelo provider LLM configurado. */
-  listAnswerModels?: () => Promise<ModelDiscoveryResult>;
+  /** Lista modelos expostos pelo provider LLM (o salvo ou o passado); null usa o valor salvo. */
+  listAnswerModels?: (provider?: string | null, baseUrl?: string | null) => Promise<ModelDiscoveryResult>;
 
   /** Salva ou remove ESCOLIO_ANSWER_API_KEY em pipeline/.env. */
   saveApiKey?: (apiKey: string) => Promise<SaveApiKeyResult>;
@@ -692,7 +707,7 @@ const MOCK_CITATIONS: AskCitation[] = [
     note_version: 1,
     chunk_id: 'arquitetura--3f9a1c::v1::ofs-000680-001480::9a41',
     snippet: 'O id de um chunk junta o id da nota, a versão e o deslocamento no texto.',
-    source_path: 'Projetos/escolio/Arquitetura do índice.md',
+    source_path: 'D:\\Notas\\Obsidian\\Projetos\\escolio\\Arquitetura do índice.md',
     char_start: 680,
     char_end: 1480,
   },
@@ -701,7 +716,7 @@ const MOCK_CITATIONS: AskCitation[] = [
     note_version: 1,
     chunk_id: 'arquitetura--3f9a1c::v1::ofs-001360-002160::77c0',
     snippet: 'Se o hash não mudou desde a última indexação, a nota entra como inalterada.',
-    source_path: 'Projetos/escolio/Arquitetura do índice.md',
+    source_path: 'D:\\Notas\\Obsidian\\Projetos\\escolio\\Arquitetura do índice.md',
     char_start: 1360,
     char_end: 2160,
   },
@@ -710,10 +725,20 @@ const MOCK_CITATIONS: AskCitation[] = [
     note_version: 2,
     chunk_id: 'pipeline--b21e07::v2::ofs-000000-000800::1c3d',
     snippet: 'Notas alteradas voltam para a fila e passam de novo pelo chunking.',
-    source_path: 'Projetos/escolio/Pipeline de ingestão.md',
+    source_path: 'D:\\Notas\\Obsidian\\Projetos\\escolio\\Pipeline de ingestão.md',
     char_start: 0,
     char_end: 800,
   },
+];
+
+// Provedor e modelo de resposta do modo navegador; Salvar em Configurações › IA muda os dois.
+const mockAnswer = { provider: 'extractive', model: 'qwen2.5:3b' };
+
+const MOCK_LOCAL_MODELS: ModelInfo[] = [
+  { id: 'qchat:latest', label: 'qchat:latest', provider: 'ollama', details: { parameter_size: '3.1B', quantization_level: 'Q4_K_M', size: 1929912432 } },
+  { id: 'qwen2.5:3b', label: 'qwen2.5:3b', provider: 'ollama', details: { parameter_size: '3.1B', quantization_level: 'Q4_K_M', size: 1929912432 } },
+  { id: 'qwen2.5-coder:3b', label: 'qwen2.5-coder:3b', provider: 'ollama', details: { parameter_size: '3.1B', quantization_level: 'Q4_K_M', size: 1929912461 } },
+  { id: 'deepseek-r1:1.5b', label: 'deepseek-r1:1.5b', provider: 'ollama', details: { parameter_size: '1.8B', quantization_level: 'Q4_K_M', size: 1117322768 } },
 ];
 
 const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'): Promise<AskResult> => {
@@ -735,7 +760,17 @@ const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'):
     latency_ms: 700,
     strategy,
     top_k: 5,
-    answer_provider: 'extractive',
+    answer_provider: mockAnswer.provider,
+    ...(mockAnswer.provider === 'extractive'
+      ? {}
+      : {
+          answer:
+            '(mock) Cada nota guarda uma versão, e o id de cada chunk carrega essa versão. Ao indexar de novo, o hash decide: ' +
+            'se o conteúdo não mudou, a nota fica como está; se mudou, ela volta para a fila e é quebrada em chunks outra vez.',
+          answer_model: mockAnswer.model,
+          generated: true,
+          latency_ms: 2400,
+        }),
   };
 };
 
@@ -775,6 +810,36 @@ const mockSettingRow = (row: MockSettingRow): SettingRow => ({
   ...row,
 });
 
+// Notas do grafo no modo navegador; as duas primeiras são as citadas por MOCK_CITATIONS.
+const mockVaultNote = (note_id: string, title: string, rel: string): NoteDetail => ({
+  note_id,
+  title,
+  source_type: 'md',
+  source_path: `D:\\Notas\\Obsidian\\${rel}`,
+  created_at: '2026-10-18T12:00:00-03:00',
+  tags: ['md'],
+  chunk_count: 1,
+  structured_markdown: `# ${title}\n\n(mock) Nota de exemplo do modo navegador.`,
+  chunks: [
+    { chunk_id: `${note_id}::v1::0000`, chunk_index: 0, char_start: 0, char_end: 42, token_count: 8, snippet: '(mock) Nota de exemplo do modo navegador.' },
+  ],
+});
+
+const MOCK_VAULT_NOTES: NoteDetail[] = [
+  mockVaultNote('arquitetura--3f9a1c', 'Arquitetura do índice', 'Projetos\\escolio\\Arquitetura do índice.md'),
+  mockVaultNote('pipeline--b21e07', 'Pipeline de ingestão', 'Projetos\\escolio\\Pipeline de ingestão.md'),
+  mockVaultNote('roadmap--5c1d', 'Roadmap', 'Projetos\\escolio\\Roadmap.md'),
+  mockVaultNote('benchmark--8e2a', 'Benchmark de busca', 'Projetos\\escolio\\Benchmark de busca.md'),
+  mockVaultNote('vlan--11aa', 'VLAN', 'Estudos\\Redes\\VLAN.md'),
+  mockVaultNote('mac--22bb', 'Endereço MAC', 'Estudos\\Redes\\Endereço MAC.md'),
+  mockVaultNote('ospf--33cc', 'OSPF', 'Estudos\\Redes\\OSPF.md'),
+  mockVaultNote('docker--44dd', 'Docker vs Máquinas Virtuais', 'Estudos\\Infra\\Docker vs Maquinas Virtuais.md'),
+  mockVaultNote('linux--55ee', 'Distribuições Linux', 'Estudos\\Infra\\Distribuicoes Linux.md'),
+  mockVaultNote('zustand--66ff', 'Zustand', 'Estudos\\Front\\Zustand.md'),
+  mockVaultNote('diario-29--77aa', 'Segunda-feira, 29 de Junho', 'Diário\\2026-06-29.md'),
+  mockVaultNote('diario-30--88bb', 'Terça-feira, 30 de Junho', 'Diário\\2026-06-30.md'),
+];
+
 const MOCK_NOTES: NoteDetail[] = [
   {
     note_id: 'plataforma-local',
@@ -805,6 +870,7 @@ const MOCK_NOTES: NoteDetail[] = [
       },
     ],
   },
+  ...MOCK_VAULT_NOTES,
 ];
 
 const MOCK_BENCHMARK_RESULT: BenchmarkCompareResult = {
@@ -1333,8 +1399,8 @@ export const bridge = {
       return window.pywebview.api.getBackendSettings();
     }
     return {
-      answer_provider: 'extractive',
-      answer_model: 'llama3.1:8b',
+      answer_provider: mockAnswer.provider,
+      answer_model: mockAnswer.model,
       answer_base_url: null,
       answer_api_key_configured: false,
       local_env_path: 'pipeline\\.env',
@@ -1393,8 +1459,8 @@ export const bridge = {
           group: 'LLM',
           value_type: 'enum',
           layer: 'simple',
-          value: 'extractive',
-          display_value: 'extractive',
+          value: mockAnswer.provider,
+          display_value: mockAnswer.provider,
           options: [
             {
               value: 'extractive',
@@ -1423,13 +1489,26 @@ export const bridge = {
           index: 3,
           key: 'answer_model',
           label: 'Modelo de resposta',
-          description: 'Modelo LLM usado pelo provider generativo.',
+          description: 'Modelo que escreve a resposta. Os de ~3B (como qwen2.5:3b) cabem numa GPU de 4 GB e respondem em segundos; 7B ou mais ficam lentos.',
           group: 'LLM',
           value_type: 'string',
           layer: 'simple',
-          value: 'llama3.1:8b',
-          display_value: 'llama3.1:8b',
-          recommended: 'llama3.1:8b',
+          value: mockAnswer.model,
+          display_value: mockAnswer.model,
+          recommended: 'qwen2.5:3b',
+        }),
+        mockSettingRow({
+          index: 3,
+          key: 'answer_base_url',
+          label: 'URL do provider',
+          description: 'Endereço do servidor da IA; vazio usa o padrão do provedor escolhido.',
+          group: 'LLM',
+          value_type: 'string',
+          layer: 'advanced',
+          value: null,
+          display_value: '',
+          recommended: null,
+          placeholder: 'http://localhost:11434/v1',
         }),
         mockSettingRow({
           index: 4,
@@ -1585,39 +1664,42 @@ export const bridge = {
     return { ...preview, ok: true };
   },
 
-  testAnswerProvider: async (): Promise<AnswerProviderTestResult> => {
+  testAnswerProvider: async (draft: AnswerDraft = {}): Promise<AnswerProviderTestResult> => {
     if ((await whenDesktopReady()) && window.pywebview?.api.testAnswerProvider) {
-      return window.pywebview.api.testAnswerProvider();
+      return window.pywebview.api.testAnswerProvider(draft.provider ?? null, draft.model ?? null, draft.baseUrl ?? null);
     }
     await new Promise((resolve) => setTimeout(resolve, 300));
+    const provider = draft.provider ?? mockAnswer.provider;
     return {
-      provider: 'extractive',
-      model: 'llama3.1:8b',
-      base_url: null,
-      status: 'not_applicable',
-      latency_ms: 0,
+      provider,
+      model: draft.model || mockAnswer.model,
+      base_url: draft.baseUrl || null,
+      status: provider === 'extractive' ? 'not_applicable' : 'ok',
+      latency_ms: provider === 'extractive' ? 0 : 840,
       error: null,
     };
   },
 
-  listAnswerModels: async (): Promise<ModelDiscoveryResult> => {
+  listAnswerModels: async (draft: AnswerDraft = {}): Promise<ModelDiscoveryResult> => {
     const desktop = await whenDesktopReady();
     const pywebviewApi = globalThis.window?.pywebview?.api;
     if (desktop && pywebviewApi?.listAnswerModels) {
-      return pywebviewApi.listAnswerModels();
+      return pywebviewApi.listAnswerModels(draft.provider ?? null, draft.baseUrl ?? null);
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
+    const provider = draft.provider ?? mockAnswer.provider;
+    // Modo navegador: Ollama com os modelos de exemplo; LM Studio desligado, para ver o aviso.
+    if (provider === 'ollama') {
+      return { provider, base_url: 'http://localhost:11434', status: 'ok', models: MOCK_LOCAL_MODELS, latency_ms: 12, cached: false, message: null };
+    }
     return {
-      provider: 'ollama',
-      base_url: 'http://localhost:11434',
-      status: 'ok',
-      models: [
-        { id: 'llama3.1:8b', label: 'llama3.1:8b', provider: 'ollama', details: { size: 4661224676 } },
-        { id: 'mistral:7b', label: 'mistral:7b', provider: 'ollama', details: {} },
-      ],
-      latency_ms: 12,
+      provider,
+      base_url: provider === 'lmstudio' ? 'http://localhost:1234/v1' : null,
+      status: provider === 'lmstudio' ? 'offline' : 'not_applicable',
+      models: [],
+      latency_ms: 4,
       cached: false,
-      message: null,
+      message: provider === 'lmstudio' ? 'Servidor indisponivel ou timeout.' : null,
     };
   },
 
@@ -1649,6 +1731,8 @@ export const bridge = {
       return window.pywebview.api.saveBackendSettings(values);
     }
     console.debug('[Bridge Mock] saveBackendSettings:', values);
+    if (values.answer_provider) mockAnswer.provider = values.answer_provider;
+    if (values.answer_model) mockAnswer.model = values.answer_model;
     return bridge.getBackendSettings();
   },
 

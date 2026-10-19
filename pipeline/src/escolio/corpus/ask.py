@@ -85,6 +85,7 @@ def corpus_vocabulary_stems(connection: sqlite3.Connection) -> frozenset[str] | 
     return stems
 TEAM_ANSWER_PATTERN = re.compile(r'\bequipe\s+(?:de|da|do|dos|das)\s+[0-9A-Za-zÀ-ÖØ-öø-ÿ_-]+')
 FRONTMATTER_PATTERN = re.compile(r'\A\s*---\s*\r?\n.*?\r?\n---\s*\r?\n', re.DOTALL)
+CONTEXT_METADATA_KEYS = ('source_path:', 'note_id:', 'chunk_id:', 'claim_extrativo:')
 ANSWER_CONTEXT_TOTAL_CHAR_BUDGET = 6000
 ANSWER_CONTEXT_MAX_CHARS = 1500
 GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*[A-Za-zÀ-ÖØ-öø-ÿ%]{1,8})?')
@@ -246,10 +247,19 @@ def _unsupported_generated_numbers(answer: str, support_text: str) -> list[str]:
     return unsupported
 
 
+def _starts_sentence(text: str, start: int) -> bool:
+    before = text[:start].rstrip(' \t*->"“(')
+    return not before or before[-1] in '.!?:\n'
+
+
 def _unsupported_generated_anchors(answer: str, support_text: str) -> list[str]:
     unsupported: list[str] = []
-    for anchor in GENERATED_ANCHOR_PATTERN.findall(answer):
+    for match in GENERATED_ANCHOR_PATTERN.finditer(answer):
+        anchor = match.group()
         if anchor in IGNORED_GENERATED_ANCHORS:
+            continue
+        # Maiúscula no início da frase não indica nome ("Inicialmente,"); sigla em caixa alta, sim.
+        if not anchor.isupper() and _starts_sentence(answer, match.start()):
             continue
         normalized = anchor.casefold()
         if normalized and normalized not in support_text and normalized not in unsupported:
@@ -285,6 +295,13 @@ def validate_generated_answer(
             reason='generated_generic_no_answer',
             limitations=['Provider generativo retornou negativa generica em vez de resposta sustentada.'],
         )
+    # Trecho vazio (nota só com frontmatter) faz modelo pequeno copiar o cabeçalho do contexto.
+    if any(key in cleaned_answer for key in CONTEXT_METADATA_KEYS):
+        return GeneratedAnswerValidation(
+            action='fallback_extractive',
+            reason='echoed_context_metadata',
+            limitations=['Resposta generativa ignorada: o modelo repetiu os metadados do contexto em vez de responder.'],
+        )
 
     support_text = _normalized_support_text(contexts, claims)
     unsupported_numbers = _unsupported_generated_numbers(cleaned_answer, support_text)
@@ -307,10 +324,11 @@ def validate_generated_answer(
             ],
         )
 
+    # Sobreposição com os trechos entregues ao modelo, não só com o claim extraído: em nota
+    # Markdown o claim costuma ser o título ("VLAN - [!note]") e derrubava respostas fiéis.
     answer_terms = normalize_query_terms(cleaned_answer)
-    claim_text = ' '.join(claim.text for claim in claims)
     if len(answer_terms) >= 4:
-        _, claim_coverage = match_terms_in_text(answer_terms, claim_text)
+        _, claim_coverage = match_terms_in_text(answer_terms, support_text)
         if claim_coverage < 0.35:
             return GeneratedAnswerValidation(
                 action='fallback_extractive',
@@ -880,6 +898,7 @@ def answer_corpus_with_citations(
     if len(cited_sources) > 1:
         limitations.append('A resposta combina evidência de multiplos arquivos do corpus.')
 
+    generated = False
     if answer_provider is not None:
         try:
             context_started_at = perf_counter()
@@ -897,6 +916,7 @@ def answer_corpus_with_citations(
             stage_timings.validation_ms = _elapsed_ms(validation_started_at)
             if validation.action == 'accept':
                 answer = generated_answer
+                generated = True
             elif validation.action == 'no_answer':
                 return _no_answer(
                     validation.reason or 'generated_answer_rejected',
@@ -914,6 +934,7 @@ def answer_corpus_with_citations(
         status='answer',
         no_answer=False,
         answer=answer,
+        generated=generated,
         claims=claims,
         citations=citations,
         limitations=limitations,

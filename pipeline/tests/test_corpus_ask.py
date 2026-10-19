@@ -295,6 +295,53 @@ def test_validate_generated_answer_accepts_faithful_short_answer(tmp_path: Path)
     assert validation.reason is None
 
 
+def _title_claim(text: str) -> AnswerClaim:
+    citation = Citation(
+        note_id='vlan', note_version=1, chunk_id='vlan::1', snippet=text, source_path='VLAN.md', char_start=0, char_end=20
+    )
+    return AnswerClaim(text=text, citations=[citation], support_level='partial')
+
+
+VLAN_CONTEXT = (
+    '[1]\nsource_path: VLAN.md\ntitle: VLAN\nnote_id: vlan\nchunk_id: vlan::1\nclaim_extrativo: VLAN - [!note]\n'
+    'trecho:\nVLAN faz a segmentação lógica da rede em switches, com isolamento entre portas trunk e access.'
+)
+
+
+def test_validate_generated_answer_mede_sobreposicao_contra_o_trecho_e_nao_so_o_titulo() -> None:
+    validation = validate_generated_answer(
+        'o que é VLAN?',
+        'Inicialmente, VLAN faz a segmentação lógica da rede, com isolamento entre portas trunk e access.',
+        [VLAN_CONTEXT],
+        [_title_claim('VLAN - [!note]')],
+    )
+
+    assert validation.action == 'accept'
+
+
+def test_validate_generated_answer_barra_nome_inventado_no_meio_da_frase() -> None:
+    validation = validate_generated_answer(
+        'o que é VLAN?',
+        'VLAN faz a segmentação lógica da rede, segundo a Juniper, com portas trunk e access.',
+        [VLAN_CONTEXT],
+        [_title_claim('VLAN - [!note]')],
+    )
+
+    assert validation.reason == 'unsupported_anchor'
+
+
+def test_validate_generated_answer_ignora_eco_do_cabecalho_do_contexto() -> None:
+    validation = validate_generated_answer(
+        'vlan',
+        'source_path: VLAN.md\ntitle: VLAN\nnote_id: vlan',
+        [VLAN_CONTEXT],
+        [_title_claim('VLAN - [!note]')],
+    )
+
+    assert validation.action == 'fallback_extractive'
+    assert validation.reason == 'echoed_context_metadata'
+
+
 def test_answer_corpus_with_citations_stitches_multiple_files(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     root = tmp_path / 'corpus'
@@ -590,6 +637,7 @@ def test_answer_corpus_calls_answer_provider_only_after_citations(tmp_path: Path
 
     assert response.status == 'answer'
     assert response.answer == 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    assert response.generated is True
     assert response.citations
     assert len(provider.calls) == 1
     question, contexts = provider.calls[0]
@@ -617,6 +665,7 @@ def test_answer_corpus_falls_back_when_generated_answer_has_unsupported_number(t
     assert response.status == 'answer'
     assert '64 KB' not in (response.answer or '')
     assert 'RabbitMQ foi adotado' in (response.answer or '')
+    assert response.generated is False
     assert any('unsupported_number' in limitation for limitation in response.limitations)
 
 
