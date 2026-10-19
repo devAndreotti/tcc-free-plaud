@@ -10,6 +10,7 @@ UNKNOWN_REASON = 'desconhecido'
 # ponytail: o código sai do texto da limitação, porque a validação não expõe o reason quando troca a
 # resposta gerativa pela extrativa. Se o AskResponse passar a carregar esse reason, trocar esta tabela por ele.
 _LIMITATION_MARKERS: tuple[tuple[str, str], ...] = (
+    ('só marcações de fonte', 'empty_generated_answer'),
     ('unsupported_number:', 'unsupported_number'),
     ('unsupported_anchor:', 'unsupported_anchor'),
     ('repetiu os metadados', 'echoed_context_metadata'),
