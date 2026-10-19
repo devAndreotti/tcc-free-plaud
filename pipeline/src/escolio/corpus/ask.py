@@ -318,6 +318,13 @@ def validate_generated_answer(
     _ = question
     # Os [n] são só ponteiros para o contexto: número, anchor e sobreposição são checados sem eles.
     cleaned_answer = _without_answer_markers(answer).strip()
+    # O qchat às vezes devolve só "[1]": sem os marcadores não sobra texto, e nada abaixo recusaria.
+    if not any(char.isalnum() for char in cleaned_answer):
+        return GeneratedAnswerValidation(
+            action='fallback_extractive',
+            reason='empty_generated_answer',
+            limitations=['Resposta generativa ignorada: o modelo devolveu só marcações de fonte, sem texto.'],
+        )
     if cleaned_answer.startswith('NAO_ENCONTRADO') or cleaned_answer == NO_ANSWER_SENTINEL:
         return GeneratedAnswerValidation(
             action='no_answer',

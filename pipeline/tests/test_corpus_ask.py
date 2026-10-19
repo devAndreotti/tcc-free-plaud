@@ -726,6 +726,24 @@ def test_answer_corpus_drops_only_markers_without_context(tmp_path: Path) -> Non
     assert response.answer == 'RabbitMQ foi adotado como message broker padrao do pipeline. [1] Ele segue o padrao da equipe.'
 
 
+def test_answer_corpus_resposta_so_com_marcadores_volta_para_a_extrativa(tmp_path: Path) -> None:
+    # Regressão: o qchat devolveu só "[1]" numa pergunta real e a tela mostrou "[1]" como resposta.
+    connection = _indexed_connection(tmp_path)
+
+    for texto in ('[1]', ' [1] [2]. '):
+        response = answer_corpus_with_citations(
+            'Qual message broker foi adotado?',
+            connection=connection,
+            strategy='lexical',
+            top_k=4,
+            answer_provider=StreamingAnswerProvider(texto),
+        )
+
+        assert response.generated is False
+        assert response.answer and 'RabbitMQ' in response.answer
+        assert any('só marcações de fonte' in limitation for limitation in response.limitations)
+
+
 def test_answer_corpus_abstains_when_question_term_is_not_in_any_note(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     root = tmp_path / 'corpus'

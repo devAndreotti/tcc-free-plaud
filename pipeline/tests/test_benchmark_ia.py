@@ -114,6 +114,7 @@ def _linha(**campos) -> BenchmarkQueryResult:
 
 def test_limitacao_da_validacao_vira_o_mesmo_codigo_do_motivo() -> None:
     casos = {
+        'empty_generated_answer': ('[1]', 'O prazo e curto.'),
         'echoed_context_metadata': ('Resposta: source_path: nota.md', 'O prazo e curto.'),
         'unsupported_number': ('O limite e 987654 requisicoes por minuto.', 'O limite e 10 requisicoes por minuto.'),
         'unsupported_anchor': ('O padrao adotado e o Zorbax.', 'O padrao adotado e o Kafka.'),
