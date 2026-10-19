@@ -110,6 +110,8 @@ class AskResponse(BaseModel):
     status: Literal['answer', 'no_answer']
     no_answer: bool
     answer: str | None
+    # True quando `answer` é o texto do provider generativo (validado); False é a junção dos claims.
+    generated: bool = False
     claims: list[AnswerClaim] = Field(default_factory=list)
     citations: list[Citation] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)

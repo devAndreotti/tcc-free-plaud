@@ -107,6 +107,24 @@ export function buildGraph(
   return { nodes, edges };
 }
 
+// ─── Foco vindo do chat ──────────────────────────────────────────────────────
+
+/** Hover numa fonte da resposta destaca a nota no grafo; detail = note_id, ou null para soltar. */
+export const GRAPH_FOCUS_EVENT = 'escolio:graph-focus';
+
+export function focusNoteInGraph(noteId: string | null) {
+  window.dispatchEvent(new CustomEvent<string | null>(GRAPH_FOCUS_EVENT, { detail: noteId }));
+}
+
+/** O nó e as pastas acima dele até a raiz ("de onde veio"); vazio se o nó não está no grafo. */
+export function pathToRoot(id: string, nodes: SimNode[], edges: SimEdge[]): string[] {
+  if (!nodes.some((n) => n.id === id)) return [];
+  const parent = new Map(edges.map((e) => [e.target, e.source]));
+  const chain = [id];
+  for (let p = parent.get(id); p !== undefined && !chain.includes(p); p = parent.get(p)) chain.push(p);
+  return chain;
+}
+
 // ─── Câmera que enquadra todos os nós ────────────────────────────────────────
 
 export function fitCamera(nodes: SimNode[], width: number, height: number): Camera {

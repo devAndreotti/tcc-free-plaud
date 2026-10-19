@@ -25,6 +25,7 @@ import threading
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import get_args
 
 try:
     import webview
@@ -55,7 +56,7 @@ from escolio.corpus.dropped import DroppedFileIndexer
 from escolio.corpus.jobs import cancel_index_job, corpus_write_lock, get_index_job, index_job_manager, start_index_job
 from escolio.corpus.runtime import CorpusRuntime
 from escolio.notes.service import delete_note, get_note_detail, list_notes, reindex_note
-from escolio.providers.answer import test_answer_provider
+from escolio.providers.answer import AnswerProviderName, test_answer_provider
 from escolio.providers.model_discovery import list_answer_models
 from escolio.retrieval.models import AskResponse
 from escolio.ingest.validators import SUPPORTED_EXTENSIONS
@@ -328,6 +329,7 @@ class Api:
         payload['strategy'] = resolved
         payload['top_k'] = settings.retrieval_top_k
         payload['answer_provider'] = settings.answer_provider
+        payload['answer_model'] = settings.answer_model
         return payload
 
     def listCorpusRoots(self) -> list[dict]:
@@ -414,11 +416,23 @@ class Api:
             'changes': {key: change.model_dump(mode='json') for key, change in result.changes.items()},
         }
 
-    def testAnswerProvider(self) -> dict:
-        return test_answer_provider().model_dump(mode='json')
+    def _answer_settings(self, provider: str | None, model: str | None, base_url: str | None):
+        """Settings salvas com o que está na tela (rascunho): testar e listar antes de salvar."""
+        update: dict = {}
+        if provider in get_args(AnswerProviderName):
+            update['answer_provider'] = provider
+        if model and model.strip():
+            update['answer_model'] = model.strip()
+        if base_url is not None:
+            update['answer_base_url'] = base_url.strip() or None
+        settings = get_settings()
+        return settings.model_copy(update=update) if update else settings
 
-    def listAnswerModels(self) -> dict:  # NOSONAR - contrato publico do PyWebView consumido pelo front.
-        return list_answer_models().model_dump(mode='json')
+    def testAnswerProvider(self, provider: str | None = None, model: str | None = None, base_url: str | None = None) -> dict:
+        return test_answer_provider(self._answer_settings(provider, model, base_url)).model_dump(mode='json')
+
+    def listAnswerModels(self, provider: str | None = None, base_url: str | None = None) -> dict:  # NOSONAR - contrato publico do PyWebView consumido pelo front.
+        return list_answer_models(self._answer_settings(provider, None, base_url)).model_dump(mode='json')
 
     def saveApiKey(self, api_key: str) -> dict:
         path = save_answer_api_key(api_key)

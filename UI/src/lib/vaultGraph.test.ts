@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MarkdownNode } from './vaultGraph';
-import { buildGraph, fitCamera, tick } from './vaultGraph';
+import { buildGraph, fitCamera, pathToRoot, tick } from './vaultGraph';
 
 const note = (path: string): MarkdownNode => ({
   id: path,
@@ -26,6 +26,18 @@ describe('vaultGraph (regressão do grafo bagunçado)', () => {
     expect(edges).toContainEqual({ source: 'dir:', target: 'dir:A' });
     expect(edges).toContainEqual({ source: 'dir:', target: 'raiz.md' });
     expect(nodes.find((n) => n.id === 'dir:Estudos')?.degree).toBe(31);
+  });
+
+  it('pathToRoot devolve a nota e as pastas até a raiz (destaque da fonte no grafo)', () => {
+    const { nodes, edges } = buildGraph([note('Estudos/Cisco/Cisco.md'), note('raiz.md')], 400, 400);
+
+    expect(pathToRoot('Estudos/Cisco/Cisco.md', nodes, edges)).toEqual([
+      'Estudos/Cisco/Cisco.md',
+      'dir:Estudos/Cisco',
+      'dir:Estudos',
+      'dir:',
+    ]);
+    expect(pathToRoot('outra-vault.md', nodes, edges)).toEqual([]);
   });
 
   it('reconstruir com os mesmos ids mantém as posições (rescan não embaralha)', () => {

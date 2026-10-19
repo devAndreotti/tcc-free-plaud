@@ -366,9 +366,9 @@ def test_desktop_api_tests_answer_provider(monkeypatch) -> None:
     monkeypatch.setattr(
         module,
         "test_answer_provider",
-        lambda: AnswerProviderTestResult(
-            provider="ollama",
-            model="llama3.1:8b",
+        lambda settings: AnswerProviderTestResult(
+            provider=settings.answer_provider,
+            model=settings.answer_model,
             base_url="http://localhost:11434/v1",
             status="ok",
             latency_ms=7,
@@ -379,7 +379,6 @@ def test_desktop_api_tests_answer_provider(monkeypatch) -> None:
     result = module.Api().testAnswerProvider()
 
     assert result["status"] == "ok"
-    assert result["provider"] == "ollama"
     assert result["latency_ms"] == 7
 
 
@@ -388,12 +387,12 @@ def test_desktop_api_lists_answer_models(monkeypatch) -> None:
     monkeypatch.setattr(
         module,
         "list_answer_models",
-        lambda: ModelDiscoveryResult(
+        lambda settings: ModelDiscoveryResult(
             provider="ollama",
             base_url="http://localhost:11434",
             status="ok",
             models=[
-                ModelInfo(id="llama3.1:8b", label="llama3.1:8b", provider="ollama")
+                ModelInfo(id="qchat:latest", label="qchat:latest", provider="ollama")
             ],
             latency_ms=9,
         ),
@@ -403,8 +402,30 @@ def test_desktop_api_lists_answer_models(monkeypatch) -> None:
 
     assert result["status"] == "ok"
     assert result["provider"] == "ollama"
-    assert result["models"][0]["id"] == "llama3.1:8b"
+    assert result["models"][0]["id"] == "qchat:latest"
     assert "api_key" not in result
+
+
+def test_desktop_api_testar_e_listar_usam_o_que_esta_na_tela_sem_salvar(monkeypatch, tmp_path: Path) -> None:
+    module = _load_ui_main(monkeypatch)
+    api = module.Api()
+    monkeypatch.setattr(module, "get_settings", lambda: Settings(results_dir=tmp_path))  # salvo: extractive
+    seen: list[Settings] = []
+
+    def capture(settings: Settings):
+        seen.append(settings)
+        return SimpleNamespace(model_dump=lambda mode: {})
+
+    monkeypatch.setattr(module, "test_answer_provider", capture)
+    monkeypatch.setattr(module, "list_answer_models", capture)
+
+    api.testAnswerProvider("ollama", " qchat:latest ", "")
+    api.listAnswerModels("lmstudio", "http://127.0.0.1:1234/v1")
+    api.testAnswerProvider("nao-existe", None, None)
+
+    assert (seen[0].answer_provider, seen[0].answer_model, seen[0].answer_base_url) == ("ollama", "qchat:latest", None)
+    assert (seen[1].answer_provider, seen[1].answer_base_url) == ("lmstudio", "http://127.0.0.1:1234/v1")
+    assert seen[2].answer_provider == "extractive"  # provedor desconhecido não passa
 
 
 def test_desktop_api_saves_backend_setting(monkeypatch, tmp_path: Path) -> None:

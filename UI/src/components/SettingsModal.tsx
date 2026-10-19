@@ -49,6 +49,24 @@ const PRESET_KEY_LABELS: Record<string, string> = { embedding_model: 'Modelo de 
 
 const MODEL_STATUS: Record<string, string> = { offline: 'offline', unauthorized: 'sem autorização', error: 'erro' };
 
+// URL que o backend usa com o campo vazio (providers/answer.py::_default_base_url).
+const PROVIDER_DEFAULT_URL: Record<string, string> = {
+  ollama: 'http://localhost:11434/v1',
+  lmstudio: 'http://localhost:1234/v1',
+  'openai-compatible': 'https://api.openai.com/v1',
+};
+const PROVIDER_LABEL: Record<string, string> = { ollama: 'Ollama', lmstudio: 'LM Studio', 'openai-compatible': 'provedor' };
+// IA local: os modelos instalados aparecem sozinhos ao abrir a aba (remoto só lista no botão).
+const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio']);
+
+// "3.1B · Q4_K_M · 2,3 GB" com o que o Ollama informa; o LM Studio não manda esses dados.
+const modelDescription = (details: Record<string, unknown>) => {
+  const size = typeof details.size === 'number'
+    ? `${(details.size / 1e9).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} GB`
+    : null;
+  return [details.parameter_size, details.quantization_level, size].filter(Boolean).join(' · ') || undefined;
+};
+
 export type SettingsTab = 'geral' | 'vaults' | 'ia' | 'voz' | 'avancado' | 'aparencia';
 
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
@@ -161,6 +179,27 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
       setIsRunningDoctor(false);
     }
   };
+
+  // Provedor e URL que estão na tela (ainda não salvos): Testar e Listar usam estes.
+  const draftProvider = settingDrafts.answer_provider || backendSettings?.answer_provider || 'extractive';
+  const draftBaseUrl = settingDrafts.answer_base_url ?? '';
+
+  // IA local: lista os modelos instalados ao abrir a aba e ao trocar provedor ou URL.
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'ia' || !LOCAL_PROVIDERS.has(draftProvider)) return undefined;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      bridge.listAnswerModels({ provider: draftProvider, baseUrl: draftBaseUrl })
+        .then((result) => {
+          if (!cancelled) setModelDiscovery(result);
+        })
+        .catch((error) => console.error('[SettingsModal] Erro ao listar modelos:', error));
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isOpen, activeTab, draftProvider, draftBaseUrl]);
 
   const pendingChanges = useMemo(() => {
     if (!backendSettings) return 0;
@@ -322,11 +361,16 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     if (isTestingProvider) return;
     setIsTestingProvider(true);
     try {
-      const result = await bridge.testAnswerProvider();
+      const result = await bridge.testAnswerProvider({
+        provider: draftProvider,
+        model: settingDrafts.answer_model ?? '',
+        baseUrl: draftBaseUrl,
+      });
+      const name = PROVIDER_LABEL[result.provider] ?? result.provider;
       setToast(
         result.error
-          ? { tone: 'error', text: `O teste do ${result.provider} falhou: ${result.error}` }
-          : { tone: 'ok', text: `${result.provider} respondeu em ${result.latency_ms} ms.` }
+          ? { tone: 'error', text: `O teste do ${name} falhou: ${result.error}` }
+          : { tone: 'ok', text: `${name} respondeu em ${result.latency_ms} ms com ${result.model}.` }
       );
     } catch (error) {
       console.error('[SettingsModal] Erro ao testar provider:', error);
@@ -341,19 +385,14 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     setIsListingModels(true);
     setToast(null);
     try {
-      // O resultado aparece logo abaixo dos botões; o aviso flutuante fica para erros.
-      setModelDiscovery(await bridge.listAnswerModels());
+      // O resultado vira a lista do campo Modelo; o aviso flutuante fica para erros.
+      setModelDiscovery(await bridge.listAnswerModels({ provider: draftProvider, baseUrl: draftBaseUrl }));
     } catch (error) {
       console.error('[SettingsModal] Erro ao listar modelos:', error);
       setToast({ tone: 'error', text: 'Não foi possível listar os modelos.' });
     } finally {
       setIsListingModels(false);
     }
-  };
-
-  // A barra de salvar aparece com a alteração pendente; não precisa de aviso extra.
-  const handleSelectModel = (modelId: string) => {
-    setSettingDrafts((prev) => ({ ...prev, answer_model: modelId }));
   };
 
   const discardDrafts = () => {
@@ -496,7 +535,22 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const catalogLabel = (key: string) =>
     backendSettings?.settings_catalog.find((row) => row.key === key)?.label ?? PRESET_KEY_LABELS[key] ?? key;
   // Modelo, URL, API key, Testar e Listar só existem para provedores generativos.
-  const isGenerative = (settingDrafts.answer_provider || backendSettings?.answer_provider || 'extractive') !== 'extractive';
+  const isGenerative = draftProvider !== 'extractive';
+  const needsApiKey = draftProvider === 'openai-compatible';
+  const providerLabel = PROVIDER_LABEL[draftProvider] ?? draftProvider;
+  // Lista de modelos só vale para o provedor que está na tela (trocar de provedor descarta a anterior).
+  const discovered = modelDiscovery?.provider === draftProvider ? modelDiscovery : null;
+  const draftModel = settingDrafts.answer_model ?? '';
+  // "qchat" e "qchat:latest" são o mesmo modelo no Ollama: a opção fica com a grafia salva.
+  const isDraftModel = (id: string) => id === draftModel || id === `${draftModel}:latest`;
+  const modelOptions: SettingOption[] = (discovered?.models ?? []).map((model) => ({
+    value: isDraftModel(model.id) ? draftModel : model.id,
+    label: model.label,
+    description: modelDescription(model.details),
+  }));
+  if (modelOptions.length > 0 && draftModel && !modelOptions.some((option) => option.value === draftModel)) {
+    modelOptions.push({ value: draftModel, label: draftModel, description: `Não está instalado no ${providerLabel}: escolha um da lista.` });
+  }
   const iaCatalogRows = backendSettings?.settings_catalog.filter((row) => IA_CATALOG_KEYS.includes(row.key) && !row.secret) ?? [];
   const advancedRows = backendSettings?.settings_catalog.filter(
     (row) => !row.secret && row.group !== 'Áudio' && !IA_CATALOG_KEYS.includes(row.key)
@@ -657,37 +711,52 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                 </h3>
                 <p className="settings-section__lede">Como a resposta é escrita a partir dos trechos das suas notas.</p>
 
-                {iaCatalogRows.filter((row) => isGenerative || row.key === 'answer_provider').map((row) => renderSettingRow(row))}
+                {iaCatalogRows
+                  .filter((row) => isGenerative || row.key === 'answer_provider')
+                  .map((row) => {
+                    // Modelo: lista do que está instalado no provedor; URL: o padrão do provedor escolhido.
+                    if (row.key === 'answer_model' && modelOptions.length > 0) return renderSettingRow(row, modelOptions);
+                    if (row.key === 'answer_base_url') {
+                      return renderSettingRow({ ...row, placeholder: PROVIDER_DEFAULT_URL[draftProvider] ?? row.placeholder });
+                    }
+                    return renderSettingRow(row);
+                  })}
 
                 {isGenerative ? (
                     <div className="settings-item settings-item--stacked">
                     <div className="settings-item__info">
-                      <span className="settings-item__label">API key</span>
+                      <span className="settings-item__label">{needsApiKey ? 'API key' : 'Conexão'}</span>
                       <span className="settings-item__description">
-                        {backendSettings?.answer_api_key_configured ? 'Configurada no .env local.' : 'Ausente.'} Teste o provedor ou liste os modelos dele.
+                        {needsApiKey
+                          ? `${backendSettings?.answer_api_key_configured ? 'Configurada no .env local.' : 'Ausente.'} Teste o provedor ou liste os modelos dele.`
+                          : `Roda no seu computador, sem API key. Testar manda uma pergunta curta ao ${providerLabel} com o modelo escolhido.`}
                       </span>
                     </div>
 
-                    <div className="vault-picker" role="group" aria-label="Salvar API key local">
-                      <input
-                        id="input-api-key"
-                        type="password"
-                        className="vault-picker__input"
-                        value={apiKey}
-                        placeholder="ESCOLIO_ANSWER_API_KEY"
-                        aria-label="API key"
-                        onChange={(event) => setApiKey(event.target.value)}
-                      />
-                      <button
-                        id="btn-save-api-key"
-                        type="button"
-                        className="btn"
-                        onClick={handleSaveApiKey}
-                        disabled={isSavingApiKey}
-                        aria-label="Salvar API key"
-                      >
-                        {isSavingApiKey ? 'Salvando…' : 'Salvar'}
-                      </button>
+                    <div className="vault-picker" role="group" aria-label={needsApiKey ? 'Salvar API key local' : `Conexão com o ${providerLabel}`}>
+                      {needsApiKey && (
+                        <>
+                          <input
+                            id="input-api-key"
+                            type="password"
+                            className="vault-picker__input"
+                            value={apiKey}
+                            placeholder="ESCOLIO_ANSWER_API_KEY"
+                            aria-label="API key"
+                            onChange={(event) => setApiKey(event.target.value)}
+                          />
+                          <button
+                            id="btn-save-api-key"
+                            type="button"
+                            className="btn"
+                            onClick={handleSaveApiKey}
+                            disabled={isSavingApiKey}
+                            aria-label="Salvar API key"
+                          >
+                            {isSavingApiKey ? 'Salvando…' : 'Salvar'}
+                          </button>
+                        </>
+                      )}
                       <button
                         id="btn-test-provider"
                         type="button"
@@ -709,31 +778,19 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                         {isListingModels ? 'Listando…' : 'Listar modelos'}
                       </button>
                     </div>
-                    {modelDiscovery && (
+                    {discovered && (
                       <div className="settings-discovery" aria-live="polite">
                         <span className="settings-inline-status">
-                          {modelDiscovery.models.length} {modelDiscovery.models.length === 1 ? 'modelo' : 'modelos'} no{' '}
-                          {modelDiscovery.provider} · {modelDiscovery.latency_ms} ms{modelDiscovery.cached ? ' · em cache' : ''}
-                          {modelDiscovery.status !== 'ok' && ` · ${MODEL_STATUS[modelDiscovery.status] ?? modelDiscovery.status}`}
+                          {discovered.models.length} {discovered.models.length === 1 ? 'modelo' : 'modelos'} no {providerLabel} ·{' '}
+                          {discovered.latency_ms} ms{discovered.cached ? ' · em cache' : ''}
+                          {discovered.status !== 'ok' && ` · ${MODEL_STATUS[discovered.status] ?? discovered.status}`}
                         </span>
-                        {modelDiscovery.message && (
-                          <span className="settings-warning">{modelDiscovery.message}</span>
-                        )}
-                        {modelDiscovery.models.length > 0 && (
-                          <ul className="settings-model-list" aria-label="Modelos encontrados">
-                            {modelDiscovery.models.map((model) => (
-                              <li key={model.id} className="settings-model-list__item">
-                                <button
-                                  type="button"
-                                  className="btn btn--sm settings-model-option"
-                                  onClick={() => handleSelectModel(model.id)}
-                                  aria-label={`Selecionar ${model.label}`}
-                                >
-                                  {model.label}
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
+                        {discovered.status === 'offline' && LOCAL_PROVIDERS.has(draftProvider) ? (
+                          <span className="settings-warning">
+                            O {providerLabel} não respondeu em {discovered.base_url}. Abra o {providerLabel} e clique em Listar modelos.
+                          </span>
+                        ) : (
+                          discovered.message && <span className="settings-warning">{discovered.message}</span>
                         )}
                       </div>
                     )}

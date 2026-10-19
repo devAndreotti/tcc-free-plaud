@@ -262,20 +262,38 @@ describe('SettingsModal', () => {
     expect(screen.getByText('Roda no processador. Funciona em qualquer PC.')).toBeTruthy();
   });
 
-  it('lista modelos e preenche draft de answer_model ao clicar', async () => {
+  it('IA local: lista os modelos instalados ao abrir a aba e o campo Modelo vira lista', async () => {
     const user = userEvent.setup();
     renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'IA' }));
-    await screen.findByLabelText('Modelo de resposta');
-    await user.click(screen.getByRole('button', { name: 'Listar modelos' }));
-    await screen.findByText('mistral:7b');
-    await user.click(screen.getByRole('button', { name: 'Selecionar mistral:7b' }));
+    const model = await screen.findByRole('combobox', { name: 'Modelo de resposta' });
+    expect(bridgeMock.listAnswerModels).toHaveBeenCalledWith({ provider: 'ollama', baseUrl: '' });
+    // O modelo salvo não está instalado: continua na lista, com o aviso
+    expect(screen.getByText('Não está instalado no Ollama: escolha um da lista.')).toBeTruthy();
+    // IA local não pede API key
+    expect(screen.queryByLabelText('API key')).toBeNull();
 
-    await waitFor(() => {
-      expect((screen.getByLabelText('Modelo de resposta') as HTMLInputElement).value).toBe('mistral:7b');
-    });
+    await user.click(model);
+    await user.click(within(screen.getByRole('listbox', { name: 'Modelo de resposta' })).getByRole('option', { name: 'mistral:7b' }));
+
+    expect(await screen.findByRole('region', { name: 'Alterações não salvas' })).toBeTruthy();
     expect(bridgeMock.saveBackendSetting).not.toHaveBeenCalled();
+  });
+
+  it('Testar usa o provedor e o modelo que estão na tela, mesmo sem salvar', async () => {
+    const user = userEvent.setup();
+    bridgeMock.testAnswerProvider.mockResolvedValue({
+      provider: 'ollama', model: 'mistral:7b', base_url: null, status: 'ok', latency_ms: 812, error: null,
+    });
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="ia" />);
+
+    await user.click(await screen.findByRole('combobox', { name: 'Modelo de resposta' }));
+    await user.click(within(screen.getByRole('listbox', { name: 'Modelo de resposta' })).getByRole('option', { name: 'mistral:7b' }));
+    await user.click(screen.getByRole('button', { name: 'Testar provider' }));
+
+    expect(bridgeMock.testAnswerProvider).toHaveBeenCalledWith({ provider: 'ollama', model: 'mistral:7b', baseUrl: '' });
+    expect(await screen.findByText('Ollama respondeu em 812 ms com mistral:7b.')).toBeTruthy();
   });
 
   it('baixa modelo de voz nao instalado e reflete progresso ate completed', async () => {
@@ -518,9 +536,25 @@ describe('SettingsModal', () => {
     expect(screen.queryByRole('region', { name: 'Alterações não salvas' })).toBeNull();
   });
 
-  it('mostra estado offline sem quebrar modal', async () => {
-    const user = userEvent.setup();
-    bridgeMock.listAnswerModels.mockResolvedValueOnce({
+  it('modelo salvo sem a tag (qchat) é o mesmo que qchat:latest da lista: nada de "não instalado"', async () => {
+    bridgeMock.getBackendSettings.mockResolvedValue({
+      ...backendSettings,
+      settings_catalog: [{ ...backendSettings.settings_catalog[0], value: 'qchat', display_value: 'qchat' }, ...backendSettings.settings_catalog.slice(1)],
+    });
+    bridgeMock.listAnswerModels.mockResolvedValue({
+      provider: 'ollama', base_url: 'http://localhost:11434', status: 'ok', latency_ms: 5, cached: false, message: null,
+      models: [{ id: 'qchat:latest', label: 'qchat:latest', provider: 'ollama', details: { parameter_size: '3.1B', quantization_level: 'Q4_K_M' } }],
+    });
+
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="ia" />);
+
+    expect((await screen.findByRole('combobox', { name: 'Modelo de resposta' })).textContent).toContain('qchat:latest');
+    expect(screen.getByText('3.1B · Q4_K_M')).toBeTruthy();
+    expect(screen.queryByText(/Não está instalado/)).toBeNull();
+  });
+
+  it('IA local desligada: pede para abrir o app e deixa digitar o modelo', async () => {
+    bridgeMock.listAnswerModels.mockResolvedValue({
       provider: 'ollama',
       base_url: 'http://localhost:11434',
       status: 'offline',
@@ -530,14 +564,11 @@ describe('SettingsModal', () => {
       message: 'Servidor indisponivel.',
     });
 
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="ia" />);
 
-    await user.click(screen.getByRole('button', { name: 'IA' }));
-    await screen.findByLabelText('Modelo de resposta');
-    await user.click(screen.getByRole('button', { name: 'Listar modelos' }));
-
-    expect((await screen.findAllByText(/offline/)).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText(/Servidor indisponivel/)).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/O Ollama não respondeu em http:\/\/localhost:11434/)).toBeTruthy();
+    expect(screen.getAllByText(/offline/).length).toBeGreaterThan(0);
+    expect((screen.getByLabelText('Modelo de resposta') as HTMLInputElement).value).toBe('old-model');
   });
 
   it('regressão: clique no overlay fora do card chama onClose', async () => {
