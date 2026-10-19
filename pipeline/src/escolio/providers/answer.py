@@ -29,10 +29,8 @@ GROUNDED_SYSTEM_PROMPT = (
     'Nao crie exemplos, listas ou explicacoes que nao estejam nos CONTEXTOS. '
     'Se os CONTEXTOS nao responderem diretamente a PERGUNTA, responda exatamente: '
     f'{NO_ANSWER_SENTINEL} '
-    # Medido no experimento 17: "Termine cada frase com [1]" fazia o qchat (3B) responder só "[1]" em 34 de 39 perguntas.
     'Escreva a resposta em frases completas. No fim de cada frase, escreva entre colchetes o numero do CONTEXTO que a sustenta, '
-    'por exemplo: O VLAN separa dominios de broadcast [1]. '
-    'Nunca responda so com colchetes. '
+    'por exemplo: O VLAN separa dominios de broadcast [1]. Nunca responda so com colchetes. '
     'Preserve numeros, nomes e termos tecnicos exatamente como aparecem.'
 )
 
