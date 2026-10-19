@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import quantiles
@@ -7,6 +8,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from escolio.benchmark.answer_metrics import generation_discard_reason
 from escolio.benchmark.datasets import (
     BenchmarkDataset,
     BenchmarkSample,
@@ -24,6 +26,7 @@ from escolio.corpus.ask import answer_corpus_with_citations, retrieve_corpus_hit
 from escolio.ingest.loaders import load_document
 from escolio.notes.schemas import Note
 from escolio.notes.structurer import structure_document
+from escolio.providers.answer import AnswerProvider
 from escolio.providers.embed import Embedder
 from escolio.retrieval.indexer import index_note, index_note_in_vector_store
 from escolio.retrieval.models import Chunk, SearchHit
@@ -76,8 +79,13 @@ class BenchmarkQueryResult(BaseModel):
     reciprocal_rank: float
     latency_ms: int
     category: str | None = None
-    # Só na passada no corpus: o chat (extrativo) respondeu ou se absteve.
+    # Só na passada no corpus: o chat respondeu ou se absteve.
     answered: bool | None = None
+    # Só na passada no corpus: a resposta gerativa foi aceita, ou o código do motivo do descarte.
+    generated: bool | None = None
+    discard_reason: str | None = None
+    # Pergunta inteira no chat (recuperação e resposta), não só a busca.
+    question_latency_ms: int | None = None
 
 
 class BenchmarkRunResult(BaseModel):
@@ -99,6 +107,19 @@ class BenchmarkRunResult(BaseModel):
     duration_ms: int
 
 
+class BenchmarkAnswerMetrics(BaseModel):
+    """Resposta do chat sobre todas as perguntas do corpus. Sem provider generativo: taxa nula e motivos vazios."""
+
+    # Respostas com status `answer` (denominador da taxa de aceite).
+    answer_count: int
+    accepted_count: int
+    accepted_rate: float | None = None
+    # Código do motivo -> quantidade, incluindo as negativas que a validação trocou por abstenção.
+    discard_reasons: dict[str, int] = Field(default_factory=dict)
+    question_p50_ms: float = 0.0
+    question_p95_ms: float = 0.0
+
+
 class BenchmarkStrategySummary(BaseModel):
     strategy: str
     case_count: int
@@ -117,6 +138,8 @@ class BenchmarkStrategySummary(BaseModel):
     recall_at_5_ci: list[float] | None = None
     # Decisão de responder/abster-se do chat; só na passada no corpus.
     abstention: dict[str, float] | None = None
+    # Métricas da resposta gerativa do chat; só na passada no corpus.
+    answer_metrics: BenchmarkAnswerMetrics | None = None
 
 
 class BenchmarkCaseComparisonResult(BaseModel):
@@ -153,6 +176,9 @@ class BenchmarkComparisonResult(BaseModel):
     summaries: dict[str, BenchmarkStrategySummary]
     cases: list[BenchmarkCaseComparisonResult]
     corpus: BenchmarkCorpusResult | None = None
+    # Provider da resposta do chat usado na passada no corpus ('extractive' quando não há gerativo).
+    answer_provider: str = 'extractive'
+    answer_model: str | None = None
     started_at: datetime
     finished_at: datetime
     duration_ms: int
@@ -379,6 +405,21 @@ def run_benchmark(
     return run_result
 
 
+def _summarize_answer_metrics(rows: list[BenchmarkQueryResult], *, has_provider: bool) -> BenchmarkAnswerMetrics:
+    """Taxa de aceite sobre as respostas `answer`; latência p50/p95 da pergunta inteira."""
+    answer_count = sum(1 for row in rows if row.answered)
+    accepted_count = sum(1 for row in rows if row.generated)
+    latencies = [row.question_latency_ms for row in rows if row.question_latency_ms is not None]
+    return BenchmarkAnswerMetrics(
+        answer_count=answer_count,
+        accepted_count=accepted_count,
+        accepted_rate=accepted_count / answer_count if has_provider and answer_count else None,
+        discard_reasons=dict(sorted(Counter(row.discard_reason for row in rows if row.discard_reason).items())),
+        question_p50_ms=_percentile(latencies, 50),
+        question_p95_ms=_percentile(latencies, 95),
+    )
+
+
 def run_corpus_benchmark(
     cases: list[tuple[Note, BenchmarkDataset]],
     negatives: list[BenchmarkSample],
@@ -387,13 +428,14 @@ def run_corpus_benchmark(
     vector_store: LocalVectorStore,
     embedder: Embedder,
     top_k: int,
+    answer_provider: AnswerProvider | None = None,
 ) -> BenchmarkCorpusResult:
     """Mede o cenário do chat: todas as notas num corpus só, sem filtro por nota.
 
     Os rankings vêm de `retrieve_corpus_hits`, a mesma busca do chat, com profundidade 10. Um
     trecho só conta como relevante se for da nota do caso, então outra nota com os mesmos termos
-    é erro. A decisão de responder ou se abster vem de `answer_corpus_with_citations` sem provedor
-    gerativo (extrativo, determinístico), e as negativas medem se o chat se abstém quando o corpus
+    é erro. A decisão de responder ou se abster vem de `answer_corpus_with_citations` com
+    `answer_provider` (None é o extrativo, determinístico), e as negativas medem se o chat se abstém quando o corpus
     não tem a resposta. Espera as notas já gravadas em `connection` e `vector_store`.
     """
     # ponytail: notas de uma versão antiga da suite seguem no SQLite da comparação como distratoras
@@ -432,6 +474,7 @@ def run_corpus_benchmark(
                 embedder=embedder,
                 strategy=strategy,
                 top_k=top_k,
+                answer_provider=answer_provider,
             )
             answered = not response.no_answer
             if is_negative:
@@ -448,6 +491,9 @@ def run_corpus_benchmark(
                 positives.append(row)
             row.category = 'negativa' if is_negative else sample.category
             row.answered = answered
+            row.generated = response.generated
+            row.discard_reason = generation_discard_reason(response, has_provider=answer_provider is not None)
+            row.question_latency_ms = response.latency_ms
             rows.append(row)
             predicted_abstain.append(not answered)
             gold_abstain.append(is_negative)
@@ -462,6 +508,7 @@ def run_corpus_benchmark(
         summary.abstention['answered_positive_rate'] = (
             sum(1 for row in positives if row.answered) / len(positives) if positives else 0.0
         )
+        summary.answer_metrics = _summarize_answer_metrics(rows, has_provider=answer_provider is not None)
         summaries[strategy] = summary
         queries_by_strategy[strategy] = rows
 
@@ -501,6 +548,7 @@ def compare_benchmark_suite(
     hybrid_lexical_pool: int | None = None,
     hybrid_vector_pool: int | None = None,
     settings_snapshot: BenchmarkSettingsSnapshot | None = None,
+    answer_provider: AnswerProvider | None = None,
 ) -> BenchmarkComparisonResult:
     """Compara lexical, vector e hybrid em múltiplos documentos de forma reproduzível."""
     started_at = datetime.now(UTC)
@@ -594,6 +642,7 @@ def compare_benchmark_suite(
             vector_store=vector_store,
             embedder=embedder,
             top_k=top_k,
+            answer_provider=answer_provider,
         )
 
     finished_at = datetime.now(UTC)
@@ -620,6 +669,8 @@ def compare_benchmark_suite(
         },
         cases=case_results,
         corpus=corpus,
+        answer_provider=answer_provider.provider_name if answer_provider is not None else 'extractive',
+        answer_model=getattr(answer_provider, 'model', None),
         started_at=started_at,
         finished_at=finished_at,
         duration_ms=duration_ms,
