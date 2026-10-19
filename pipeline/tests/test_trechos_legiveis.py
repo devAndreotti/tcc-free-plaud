@@ -4,6 +4,7 @@ from pathlib import Path
 from escolio.corpus.ask import _build_corpus_claims, _citation_from_corpus_hit
 from escolio.ingest.loaders import load_document
 from escolio.notes.readable import readable_chunk_text
+from escolio.notes.service import _chunk_summary
 from escolio.notes.structurer import structure_document
 from escolio.retrieval.models import Chunk, SearchHit
 from escolio.retrieval.search import normalize_query_terms
@@ -51,6 +52,14 @@ def test_readable_chunk_text_remove_frontmatter_callout_wikilink_e_dataview() ->
         '**Cisco — Trilha de Cursos e Certificações**\n'
         'Este arquivo centraliza os cursos em switches e VLAN.'
     )
+
+
+def test_resumo_do_trecho_na_tela_de_notas_sai_legivel() -> None:
+    assert _chunk_summary(_hit('c1', CHUNK_CISCO).chunk).snippet == (
+        '**Cisco — Trilha de Cursos e Certificações** Este arquivo centraliza os cursos em switches e VLAN.'
+    )
+    # Trecho que é só frontmatter não fica vazio.
+    assert _chunk_summary(_hit('c2', '---\ntype: index\n---\n').chunk).snippet == '--- type: index ---'
 
 
 def test_readable_chunk_text_nao_apaga_lista_ou_chave_valor_antes_de_regra_horizontal() -> None:
