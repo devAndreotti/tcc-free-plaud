@@ -23,6 +23,8 @@ import sqlite3
 import sys
 import threading
 import json
+import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import get_args
@@ -59,6 +61,7 @@ from escolio.corpus.runtime import CorpusRuntime
 from escolio.notes.links import note_link_edges
 from escolio.notes.service import delete_note, get_note_detail, list_notes, reindex_note
 from escolio.providers.answer import AnswerProviderName, test_answer_provider
+from escolio.providers.answer_warmup import warm_up_answer_model
 from escolio.providers.model_discovery import list_answer_models
 from escolio.retrieval.models import AskResponse
 from escolio.ingest.validators import SUPPORTED_EXTENSIONS
@@ -102,6 +105,9 @@ class Api:
     def __init__(self) -> None:
         self.runtime: CorpusRuntime | None = None
         self.dropped_files: DroppedFileIndexer | None = None
+        self._ask_jobs: dict[str, dict] = {}  # respostas em streaming, por ask_id
+        self._answer_lock = threading.Lock()  # protege _ask_jobs e _warming
+        self._warming = False
         self._activate_vault(stop_watcher=False)
 
     def _activate_vault(self, stop_watcher: bool = True) -> None:
@@ -327,12 +333,86 @@ class Api:
         settings = get_settings()
         resolved = strategy if strategy in ASK_STRATEGIES else settings.default_ask_strategy
         response = ask_corpus(message, resolved, runtime=self.runtime, source_root=source_root or None)
+        return self._ask_payload(response, resolved)
+
+    def _ask_payload(self, response: AskResponse, strategy: str) -> dict:
+        settings = get_settings()
         payload = response.model_dump(mode='json', exclude={'debug'})
-        payload['strategy'] = resolved
+        payload['strategy'] = strategy
         payload['top_k'] = settings.retrieval_top_k
         payload['answer_provider'] = settings.answer_provider
         payload['answer_model'] = settings.answer_model
         return payload
+
+    def startAsk(self, message: str, strategy: str | None = None, source_root: str | None = None) -> dict:
+        """Começa a pergunta em segundo plano. pollAsk devolve as etapas e o texto que a IA já escreveu."""
+        resolved = strategy if strategy in ASK_STRATEGIES else get_settings().default_ask_strategy
+        ask_id = uuid.uuid4().hex
+        job = {'ask_id': ask_id, 'stage': 'retrieving', 'partial': '', 'result': None, 'error': None, 'finished_at': None}
+        with self._answer_lock:
+            self._prune_ask_jobs()
+            self._ask_jobs[ask_id] = job
+        threading.Thread(target=self._run_ask, args=(job, message, resolved, source_root or None), daemon=True).start()
+        return {'ask_id': ask_id}
+
+    def _run_ask(self, job: dict, message: str, strategy: str, source_root: str | None) -> None:
+        def on_delta(piece: str) -> None:
+            with self._answer_lock:
+                job['stage'] = 'writing'
+                job['partial'] += piece
+
+        try:
+            response = ask_corpus(
+                message, strategy, runtime=self.runtime, source_root=source_root, on_answer_delta=on_delta
+            )
+            outcome = {'stage': 'done', 'result': self._ask_payload(response, strategy)}
+        except Exception as exc:  # a thread não pode morrer calada: o erro vai para a tela
+            print(f'[Backend] Pergunta falhou: {exc}')
+            outcome = {'stage': 'error', 'error': str(exc) or 'Não foi possível responder.'}
+        with self._answer_lock:
+            job.update(outcome, finished_at=time.monotonic())
+
+    def pollAsk(self, ask_id: str) -> dict:
+        """Estado da pergunta. Ao terminar (done ou error) a entrega é única: o job sai do registro."""
+        with self._answer_lock:
+            job = self._ask_jobs.get(ask_id)
+            if job is None:
+                return {'ask_id': ask_id, 'stage': 'error', 'partial': '', 'result': None, 'error': 'Pergunta não encontrada.'}
+            snapshot = {key: job[key] for key in ('ask_id', 'stage', 'partial', 'result', 'error')}
+            if job['stage'] in ('done', 'error'):
+                del self._ask_jobs[ask_id]
+        return snapshot
+
+    def _prune_ask_jobs(self) -> None:
+        """Descarta respostas terminadas há mais de 10 min que ninguém consultou (chamar com _answer_lock)."""
+        limit = time.monotonic() - 600
+        expired = [key for key, job in self._ask_jobs.items() if job['finished_at'] is not None and job['finished_at'] < limit]
+        for key in expired:
+            del self._ask_jobs[key]
+
+    def warmAnswerModel(self) -> dict:
+        """Carrega o modelo do Ollama na VRAM em segundo plano. Nunca levanta exceção."""
+        try:
+            settings = get_settings()
+            if settings.answer_provider != 'ollama':
+                return {'ok': True, 'started': False}
+            with self._answer_lock:
+                if self._warming:
+                    return {'ok': True, 'started': False}
+                self._warming = True
+
+            def warm() -> None:
+                try:
+                    warm_up_answer_model(settings)
+                finally:
+                    with self._answer_lock:
+                        self._warming = False
+
+            threading.Thread(target=warm, daemon=True).start()
+            return {'ok': True, 'started': True}
+        except Exception as exc:
+            print(f'[Backend] Aquecimento do modelo falhou: {exc}')
+            return {'ok': False, 'started': False}
 
     def listCorpusRoots(self) -> list[dict]:
         """Pastas indexadas com notas, para o seletor de pasta do chat."""

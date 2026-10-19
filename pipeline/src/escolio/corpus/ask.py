@@ -1,5 +1,6 @@
 import re
 import sqlite3
+from collections.abc import Callable
 from time import perf_counter
 from typing import Literal
 
@@ -674,6 +675,7 @@ def answer_corpus_with_citations(
     answer_provider: AnswerProvider | None = None,
     include_debug: bool = False,
     source_root: str | None = None,
+    on_answer_delta: Callable[[str], None] | None = None,
 ) -> AskResponse:
     """Responde usando todo o corpus persistido (ou só a pasta `source_root`), mantendo citacoes por chunk."""
     started_at = perf_counter()
@@ -901,7 +903,10 @@ def answer_corpus_with_citations(
 
             provider_started_at = perf_counter()
             try:
-                generated_answer = answer_provider.answer(question, answer_contexts)
+                if on_answer_delta is not None and hasattr(answer_provider, 'answer_stream'):
+                    generated_answer = answer_provider.answer_stream(question, answer_contexts, on_answer_delta)
+                else:
+                    generated_answer = answer_provider.answer(question, answer_contexts)
             finally:
                 stage_timings.provider_ms = _elapsed_ms(provider_started_at)
 

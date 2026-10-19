@@ -545,6 +545,92 @@ def test_answer_corpus_debug_includes_provider_timings_and_identity(tmp_path: Pa
     assert response.debug.provider_model == 'fake-model'
 
 
+class StreamingAnswerProvider:
+    provider_name = 'fake-stream'
+    model = 'fake-model'
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.answer_calls = 0
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        self.answer_calls += 1
+        return self.text
+
+    def answer_stream(self, question: str, contexts: list[str], on_delta) -> str:
+        on_delta(self.text[:20])
+        on_delta(self.text[20:])
+        return self.text
+
+
+def _indexed_connection(tmp_path: Path):
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+    return connection
+
+
+def test_answer_corpus_usa_answer_stream_quando_recebe_callback(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+    text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    provider = StreamingAnswerProvider(text)
+    pieces: list[str] = []
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+        on_answer_delta=pieces.append,
+    )
+
+    assert pieces == [text[:20], text[20:]]
+    assert response.generated is True
+    assert response.answer == text
+    assert provider.answer_calls == 0
+
+
+def test_answer_corpus_stream_mantem_a_validacao_sobre_o_texto_final(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+    provider = StreamingAnswerProvider(
+        'RabbitMQ foi adotado como message broker padrao do pipeline com lote de 64 KB.'
+    )
+    pieces: list[str] = []
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+        on_answer_delta=pieces.append,
+    )
+
+    assert pieces  # o texto já foi repassado antes da validação
+    assert response.generated is False
+    assert '64 KB' not in (response.answer or '')
+    assert any('unsupported_number' in limitation for limitation in response.limitations)
+
+
+def test_answer_corpus_sem_callback_continua_usando_answer(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+    provider = StreamingAnswerProvider('RabbitMQ foi adotado como message broker padrao do pipeline.')
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+    )
+
+    assert response.generated is True
+    assert provider.answer_calls == 1
+
+
 def test_answer_corpus_abstains_when_question_term_is_not_in_any_note(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     root = tmp_path / 'corpus'

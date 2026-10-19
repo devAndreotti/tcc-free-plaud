@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal, Protocol
@@ -118,6 +119,17 @@ def _empty_answer_error_message(message: dict[str, object], finish_reason: objec
     return EMPTY_ANSWER_ERROR
 
 
+def _transport_error(exc: Exception) -> AnswerProviderError:
+    if isinstance(exc, HTTPError):
+        error_body = exc.read().decode('utf-8', errors='replace')
+        return AnswerProviderError(f'Provider respondeu HTTP {exc.code}: {error_body}')
+    if isinstance(exc, URLError):
+        return AnswerProviderError(f'Provider indisponivel: {exc.reason}')
+    if isinstance(exc, TimeoutError):
+        return AnswerProviderError('Provider excedeu timeout.')
+    return AnswerProviderError(INVALID_BASE_URL_ERROR)
+
+
 @dataclass
 class OpenAICompatibleAnswerProvider:
     base_url: str
@@ -128,43 +140,34 @@ class OpenAICompatibleAnswerProvider:
     timeout_seconds: int = 60
     provider_name: str = 'openai-compatible'
 
-    def answer(self, question: str, contexts: list[str]) -> str:
+    def _chat_request(self, question: str, contexts: list[str], *, stream: bool = False) -> Request:
         if not contexts:
             raise ValueError('Provider de resposta exige pelo menos um contexto citavel.')
         if not _is_http_base_url(self.base_url):
             raise AnswerProviderError(INVALID_BASE_URL_ERROR)
 
-        endpoint = f'{self.base_url.rstrip("/")}/chat/completions'
-        messages = build_grounded_chat_messages(question, contexts)
         payload: dict[str, object] = {
             'model': self.model,
-            'messages': messages,
+            'messages': build_grounded_chat_messages(question, contexts),
             'temperature': self.temperature,
         }
+        if stream:
+            payload['stream'] = True
         if self.max_tokens is not None:
             payload['max_tokens'] = self.max_tokens
         headers = {'Content-Type': 'application/json'}
         if self.api_key:
             headers['Authorization'] = f'Bearer {self.api_key}'
+        endpoint = f'{self.base_url.rstrip("/")}/chat/completions'
+        return Request(endpoint, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
 
-        request = Request(
-            endpoint,
-            data=json.dumps(payload).encode('utf-8'),
-            headers=headers,
-            method='POST',
-        )
+    def answer(self, question: str, contexts: list[str]) -> str:
+        request = self._chat_request(question, contexts)
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 body = response.read()
-        except HTTPError as exc:
-            error_body = exc.read().decode('utf-8', errors='replace')
-            raise AnswerProviderError(f'Provider respondeu HTTP {exc.code}: {error_body}') from exc
-        except URLError as exc:
-            raise AnswerProviderError(f'Provider indisponivel: {exc.reason}') from exc
-        except TimeoutError as exc:
-            raise AnswerProviderError('Provider excedeu timeout.') from exc
-        except ValueError as exc:
-            raise AnswerProviderError(INVALID_BASE_URL_ERROR) from exc
+        except (URLError, TimeoutError, ValueError) as exc:
+            raise _transport_error(exc) from exc
 
         try:
             decoded = json.loads(body.decode('utf-8'))
@@ -175,6 +178,16 @@ class OpenAICompatibleAnswerProvider:
         if not answer:
             raise AnswerProviderError(_empty_answer_error_message(message, finish_reason))
         return answer
+
+    def answer_stream(self, question: str, contexts: list[str], on_delta: Callable[[str], None]) -> str:
+        from escolio.providers.answer_stream import read_sse_answer  # evita ciclo
+
+        request = self._chat_request(question, contexts, stream=True)
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                return read_sse_answer(response, on_delta)
+        except (URLError, TimeoutError) as exc:
+            raise _transport_error(exc) from exc
 
 
 def _default_base_url(provider_name: AnswerProviderName, base_url: str | None) -> str:
