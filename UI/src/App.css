@@ -2091,6 +2091,23 @@
   animation: spin 0.8s linear infinite;
 }
 
+/* Cursor da resposta em escrita: pisca no fim do texto; com reduce motion fica parado. */
+.msg__cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 3px;
+  vertical-align: text-bottom;
+  background: var(--accent-blue-light);
+  animation: blink 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg__cursor {
+    animation: none;
+  }
+}
+
 .msg__answer {
   font: 16.5px/1.72 var(--font-read);
   color: var(--text-primary);
