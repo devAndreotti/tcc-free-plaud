@@ -617,3 +617,17 @@ def test_desktop_api_removes_corpus_root_only_with_confirmation_regressao(monkey
     assert calls == []
     assert api.removeCorpusRoot("D:/Notas/Culinaria", "REMOVER") == {"ok": True, "removed_notes": 3}
     assert calls == ["D:/Notas/Culinaria"]
+
+
+def test_desktop_api_save_conversations_devolve_erro_de_validacao(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+
+    def fake_save(payload: dict) -> None:
+        if "tabs" not in payload:
+            raise ValueError('Conversas: "tabs" precisa ser uma lista.')
+
+    monkeypatch.setattr(module, "save_conversations", fake_save)
+    api = module.Api()
+
+    assert api.saveConversations({}) == {"ok": False, "message": 'Conversas: "tabs" precisa ser uma lista.'}
+    assert api.saveConversations({"tabs": []}) == {"ok": True}

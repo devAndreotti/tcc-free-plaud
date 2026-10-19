@@ -18,6 +18,7 @@ import { bridge, type AskStrategy, type CorpusRoot } from './services/bridge';
 import { VaultsProvider } from './contexts/VaultsContext';
 import { useVaults } from './hooks/useVaults';
 import { QueueProvider } from './contexts/QueueContext';
+import { fromSavedConversations, toSavedConversations, type ConversationSnapshot } from './lib/conversations';
 
 // Gera ID único para mensagens e abas
 const generateId = () =>
@@ -74,6 +75,18 @@ const syncWithVaults = (chat: ChatState, vaultKey: string, vaultIds: string[]): 
   return { ...next, tabs: [...tabs, tab], activeTabId: tab.id, tabMessages: { ...tabMessages, [tab.id]: [] } };
 };
 
+// Abertura intocada: uma "Nova Conversa" vazia e nenhuma mensagem. Só nesse estado a conversa salva toma o lugar da aba vazia.
+const isUntouched = (chat: ChatState): boolean =>
+  chat.tabs.length === 1 &&
+  chat.tabs[0].label === 'Nova Conversa' &&
+  Object.values(chat.tabMessages).every((messages) => messages.length === 0);
+
+// Conversa salva que chega depois de o usuário já ter mexido: as salvas entram antes das dele, sem apagar nada.
+const withLoaded = (chat: ChatState, loaded: ConversationSnapshot): ChatState =>
+  isUntouched(chat)
+    ? { ...loaded, tabTyping: {} }
+    : { ...chat, tabs: [...loaded.tabs, ...chat.tabs], tabMessages: { ...loaded.tabMessages, ...chat.tabMessages } };
+
 // Estado de conversa vazia para reutilização
 const EMPTY_MESSAGES: MessageData[] = [];
 
@@ -111,13 +124,54 @@ function AppContent() {
   // Aba de outra vault à vista (clique, ou vizinha ao fechar uma aba): ativa a vault da conversa.
   // Até a troca terminar, o envio fica bloqueado, para a pergunta não ir ao corpus errado.
   const activeTabVault = activeTab?.vaultId ?? '';
-  const switchingVault = activeTabVault !== '' && activeTabVault !== vaultKey;
+  // Sem a lista de vaults ainda (abertura), uma aba restaurada espera a vault: não há troca a pedir.
+  const switchingVault = activeTabVault !== '' && vaultKey !== '' && activeTabVault !== vaultKey;
   useEffect(() => {
     if (!switchingVault) return;
     void selectVault(activeTabVault).then((result) => {
       if (!result.ok) console.error('[App] Não foi possível ativar a vault da conversa:', result.message);
     });
   }, [switchingVault, activeTabVault, selectVault]);
+
+  // Conversas salvas entre aberturas. A carga corre uma vez ao abrir; o salvamento só liga depois dela,
+  // para nunca gravar a tela vazia por cima do arquivo.
+  const [conversasCarregadas, setConversasCarregadas] = useState(false);
+  useEffect(() => {
+    let active = true;
+    bridge
+      .loadConversations()
+      .then((saved) => {
+        if (!active) return;
+        const loaded = fromSavedConversations(saved);
+        if (loaded) {
+          setChat((prev) => withLoaded(prev, loaded));
+          // Zerar a chave faz a sincronização com a vault rodar na renderização seguinte, já com a conversa restaurada.
+          setSyncedVaultsKey('');
+        }
+        setConversasCarregadas(true);
+      })
+      .catch((error: unknown) => {
+        // Sem a carga não se sabe o que está no arquivo: nesta abertura nada é gravado.
+        console.error('[App] Não foi possível carregar as conversas salvas:', error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Grava 500 ms depois da última mudança (a digitação não entra); fechar uma aba também sai no arquivo.
+  useEffect(() => {
+    if (!conversasCarregadas) return;
+    const timer = window.setTimeout(() => {
+      bridge
+        .saveConversations(toSavedConversations({ tabs, activeTabId, tabMessages }))
+        .then((result) => {
+          if (!result.ok) console.error('[App] Conversas não salvas:', result.message);
+        })
+        .catch((error: unknown) => console.error('[App] Não foi possível salvar as conversas:', error));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [conversasCarregadas, tabs, activeTabId, tabMessages]);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);

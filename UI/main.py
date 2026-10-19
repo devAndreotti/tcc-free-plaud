@@ -46,6 +46,7 @@ from escolio.app.vaults import (
     set_active,
     update_vault,
 )
+from escolio.app.conversations import load_conversations, save_conversations
 from escolio.app.doctor import run_doctor
 from escolio.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
 from escolio.app.settings_catalog import save_catalog_setting, save_catalog_settings, settings_catalog_payload
@@ -451,6 +452,16 @@ class Api:
         save_catalog_settings(values)
         self.runtime.clear()
         return self.getBackendSettings()
+
+    def loadConversations(self) -> dict | None:
+        return load_conversations()
+
+    def saveConversations(self, payload: dict) -> dict:
+        try:
+            save_conversations(payload)
+        except ValueError as exc:
+            return {'ok': False, 'message': str(exc)}
+        return {'ok': True}
 
     def listNotes(self) -> list[dict]:
         return [note.model_dump(mode='json') for note in list_notes()]
