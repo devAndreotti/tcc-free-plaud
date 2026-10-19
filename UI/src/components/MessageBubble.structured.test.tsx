@@ -187,4 +187,35 @@ describe('MessageBubble com resposta estruturada', () => {
     expect(screen.getByText(limitation)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Buscar só por palavra-chave' })).toBeNull();
   });
+
+  it('clicar no título ou no corpo do card abre a nota no trecho citado', async () => {
+    const user = userEvent.setup();
+    const onOpenSource = vi.fn();
+    const a = cite(1, 'Projetos/Arquitetura.md');
+    render(<MessageBubble message={answer({ claims: [{ text: 'Afirmação.', citations: [a], support_level: 'direct' }], citations: [a] })} onOpenSource={onOpenSource} />);
+
+    await user.click(screen.getByRole('button', { name: 'Abrir Arquitetura no trecho citado' }));
+    expect(onOpenSource).toHaveBeenLastCalledWith('nota-1', 'nota-1::v1::ofs-1');
+
+    await user.click(screen.getByText('Trecho 1'));
+    expect(onOpenSource).toHaveBeenCalledTimes(2);
+    expect(onOpenSource).toHaveBeenLastCalledWith('nota-1', 'nota-1::v1::ofs-1');
+  });
+
+  it('Enter e Espaço com o card focado abrem a nota no trecho citado', async () => {
+    const user = userEvent.setup();
+    const onOpenSource = vi.fn();
+    const a = cite(1, 'Projetos/Arquitetura.md');
+    const { container } = render(
+      <MessageBubble message={answer({ claims: [{ text: 'Afirmação.', citations: [a], support_level: 'direct' }], citations: [a] })} onOpenSource={onOpenSource} />
+    );
+
+    (container.querySelector('.msg__source') as HTMLElement).focus();
+    await user.keyboard('{Enter}');
+    expect(onOpenSource).toHaveBeenCalledTimes(1);
+    expect(onOpenSource).toHaveBeenLastCalledWith('nota-1', 'nota-1::v1::ofs-1');
+
+    await user.keyboard(' ');
+    expect(onOpenSource).toHaveBeenCalledTimes(2);
+  });
 });

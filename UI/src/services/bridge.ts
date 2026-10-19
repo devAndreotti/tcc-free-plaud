@@ -897,24 +897,51 @@ const mockSettingRow = (row: MockSettingRow): SettingRow => ({
   ...row,
 });
 
-// Notas do grafo no modo navegador; as duas primeiras são as citadas por MOCK_CITATIONS.
-const mockVaultNote = (note_id: string, title: string, rel: string): NoteDetail => ({
+// Notas do grafo no modo navegador. As duas primeiras são as citadas por MOCK_CITATIONS: trazem os trechos citados
+// (mesmo chunk_id, snippet e offsets) no lugar do chunk genérico, para o destaque aparecer.
+const mockVaultNote = (note_id: string, title: string, rel: string, cited: NoteChunkSummary[] = []): NoteDetail => ({
   note_id,
   title,
   source_type: 'md',
   source_path: `D:\\Notas\\Obsidian\\${rel}`,
   created_at: '2026-10-18T12:00:00-03:00',
   tags: ['md'],
-  chunk_count: 1,
+  chunk_count: Math.max(cited.length, 1),
   structured_markdown: `# ${title}\n\n(mock) Nota de exemplo do modo navegador.`,
-  chunks: [
-    { chunk_id: `${note_id}::v1::0000`, chunk_index: 0, char_start: 0, char_end: 42, token_count: 8, snippet: '(mock) Nota de exemplo do modo navegador.' },
-  ],
+  chunks: cited.length
+    ? cited
+    : [{ chunk_id: `${note_id}::v1::0000`, chunk_index: 0, char_start: 0, char_end: 42, token_count: 8, snippet: '(mock) Nota de exemplo do modo navegador.' }],
 });
 
 const MOCK_VAULT_NOTES: NoteDetail[] = [
-  mockVaultNote('arquitetura--3f9a1c', 'Arquitetura do índice', 'Projetos\\escolio\\Arquitetura do índice.md'),
-  mockVaultNote('pipeline--b21e07', 'Pipeline de ingestão', 'Projetos\\escolio\\Pipeline de ingestão.md'),
+  mockVaultNote('arquitetura--3f9a1c', 'Arquitetura do índice', 'Projetos\\escolio\\Arquitetura do índice.md', [
+    {
+      chunk_id: 'arquitetura--3f9a1c::v1::ofs-000680-001480::9a41',
+      chunk_index: 0,
+      char_start: 680,
+      char_end: 1480,
+      token_count: 180,
+      snippet: 'O id de um chunk junta o id da nota, a versão e o deslocamento no texto.',
+    },
+    {
+      chunk_id: 'arquitetura--3f9a1c::v1::ofs-001360-002160::77c0',
+      chunk_index: 1,
+      char_start: 1360,
+      char_end: 2160,
+      token_count: 180,
+      snippet: 'Se o hash não mudou desde a última indexação, a nota entra como inalterada.',
+    },
+  ]),
+  mockVaultNote('pipeline--b21e07', 'Pipeline de ingestão', 'Projetos\\escolio\\Pipeline de ingestão.md', [
+    {
+      chunk_id: 'pipeline--b21e07::v2::ofs-000000-000800::1c3d',
+      chunk_index: 0,
+      char_start: 0,
+      char_end: 800,
+      token_count: 180,
+      snippet: 'Notas alteradas voltam para a fila e passam de novo pelo chunking.',
+    },
+  ]),
   mockVaultNote('roadmap--5c1d', 'Roadmap', 'Projetos\\escolio\\Roadmap.md'),
   mockVaultNote('benchmark--8e2a', 'Benchmark de busca', 'Projetos\\escolio\\Benchmark de busca.md'),
   mockVaultNote('vlan--11aa', 'VLAN', 'Estudos\\Redes\\VLAN.md'),

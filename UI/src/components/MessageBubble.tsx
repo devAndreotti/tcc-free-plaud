@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { AskCitation, AskResult, AskStage, AskStrategy } from '../services/bridge';
 import { focusNoteInGraph } from '../lib/vaultGraph';
-import { AlertTriangleIcon, CopyIcon, SearchIcon } from './Icons';
+import { AlertTriangleIcon, CopyIcon, ExternalIcon, SearchIcon } from './Icons';
 
 export type MessageRole = 'user' | 'assistant';
 
@@ -18,6 +18,8 @@ interface MessageBubbleProps {
   message: MessageData;
   /** Pergunta de novo com outra estratégia (usado no estado "sem resposta"). */
   onRetry?: (query: string, strategy: AskStrategy) => void;
+  /** Abre a nota da fonte no trecho citado (clique no card, ou Enter/Espaço com ele focado). */
+  onOpenSource?: (noteId: string, chunkId: string) => void;
 }
 
 const STRATEGY_LABEL: Record<string, string> = {
@@ -183,7 +185,7 @@ const NoAnswer = ({ ask, onRetry }: { ask: AskResult; onRetry?: MessageBubblePro
   </div>
 );
 
-const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
+const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?: MessageBubbleProps['onOpenSource'] }) => {
   const { claims, sources, support } = useSources(ask);
   const [hl, setHl] = useState<number | null>(null);
   const noteCount = new Set(sources.map((s) => s.note_id)).size;
@@ -256,10 +258,23 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
               className={`msg__source${hl === i ? ' is-hl' : ''}`}
               onMouseEnter={() => highlight(i)}
               onMouseLeave={() => highlight(null)}
+              onClick={() => onOpenSource?.(source.note_id, source.chunk_id)}
+              onKeyDown={(event) => {
+                // Só com o próprio card focado: Enter ou Espaço no título (botão) já dispara o clique.
+                if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+                event.preventDefault();
+                onOpenSource?.(source.note_id, source.chunk_id);
+              }}
+              tabIndex={onOpenSource ? 0 : undefined}
             >
               <span className="msg__source-n mono">{i + 1}</span>
               <div className="msg__source-body">
-                <div className="msg__source-title">{noteTitle(source)}</div>
+                <div className="msg__source-title">
+                  <button type="button" className="msg__source-open" aria-label={`Abrir ${noteTitle(source)} no trecho citado`}>
+                    {noteTitle(source)}
+                    <ExternalIcon size={12} />
+                  </button>
+                </div>
                 <div className="msg__source-path mono" title={source.source_path ?? source.note_id}>
                   {source.source_path ? shortPath(source.source_path) : source.note_id}
                 </div>
@@ -294,7 +309,7 @@ const StructuredAnswer = ({ ask }: { ask: AskResult }) => {
   );
 };
 
-const MessageBubble = ({ message, onRetry }: MessageBubbleProps) => {
+const MessageBubble = ({ message, onRetry, onOpenSource }: MessageBubbleProps) => {
   if (message.role === 'user') {
     return (
       <article className="msg msg--user fade-in" aria-label="Sua pergunta">
@@ -316,7 +331,7 @@ const MessageBubble = ({ message, onRetry }: MessageBubbleProps) => {
           <AnswerMeta ask={ask} />
         </>
       ) : ask ? (
-        <StructuredAnswer ask={ask} />
+        <StructuredAnswer ask={ask} onOpenSource={onOpenSource} />
       ) : (
         <>
           <div className="msg__head">

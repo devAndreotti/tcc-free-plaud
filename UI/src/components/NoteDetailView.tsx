@@ -11,6 +11,8 @@ interface NoteDetailViewProps {
   isLoadingDetail: boolean;
   onReindex: () => void;
   onDelete: () => void;
+  /** Trecho citado numa resposta do chat: abre os chunks, rola até ele e o destaca. */
+  highlightChunkId?: string | null;
 }
 
 /** `código` e **negrito** dentro de uma linha; o React escapa o resto. */
@@ -153,17 +155,24 @@ function readableMarkdown(source: string): string {
   return end < 0 ? text : text.slice(0, end);
 }
 
-export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, onReindex, onDelete }: NoteDetailViewProps) => {
-  const [showChunks, setShowChunks] = useState(false);
+export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, onReindex, onDelete, highlightChunkId = null }: NoteDetailViewProps) => {
+  const chunks = detail.chunks ?? [];
+  // Trecho citado: a lista abre com os chunks visíveis; se a nota não tiver mais esse trecho, abre a leitura normal.
+  const [showChunks, setShowChunks] = useState(() => chunks.some((c) => c.chunk_id === highlightChunkId));
   const [menu, setMenu] = useState<'closed' | 'menu' | 'confirm'>('closed');
   const [copied, setCopied] = useState(false);
   const actionsRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const citedRef = useRef<HTMLLIElement>(null);
 
-  const chunks = detail.chunks ?? [];
   const tokens = chunks.reduce((sum, c) => sum + (c.token_count ?? 0), 0);
   const created = formatDate(detail.created_at);
   const busy = isMutating || isLoadingDetail;
+
+  // Rola até o trecho citado uma vez, ao abrir: a nota só monta depois de carregada.
+  useEffect(() => {
+    citedRef.current?.scrollIntoView({ block: 'center' });
+  }, []);
 
   useEffect(() => {
     if (menu === 'closed') return undefined;
@@ -308,9 +317,16 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
             <ol className="reader__chunks" aria-label="Chunks indexados">
               {chunks.map((chunk, i) => {
                 const overlap = i > 0 ? chunks[i - 1].char_end - chunk.char_start : 0;
+                const cited = chunk.chunk_id === highlightChunkId;
                 return (
-                  <li key={chunk.chunk_id} className="reader__chunk" title={chunk.chunk_id}>
+                  <li
+                    key={chunk.chunk_id}
+                    ref={cited ? citedRef : undefined}
+                    className={`reader__chunk${cited ? ' reader__chunk--cited' : ''}`}
+                    title={chunk.chunk_id}
+                  >
                     <span className="reader__chunk-label mono">
+                      {cited && <span className="pill pill--accent">trecho citado</span>}
                       <b>#{chunk.chunk_index} · {chunk.token_count} tok</b>
                       {chunk.char_start}–{chunk.char_end}
                       {overlap > 0 && <><br />↥ {overlap} sobrepostos</>}
