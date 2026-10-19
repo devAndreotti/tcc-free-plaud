@@ -252,7 +252,8 @@ const VaultsTab = ({ onOpenQueue }: VaultsTabProps) => {
         <div>
           <h3 id="settings-vaults" className="settings-section__title">Vaults</h3>
           <p className="settings-item__description">
-            Cada vault é um espaço separado: índice, pastas, Fila, grafo e conversas próprios.
+            Cada vault é um espaço separado: índice, pastas, Fila, grafo e conversas próprios. Mudanças aqui valem na
+            hora.
           </p>
         </div>
         <button type="button" className="btn btn--primary" onClick={() => setCreating(true)}>

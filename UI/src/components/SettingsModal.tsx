@@ -15,6 +15,7 @@ import {
   XCircleIcon,
   XIcon,
 } from './Icons';
+import MomentumRail from './MomentumRail';
 import Select from './Select';
 import VaultsTab from './VaultsTab';
 import { VaultGlyph } from './VaultGlyph';
@@ -24,6 +25,7 @@ import {
   bridge,
   type BackendSettings,
   type ModelDiscoveryResult,
+  type SettingOption,
   type SettingRow,
   type VoiceModelDownloadSnapshot,
   type VoiceModelInfo,
@@ -78,6 +80,9 @@ const Meter = ({ level, label }: { level: number; label: string }) => (
   </span>
 );
 
+// Aviso flutuante: sucesso some sozinho; erro fica até fechar.
+type Toast = { tone: 'ok' | 'error'; text: string };
+
 const draftsFrom = (settings: BackendSettings) =>
   Object.fromEntries(
     settings.settings_catalog
@@ -97,7 +102,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [isListingModels, setIsListingModels] = useState(false);
   const [modelDiscovery, setModelDiscovery] = useState<ModelDiscoveryResult | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>('voz');
-  const [operationStatus, setOperationStatus] = useState('');
+  const [toast, setToast] = useState<Toast | null>(null);
   const [voiceModels, setVoiceModels] = useState<VoiceModelInfo[]>([]);
   const [downloadJob, setDownloadJob] = useState<VoiceModelDownloadSnapshot | null>(null);
   const [downloadError, setDownloadError] = useState('');
@@ -127,6 +132,12 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [isRunningDoctor, setIsRunningDoctor] = useState(false);
 
   useEffect(() => {
+    if (toast?.tone !== 'ok') return undefined;
+    const timer = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
     if (!isOpen) return;
     bridge.getBackendSettings()
       .then((settings) => {
@@ -145,7 +156,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
       const settings = await bridge.getBackendSettings();
       setBackendSettings((prev) => (prev ? { ...prev, doctor: settings.doctor, notes_count: settings.notes_count, sqlite_chunks_count: settings.sqlite_chunks_count } : settings));
     } catch (error) {
-      setOperationStatus(error instanceof Error ? error.message : 'Falha ao rodar o diagnóstico.');
+      setToast({ tone: 'error', text: error instanceof Error ? error.message : 'Falha ao rodar o diagnóstico.' });
     } finally {
       setIsRunningDoctor(false);
     }
@@ -240,12 +251,12 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     try {
       const result = await bridge.saveApiKey(apiKey);
       setApiKey('');
-      setOperationStatus(result.configured ? `API key salva em ${result.local_env_path}` : `API key removida de ${result.local_env_path}`);
+      setToast({ tone: 'ok', text: result.configured ? 'API key salva no .env local.' : 'API key removida do .env local.' });
       const settings = await bridge.getBackendSettings();
       setBackendSettings(settings);
     } catch (error) {
       console.error('[SettingsModal] Erro ao salvar API key:', error);
-      setOperationStatus('Erro ao salvar API key.');
+      setToast({ tone: 'error', text: 'Não foi possível salvar a API key.' });
     } finally {
       setIsSavingApiKey(false);
     }
@@ -268,14 +279,13 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
             .map((row) => [row.key, row.value === null ? '' : String(row.value)])
         )
       );
-      setOperationStatus('Configurações salvas.');
+      setToast({ tone: 'ok', text: 'Configurações salvas.' });
     } catch (error) {
       console.error('[SettingsModal] Erro ao salvar settings do backend:', error);
-      setOperationStatus(
-        error instanceof Error
-          ? `Erro ao salvar configurações: ${error.message}`
-          : 'Erro ao salvar configurações do backend.'
-      );
+      setToast({
+        tone: 'error',
+        text: error instanceof Error ? `Não foi possível salvar: ${error.message}` : 'Não foi possível salvar as configurações.',
+      });
     } finally {
       setIsSavingBackendSettings(false);
     }
@@ -299,10 +309,10 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     try {
       const result = await bridge.applySettingsPreset(presetKey);
       await refreshBackendSettings();
-      setOperationStatus(`Preset ${result.preset.label} aplicado.`);
+      setToast({ tone: 'ok', text: `Preset ${result.preset.label} aplicado.` });
     } catch (error) {
       console.error('[SettingsModal] Erro ao aplicar preset:', error);
-      setOperationStatus('Erro ao aplicar preset.');
+      setToast({ tone: 'error', text: 'Não foi possível aplicar o preset.' });
     } finally {
       setApplyingPreset('');
     }
@@ -313,14 +323,14 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     setIsTestingProvider(true);
     try {
       const result = await bridge.testAnswerProvider();
-      setOperationStatus(
+      setToast(
         result.error
-          ? `O teste do ${result.provider} falhou: ${result.error}`
-          : `${result.provider} respondeu em ${result.latency_ms} ms.`
+          ? { tone: 'error', text: `O teste do ${result.provider} falhou: ${result.error}` }
+          : { tone: 'ok', text: `${result.provider} respondeu em ${result.latency_ms} ms.` }
       );
     } catch (error) {
       console.error('[SettingsModal] Erro ao testar provider:', error);
-      setOperationStatus('Erro ao testar provider.');
+      setToast({ tone: 'error', text: 'Não foi possível testar o provedor.' });
     } finally {
       setIsTestingProvider(false);
     }
@@ -329,21 +339,27 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const handleListModels = async () => {
     if (isListingModels) return;
     setIsListingModels(true);
-    setOperationStatus('');
+    setToast(null);
     try {
-      // O resultado aparece logo abaixo dos botões; a barra de status fica para erros.
+      // O resultado aparece logo abaixo dos botões; o aviso flutuante fica para erros.
       setModelDiscovery(await bridge.listAnswerModels());
     } catch (error) {
       console.error('[SettingsModal] Erro ao listar modelos:', error);
-      setOperationStatus('Erro ao listar modelos.');
+      setToast({ tone: 'error', text: 'Não foi possível listar os modelos.' });
     } finally {
       setIsListingModels(false);
     }
   };
 
+  // A barra de salvar aparece com a alteração pendente; não precisa de aviso extra.
   const handleSelectModel = (modelId: string) => {
     setSettingDrafts((prev) => ({ ...prev, answer_model: modelId }));
-    setOperationStatus(`Modelo ${modelId} escolhido. Clique em Salvar para gravar.`);
+  };
+
+  const discardDrafts = () => {
+    if (backendSettings) setSettingDrafts(draftsFrom(backendSettings));
+    setDownloadJob(null);
+    setDownloadError('');
   };
 
   // Estado de instalado/baixando/erro de UM modelo de voz - reusado tanto
@@ -394,24 +410,32 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     );
   };
 
-  const renderSettingRow = (row: SettingRow, overrideOptions?: { value: string; label: string; disabled?: boolean }[]) => (
+  const renderSettingRow = (row: SettingRow, overrideOptions?: (SettingOption & { disabled?: boolean })[]) => {
+    const options = overrideOptions ?? row.options;
+    const draft = settingDrafts[row.key] ?? '';
+    const recommended =
+      row.recommended === null || row.recommended === undefined || row.recommended === ''
+        ? null
+        : options.find((option) => option.value === String(row.recommended))?.label ?? String(row.recommended);
+    const choice = options.find((option) => option.value === draft)?.description;
+    return (
     <div key={row.key} className="settings-item settings-item--stacked">
       <div className="settings-item__info">
-        <span className="settings-item__label">{row.label}</span>
-        <span className="settings-item__description">
-          {row.description}
-          {row.recommended !== null && ` · recomendado: ${row.recommended}`}
+        <span className="settings-item__head">
+          <span className="settings-item__label">{row.label}</span>
+          {recommended && <span className="settings-item__rec">Recomendado: {recommended}</span>}
         </span>
+        <span className="settings-item__description">{row.description}</span>
         {row.warning && (
           <span className="settings-warning">{row.warning}</span>
         )}
       </div>
 
-      {(overrideOptions ?? row.options).length > 0 ? (
+      {options.length > 0 ? (
         <Select
           className="settings-control-wide"
-          value={settingDrafts[row.key] ?? ''}
-          options={overrideOptions ?? row.options}
+          value={draft}
+          options={options}
           ariaLabel={row.label}
           onChange={(value) =>
             setSettingDrafts((prev) => ({ ...prev, [row.key]: value }))
@@ -445,8 +469,10 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
           }
         />
       )}
+      {choice && <p className="settings-item__choice">{choice}</p>}
     </div>
-  );
+    );
+  };
 
   if (!isOpen) return null;
 
@@ -629,6 +655,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                 <h3 id="settings-ai" className="settings-section__title">
                   IA
                 </h3>
+                <p className="settings-section__lede">Como a resposta é escrita a partir dos trechos das suas notas.</p>
 
                 {iaCatalogRows.filter((row) => isGenerative || row.key === 'answer_provider').map((row) => renderSettingRow(row))}
 
@@ -683,7 +710,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                       </button>
                     </div>
                     {modelDiscovery && (
-                      <div className="settings-item settings-item--stacked" aria-live="polite">
+                      <div className="settings-discovery" aria-live="polite">
                         <span className="settings-inline-status">
                           {modelDiscovery.models.length} {modelDiscovery.models.length === 1 ? 'modelo' : 'modelos'} no{' '}
                           {modelDiscovery.provider} · {modelDiscovery.latency_ms} ms{modelDiscovery.cached ? ' · em cache' : ''}
@@ -711,11 +738,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                       </div>
                     )}
                   </div>
-                ) : (
-                  <p className="settings-inline-status">
-                    O extractive responde só com trechos das notas: não usa LLM, modelo nem API key.
-                  </p>
-                )}
+                ) : null}
               </section>
             )}
 
@@ -724,6 +747,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                 <h3 id="settings-voz" className="settings-section__title">
                   Voz
                 </h3>
+                <p className="settings-section__lede">Transcrição local da pergunta falada: nada sai do seu computador.</p>
 
                 <div className="settings-item settings-item--stacked">
                   <div className="settings-item__info">
@@ -731,14 +755,13 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                       {audioModelRow?.label ?? 'Modelo de transcrição (voz)'}
                     </span>
                     <span className="settings-item__description">
-                      {audioModelRow?.description ?? 'Modelo local usado para transcrever o áudio gravado no chat.'}
-                      {audioModelRow?.recommended !== null && audioModelRow?.recommended !== undefined &&
-                        ` · recomendado: ${audioModelRow.recommended}`}
+                      {audioModelRow?.description ?? 'Modelo local usado para transcrever o áudio gravado no chat.'} Arraste para
+                      ver todos.
                     </span>
                   </div>
 
                   {selectableVoiceModels.length > 0 ? (
-                    <div className="voice-models" role="radiogroup" aria-label={audioModelRow?.label ?? 'Modelo de transcrição (voz)'}>
+                    <MomentumRail className="voice-models" role="radiogroup" aria-label={audioModelRow?.label ?? 'Modelo de transcrição (voz)'}>
                       {selectableVoiceModels.map((model) => {
                         const checked = settingDrafts.audio_model === model.id;
                         const autoLang = model.supports_auto_language;
@@ -792,7 +815,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                           </div>
                         );
                       })}
-                    </div>
+                    </MomentumRail>
                   ) : (
                     <Select
                       className="settings-control-wide"
@@ -825,6 +848,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   <h3 id="settings-presets" className="settings-section__title">
                     Presets
                   </h3>
+                  <p className="settings-section__lede">Combinações prontas de busca e indexação. Aplicar grava na hora.</p>
                   {backendSettings?.settings_presets.map((preset) => (
                     <div key={preset.key} className="settings-item settings-item--stacked">
                       <div className="settings-item__info">
@@ -858,6 +882,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   <h3 id="settings-advanced" className="settings-section__title">
                     Avançado
                   </h3>
+                  <p className="settings-section__lede">Ajustes finos de busca, chunks e indexação. Mude só se souber o efeito.</p>
                   {advancedRows.map((row) => renderSettingRow(row))}
                 </section>
               </>
@@ -919,42 +944,45 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
           </div>
         </div>
 
-        {operationStatus && (
-          <p className="settings-inline-status settings-status-bar" role="status">
-            {operationStatus}
-          </p>
+        {toast && (
+          <div
+            className={`settings-toast settings-toast--${toast.tone}${pendingChanges > 0 ? ' settings-toast--raised' : ''}`}
+            role={toast.tone === 'error' ? 'alert' : 'status'}
+          >
+            {toast.tone === 'ok' ? <CheckCircleIcon size={16} /> : <AlertTriangleIcon size={16} />}
+            <span>{toast.text}</span>
+            {toast.tone === 'error' && (
+              <button type="button" className="settings-toast__close" aria-label="Fechar aviso" onClick={() => setToast(null)}>
+                <XIcon size={12} />
+              </button>
+            )}
+          </div>
         )}
 
-        {/* Rodapé do modal */}
-        <div className="modal__footer">
-          <span className="modal__pending" aria-live="polite">
-            {pendingChanges > 0 ? (
-              <>
-                <span className="modal__pending-dot" aria-hidden="true" />
-                {pendingChanges} {pendingChanges === 1 ? 'alteração não salva' : 'alterações não salvas'}
-              </>
-            ) : activeTab === 'vaults' ? (
-              'Mudanças nas vaults valem na hora.'
-            ) : (
-              'Nenhuma alteração'
-            )}
-          </span>
-          <div className="modal__footer-actions">
-            <button id="btn-settings-close" type="button" className="btn btn--ghost" onClick={onClose}>
-              Cancelar
-            </button>
-            <button
-              id="btn-save-backend-settings"
-              type="button"
-              className="btn btn--primary"
-              onClick={handleSaveBackendSettings}
-              disabled={!backendSettings || isSavingBackendSettings}
-              aria-label="Salvar configurações do backend"
-            >
-              {isSavingBackendSettings ? 'Salvando…' : 'Salvar'}
-            </button>
+        {/* Barra de salvar: só existe com alteração pendente (sem "Nenhuma alteração" parado no rodapé). */}
+        {pendingChanges > 0 && (
+          <div className="modal__footer settings-savebar" role="region" aria-label="Alterações não salvas">
+            <span className="modal__pending" aria-live="polite">
+              <span className="modal__pending-dot" aria-hidden="true" />
+              {pendingChanges} {pendingChanges === 1 ? 'alteração não salva' : 'alterações não salvas'}
+            </span>
+            <div className="modal__footer-actions">
+              <button type="button" className="btn btn--ghost" onClick={discardDrafts}>
+                Descartar
+              </button>
+              <button
+                id="btn-save-backend-settings"
+                type="button"
+                className="btn btn--primary"
+                onClick={handleSaveBackendSettings}
+                disabled={!backendSettings || isSavingBackendSettings}
+                aria-label="Salvar configurações do backend"
+              >
+                {isSavingBackendSettings ? 'Salvando…' : 'Salvar alterações'}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>,
     document.body

@@ -2,7 +2,6 @@ import { act, cleanup, render, renderHook, screen, waitFor, within } from '@test
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VaultsProvider, CORPUS_CHANGED_EVENT } from '../contexts/VaultsContext';
-import { OPEN_VAULT_MENU_EVENT } from '../contexts/VaultsContextObject';
 import { useIndexJob } from '../hooks/useIndexJob';
 import { useVaults } from '../hooks/useVaults';
 import { bridge, type Vault, type VaultList } from '../services/bridge';
@@ -87,7 +86,7 @@ describe('vaults: seletor, criação e aba Vaults', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('vault: seletor mostra as contagens, fecha com Esc e abre pelo chip do campo de pergunta', async () => {
+  it('vault: seletor mostra as contagens e fecha com Esc', async () => {
     vi.spyOn(bridge, 'listVaults').mockResolvedValue(LIST);
     const user = userEvent.setup();
 
@@ -105,11 +104,6 @@ describe('vaults: seletor, criação e aba Vaults', () => {
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu', { name: 'Vaults' })).toBeNull();
-
-    act(() => {
-      window.dispatchEvent(new Event(OPEN_VAULT_MENU_EVENT));
-    });
-    expect(screen.getByRole('menu', { name: 'Vaults' })).toBeTruthy();
   });
 
   it('vault: aba Vaults mostra a lista e o detalhe com as pastas reais da vault', async () => {

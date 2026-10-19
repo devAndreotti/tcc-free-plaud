@@ -23,6 +23,11 @@ const bridgeMock = vi.hoisted(() => ({
   scanVault: vi.fn(),
   listCorpusRoots: vi.fn(),
   removeCorpusRoot: vi.fn(),
+  listIgnoredPaths: vi.fn().mockResolvedValue([]),
+  ignoreIndexPaths: vi.fn(),
+  unignoreIndexPaths: vi.fn(),
+  retryIndexPaths: vi.fn(),
+  openIndexPath: vi.fn(),
 }));
 
 vi.mock('../services/bridge', () => ({
@@ -134,12 +139,12 @@ describe('QueuePanel', () => {
     });
   });
 
-  it('mostra últimos erros do job como alertas', async () => {
+  it('mostra as falhas do job com nome do arquivo, motivo e detalhe técnico', async () => {
     const user = userEvent.setup();
     bridgeMock.getIndexJob.mockResolvedValue({
       ...runningJob,
       last_errors: [
-        { source_path: 'data\\corpus\\notes\\rascunho.md', message: 'Encoding inválido.', error_code: 'BAD_ENCODING' },
+        { source_path: 'C:\\Vault\\notes\\rascunho.md', message: 'Encoding inválido.', error_code: 'BAD_ENCODING' },
       ],
     });
     renderQueuePanel();
@@ -147,9 +152,71 @@ describe('QueuePanel', () => {
     await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
     await user.click(screen.getByRole('button', { name: 'Indexar' }));
 
-    expect(await screen.findByRole('alert')).toBeTruthy();
-    expect(screen.getByText('data\\corpus\\notes\\rascunho.md')).toBeTruthy();
-    expect(screen.getByText('Encoding inválido.')).toBeTruthy();
+    const failures = await screen.findByRole('region', { name: 'Arquivos com problema' });
+    expect(within(failures).getByText('Falha ao indexar')).toBeTruthy();
+    expect(within(failures).getByText('rascunho.md')).toBeTruthy();
+    expect(within(failures).getByText('Vault › notes')).toBeTruthy();
+    expect(within(failures).getByText('Encoding inválido.')).toBeTruthy();
+  });
+
+  it('nota vazia vira aviso amigável e "Ignorar todos" tira o grupo da lista', async () => {
+    const user = userEvent.setup();
+    bridgeMock.ignoreIndexPaths.mockResolvedValue({ ok: true, ignored: 2, removed_notes: 0 });
+    bridgeMock.getIndexJob.mockResolvedValue({
+      ...runningJob,
+      last_errors: [
+        { source_path: 'C:\\Vault\\Templates\\Mensal.md', message: 'EMPTY_CONTENT', error_code: 'EMPTY_CONTENT' },
+        { source_path: 'C:\\Vault\\Templates\\Vídeo.md', message: 'EMPTY_CONTENT', error_code: 'EMPTY_CONTENT' },
+      ],
+    });
+    renderQueuePanel();
+
+    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
+    await user.click(screen.getByRole('button', { name: 'Indexar' }));
+
+    const failures = await screen.findByRole('region', { name: 'Arquivos com problema' });
+    expect(within(failures).getByText(/Notas sem conteúdo/)).toBeTruthy();
+    expect(within(failures).queryByText('EMPTY_CONTENT')).toBeNull();
+    await user.click(within(failures).getByRole('button', { name: 'Ignorar todos' }));
+
+    expect(bridgeMock.ignoreIndexPaths).toHaveBeenCalledWith(['C:\\Vault\\Templates\\Mensal.md', 'C:\\Vault\\Templates\\Vídeo.md']);
+    expect(await within(failures).findByText('Tudo resolvido neste job.')).toBeTruthy();
+  });
+
+  it('tentar de novo tira o arquivo da lista quando indexa e mantém quando continua falhando', async () => {
+    const user = userEvent.setup();
+    bridgeMock.retryIndexPaths
+      .mockResolvedValueOnce({ ok: true, results: [{ name: 'a.md', source_path: 'C:\\Vault\\a.md', status: 'failed', chunks: 0, error_code: 'EMPTY_CONTENT', message: 'EMPTY_CONTENT' }] })
+      .mockResolvedValueOnce({ ok: true, results: [{ name: 'a.md', source_path: 'C:\\Vault\\a.md', status: 'indexed', chunks: 2, error_code: null, message: null }] });
+    bridgeMock.getIndexJob.mockResolvedValue({
+      ...runningJob,
+      last_errors: [{ source_path: 'C:\\Vault\\a.md', message: 'EMPTY_CONTENT', error_code: 'EMPTY_CONTENT' }],
+    });
+    renderQueuePanel();
+
+    await user.click(screen.getByRole('button', { name: 'Escolher pasta' }));
+    await user.click(screen.getByRole('button', { name: 'Indexar' }));
+
+    await user.click(await screen.findByRole('button', { name: 'Tentar indexar a.md de novo' }));
+    expect(await screen.findByText('1 arquivo continua com problema.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Tentar indexar a.md de novo' }));
+    expect(await screen.findByText('1 arquivo indexado.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Tentar indexar a.md de novo' })).toBeNull();
+  });
+
+  it('lista os ignorados e "Voltar a indexar" desfaz', async () => {
+    const user = userEvent.setup();
+    bridgeMock.listIgnoredPaths
+      .mockResolvedValueOnce([{ path: 'C:\\Vault\\Templates\\Mensal.md', reason: 'usuario', ignored_at: '2026-10-18T20:00:00-03:00' }])
+      .mockResolvedValue([]);
+    bridgeMock.unignoreIndexPaths.mockResolvedValue({ ok: true, restored: 1, queued: 1 });
+    renderQueuePanel();
+
+    await user.click(await screen.findByText(/Ignorados na indexação/));
+    await user.click(screen.getByRole('button', { name: 'Voltar a indexar Mensal.md' }));
+
+    expect(bridgeMock.unignoreIndexPaths).toHaveBeenCalledWith(['C:\\Vault\\Templates\\Mensal.md']);
+    await waitFor(() => expect(screen.queryByText(/Ignorados na indexação/)).toBeNull());
   });
 
   it('falha de modelo de voz leva direto para Configurações › Voz', async () => {

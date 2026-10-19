@@ -6,7 +6,9 @@ import type { SettingsTab } from './SettingsModal';
 import { useQueueContext } from '../hooks/useQueueContext';
 import Dropzone, { type DropzoneToast } from './Dropzone';
 import ToastStack from './ToastStack';
-import { FolderIcon, LoaderIcon, PlayIcon, XCircleIcon } from './Icons';
+import JobFailures from './JobFailures';
+import IgnoredFiles from './IgnoredFiles';
+import { FolderIcon, LoaderIcon, PlayIcon } from './Icons';
 import { notifyCorpusChanged } from '../hooks/useCorpusHealth';
 
 interface QueuePanelProps {
@@ -48,11 +50,12 @@ const stepIndex = (snapshot: IndexJobSnapshot) => {
   return STEPS.findIndex((step) => step.phases.includes(phase ?? ''));
 };
 
-const JobCard = ({ job, onCancel, busy, onOpenSettings }: {
+const JobCard = ({ job, onCancel, busy, onOpenSettings, onIgnoredChanged }: {
   job: IndexJobSnapshot;
   onCancel: () => void;
   busy: boolean;
   onOpenSettings: QueuePanelProps['onOpenSettings'];
+  onIgnoredChanged: () => void;
 }) => {
   const progress = job.progress;
   const total = progress?.total_found ?? job.result?.total_found ?? 0;
@@ -66,7 +69,7 @@ const JobCard = ({ job, onCancel, busy, onOpenSettings }: {
     { key: 'indexed', label: 'indexadas', value: progress?.indexed_count ?? job.result?.indexed_count ?? 0, color: 'var(--accent-blue)' },
     { key: 'unchanged', label: 'inalteradas', value: progress?.unchanged_count ?? job.result?.unchanged_count ?? 0, color: 'color-mix(in srgb, var(--accent-blue-light) 38%, transparent)' },
     { key: 'failed', label: 'com falha', value: progress?.failed_count ?? job.result?.failed_count ?? 0, color: 'var(--err)' },
-    { key: 'skipped', label: 'ignoradas', value: progress?.skipped_count ?? job.result?.skipped_count ?? 0, color: 'var(--text-muted)' },
+    { key: 'skipped', label: 'puladas', value: progress?.skipped_count ?? job.result?.skipped_count ?? 0, color: 'var(--text-muted)' },
     { key: 'removed', label: 'removidas', value: job.result?.removed_count ?? 0, color: 'var(--text-muted)' },
   ];
 
@@ -194,28 +197,14 @@ const JobCard = ({ job, onCancel, busy, onOpenSettings }: {
         </div>
       )}
 
-      {job.last_errors.length > 0 && (
-        <section className="job__errors" aria-label="Falhas por arquivo">
-          <h2>
-            Falhas neste job <span className="card__count">{job.last_errors.length}</span>
-          </h2>
-          {job.last_errors.map((error) => (
-            <article key={`${error.source_path}-${error.message}`} className="job__error" role="alert">
-              <XCircleIcon size={15} />
-              <div className="job__error-body">
-                <span className="job__error-path mono">{error.source_path}</span>
-                <p>{error.message}</p>
-                {error.error_code && <span className="job__error-code mono">{error.error_code}</span>}
-              </div>
-              {error.error_code === 'AUDIO_MODEL_NOT_READY' && onOpenSettings && (
-                <button type="button" className="link-btn" onClick={() => onOpenSettings('voz')}>
-                  Abrir Voz
-                </button>
-              )}
-            </article>
-          ))}
-        </section>
-      )}
+      {/* Falhas agrupadas pelo motivo, com abrir, tentar de novo e ignorar; novo job, lista nova. */}
+      <JobFailures
+        key={job.job_id}
+        errors={job.last_errors}
+        rootPath={job.source_path}
+        onOpenSettings={onOpenSettings}
+        onIgnoredChanged={onIgnoredChanged}
+      />
     </article>
   );
 };
@@ -386,6 +375,7 @@ const QueuePanel = ({ onOpenSettings }: QueuePanelProps) => {
 
   const [roots, setRoots] = useState<CorpusRoot[]>([]);
   const [rootsVersion, setRootsVersion] = useState(0);
+  const [ignoredVersion, setIgnoredVersion] = useState(0);
   // Chave do job que acabou: muda quando um job termina e então recarrega as pastas.
   const finishedJob = job && job.status !== 'running' ? `${job.job_id}:${job.status}` : '';
   // Carrega ao montar, quando um job termina (pode ter criado ou trocado uma pasta) e após remover uma pasta.
@@ -476,10 +466,18 @@ const QueuePanel = ({ onOpenSettings }: QueuePanelProps) => {
         />
 
         {job ? (
-          <JobCard job={job} onCancel={cancelJob} busy={isBusy} onOpenSettings={onOpenSettings} />
+          <JobCard
+            job={job}
+            onCancel={cancelJob}
+            busy={isBusy}
+            onOpenSettings={onOpenSettings}
+            onIgnoredChanged={() => setIgnoredVersion((version) => version + 1)}
+          />
         ) : (
           <QueueIdle busy={isBusy} />
         )}
+
+        <IgnoredFiles version={ignoredVersion} />
 
         <Dropzone watchDirectory={watcherActive ? folderPath : null} onToast={addToast} />
       </div>

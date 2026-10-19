@@ -20,7 +20,6 @@ import {
 import type { SettingsTab } from './SettingsModal';
 import { useQueueContext } from '../hooks/useQueueContext';
 import { useVaults } from '../hooks/useVaults';
-import { OPEN_VAULT_MENU_EVENT } from '../contexts/VaultsContextObject';
 import { vaultMeta } from '../lib/vaultVisuals';
 import VaultDialog from './VaultDialog';
 import { VaultGlyph } from './VaultGlyph';
@@ -92,13 +91,6 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
       document.removeEventListener('keydown', onKey);
     };
   }, [menuOpen]);
-
-  // O chip da vault no campo de pergunta abre este mesmo seletor.
-  useEffect(() => {
-    const open = () => setMenuOpen(true);
-    window.addEventListener(OPEN_VAULT_MENU_EVENT, open);
-    return () => window.removeEventListener(OPEN_VAULT_MENU_EVENT, open);
-  }, []);
   const health = useCorpusHealth(healthKey);
 
   useEffect(() => {

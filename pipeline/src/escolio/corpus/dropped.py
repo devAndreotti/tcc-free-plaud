@@ -41,17 +41,20 @@ def _default_runner(runtime: CorpusRuntime | None) -> DroppedFileRunner:
     def run(path: Path) -> CorpusIndexBatchResult:
         from escolio.corpus.service import index_corpus_path
 
+        # SQLite, Chroma e embedder da mesma vault (a do runtime), não da vault ativa no momento.
+        settings = runtime.settings_snapshot() if runtime is not None else None
         vector_store = runtime.get_vector_store() if runtime is not None else None
         embedder = runtime.get_embedder() if runtime is not None else None
-        return index_corpus_path(path, vector_store=vector_store, embedder=embedder)
+        return index_corpus_path(path, settings=settings, vector_store=vector_store, embedder=embedder)
 
     return run
 
 
 def _default_remover(runtime: CorpusRuntime | None) -> DroppedFileRemover:
     def remove(path: Path, folder: bool) -> int:
+        settings = runtime.settings_snapshot() if runtime is not None else None
         vector_store = runtime.get_vector_store() if runtime is not None else None
-        return delete_notes_by_source_path(path, folder=folder, vector_store=vector_store)
+        return delete_notes_by_source_path(path, folder=folder, settings=settings, vector_store=vector_store)
 
     return remove
 
@@ -170,20 +173,24 @@ class DroppedFileIndexer:
         """Espera a fila esvaziar (usado em testes)."""
         self._queue.join()
 
+    def index_now(self, path: Path) -> DroppedFileEvent:
+        """Indexa um arquivo agora, com a mesma trava de escrita da fila (Fila: "Tentar de novo")."""
+        try:
+            with corpus_write_lock:
+                return _event_from_result(path, self._runner(path))
+        except Exception as exc:  # um arquivo ruim vira evento de falha, não derruba o worker nem a UI
+            return DroppedFileEvent(
+                name=path.name,
+                source_path=str(path),
+                status='failed',
+                error_code=exc.__class__.__name__,
+                message=str(exc),
+            )
+
     def _drain(self) -> None:
         while True:
             path = self._queue.get()
-            try:
-                with corpus_write_lock:
-                    event = _event_from_result(path, self._runner(path))
-            except Exception as exc:  # o worker não pode morrer por um arquivo ruim
-                event = DroppedFileEvent(
-                    name=path.name,
-                    source_path=str(path),
-                    status='failed',
-                    error_code=exc.__class__.__name__,
-                    message=str(exc),
-                )
+            event = self.index_now(path)
             with self._lock:
                 self._events.append(event)
             self._queue.task_done()

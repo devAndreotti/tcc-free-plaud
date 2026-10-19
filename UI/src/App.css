@@ -1848,47 +1848,66 @@
   font-weight: 600;
 }
 
-.job__error {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+/* Falhas do job agrupadas pelo motivo: explicação para o usuário e ações por arquivo. */
+.issues__notice {
+  margin: 4px 0 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+.issues__done { margin: 6px 0 0; font-size: 13px; color: var(--text-secondary); }
+.issue-group {
+  margin-top: 10px;
+  border: 1px solid var(--border-color-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.issue-group__head {
+  display: flex;
+  align-items: flex-start;
   gap: 10px;
-  align-items: start;
-  padding: 10px 0;
+  padding: 12px 14px;
+}
+.issue-group--error .issue-group__head { background: color-mix(in srgb, var(--err) 7%, transparent); }
+.issue-group--warn .issue-group__head { background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.issue-group__icon { margin-top: 1px; display: grid; }
+.issue-group--error .issue-group__icon { color: var(--err); }
+.issue-group--warn .issue-group__icon { color: var(--warn); }
+.issue-group__text { flex: 1; min-width: 0; }
+.issue-group__text h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13.5px; font-weight: 600; }
+.issue-group__text p { margin: 2px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+.issue-group__files { list-style: none; margin: 0; padding: 0; }
+.issue-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px 9px 14px;
   border-top: 1px solid var(--border-color-subtle);
 }
+.issue-file > svg { flex-shrink: 0; color: var(--text-muted); }
+.issue-file__text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+.issue-file__name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.issue-file__folder,
+.issue-file__detail { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.issue-file__detail { color: var(--text-secondary); white-space: normal; overflow-wrap: anywhere; }
+.issue-file__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 
-.job__errors h2 + .job__error {
-  border-top: 0;
+/* Ignorados na indexação: lista recolhível com "Voltar a indexar". */
+.queue__ignored { padding: 0; }
+.queue__ignored summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 14px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
 }
-
-.job__error svg {
-  margin-top: 2px;
-  color: var(--err);
-}
-
-.job__error-body {
-  min-width: 0;
-}
-
-.job__error-path {
-  display: block;
-  font-size: 12px;
-  color: var(--text-primary);
-  overflow-wrap: anywhere;
-}
-
-.job__error p {
-  margin-top: 2px;
-  font-size: 12.5px;
-  color: var(--text-secondary);
-}
-
-.job__error-code {
-  display: block;
-  margin-top: 3px;
-  font-size: 10.5px;
-  color: var(--text-muted);
-}
+.queue__ignored summary small { flex-basis: 100%; font-size: 12.5px; font-weight: 400; color: var(--text-secondary); }
+.queue__ignored ul { list-style: none; margin: 0; padding: 0 0 6px; }
 
 .link-btn {
   padding: 0;
@@ -2464,7 +2483,10 @@
   position: absolute;
   left: 0;
   bottom: calc(100% + 8px);
-  width: 290px;
+  /* Largura do conteúdo: a dica de cada opção cabe numa linha (até o limite). */
+  width: max-content;
+  min-width: 240px;
+  max-width: min(440px, calc(100vw - 48px));
   padding: 5px;
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -2493,13 +2515,14 @@
   background: var(--bg-surface-hover);
 }
 
-.strategy__item svg {
+/* Só o check (filho direto): o ícone da vault fica sempre visível. */
+.strategy__item > svg {
   margin-top: 2px;
   color: var(--accent-blue-light);
   visibility: hidden;
 }
 
-.strategy__item[aria-checked='true'] svg {
+.strategy__item[aria-checked='true'] > svg {
   visibility: visible;
 }
 
@@ -3242,11 +3265,44 @@
   gap: var(--spacing-lg);
 }
 
-.settings-status-bar {
-  padding: var(--spacing-sm) var(--spacing-lg);
-  border-top: 1px solid var(--border-color-subtle);
-  flex-shrink: 0;
+/* Aviso flutuante das Configurações (salvo, erro): no lugar da antiga faixa fixa acima do rodapé. */
+.settings-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100% - 48px));
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  color: var(--text-primary);
+  transform: translateX(-50%);
+  animation: fadeIn var(--transition-base) forwards;
 }
+.settings-toast--raised { bottom: 84px; }
+.settings-toast > svg { flex-shrink: 0; }
+.settings-toast--ok > svg { color: var(--ok); }
+.settings-toast--error { border-color: color-mix(in srgb, var(--err) 45%, var(--border-color)); }
+.settings-toast--error > svg { color: var(--err); }
+.settings-toast__close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.settings-toast__close:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
 
 /* Rodapé do modal */
 .modal__footer {
@@ -3285,18 +3341,58 @@
   background: var(--border-color-subtle);
 }
 
-/* Item de configuração individual */
+/* Item de configuração: cartão com nome, explicação e o controle. */
 .settings-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
-  padding: var(--spacing-sm) 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color-subtle);
+  border-radius: 12px;
+  background: var(--bg-primary);
 }
 
 .settings-item--stacked {
   align-items: stretch;
   flex-direction: column;
+  gap: 10px;
+}
+
+.settings-section__lede {
+  margin: -6px 0 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.settings-item__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-item__rec {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-blue-light);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Explicação da opção escolhida no select (Extractive, Ollama, Auto, CPU, CUDA...). */
+.settings-item__choice {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.settings-discovery {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .settings-item__info {
@@ -3307,13 +3403,13 @@
 }
 
 .settings-item__label {
-  font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-size: var(--font-size-base);
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .settings-item__description {
-  font-size: var(--font-size-xs);
+  font-size: 12.5px;
   color: var(--text-muted);
   line-height: 1.5;
 }
@@ -3417,6 +3513,13 @@
   display: flex;
   gap: 8px;
 }
+
+/* Barra de salvar: sobe quando há alteração pendente e some ao salvar ou descartar. */
+.settings-savebar {
+  background: color-mix(in srgb, var(--warn) 6%, var(--bg-surface));
+  animation: slideUp var(--transition-base) forwards;
+}
+.settings-savebar .modal__pending { color: var(--text-primary); font-weight: 500; }
 
 /* Diagnóstico (Doctor) */
 .settings-section__title--vault {
@@ -3591,12 +3694,24 @@
 }
 
 /* Modelos de voz como cartões comparáveis */
+/* Modelos de voz numa faixa horizontal: arrastar, roda do mouse ou teclado (sem quebrar linha). */
 .voice-models {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 10px;
-  margin-top: 8px;
+  display: flex;
+  gap: 12px;
+  margin: 8px -16px 0;
+  padding: 4px 16px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  touch-action: pan-y;
 }
+/* Barra fina no estilo do app (scrollbar-width desligaria o ::-webkit-scrollbar e mostraria setas no Windows). */
+.voice-models::-webkit-scrollbar { height: 6px; }
+.voice-models::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: var(--radius-full); }
+.voice-models > .voice-model { flex: 0 0 264px; }
+.momentum-rail { cursor: grab; }
+.momentum-rail--dragging { cursor: grabbing; user-select: none; }
+.momentum-rail--dragging .voice-model { pointer-events: none; }
 
 .voice-model {
   position: relative;
@@ -3796,7 +3911,7 @@
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  max-height: 240px;
+  max-height: 320px;
   overflow-y: auto;
   margin: 0;
   padding: 4px;
@@ -3846,6 +3961,20 @@
   font-size: var(--font-size-xs);
   color: var(--text-muted);
   flex-shrink: 0;
+}
+
+.select__option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.select__option-desc {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--text-muted);
 }
 
 /* Badge de versão */
@@ -4250,6 +4379,8 @@
 .composer__vault { max-width: 220px; padding-left: 5px; color: var(--text-primary); }
 .composer__vault .vault-glyph { width: 22px; height: 22px; border-radius: 999px; }
 .composer__vault-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strategy__vault { display: flex; align-items: center; gap: 10px; }
+.strategy__vault .vault-glyph { width: 26px; height: 26px; border-radius: 7px; }
 
 /* Modal de criar/editar vault */
 .vault-dialog-backdrop {

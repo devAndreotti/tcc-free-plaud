@@ -57,6 +57,13 @@ CREATE TABLE IF NOT EXISTS corpus_roots (
     last_indexed_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS ignored_paths (
+    path_key TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    reason TEXT,
+    ignored_at TEXT NOT NULL
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     chunk_id UNINDEXED,
     note_id UNINDEXED,
@@ -432,6 +439,39 @@ def _path_key(path: str | Path) -> str:
 def _is_under_root(path_key: str, root_key: str) -> bool:
     # Fronteira de separador: 'C:\\x\\cul' não pode casar 'C:\\x\\culinaria'.
     return path_key == root_key or path_key.startswith(root_key.rstrip(os.sep) + os.sep)
+
+
+def ignore_paths(connection: sqlite3.Connection, paths: Iterable[str | Path], reason: str | None = None) -> int:
+    """Marca arquivos para a indexação pular (Fila: "Ignorar"). Não apaga nada do disco."""
+    now = datetime.now().astimezone().isoformat()
+    rows = [(_path_key(path), str(path), reason, now) for path in paths]
+    connection.executemany(
+        'INSERT OR REPLACE INTO ignored_paths (path_key, path, reason, ignored_at) VALUES (?, ?, ?, ?)', rows
+    )
+    connection.commit()
+    return len(rows)
+
+
+def unignore_paths(connection: sqlite3.Connection, paths: Iterable[str | Path]) -> int:
+    """Volta a permitir a indexação dos arquivos; devolve quantos estavam ignorados."""
+    cursor = connection.executemany('DELETE FROM ignored_paths WHERE path_key = ?', [(_path_key(path),) for path in paths])
+    connection.commit()
+    return cursor.rowcount
+
+
+def list_ignored_paths(connection: sqlite3.Connection) -> list[dict[str, object]]:
+    rows = connection.execute('SELECT path, reason, ignored_at FROM ignored_paths ORDER BY path')
+    return [{'path': row['path'], 'reason': row['reason'], 'ignored_at': row['ignored_at']} for row in rows]
+
+
+def split_ignored(connection: sqlite3.Connection, paths: Iterable[Path]) -> tuple[list[Path], list[Path]]:
+    """Separa os arquivos a indexar dos que o usuário mandou ignorar."""
+    ignored = {row[0] for row in connection.execute('SELECT path_key FROM ignored_paths')}
+    kept: list[Path] = []
+    skipped: list[Path] = []
+    for path in paths:
+        (skipped if _path_key(path) in ignored else kept).append(path)
+    return kept, skipped
 
 
 def record_corpus_root(connection: sqlite3.Connection, root: Path) -> None:

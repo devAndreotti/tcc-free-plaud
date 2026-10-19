@@ -105,15 +105,16 @@ describe('vault: cada conversa pertence a uma vault', () => {
     expect(await screen.findByText('Resposta da Obsidian')).toBeTruthy();
   });
 
-  it('vault: o chip da vault no campo de pergunta abre o seletor de vault', async () => {
+  it('vault: o chip da vault no campo de pergunta abre um seletor ao lado dele (não o da sidebar)', async () => {
     const user = userEvent.setup();
     render(<App />);
     await waitForVault();
     expect(screen.getByRole('textbox', { name: 'Campo de mensagem' }).getAttribute('placeholder')).toBe('Pergunte à vault Obsidian…');
 
     await user.click(screen.getByRole('button', { name: 'Vault da pergunta: Obsidian. Trocar vault' }));
-    expect(await screen.findByRole('menu', { name: 'Vaults' })).toBeTruthy();
-    await user.click(screen.getByRole('menuitemradio', { name: /Culinária/ }));
+    const menu = await screen.findByRole('menu', { name: 'Vault da pergunta' });
+    expect(screen.queryByRole('menu', { name: 'Vaults' })).toBeNull();
+    await user.click(within(menu).getByRole('menuitemradio', { name: /Culinária/ }));
     expect(await waitForVault(/Culinária/)).toBeTruthy();
   });
 

@@ -106,6 +106,19 @@ export interface IndexJobFileError {
   error_code: string | null;
 }
 
+/** Arquivo que a indexação da vault pula (Fila: "Ignorar"). */
+export interface IgnoredPath {
+  path: string;
+  reason: string | null;
+  ignored_at: string;
+}
+
+/** Resultado de "Tentar de novo" por arquivo (status: indexed | unchanged | failed). */
+export interface RetryIndexResult {
+  ok: boolean;
+  results: { name: string; source_path: string; status: string; chunks: number; error_code: string | null; message: string | null }[];
+}
+
 export interface IndexJobSnapshot {
   job_id: string;
   status: 'running' | 'success' | 'partial' | 'failed' | 'cancelled' | string;
@@ -205,6 +218,8 @@ export interface SaveApiKeyResult {
 export interface SettingOption {
   value: string;
   label: string;
+  /** Explicação da opção (Extractive, Ollama, Auto, CPU, CUDA...). */
+  description?: string | null;
 }
 
 export interface SettingRow {
@@ -612,6 +627,11 @@ interface PythonApi {
 
   /** Tira a pasta do corpus (notas e raiz), exigindo 'REMOVER'. Não apaga arquivos do disco. */
   removeCorpusRoot?: (root: string, confirmation: string) => Promise<CorpusRootRemoveResult>;
+  listIgnoredPaths?: () => Promise<IgnoredPath[]>;
+  ignoreIndexPaths?: (paths: string[]) => Promise<{ ok: boolean; ignored?: number; removed_notes?: number; message?: string }>;
+  unignoreIndexPaths?: (paths: string[]) => Promise<{ ok: boolean; restored?: number; queued?: number; message?: string }>;
+  retryIndexPaths?: (paths: string[]) => Promise<RetryIndexResult>;
+  openIndexPath?: (path: string, reveal: boolean) => Promise<{ ok: boolean; message?: string }>;
 
   /** Vaults cadastradas, com a ativa e a contagem de notas de cada uma. */
   listVaults?: () => Promise<VaultList>;
@@ -736,6 +756,13 @@ type MockSettingRow = Omit<
 > &
   Partial<Pick<SettingRow, 'storage' | 'options' | 'placeholder' | 'warning' | 'local_env_path' | 'min' | 'max'>>;
 
+// Mesmas explicações do catálogo do backend (settings_specs.py), para o modo navegador.
+const MOCK_DEVICE_OPTIONS = [
+  { value: 'auto', label: 'Auto', description: 'Usa a placa de vídeo NVIDIA (CUDA) se houver; senão, o processador. A escolha segura.' },
+  { value: 'cpu', label: 'CPU', description: 'Roda no processador. Funciona em qualquer PC; mais lento com modelos grandes.' },
+  { value: 'cuda', label: 'CUDA', description: 'Roda na placa de vídeo NVIDIA: bem mais rápido, mas exige GPU NVIDIA com CUDA; sem ela, dá erro.' },
+];
+
 const mockSettingRow = (row: MockSettingRow): SettingRow => ({
   storage: 'user_settings',
   options: [],
@@ -859,6 +886,8 @@ const MOCK_BENCHMARK_RESULT: BenchmarkCompareResult = {
   },
 };
 
+let mockJobPolls = 0;
+
 const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobSnapshot => ({
   job_id: 'idx-mock',
   status,
@@ -897,7 +926,15 @@ const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobS
   },
   error_code: null,
   message: status === 'running' ? 'Processando Introdução.md' : 'Indexação finalizada.',
-  last_errors: [],
+  // Exemplos de falhas (modo navegador): templates vazios e um PDF escaneado.
+  last_errors:
+    status === 'running'
+      ? []
+      : [
+          { source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Templates\\Mensal.md', message: 'EMPTY_CONTENT', error_code: 'EMPTY_CONTENT' },
+          { source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Templates\\Reunião.md', message: 'EMPTY_CONTENT', error_code: 'EMPTY_CONTENT' },
+          { source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Anexos\\contrato-escaneado.pdf', message: 'PDF_PARSE_FAILED', error_code: 'PDF_PARSE_FAILED' },
+        ],
   cancel_requested: status === 'cancelled',
   files_per_second: 2.08,
   chunks_per_second: 8.33,
@@ -958,6 +995,44 @@ const MOCK_VOICE_MODELS: VoiceModelInfo[] = [
     selectable: true,
   },
   {
+    id: 'sensevoice-small',
+    engine: 'sensevoice',
+    format: 'onnx',
+    repo_id: 'csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17',
+    revision: 'mock',
+    languages: ['zh', 'en', 'ja', 'ko', 'yue'],
+    license: 'Apache-2.0',
+    files: [{ path: 'model.int8.onnx', size: 239_549_735, sha256: 'mock' }],
+    installed: false,
+    size_bytes: 239_549_735,
+    label: 'SenseVoice Small',
+    description: 'Multilíngue (zh/en/ja/ko/yue), boa precisão.',
+    speed_tier: 'medio',
+    quality_tier: 'boa',
+    recommended: false,
+    supports_auto_language: false,
+    selectable: true,
+  },
+  {
+    id: 'sensevoice-gguf-q8',
+    engine: 'catalog-only',
+    format: 'gguf',
+    repo_id: 'handy-computer/SenseVoiceSmall-gguf',
+    revision: 'mock',
+    languages: ['zh', 'en', 'ja', 'ko', 'yue'],
+    license: 'Apache-2.0',
+    files: [{ path: 'model.gguf', size: 252_684_608, sha256: 'mock' }],
+    installed: false,
+    size_bytes: 252_684_608,
+    label: 'SenseVoice GGUF Q8',
+    description: 'Variante quantizada; menor, com precisão um pouco menor.',
+    speed_tier: 'rapido',
+    quality_tier: 'boa',
+    recommended: false,
+    supports_auto_language: false,
+    selectable: true,
+  },
+  {
     id: 'silero-vad',
     engine: 'silero',
     format: 'onnx',
@@ -994,6 +1069,9 @@ const mockVoiceModelDownload = (
 // ─── Serviço de bridge exportado ─────────────────────────────────────────────
 let mockWatcherActive = false;
 let mockWatcherDirectory: string | null = null;
+
+// Arquivos ignorados na indexação (mock).
+const MOCK_IGNORED_PATHS: IgnoredPath[] = [];
 
 // ─── Vaults (mock) ──────────────────────────────────────────────────────────
 const MOCK_VAULTS: Vault[] = [
@@ -1119,6 +1197,7 @@ export const bridge = {
     }
     console.debug(`[Bridge Mock] startIndexJob: ${folderPath} rebuild=${String(rebuild)}`);
     await new Promise((resolve) => setTimeout(resolve, 250));
+    mockJobPolls = 0;
     return mockIndexJob('running');
   },
 
@@ -1127,7 +1206,9 @@ export const bridge = {
       return window.pywebview.api.getIndexJob(jobId);
     }
     console.debug(`[Bridge Mock] getIndexJob: ${jobId}`);
-    return mockIndexJob('running');
+    // O job de exemplo termina na quarta consulta (com as falhas de exemplo).
+    mockJobPolls += 1;
+    return mockIndexJob(mockJobPolls >= 4 ? 'completed' : 'running');
   },
 
   cancelIndexJob: async (jobId: string): Promise<IndexJobSnapshot> => {
@@ -1301,11 +1382,7 @@ export const bridge = {
           layer: 'simple',
           value: 'cpu',
           display_value: 'cpu',
-          options: [
-            { value: 'auto', label: 'Auto' },
-            { value: 'cpu', label: 'CPU' },
-            { value: 'cuda', label: 'CUDA' },
-          ],
+          options: MOCK_DEVICE_OPTIONS,
           recommended: 'auto',
         }),
         mockSettingRow({
@@ -1319,10 +1396,26 @@ export const bridge = {
           value: 'extractive',
           display_value: 'extractive',
           options: [
-            { value: 'extractive', label: 'Extractive' },
-            { value: 'ollama', label: 'Ollama' },
-            { value: 'lmstudio', label: 'LM Studio' },
-            { value: 'openai-compatible', label: 'OpenAI-compatible' },
+            {
+              value: 'extractive',
+              label: 'Extractive',
+              description: 'Sem IA generativa: monta a resposta com trechos das suas notas, cada um com a fonte. Rápido, offline e sem custo.',
+            },
+            {
+              value: 'ollama',
+              label: 'Ollama',
+              description: 'IA local pelo Ollama (localhost:11434): escreve a resposta a partir dos trechos sem enviar nada para fora. Precisa do Ollama aberto e de um modelo baixado.',
+            },
+            {
+              value: 'lmstudio',
+              label: 'LM Studio',
+              description: 'IA local pelo servidor do LM Studio (localhost:1234). Mesmo papel do Ollama: privado, mas exige o servidor ligado com um modelo carregado.',
+            },
+            {
+              value: 'openai-compatible',
+              label: 'OpenAI-compatible',
+              description: 'Qualquer API no padrão OpenAI (OpenAI, OpenRouter, Groq…). Usa a API key e envia os trechos recuperados para o serviço.',
+            },
           ],
           recommended: 'extractive',
         }),
@@ -1404,11 +1497,7 @@ export const bridge = {
           layer: 'simple',
           value: 'auto',
           display_value: 'auto',
-          options: [
-            { value: 'auto', label: 'Auto' },
-            { value: 'cpu', label: 'CPU' },
-            { value: 'cuda', label: 'CUDA' },
-          ],
+          options: MOCK_DEVICE_OPTIONS,
           recommended: 'auto',
         }),
         mockSettingRow({
@@ -1619,6 +1708,59 @@ export const bridge = {
     const index = MOCK_CORPUS_ROOTS.findIndex((item) => item.root === root);
     const removed = index >= 0 ? MOCK_CORPUS_ROOTS.splice(index, 1)[0].notes_count : 0;
     return { ok: true, removed_notes: removed };
+  },
+
+  // ─── Falhas da Fila: ignorar, voltar a indexar, tentar de novo, abrir ──────
+  listIgnoredPaths: async (): Promise<IgnoredPath[]> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.listIgnoredPaths) {
+      return window.pywebview.api.listIgnoredPaths();
+    }
+    return MOCK_IGNORED_PATHS.map((item) => ({ ...item }));
+  },
+
+  ignoreIndexPaths: async (paths: string[]) => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.ignoreIndexPaths) {
+      return window.pywebview.api.ignoreIndexPaths(paths);
+    }
+    for (const path of paths) {
+      if (!MOCK_IGNORED_PATHS.some((item) => item.path === path)) {
+        MOCK_IGNORED_PATHS.push({ path, reason: 'usuario', ignored_at: new Date().toISOString() });
+      }
+    }
+    return { ok: true, ignored: paths.length, removed_notes: 0 };
+  },
+
+  unignoreIndexPaths: async (paths: string[]) => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.unignoreIndexPaths) {
+      return window.pywebview.api.unignoreIndexPaths(paths);
+    }
+    const before = MOCK_IGNORED_PATHS.length;
+    const keep = MOCK_IGNORED_PATHS.filter((item) => !paths.includes(item.path));
+    MOCK_IGNORED_PATHS.splice(0, MOCK_IGNORED_PATHS.length, ...keep);
+    return { ok: true, restored: before - keep.length, queued: 0 };
+  },
+
+  retryIndexPaths: async (paths: string[]): Promise<RetryIndexResult> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.retryIndexPaths) {
+      return window.pywebview.api.retryIndexPaths(paths);
+    }
+    const results = paths.map((path) => ({
+      name: path.split(/[\\/]/).pop() ?? path,
+      source_path: path,
+      status: 'failed',
+      chunks: 0,
+      error_code: 'EMPTY_CONTENT',
+      message: 'EMPTY_CONTENT',
+    }));
+    return { ok: true, results };
+  },
+
+  openIndexPath: async (path: string, reveal = false) => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.openIndexPath) {
+      return window.pywebview.api.openIndexPath(path, reveal);
+    }
+    console.debug(`[Bridge Mock] openIndexPath: ${path} reveal=${reveal}`);
+    return { ok: true };
   },
 
   listVaults: async (): Promise<VaultList> => {

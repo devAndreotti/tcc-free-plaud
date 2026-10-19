@@ -247,3 +247,16 @@ def test_audio_input_device_keeps_only_default_when_listing_fails(tmp_path: Path
 
     assert row['options'] == [{'value': '', 'label': 'Padrão do sistema'}]
     assert row['warning'] is None
+
+
+def test_opcoes_tecnicas_trazem_explicacao_para_o_usuario(tmp_path: Path) -> None:
+    # Provedor de resposta e devices explicam cada opção (Extractive, Ollama, Auto, CPU, CUDA...).
+    rows = {r['key']: r for r in settings_catalog_payload(_settings(tmp_path))}
+
+    for key in ('answer_provider', 'audio_device', 'embedding_device', 'default_ask_strategy', 'corpus_commit_mode'):
+        assert all(option.get('description') for option in rows[key]['options']), key
+    providers = {option['value']: option['description'] for option in rows['answer_provider']['options']}
+    assert 'offline' in providers['extractive']
+    assert 'localhost:11434' in providers['ollama']
+    # Opções sem explicação continuam sem a chave (formato antigo).
+    assert all('description' not in option for option in rows['audio_language']['options'])

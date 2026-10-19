@@ -18,6 +18,7 @@ Integração atual:
 """
 
 import os
+import subprocess
 import sqlite3
 import sys
 import threading
@@ -51,13 +52,15 @@ from escolio.app.settings_presets import apply_settings_preset, list_settings_pr
 from escolio.benchmark.service import run_benchmark_compare
 from escolio.corpus.ask import corpus_vocabulary_stems
 from escolio.corpus.dropped import DroppedFileIndexer
-from escolio.corpus.jobs import cancel_index_job, get_index_job, index_job_manager, start_index_job
+from escolio.corpus.jobs import cancel_index_job, corpus_write_lock, get_index_job, index_job_manager, start_index_job
 from escolio.corpus.runtime import CorpusRuntime
 from escolio.notes.service import delete_note, get_note_detail, list_notes, reindex_note
 from escolio.providers.answer import test_answer_provider
 from escolio.providers.model_discovery import list_answer_models
 from escolio.retrieval.models import AskResponse
-from escolio.storage.sqlite import init_sqlite, list_corpus_roots
+from escolio.ingest.validators import SUPPORTED_EXTENSIONS
+from escolio.notes.service import delete_notes_by_source_path
+from escolio.storage.sqlite import ignore_paths, init_sqlite, list_corpus_roots, list_ignored_paths, unignore_paths
 from escolio.storage.vector import close_vector_stores
 from escolio.tui.actions import (
     ask_corpus,
@@ -181,6 +184,75 @@ class Api:
             return {'ok': False, 'message': str(exc)}
         self._activate_vault()
         return {'ok': True, 'vault': vault.model_dump()}
+
+    def _vault_connection(self):
+        return init_sqlite(self.runtime.settings_snapshot().sqlite_path)
+
+    def listIgnoredPaths(self) -> list[dict]:
+        """Arquivos que a indexação desta vault pula (Fila: "Ignorados")."""
+        connection = self._vault_connection()
+        try:
+            return list_ignored_paths(connection)
+        finally:
+            connection.close()
+
+    def ignoreIndexPaths(self, paths: list[str]) -> dict:
+        """Ignora arquivos nas próximas indexações e tira do índice o que já estava lá. Não apaga do disco."""
+        clean = [path for path in (paths or []) if path]
+        if not clean:
+            return {'ok': False, 'message': 'Nenhum arquivo informado.'}
+        settings = self.runtime.settings_snapshot()
+        connection = init_sqlite(settings.sqlite_path)
+        try:
+            with corpus_write_lock:
+                ignore_paths(connection, clean, reason='usuario')
+                vector_store = self.runtime.get_vector_store()
+                removed = sum(
+                    delete_notes_by_source_path(path, settings=settings, connection=connection, vector_store=vector_store)
+                    for path in clean
+                )
+        finally:
+            connection.close()
+        return {'ok': True, 'ignored': len(clean), 'removed_notes': removed}
+
+    def unignoreIndexPaths(self, paths: list[str]) -> dict:
+        """Volta a indexar arquivos ignorados: saem da lista e entram na fila serial de escrita."""
+        clean = [path for path in (paths or []) if path]
+        connection = self._vault_connection()
+        try:
+            restored = unignore_paths(connection, clean)
+        finally:
+            connection.close()
+        existing = [Path(path) for path in clean if Path(path).is_file()]
+        if existing:
+            self.dropped_files.enqueue_paths(existing)
+        return {'ok': True, 'restored': restored, 'queued': len(existing)}
+
+    def retryIndexPaths(self, paths: list[str]) -> dict:
+        """Tenta indexar de novo arquivos que falharam e devolve o resultado de cada um."""
+        results = [self.dropped_files.index_now(Path(path)).model_dump() for path in (paths or []) if path]
+        return {'ok': True, 'results': results}
+
+    def openIndexPath(self, path: str, reveal: bool = False) -> dict:
+        """Abre o arquivo no programa padrão ou mostra na pasta (falhas da Fila)."""
+        target = Path(path or '')
+        if not path or not target.exists():
+            return {'ok': False, 'message': 'Arquivo não encontrado: foi movido ou apagado.'}
+        # Abrir qualquer caminho executaria programas (.exe, .bat): só os tipos que o Escólio indexa.
+        if not reveal and target.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            return {'ok': False, 'message': 'Este tipo de arquivo não pode ser aberto daqui.'}
+        try:
+            if sys.platform == 'win32':
+                if reveal:
+                    subprocess.Popen(['explorer', f'/select,{target}'])
+                else:
+                    os.startfile(target)
+            else:
+                opener = 'open' if sys.platform == 'darwin' else 'xdg-open'
+                subprocess.Popen([opener, str(target.parent if reveal else target)])
+        except OSError as exc:
+            return {'ok': False, 'message': f'Não foi possível abrir: {exc}'}
+        return {'ok': True}
 
     def _warmup(self) -> None:
         """Abre o Chroma, carrega o embedding e o vocabulário do corpus antes da primeira pergunta (~8 s a frio)."""
