@@ -147,4 +147,27 @@ describe('NoteDetailView', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Copiar caminho' }));
     expect(screen.queryByText('caminho copiado')).toBeNull();
   });
+
+  it('com highlightChunkId, abre os chunks, destaca o trecho citado e rola até ele', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderView({ highlightChunkId: 'c2' });
+
+    const list = screen.getByRole('list', { name: 'Chunks indexados' });
+    const cited = within(list).getByText('Segundo trecho').closest('li') as HTMLElement;
+    expect(cited.classList.contains('reader__chunk--cited')).toBe(true);
+    expect(within(cited).getByText('trecho citado')).toBeTruthy();
+    expect(within(list).getByText('Primeiro trecho').closest('li')?.classList.contains('reader__chunk--cited')).toBe(false);
+    expect((screen.getByRole('checkbox', { name: 'Mostrar chunks' }) as HTMLInputElement).checked).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
+  });
+
+  it('trecho que a nota não tem mais: abre a leitura normal, sem destaque nem erro', () => {
+    renderView({ highlightChunkId: 'c-antigo' });
+
+    expect(screen.queryByRole('list', { name: 'Chunks indexados' })).toBeNull();
+    expect(document.querySelector('.reader__chunk--cited')).toBeNull();
+    expect(document.querySelector('.reader__body')).toBeTruthy();
+  });
 });

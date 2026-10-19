@@ -187,9 +187,9 @@ function AppContent() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
   const [healthKey, setHealthKey] = useState(0);
   const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
-  // Nota pedida pelo grafo; a tela Notas a abre ao montar. `at` muda a cada clique, então clicar de novo na mesma nota reabre.
+  // Nota pedida pelo grafo ou por uma fonte do chat (com o trecho citado); a tela Notas a abre ao montar. `at` muda a cada clique, então clicar de novo na mesma nota reabre.
   // Navegar pela sidebar limpa o pedido.
-  const [pendingNote, setPendingNote] = useState<{ noteId: string; at: number } | null>(null);
+  const [pendingNote, setPendingNote] = useState<{ noteId: string; chunkId?: string; at: number } | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('chat');
   const [strategy, setStrategy] = useState<AskStrategy>('hybrid');
   const [sourceRoot, setSourceRoot] = useState<string | null>(readStoredSourceRoot);
@@ -240,9 +240,9 @@ function AppContent() {
     setWorkspaceView(view);
   }, []);
 
-  // Clique numa nota do grafo: vai para Notas e abre o detalhe dela
-  const handleOpenNote = useCallback((noteId: string) => {
-    setPendingNote((prev) => ({ noteId, at: (prev?.at ?? 0) + 1 }));
+  // Clique numa nota do grafo, ou numa fonte do chat (com o trecho citado): vai para Notas e abre o detalhe dela
+  const handleOpenNote = useCallback((noteId: string, chunkId?: string) => {
+    setPendingNote((prev) => ({ noteId, chunkId, at: (prev?.at ?? 0) + 1 }));
     setWorkspaceView('notes');
   }, []);
 
@@ -457,7 +457,7 @@ function AppContent() {
             />
 
             {/* View ativa conforme a aba selecionada */}
-            {workspaceView === 'notes' && <NotesPanel key={pendingNote ? `nota-${pendingNote.at}` : `lista-${vaultVersion}`} initialNoteId={pendingNote?.noteId ?? null} />}
+            {workspaceView === 'notes' && <NotesPanel key={pendingNote ? `nota-${pendingNote.at}` : `lista-${vaultVersion}`} initialNoteId={pendingNote?.noteId ?? null} initialChunkId={pendingNote?.chunkId ?? null} />}
 
             {workspaceView === 'benchmark' && <BenchmarkPanel />}
 
@@ -479,7 +479,7 @@ function AppContent() {
                     aria-live="polite"
                   >
                     {activeMessages.map((message) => (
-                      <MessageBubble key={message.id} message={message} onRetry={handleRetry} />
+                      <MessageBubble key={message.id} message={message} onRetry={handleRetry} onOpenSource={handleOpenNote} />
                     ))}
 
                     {/* Indicador de digitação da aba ativa */}

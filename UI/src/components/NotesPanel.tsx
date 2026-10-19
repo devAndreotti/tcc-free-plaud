@@ -39,9 +39,11 @@ const TypeIcon = ({ type }: { type: string | null | undefined }) => {
 interface NotesPanelProps {
   /** Nota pedida pelo grafo: abre o detalhe dela ao montar ou quando muda */
   initialNoteId?: string | null;
+  /** Trecho citado numa resposta do chat: a nota abre com ele destacado */
+  initialChunkId?: string | null;
 }
 
-const NotesPanel = ({ initialNoteId = null }: NotesPanelProps) => {
+const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelProps) => {
   const [notes, setNotes] = useState<NoteSummary[]>(() => notesCache ?? []);
   const [selectedId, setSelectedId] = useState<string | null>(initialNoteId);
   const [detail, setDetail] = useState<NoteDetail | null>(null);
@@ -283,6 +285,7 @@ const NotesPanel = ({ initialNoteId = null }: NotesPanelProps) => {
             isLoadingDetail={isLoadingDetail}
             onReindex={handleReindex}
             onDelete={handleDelete}
+            highlightChunkId={initialChunkId}
           />
         ) : (
           <div className="notes__empty notes__empty--detail">

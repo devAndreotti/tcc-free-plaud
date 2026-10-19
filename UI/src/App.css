@@ -1237,6 +1237,12 @@
   background: var(--accent-soft);
 }
 
+/* Trecho citado numa resposta do chat. Mesma especificidade do :nth-child(even) acima, mas vem depois: esta regra vence. */
+.reader__chunk.reader__chunk--cited {
+  background: var(--accent-soft);
+  border-left-color: var(--accent-blue-light);
+}
+
 .reader__chunk-label {
   position: absolute;
   right: calc(100% + 16px);
@@ -2239,6 +2245,38 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.msg__source-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.msg__source-open svg {
+  flex: none;
+}
+
+.msg__source-open:hover {
+  color: var(--accent-blue-light);
+}
+
+.msg__source[tabindex] {
+  cursor: pointer;
+}
+
+.msg__source:focus-visible,
+.msg__source-open:focus-visible {
+  outline: 2px solid var(--accent-blue-light);
+  outline-offset: 2px;
 }
 
 .msg__source-path {
