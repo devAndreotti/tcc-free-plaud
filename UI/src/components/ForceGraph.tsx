@@ -88,14 +88,17 @@ function drawNodes(ctx: Ctx, nodes: SimNode[], colors: Colors, hoveredId: string
   }
 }
 
-// Rótulos das pastas só com zoom suficiente para não se sobreporem (1º nível antes dos demais)
-function drawFolderLabels(ctx: Ctx, nodes: SimNode[], colors: Colors, cam: Camera) {
+// Rótulos das pastas só com zoom suficiente para não se sobreporem (1º nível antes dos demais);
+// as notas ganham nome com mais zoom ainda, como no grafo do Obsidian (no modo Links só há notas).
+const NOTE_LABEL_SCALE = 1.6;
+
+function drawLabels(ctx: Ctx, nodes: SimNode[], colors: Colors, cam: Camera) {
   ctx.fillStyle = colors.label;
   ctx.font = `${11 / cam.scale}px sans-serif`;
   ctx.textAlign = 'center';
   for (const n of nodes) {
-    if (n.kind !== 'folder' || n.depth === 0) continue;
-    const minScale = n.depth === 1 ? 0.45 : 1.2;
+    if (n.kind === 'folder' && n.depth === 0) continue;
+    const minScale = n.kind === 'note' ? NOTE_LABEL_SCALE : n.depth === 1 ? 0.45 : 1.2;
     if (cam.scale < minScale) continue;
     ctx.fillText(n.label, n.x, n.y - (nodeRadius(n) + 4) / cam.scale);
   }
@@ -232,7 +235,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     ctx.globalAlpha = chain.length > 0 ? 0.3 : 1;
     drawEdges(ctx, nodes, edges, colors, cam);
     drawNodes(ctx, nodes, colors, hovered.current);
-    drawFolderLabels(ctx, nodes, colors, cam);
+    drawLabels(ctx, nodes, colors, cam);
     ctx.globalAlpha = 1;
     if (chain.length > 0) drawFocus(ctx, chain, nodes, colors, cam, logW.current);
 
