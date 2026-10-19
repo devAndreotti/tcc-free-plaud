@@ -1,4 +1,8 @@
-from escolio.providers.answer_quality import is_echoed_question, is_echoed_title, is_no_answer_sentinel
+from escolio.providers.answer_quality import (
+    is_echoed_question,
+    is_echoed_title,
+    is_no_answer_sentinel,
+)
 
 CISCO_CONTEXT = (
     '[1]\nsource_path: cisco.md\ntitle: Cisco — Trilha de Cursos e Certificações\nnote_id: cisco\nchunk_id: cisco::1\n'
