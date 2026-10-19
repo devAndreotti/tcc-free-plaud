@@ -62,7 +62,7 @@ def _input_device_names() -> list[str] | None:
 
 def _options_for(spec: SettingSpec, settings: Settings) -> list[dict[str, Any]]:
     if spec.key != 'audio_input_device':
-        return [option.model_dump() for option in spec.options]
+        return [option.model_dump(exclude_none=True) for option in spec.options]
     options: list[dict[str, Any]] = [{'value': '', 'label': 'Padrão do sistema'}]
     names = _input_device_names()
     if names is None:

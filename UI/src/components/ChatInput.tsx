@@ -10,6 +10,7 @@ import {
 import { PaperclipIcon, MicIcon, SendIcon, FileIcon, XIcon, LoaderIcon, ChevronDownIcon, CheckIcon } from './Icons';
 import { bridge, type AskStrategy, type AudioJobSnapshot, type CorpusRoot, type Vault } from '../services/bridge';
 import { VaultGlyph } from './VaultGlyph';
+import { vaultMeta } from '../lib/vaultVisuals';
 
 const isAudioJobDone = (snapshot: AudioJobSnapshot) =>
   snapshot.status === 'completed' || snapshot.status === 'failed' || snapshot.status === 'cancelled';
@@ -40,9 +41,10 @@ interface ChatInputProps {
   /** Caminho da pasta escolhida, ou null para "Todas as pastas". */
   sourceRoot?: string | null;
   onSourceRootChange?: (root: string | null) => void;
-  /** Vault que vai responder: aparece no placeholder, na dica e num chip que abre o seletor de vault. */
+  /** Vault que vai responder: aparece no placeholder, na dica e num chip com o seletor de vault. */
   vault?: Vault | null;
-  onOpenVaultMenu?: () => void;
+  vaults?: Vault[];
+  onVaultChange?: (vaultId: string) => void;
 }
 
 const STRATEGIES: { value: AskStrategy; label: string; hint: string }[] = [
@@ -117,6 +119,64 @@ const StrategyPicker = ({ value, onChange }: { value: AskStrategy; onChange: (s:
 };
 
 const folderName = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+
+// Mesmo padrão do StrategyPicker: troca a vault da pergunta num menu ancorado no próprio chip.
+const VaultPicker = ({
+  vaults,
+  value,
+  onChange,
+}: {
+  vaults: Vault[];
+  value: Vault;
+  onChange: (vaultId: string) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useDismissOnOutside(open, wrapRef, () => setOpen(false));
+
+  return (
+    <div className="strategy" ref={wrapRef}>
+      <button
+        type="button"
+        className="strategy__chip composer__vault"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Vault da pergunta: ${value.name}. Trocar vault`}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <VaultGlyph icon={value.icon} color={value.color} size={11} />
+        <span className="composer__vault-name">{value.name}</span>
+        <ChevronDownIcon size={13} />
+      </button>
+      {open && (
+        <div className="strategy__menu" role="menu" aria-label="Vault da pergunta">
+          {vaults.map((vault) => (
+            <button
+              key={vault.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={vault.id === value.id}
+              className="strategy__item"
+              onClick={() => {
+                setOpen(false);
+                if (vault.id !== value.id) onChange(vault.id);
+              }}
+            >
+              <CheckIcon size={15} />
+              <span className="strategy__vault">
+                <VaultGlyph icon={vault.icon} color={vault.color} size={13} />
+                <span>
+                  {vault.name}
+                  <small className="mono">{vaultMeta(vault)}</small>
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // Mesmo padrão visual do StrategyPicker: escolhe a pasta de origem da pergunta (ou todas).
 const SourcePicker = ({
@@ -201,7 +261,8 @@ const ChatInput = ({
   sourceRoot = null,
   onSourceRootChange,
   vault = null,
-  onOpenVaultMenu,
+  vaults = [],
+  onVaultChange,
 }: ChatInputProps) => {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
@@ -443,18 +504,7 @@ const ChatInput = ({
             <PaperclipIcon size={17} />
           </button>
 
-          {vault && onOpenVaultMenu && (
-            <button
-              type="button"
-              className="strategy__chip composer__vault"
-              aria-label={`Vault da pergunta: ${vault.name}. Trocar vault`}
-              onClick={onOpenVaultMenu}
-            >
-              <VaultGlyph icon={vault.icon} color={vault.color} size={11} />
-              <span className="composer__vault-name">{vault.name}</span>
-              <ChevronDownIcon size={13} />
-            </button>
-          )}
+          {vault && onVaultChange && <VaultPicker vaults={vaults.length ? vaults : [vault]} value={vault} onChange={onVaultChange} />}
           {strategy && onStrategyChange && <StrategyPicker value={strategy} onChange={onStrategyChange} />}
           {onSourceRootChange && corpusRoots.length >= 2 && (
             <SourcePicker roots={corpusRoots} value={sourceRoot} onChange={onSourceRootChange} />

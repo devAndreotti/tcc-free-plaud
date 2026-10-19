@@ -16,7 +16,4 @@ export interface VaultsState {
 /** Disparado ao trocar de vault: o backend parou o watcher; a Fila zera o toggle local. */
 export const VAULT_SWITCHED_EVENT = 'escolio:vault-switched';
 
-/** Pede para a sidebar abrir o seletor de vault (ex.: chip da vault no campo de pergunta). */
-export const OPEN_VAULT_MENU_EVENT = 'escolio:open-vault-menu';
-
 export const VaultsContext = createContext<VaultsState | null>(null);

@@ -73,7 +73,7 @@ def _failed_file_errors(result: CorpusIndexBatchResult | None) -> list[IndexJobF
                     error_code=item.error_code,
                 )
             )
-    return errors[-10:]
+    return errors[-100:]
 
 
 def _chunks_indexed(result: CorpusIndexBatchResult | None) -> int:

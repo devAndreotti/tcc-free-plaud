@@ -27,6 +27,7 @@ from escolio.corpus.models import (
     CorpusPerfBenchmarkResult,
     CorpusRebuildResult,
     CorpusResetResult,
+    CorpusSkippedPath,
     CorpusStatusResult,
     ResolvedCorpusCommitMode,
 )
@@ -54,6 +55,7 @@ from escolio.storage.sqlite import (
     note_chunks_match_config,
     record_corpus_root,
     replace_chunks_for_note,
+    split_ignored,
     upsert_note,
 )
 from escolio.storage.vector import LocalVectorStore
@@ -1253,6 +1255,16 @@ def index_corpus_file(
     resolved_overlap = resolved_settings.default_chunk_overlap if overlap is None else overlap
 
     try:
+        # Arquivo que o usuário mandou ignorar fica fora do índice (watcher, área de soltar, "tentar de novo").
+        if not split_ignored(resolved_connection, [source_path])[0]:
+            return CorpusIndexResult(
+                source_path=str(source_path),
+                status='unchanged',
+                embedding_model=resolved_embedder.model_name,
+                vector_collection_name=resolved_vector_store.collection_name,
+                vector_entries_count=resolved_vector_store.count(),
+                message='Arquivo ignorado na indexação.',
+            )
         document = load_document(source_path)
         if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
@@ -1511,6 +1523,16 @@ def index_corpus_path(
                 commit_mode_resolved=commit_mode_resolved,
                 results=[],
                 skipped=discovery.skipped,
+            )
+
+        # Arquivos ignorados pelo usuário (Fila) não entram; contam como pulados.
+        kept_files, ignored_files = split_ignored(resolved_connection, discovery.files)
+        if ignored_files:
+            discovery = discovery.model_copy(
+                update={
+                    'files': kept_files,
+                    'skipped': [*discovery.skipped, *(CorpusSkippedPath(path=str(p), reason='ignored_by_user') for p in ignored_files)],
+                }
             )
 
         # Antes de qualquer arquivo: a pasta vira raiz do corpus mesmo que a reindexação venha toda "unchanged".

@@ -11,6 +11,7 @@ const bridgeMock = vi.hoisted(() => ({
   applySettingsPreset: vi.fn(),
   testAnswerProvider: vi.fn(),
   saveBackendSetting: vi.fn(),
+  saveBackendSettings: vi.fn(),
   listAnswerModels: vi.fn(),
   listVoiceModels: vi.fn(),
   startVoiceModelDownload: vi.fn(),
@@ -219,11 +220,46 @@ describe('SettingsModal', () => {
     expect(screen.queryByLabelText('Modelo de resposta')).toBeNull();
   });
 
-  it('na aba Vaults o rodapé avisa que as mudanças valem na hora (não passam pelo Salvar)', async () => {
+  it('na aba Vaults não há barra de salvar: a aba explica que as mudanças valem na hora', async () => {
     renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="vaults" />);
 
-    expect(await screen.findByText('Mudanças nas vaults valem na hora.')).toBeTruthy();
+    expect(await screen.findByText(/Mudanças aqui valem na\s+hora/)).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Alterações não salvas' })).toBeNull();
     expect(screen.queryByText('Nenhuma alteração')).toBeNull();
+  });
+
+  it('explica cada opção técnica no dropdown e abaixo do select (ex.: Auto, CPU, CUDA)', async () => {
+    const user = userEvent.setup();
+    const deviceRow = {
+      ...backendSettings.settings_catalog[2],
+      index: 4,
+      key: 'audio_device',
+      label: 'Device de transcrição',
+      description: 'Onde roda o modelo de voz.',
+      value: 'auto',
+      display_value: 'auto',
+      recommended: 'auto',
+      options: [
+        { value: 'auto', label: 'Auto', description: 'Usa a placa de vídeo NVIDIA (CUDA) se houver; senão, o processador.' },
+        { value: 'cpu', label: 'CPU', description: 'Roda no processador. Funciona em qualquer PC.' },
+        { value: 'cuda', label: 'CUDA', description: 'Roda na placa de vídeo NVIDIA.' },
+      ],
+    };
+    bridgeMock.getBackendSettings.mockResolvedValue({
+      ...backendSettings,
+      settings_catalog: [...backendSettings.settings_catalog, deviceRow],
+    });
+
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    expect(await screen.findByText('Usa a placa de vídeo NVIDIA (CUDA) se houver; senão, o processador.')).toBeTruthy();
+    expect(screen.getAllByText('Recomendado: Auto').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('combobox', { name: 'Device de transcrição' }));
+    const listbox = screen.getByRole('listbox', { name: 'Device de transcrição' });
+    expect(within(listbox).getByText('Roda na placa de vídeo NVIDIA.')).toBeTruthy();
+    await user.click(within(listbox).getByRole('option', { name: 'CPU' }));
+
+    expect(screen.getByText('Roda no processador. Funciona em qualquer PC.')).toBeTruthy();
   });
 
   it('lista modelos e preenche draft de answer_model ao clicar', async () => {
@@ -443,20 +479,43 @@ describe('SettingsModal', () => {
     expect(screen.getByRole('combobox', { name: 'Idioma da transcrição' }).textContent).toBe('Inglês');
   });
 
-  it('conta alterações pendentes e oferece Cancelar e Salvar no rodapé', async () => {
+  it('a barra de salvar só aparece com alteração pendente; Descartar volta ao que estava salvo', async () => {
     const user = userEvent.setup();
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
 
     renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
-    expect(screen.getByText('Nenhuma alteração')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Alterações não salvas' })).toBeNull();
 
     await user.click(screen.getByRole('radio', { name: 'Moonshine Tiny' }));
 
     // Modelo e idioma (corrigido para en) mudaram.
-    expect(screen.getByText('2 alterações não salvas')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Salvar configurações do backend' })).toBeTruthy();
+    const bar = screen.getByRole('region', { name: 'Alterações não salvas' });
+    expect(within(bar).getByText('2 alterações não salvas')).toBeTruthy();
+    expect(within(bar).getByRole('button', { name: 'Salvar configurações do backend' })).toBeTruthy();
+
+    await user.click(within(bar).getByRole('button', { name: 'Descartar' }));
+    expect(screen.queryByRole('region', { name: 'Alterações não salvas' })).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Whisper Small' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('salvar fecha a barra e mostra o aviso flutuante de salvo', async () => {
+    const user = userEvent.setup();
+    bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
+    const saved = {
+      ...backendSettings,
+      settings_catalog: backendSettings.settings_catalog.map((row) =>
+        row.key === 'audio_model' ? { ...row, value: 'moonshine-tiny-en' } : row.key === 'audio_language' ? { ...row, value: 'en' } : row
+      ),
+    };
+    bridgeMock.saveBackendSettings.mockResolvedValue(saved);
+
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    await user.click(await screen.findByRole('radio', { name: 'Moonshine Tiny' }));
+    await user.click(screen.getByRole('button', { name: 'Salvar configurações do backend' }));
+
+    expect((await screen.findByRole('status')).textContent).toContain('Configurações salvas.');
+    expect(screen.queryByRole('region', { name: 'Alterações não salvas' })).toBeNull();
   });
 
   it('mostra estado offline sem quebrar modal', async () => {

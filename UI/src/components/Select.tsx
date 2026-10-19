@@ -20,6 +20,8 @@ export interface SelectOption {
   disabled?: boolean;
   /** Texto secundário opcional exibido junto à opção (ex.: "instalado", "230 MB") */
   hint?: string;
+  /** Explicação da opção, em uma ou duas linhas abaixo do nome. */
+  description?: string | null;
 }
 
 interface SelectProps {
@@ -184,7 +186,10 @@ const Select = ({ value, options, onChange, ariaLabel, id, className, disabled, 
                 }
               }}
             >
-              <span className="select__option-label">{option.label}</span>
+              <span className="select__option-text">
+                <span className="select__option-label">{option.label}</span>
+                {option.description && <span className="select__option-desc">{option.description}</span>}
+              </span>
               {option.hint && <span className="select__option-hint">{option.hint}</span>}
             </li>
           ))}
