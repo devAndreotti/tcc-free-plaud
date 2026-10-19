@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 from escolio.corpus.ask import _build_corpus_claims, _citation_from_corpus_hit
@@ -59,6 +60,15 @@ def test_readable_chunk_text_nao_apaga_lista_ou_chave_valor_antes_de_regra_horiz
 
     assert readable_chunk_text(lista) == lista
     assert readable_chunk_text(ata) == ata
+
+
+def test_frontmatter_sem_fecho_com_lista_longa_nao_trava() -> None:
+    # Regressão: trecho cortado no meio de um frontmatter grande (sem o --- de fecho) levava 2^n passos; 24 itens eram ~30 s.
+    chunk = '---\ntags:\n' + '  - item\n' * 24 + 'texto da nota'
+
+    start = time.perf_counter()
+    assert readable_chunk_text(chunk).endswith('texto da nota')
+    assert time.perf_counter() - start < 1.0
 
 
 def test_readable_chunk_text_mantem_regra_horizontal_depois_de_prosa() -> None:
