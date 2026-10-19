@@ -52,10 +52,13 @@ def test_readable_chunk_text_remove_frontmatter_callout_wikilink_e_dataview() ->
     )
 
 
-def test_readable_chunk_text_limpa_trecho_que_comeca_dentro_do_yaml() -> None:
-    chunk = '  - tema/cisco\nbanner: Imagens/x.jpg\n---\n\nTexto legível do trecho.'
+def test_readable_chunk_text_nao_apaga_lista_ou_chave_valor_antes_de_regra_horizontal() -> None:
+    # Regressão: "parece YAML" no começo do trecho não é frontmatter (só o bloco aberto por --- no início da nota é).
+    lista = '- Instale o Docker\n- Rode o compose\n\n---\n\n## Próximos passos'
+    ata = 'Status: aprovado pelo cliente\nPrazo: 30 dias\n---\nResto da ata.'
 
-    assert readable_chunk_text(chunk) == 'Texto legível do trecho.'
+    assert readable_chunk_text(lista) == lista
+    assert readable_chunk_text(ata) == ata
 
 
 def test_readable_chunk_text_mantem_regra_horizontal_depois_de_prosa() -> None:

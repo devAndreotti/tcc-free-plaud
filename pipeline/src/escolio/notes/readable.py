@@ -16,10 +16,9 @@ _YAML_LINE = (
 )
 
 # Frontmatter completo, com "---" de abertura. Só vale se todas as linhas forem YAML: "---" de régua depois de prosa não conta.
+# ponytail: trecho que começa no meio de um frontmatter maior que o chunk (raro, >680 caracteres) mantém o fim do YAML;
+# tirar "linhas que parecem YAML até um ---" apagaria listas e "Status: ..." reais antes de uma régua.
 FRONTMATTER_PATTERN = re.compile(rf'\A\s*---[ \t]*\r?\n(?:{_YAML_LINE})*?---[ \t]*(?:\r?\n|\Z)')
-# Trecho que começou dentro do YAML (chunk 1 de uma nota com frontmatter longo): linhas YAML até o "---" que fecha o bloco.
-# ponytail: sem "---" de fechamento no trecho, o YAML que sobrou fica como texto; o chunk seguinte já não traz a chave.
-CHUNK_YAML_TAIL_PATTERN = re.compile(rf'\A(?:{_YAML_LINE})*?---[ \t]*(?:\r?\n|\Z)')
 # Bloco ```dataviewjs inteiro; se o trecho cortou no meio, vai até o fim.
 DATAVIEW_BLOCK_PATTERN = re.compile(r'```[ \t]*dataview(?:js)?\b.*?(?:```|\Z)', re.DOTALL | re.IGNORECASE)
 BLOCKQUOTE_MARKER_PATTERN = re.compile(r'^[ \t]*(?:>[ \t]?)+', re.MULTILINE)
@@ -49,7 +48,6 @@ def strip_frontmatter(text: str) -> tuple[str, bool]:
 def readable_chunk_text(text: str) -> str:
     """Versão legível de um trecho: remove frontmatter, Dataview e marcadores; o resto do texto fica como está."""
     cleaned = FRONTMATTER_PATTERN.sub('', text, count=1)
-    cleaned = CHUNK_YAML_TAIL_PATTERN.sub('', cleaned, count=1)
     cleaned = DATAVIEW_BLOCK_PATTERN.sub('', cleaned)
     cleaned = BLOCKQUOTE_MARKER_PATTERN.sub('', cleaned)
     cleaned = CALLOUT_MARKER_PATTERN.sub('', cleaned)
