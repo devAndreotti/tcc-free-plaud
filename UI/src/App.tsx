@@ -271,7 +271,7 @@ function AppContent() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [activeMessages, isTyping, scrollToBottom]);
+  }, [activeMessages, isTyping, activeProgress?.partial, scrollToBottom]);
 
   // Seleciona uma aba pelo id (a vault dela vira a ativa)
   const handleSelectTab = useCallback((id: string) => {

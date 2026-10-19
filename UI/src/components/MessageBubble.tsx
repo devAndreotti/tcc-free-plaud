@@ -63,7 +63,7 @@ export const TypingIndicator = ({ stage, partial = '', model }: TypingIndicatorP
       </div>
       {/* aria-live off: o texto muda a cada consulta; a resposta final é anunciada pelo histórico. */}
       <div className="msg__answer" aria-live="off">
-        {renderFormattedContent(partial, <span className="msg__cursor" aria-hidden="true" />)}
+        {renderFormattedContent(partial.trimStart(), <span className="msg__cursor" aria-hidden="true" />)}
       </div>
     </div>
   );
@@ -258,7 +258,11 @@ const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?
               className={`msg__source${hl === i ? ' is-hl' : ''}`}
               onMouseEnter={() => highlight(i)}
               onMouseLeave={() => highlight(null)}
-              onClick={() => onOpenSource?.(source.note_id, source.chunk_id)}
+              onClick={() => {
+                // Quem selecionou texto do trecho para copiar não quer sair do chat.
+                if (window.getSelection()?.toString()) return;
+                onOpenSource?.(source.note_id, source.chunk_id);
+              }}
               onKeyDown={(event) => {
                 // Só com o próprio card focado: Enter ou Espaço no título (botão) já dispara o clique.
                 if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
