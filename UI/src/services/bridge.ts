@@ -323,6 +323,11 @@ export interface NoteSummary {
   chunk_count: number;
 }
 
+export interface NoteLink {
+  source: string;
+  target: string;
+}
+
 export interface NoteChunkSummary {
   chunk_id: string;
   chunk_index: number;
@@ -664,6 +669,9 @@ interface PythonApi {
   /** Lista notas indexadas no corpus. */
   listNotes?: () => Promise<NoteSummary[]>;
 
+  /** Ligações [[...]] entre as notas indexadas (arestas do grafo). */
+  listNoteLinks?: () => Promise<NoteLink[]>;
+
   /** Retorna detalhe operacional de uma nota indexada. */
   getNoteDetail?: (noteId: string) => Promise<NoteDetail>;
 
@@ -868,6 +876,17 @@ const MOCK_VAULT_NOTES: NoteDetail[] = [
   mockVaultNote('zustand--66ff', 'Zustand', 'Estudos\\Front\\Zustand.md'),
   mockVaultNote('diario-29--77aa', 'Segunda-feira, 29 de Junho', 'Diário\\2026-06-29.md'),
   mockVaultNote('diario-30--88bb', 'Terça-feira, 30 de Junho', 'Diário\\2026-06-30.md'),
+];
+
+// Ligações [[...]] entre as notas de exemplo do modo navegador (aba Links do grafo)
+const MOCK_NOTE_LINKS: NoteLink[] = [
+  { source: 'arquitetura--3f9a1c', target: 'pipeline--b21e07' },
+  { source: 'pipeline--b21e07', target: 'arquitetura--3f9a1c' },
+  { source: 'vlan--11aa', target: 'mac--22bb' },
+  { source: 'ospf--33cc', target: 'vlan--11aa' },
+  { source: 'docker--44dd', target: 'linux--55ee' },
+  { source: 'roadmap--5c1d', target: 'benchmark--8e2a' },
+  { source: 'roadmap--5c1d', target: 'arquitetura--3f9a1c' },
 ];
 
 const MOCK_NOTES: NoteDetail[] = [
@@ -1817,6 +1836,14 @@ export const bridge = {
       tags: note.tags,
       chunk_count: note.chunk_count,
     }));
+  },
+
+  listNoteLinks: async (): Promise<NoteLink[]> => {
+    if (await whenDesktopReady()) {
+      // Backend sem o método devolve lista vazia: o grafo mostra só pastas e notas.
+      return window.pywebview?.api.listNoteLinks ? window.pywebview.api.listNoteLinks() : [];
+    }
+    return MOCK_NOTE_LINKS.map((link) => ({ ...link }));
   },
 
   getNoteDetail: async (noteId: string): Promise<NoteDetail> => {

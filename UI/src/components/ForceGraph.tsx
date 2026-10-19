@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import type { MarkdownNode } from '../lib/vaultGraph';
+import type { GraphMode, MarkdownNode, VaultLink } from '../lib/vaultGraph';
 import {
   GRAPH_FOCUS_EVENT,
   buildGraph,
@@ -34,6 +34,7 @@ function themeColors(el: Element) {
     folder: v('--accent-blue'),
     label: v('--text-secondary'),
     hover: v('--accent-blue-light'),
+    link: v('--accent-blue-light'),
     focus: v('--accent-blue-light'),
     bg: v('--bg-primary'),
     tipBg: v('--tip-bg'),
@@ -54,16 +55,28 @@ function nodeColor(n: SimNode, colors: Colors, hoveredId: string | null): string
 
 function drawEdges(ctx: Ctx, nodes: SimNode[], edges: SimEdge[], colors: Colors, cam: Camera) {
   const map = new Map(nodes.map((n) => [n.id, n]));
+  const stroke = (isLink: boolean) => {
+    ctx.beginPath();
+    for (const e of edges) {
+      if ((e.kind === 'link') !== isLink) continue;
+      const a = map.get(e.source), b = map.get(e.target);
+      if (!a || !b) continue;
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    }
+    ctx.stroke();
+  };
+  // Árvore em cinza; ligações [[...]] por cima, um pouco mais grossas e em azul claro transparente
   ctx.strokeStyle = colors.edge;
   ctx.lineWidth   = 0.8 / cam.scale;
-  ctx.beginPath();
-  for (const e of edges) {
-    const a = map.get(e.source), b = map.get(e.target);
-    if (!a || !b) continue;
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-  }
-  ctx.stroke();
+  stroke(false);
+
+  const alpha = ctx.globalAlpha;
+  ctx.strokeStyle = colors.link;
+  ctx.lineWidth   = 1.2 / cam.scale;
+  ctx.globalAlpha = alpha * 0.35;
+  stroke(true);
+  ctx.globalAlpha = alpha;
 }
 
 function drawNodes(ctx: Ctx, nodes: SimNode[], colors: Colors, hoveredId: string | null) {
@@ -152,9 +165,16 @@ function drawFocus(ctx: Ctx, chain: string[], nodes: SimNode[], colors: Colors, 
 
 interface ForceGraphProps {
   vaultNodes: MarkdownNode[];
+  /** Ligações [[...]] entre notas (arestas de link), usadas nos modos links e ambos */
+  links?: VaultLink[];
+  /** pastas, links ou ambos (padrão) */
+  mode?: GraphMode;
   /** Clique numa nota (sem arrastar) abre a nota; clique em pasta não faz nada */
   onOpenNote?: (noteId: string) => void;
 }
+
+// Lista fixa: um array novo a cada render reconstruiria o grafo a cada render
+const NO_LINKS: VaultLink[] = [];
 
 // Deslocamento (px na tela) acima do qual o gesto é arrasto, não clique
 const CLICK_SLOP = 4;
@@ -169,7 +189,7 @@ function nodeAt(nodes: SimNode[], world: { x: number; y: number }, scale: number
   return null;
 }
 
-const ForceGraph = ({ vaultNodes, onOpenNote }: ForceGraphProps) => {
+const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }: ForceGraphProps) => {
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const animRef    = useRef<number>(0);
 
@@ -282,10 +302,10 @@ const ForceGraph = ({ vaultNodes, onOpenNote }: ForceGraphProps) => {
   // ── Reconstrói o grafo quando os nós do vault mudam ────────────────────
   const rebuild = useCallback(() => {
     if (logW.current === 0 || logH.current === 0) return;
-    graphRef.current = buildGraph(vaultNodes, logW.current, logH.current, graphRef.current.nodes);
+    graphRef.current = buildGraph(vaultNodes, logW.current, logH.current, graphRef.current.nodes, links, mode);
     autoFitRef.current = true;
     startLoop(MAX_ITER);
-  }, [vaultNodes, startLoop]);
+  }, [vaultNodes, links, mode, startLoop]);
 
   // ── ResizeObserver: redimensiona o canvas; só monta o grafo na 1ª medida ─
   useEffect(() => {
@@ -386,7 +406,7 @@ const ForceGraph = ({ vaultNodes, onOpenNote }: ForceGraphProps) => {
   const handleDoubleClick = useCallback(() => { autoFitRef.current = true; draw(); }, [draw]);
 
   // ── Zoom com scroll ─────────────────────────────────────────────────────
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -402,6 +422,16 @@ const ForceGraph = ({ vaultNodes, onOpenNote }: ForceGraphProps) => {
     cam.scale = ns;
     draw();
   }, [draw]);
+
+  // Listener nativo e não passivo: o preventDefault do React é ignorado (ele registra wheel como passivo).
+  // Com `empty`, o listener é religado quando o canvas aparece (ele não existe no estado vazio).
+  const empty = vaultNodes.length === 0;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleWheel);
+  }, [handleWheel, empty]);
 
   if (vaultNodes.length === 0) {
     return (
@@ -422,7 +452,6 @@ const ForceGraph = ({ vaultNodes, onOpenNote }: ForceGraphProps) => {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
         onDoubleClick={handleDoubleClick}
-        onWheel={handleWheel}
         aria-label="Visualização de grafo — arraste para mover, scroll para zoom, duplo clique para enquadrar"
       />
       {tooltip && (

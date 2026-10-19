@@ -171,8 +171,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 40px;
-  padding: 0 6px 0 14px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-height: 40px;
+  padding: 4px 6px 4px 14px;
   border-bottom: 1px solid var(--border-color-subtle);
   flex-shrink: 0;
 }
@@ -199,6 +201,36 @@
 .graph-panel__count {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+/* Seletor Pastas · Links · Ambos (mesmo visual dos chips da aba Notas) */
+.graph-panel__modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.graph-panel__mode {
+  height: 20px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 500 11px var(--font-family);
+  cursor: pointer;
+}
+
+.graph-panel__mode:hover {
+  color: var(--text-primary);
+}
+
+.graph-panel__mode[aria-pressed='true'] {
+  background: var(--text-primary);
+  color: var(--bg-primary);
 }
 
 /* Corpo do painel — ocupa todo o espaço restante para o canvas */

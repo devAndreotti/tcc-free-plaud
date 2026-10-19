@@ -2,7 +2,8 @@
  * vaultGraph.ts — montagem, enquadramento e física do grafo do vault (sem React, testável).
  *
  * Cada pasta (pelo caminho completo) vira um nó, cada nota se liga à sua pasta e cada pasta à
- * pasta-mãe: o grafo mostra a árvore do vault.
+ * pasta-mãe: o grafo mostra a árvore do vault. Os modos 'links' e 'ambos' somam as ligações
+ * [[...]] entre notas como arestas próprias.
  */
 
 /** Metadados de uma nota indexada, no formato que o grafo usa. */
@@ -28,7 +29,11 @@ export interface SimNode {
   degree: number;
 }
 
-export interface SimEdge { source: string; target: string }
+/** Aresta: árvore (pasta ↔ filho, sem kind) ou ligação [[...]] entre duas notas (kind 'link'). */
+export interface SimEdge { source: string; target: string; kind?: 'tree' | 'link' }
+export interface VaultLink { source: string; target: string }
+/** pastas: árvore · links: só ligações entre notas · ambos: árvore e ligações */
+export type GraphMode = 'pastas' | 'links' | 'ambos';
 export interface Camera { x: number; y: number; scale: number }
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
@@ -39,6 +44,7 @@ const DAMPING       = 0.82;
 const CENTER_PULL   = 0.004;
 const NOTE_EDGE_LEN = 26;  // nota ↔ pasta
 const DIR_EDGE_LEN  = 70;  // pasta ↔ pasta-mãe
+const LINK_EDGE_LEN = 60;  // nota ↔ nota (ligação [[...]])
 const MAX_SPEED     = 30;
 const FIT_PADDING   = 24;
 const GOLDEN_ANGLE  = 2.399963; // radianos (~137,5°): espalha nós novos sem alinhá-los
@@ -61,6 +67,8 @@ export function buildGraph(
   logW: number,
   logH: number,
   previous: SimNode[] = [],
+  links: VaultLink[] = [],
+  mode: GraphMode = 'ambos',
 ): { nodes: SimNode[]; edges: SimEdge[] } {
   const cx = logW / 2;
   const cy = logH / 2;
@@ -89,12 +97,27 @@ export function buildGraph(
     return id;
   };
 
+  // 'links' não tem pastas: as notas entram sem árvore (notas sem ligação continuam no grafo)
+  const withTree = mode !== 'links';
   for (const n of vaultNodes) {
     const dir = folderOf(n.path);
-    const folderId = ensureFolder(dir);
+    const folderId = withTree ? ensureFolder(dir) : null;
     const depth = dir ? dir.split('/').length + 1 : 1;
     nodes.push({ id: n.id, label: n.name, kind: 'note', depth, degree: 0, ...place(n.id, nodes.length) });
-    edges.push({ source: folderId, target: n.id });
+    if (folderId) edges.push({ source: folderId, target: n.id });
+  }
+
+  if (mode !== 'pastas') {
+    const noteIds = new Set(vaultNodes.map((n) => n.id));
+    const seen = new Set<string>();
+    for (const l of links) {
+      if (l.source === l.target || !noteIds.has(l.source) || !noteIds.has(l.target)) continue;
+      // A → B e B → A viram uma linha só: o desenho e a mola não dependem do sentido
+      const key = JSON.stringify([l.source, l.target].sort());
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push({ source: l.source, target: l.target, kind: 'link' });
+    }
   }
 
   const deg = new Map<string, number>();
@@ -116,10 +139,13 @@ export function focusNoteInGraph(noteId: string | null) {
   window.dispatchEvent(new CustomEvent<string | null>(GRAPH_FOCUS_EVENT, { detail: noteId }));
 }
 
-/** O nó e as pastas acima dele até a raiz ("de onde veio"); vazio se o nó não está no grafo. */
+/**
+ * O nó e as pastas acima dele até a raiz ("de onde veio"); vazio se o nó não está no grafo.
+ * Ligações entre notas não entram: só a árvore tem "pai" (no modo links, devolve só o nó).
+ */
 export function pathToRoot(id: string, nodes: SimNode[], edges: SimEdge[]): string[] {
   if (!nodes.some((n) => n.id === id)) return [];
-  const parent = new Map(edges.map((e) => [e.target, e.source]));
+  const parent = new Map(edges.filter((e) => e.kind !== 'link').map((e) => [e.target, e.source]));
   const chain = [id];
   for (let p = parent.get(id); p !== undefined && !chain.includes(p); p = parent.get(p)) chain.push(p);
   return chain;
@@ -146,6 +172,12 @@ export function fitCamera(nodes: SimNode[], width: number, height: number): Came
 
 // ─── Um tick da simulação ────────────────────────────────────────────────────
 
+// Repouso da mola: ligação entre notas tem comprimento próprio; nota ↔ pasta e pasta ↔ pasta-mãe seguem o filho
+function restLength(e: SimEdge, child: SimNode): number {
+  if (e.kind === 'link') return LINK_EDGE_LEN;
+  return child.kind === 'folder' ? DIR_EDGE_LEN : NOTE_EDGE_LEN;
+}
+
 export function tick(nodes: SimNode[], edges: SimEdge[], cx: number, cy: number) {
   const map = new Map(nodes.map((n) => [n.id, n]));
 
@@ -169,7 +201,7 @@ export function tick(nodes: SimNode[], edges: SimEdge[], cx: number, cy: number)
     if (!a || !b) continue;
     const dx = b.x - a.x, dy = b.y - a.y;
     const dist = Math.hypot(dx, dy) || 1;
-    const rest = b.kind === 'folder' ? DIR_EDGE_LEN : NOTE_EDGE_LEN;
+    const rest = restLength(e, b);
     const delta = (dist - rest) * ATTRACTION;
     const fx = (dx / dist) * delta, fy = (dy / dist) * delta;
     a.vx += fx; a.vy += fy;

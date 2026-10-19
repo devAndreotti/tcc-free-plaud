@@ -6,7 +6,7 @@ import { bridge } from '../services/bridge';
 import { buildCorpusNodes, useCorpusGraph } from './useCorpusGraph';
 
 vi.mock('../services/bridge', () => ({
-  bridge: { listNotes: vi.fn(), listCorpusRoots: vi.fn() },
+  bridge: { listNotes: vi.fn(), listCorpusRoots: vi.fn(), listNoteLinks: vi.fn() },
 }));
 
 const bridgeMock = vi.mocked(bridge);
@@ -61,6 +61,7 @@ describe('buildCorpusNodes', () => {
 describe('useCorpusGraph', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    bridgeMock.listNoteLinks.mockResolvedValue([]);
     bridgeMock.listNotes.mockResolvedValue([note()]);
     bridgeMock.listCorpusRoots.mockResolvedValue([{ root: 'C:\\Vault\\Projetos', notes_count: 1 }]);
   });
@@ -100,5 +101,23 @@ describe('useCorpusGraph', () => {
     job = { job_id: 'j1', status: 'completed' };
     rerender();
     await waitFor(() => expect(bridgeMock.listNotes).toHaveBeenCalledTimes(2));
+  });
+
+  it('ligações só entram no grafo quando as duas pontas são notas listadas', async () => {
+    bridgeMock.listNotes.mockResolvedValue([note(), note({ note_id: 'b', title: 'B' })]);
+    bridgeMock.listNoteLinks.mockResolvedValue([
+      { source: 'arq--1', target: 'b' },
+      { source: 'arq--1', target: 'apagada' },
+    ]);
+    const { result } = renderHook(() => useCorpusGraph());
+    await waitFor(() => expect(result.current.nodes).toHaveLength(2));
+    expect(result.current.links).toEqual([{ source: 'arq--1', target: 'b' }]);
+  });
+
+  it('falha ao ler as ligações não impede o grafo de pastas e notas', async () => {
+    bridgeMock.listNoteLinks.mockRejectedValue(new Error('banco indisponível'));
+    const { result } = renderHook(() => useCorpusGraph());
+    await waitFor(() => expect(result.current.nodes).toHaveLength(1));
+    expect(result.current.links).toEqual([]);
   });
 });

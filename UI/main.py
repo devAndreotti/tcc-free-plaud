@@ -56,6 +56,7 @@ from escolio.corpus.ask import corpus_vocabulary_stems
 from escolio.corpus.dropped import DroppedFileIndexer
 from escolio.corpus.jobs import cancel_index_job, corpus_write_lock, get_index_job, index_job_manager, start_index_job
 from escolio.corpus.runtime import CorpusRuntime
+from escolio.notes.links import note_link_edges
 from escolio.notes.service import delete_note, get_note_detail, list_notes, reindex_note
 from escolio.providers.answer import AnswerProviderName, test_answer_provider
 from escolio.providers.model_discovery import list_answer_models
@@ -465,6 +466,14 @@ class Api:
 
     def listNotes(self) -> list[dict]:
         return [note.model_dump(mode='json') for note in list_notes()]
+
+    def listNoteLinks(self) -> list[dict]:
+        """Ligações [[...]] entre as notas indexadas da vault ativa (arestas do grafo)."""
+        connection = init_sqlite(get_settings().sqlite_path)
+        try:
+            return note_link_edges(connection)
+        finally:
+            connection.close()
 
     def getNoteDetail(self, note_id: str) -> dict:
         return get_note_detail(note_id).model_dump(mode='json')

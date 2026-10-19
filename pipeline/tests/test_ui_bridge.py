@@ -9,6 +9,7 @@ from escolio.app.doctor_models import DoctorCheck, DoctorReport
 from escolio.providers.answer import AnswerProviderTestResult
 from escolio.providers.model_discovery import ModelDiscoveryResult, ModelInfo
 from escolio.retrieval.models import AnswerClaim, AskResponse, Citation, UsedSource
+from escolio.storage.sqlite import init_sqlite
 
 
 def _load_ui_main(monkeypatch):
@@ -511,6 +512,27 @@ def test_desktop_api_exposes_notes_methods(monkeypatch) -> None:
     assert api.deleteNote("nota-1", "APAGAR")["ok"] is True
     assert api.deleteNote("nota-1", "")["status"] == "confirmation_required"
     assert api.reindexNote("nota-1")["chunks_indexed"] == 2
+
+
+def test_desktop_api_lists_note_links_from_active_vault(monkeypatch, tmp_path: Path) -> None:
+    module = _load_ui_main(monkeypatch)
+    api = module.Api()  # o construtor limpa o cache de get_settings: patcha depois
+    db_path = tmp_path / "escolio.sqlite3"
+    monkeypatch.setattr(module, "get_settings", lambda: Settings(results_dir=tmp_path, sqlite_path=db_path))
+    connection = init_sqlite(db_path)
+    connection.executemany(
+        "INSERT INTO notes (note_id, note_version, source_type, source_path, source_name, title, summary, "
+        "raw_text, normalized_text, structured_markdown, content_hash, provider, model, created_at) "
+        "VALUES (?, 1, 'md', ?, ?, ?, '', ?, '', '', '', '', '', '2026-10-18T12:00:00')",
+        [
+            ("switch", "V/Redes/Switch.md", "Switch.md", "Switch", ""),
+            ("ospf", "V/Redes/OSPF.md", "OSPF.md", "OSPF", "- [[switch|o switch]]"),
+        ],
+    )
+    connection.commit()
+    connection.close()
+
+    assert api.listNoteLinks() == [{"source": "ospf", "target": "switch"}]
 
 
 def test_desktop_api_runs_benchmark_compare(monkeypatch) -> None:
