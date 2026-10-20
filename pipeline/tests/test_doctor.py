@@ -193,3 +193,13 @@ def test_doctor_does_not_query_provider_for_extractive(tmp_path: Path, monkeypat
     checks = _by_code(run_doctor(settings=_settings(tmp_path)))
 
     assert checks['answer_provider'].status == 'ok'  # type: ignore[attr-defined]
+
+
+def test_doctor_suggests_ollama_pull_when_model_is_missing(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr('escolio.app.doctor.list_answer_models', _fake_discovery('ok', ('outro:latest',)))
+
+    settings = _settings(tmp_path, answer_provider='ollama', answer_model='qwen2.5:7b')
+    check = _by_code(run_doctor(settings=settings))['answer_provider']
+
+    assert check.status == 'warning'  # type: ignore[attr-defined]
+    assert check.action == 'Baixe o modelo com: ollama pull qwen2.5:7b'  # type: ignore[attr-defined]
