@@ -180,6 +180,7 @@ const renderModal = (ui: React.ReactNode) => render(<VaultsProvider>{ui}</Vaults
 describe('SettingsModal', () => {
   afterEach(() => {
     cleanup();
+    window.localStorage.removeItem('escolio.avancadoLiberado');
   });
 
   beforeEach(() => {
@@ -620,5 +621,151 @@ describe('SettingsModal', () => {
 
     await screen.findByText('Banco de notas (SQLite)');
     expect(screen.getByRole('heading', { level: 3, name: 'Diagnóstico' })).toBeTruthy();
+  });
+
+  it('a pasta padrão do corpus não aparece no Avançado do desktop', async () => {
+    window.localStorage.setItem('escolio.avancadoLiberado', '1');
+    const corpusRow = {
+      index: 4,
+      key: 'default_corpus_path',
+      label: 'Pasta padrão do corpus',
+      description: 'Pasta usada como default para indexar e reconstruir corpus.',
+      group: 'Corpus',
+      value_type: 'path',
+      value: null,
+      display_value: null,
+      options: [],
+      recommended: null,
+      secret: false,
+      placeholder: null,
+      warning: null,
+      local_env_path: null,
+    };
+    const topKRow = {
+      index: 5,
+      key: 'retrieval_top_k',
+      label: 'Trechos por pergunta',
+      description: 'Quantos trechos a busca recupera.',
+      group: 'Busca',
+      value_type: 'int',
+      value: 5,
+      display_value: '5',
+      options: [],
+      recommended: 5,
+      secret: false,
+      placeholder: null,
+      warning: null,
+      local_env_path: null,
+    };
+    bridgeMock.getBackendSettings.mockResolvedValue({
+      ...backendSettings,
+      settings_catalog: [...backendSettings.settings_catalog, corpusRow, topKRow],
+    });
+
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="avancado" />);
+
+    expect(await screen.findByLabelText('Trechos por pergunta')).toBeTruthy();
+    expect(screen.queryByLabelText('Pasta padrão do corpus')).toBeNull();
+  });
+
+  it('Aplicar preset fica desligado com rascunho pendente e volta quando o rascunho é descartado', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem('escolio.avancadoLiberado', '1');
+    bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
+    bridgeMock.getBackendSettings.mockResolvedValue({
+      ...backendSettings,
+      settings_presets: [{ key: 'cpu_rapido', label: 'CPU rápido', description: 'Busca local sem GPU.', values: { default_ask_strategy: 'lexical' } }],
+    });
+
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    await user.click(await screen.findByRole('radio', { name: 'Moonshine Tiny' }));
+    await user.click(screen.getByRole('button', { name: 'Avançado' }));
+
+    const apply = screen.getByRole('button', { name: 'Aplicar preset CPU rápido' });
+    expect(apply.hasAttribute('disabled')).toBe(true);
+    expect(apply.getAttribute('title')).toBe('Salve ou descarte antes de aplicar');
+
+    await user.click(within(screen.getByRole('region', { name: 'Alterações não salvas' })).getByRole('button', { name: 'Descartar' }));
+    expect(screen.getByRole('button', { name: 'Aplicar preset CPU rápido' }).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('o card do preset não mostra embedding_model: o desktop não grava esse valor', async () => {
+    window.localStorage.setItem('escolio.avancadoLiberado', '1');
+    bridgeMock.getBackendSettings.mockResolvedValue({
+      ...backendSettings,
+      settings_presets: [
+        { key: 'cpu_rapido', label: 'CPU rápido', description: 'Busca local sem GPU.', values: { default_ask_strategy: 'lexical', embedding_model: 'chroma-default' } },
+      ],
+    });
+
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="avancado" />);
+
+    expect(await screen.findByText('default_ask_strategy')).toBeTruthy();
+    expect(screen.queryByText('embedding_model')).toBeNull();
+  });
+
+  it('fechar com rascunho pendente (Esc, fundo ou X) pede confirmação; Continuar editando mantém o modal aberto', async () => {
+    const user = userEvent.setup();
+    bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
+    const onClose = vi.fn();
+    renderModal(<SettingsModal isOpen onClose={onClose} />);
+    await user.click(await screen.findByRole('radio', { name: 'Moonshine Tiny' }));
+
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: 'Descartar alterações' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Continuar editando' }));
+
+    await user.click(screen.getByRole('button', { name: 'Fechar configurações clicando fora' }));
+    expect(screen.getByRole('button', { name: 'Descartar alterações' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Continuar editando' }));
+
+    await user.click(screen.getByRole('button', { name: 'Fechar configurações' }));
+    expect(screen.getByRole('button', { name: 'Descartar alterações' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Continuar editando' }));
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('Descartar alterações descarta os rascunhos e fecha', async () => {
+    const user = userEvent.setup();
+    bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
+    const onClose = vi.fn();
+    renderModal(<SettingsModal isOpen onClose={onClose} />);
+    await user.click(await screen.findByRole('radio', { name: 'Moonshine Tiny' }));
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByRole('button', { name: 'Descartar alterações' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('radio', { name: 'Whisper Small' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('sem rascunho pendente, Esc fecha direto', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderModal(<SettingsModal isOpen onClose={onClose} />);
+    await screen.findByRole('combobox', { name: 'Idioma da transcrição' });
+
+    await user.keyboard('{Escape}');
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('Ocultar Avançado tira a aba e a liberação gravada; desbloquear de novo não abre a aba sozinha', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem('escolio.avancadoLiberado', '1');
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="avancado" />);
+
+    await user.click(await screen.findByRole('button', { name: 'Ocultar Avançado' }));
+
+    expect(screen.queryByRole('button', { name: 'Avançado' })).toBeNull();
+    expect(window.localStorage.getItem('escolio.avancadoLiberado')).toBeNull();
+    expect(screen.getByRole('button', { name: /Geral/ }).getAttribute('aria-current')).toBe('page');
+
+    for (let i = 0; i < 5; i += 1) {
+      await user.click(screen.getByRole('button', { name: /Desbloquear avançado/ }));
+    }
+    expect(screen.getByRole('button', { name: /Geral/ }).getAttribute('aria-current')).toBe('page');
   });
 });

@@ -44,7 +44,7 @@ const STATUS_LABEL: Record<DropzoneFile['status'], { label: string; tone: string
 };
 
 const dropMessage = (event: DroppedFileEvent): string => {
-  if (event.status === 'indexed') return `${event.name} entrou no corpus (${event.chunks} chunks).`;
+  if (event.status === 'indexed') return `${event.name} entrou no corpus (${event.chunks} ${event.chunks === 1 ? 'trecho' : 'trechos'}).`;
   if (event.status === 'unchanged') return `${event.name} já estava indexado, sem mudança.`;
   if (event.status === 'removed') return `${event.name} removido do corpus.`;
   return `Falha ao indexar ${event.name}: ${event.message ?? 'erro desconhecido'}`;

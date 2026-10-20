@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { readThemeChoice, saveThemeChoice, type ThemeChoice } from '../theme';
 import { createPortal } from 'react-dom';
 import {
@@ -44,8 +44,8 @@ interface SettingsModalProps {
 // Chaves do catálogo que pertencem à aba IA (o resto de layer não-secreto vai para Avançado)
 const IA_CATALOG_KEYS = ['answer_provider', 'answer_model', 'answer_base_url'];
 
-// Chaves que o desktop não mostra nem grava: o embedding em uso é o da vault ativa (config.py, _apply_active_vault).
-const DESKTOP_HIDDEN_KEYS = ['embedding_model'];
+// Chaves que o desktop não mostra nem grava: o embedding em uso é o da vault ativa (config.py, _apply_active_vault), e a pasta padrão do corpus só é lida pela TUI.
+const DESKTOP_HIDDEN_KEYS = ['embedding_model', 'default_corpus_path'];
 
 const MODEL_STATUS: Record<string, string> = { offline: 'offline', unauthorized: 'sem autorização', error: 'erro' };
 
@@ -135,6 +135,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [settingDrafts, setSettingDrafts] = useState<Record<string, string>>({});
   const [isSavingApiKey, setIsSavingApiKey] = useState(false);
   const [isConfirmingKeyRemoval, setIsConfirmingKeyRemoval] = useState(false);
+  const [isConfirmingClose, setIsConfirmingClose] = useState(false);
   const [isSavingBackendSettings, setIsSavingBackendSettings] = useState(false);
   const [applyingPreset, setApplyingPreset] = useState('');
   const [isTestingProvider, setIsTestingProvider] = useState(false);
@@ -160,6 +161,20 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     setAdvancedUnlocked(true);
     setAdvancedClicks(0);
   };
+
+  // Esconde o Avançado de novo e apaga a liberação gravada.
+  const handleHideAdvanced = () => {
+    try {
+      window.localStorage.removeItem(ADVANCED_UNLOCK_KEY);
+    } catch {
+      // Sem storage não há liberação gravada para apagar.
+    }
+    setAdvancedUnlocked(false);
+    setAdvancedClicks(0);
+    // Sem isso, desbloquear de novo abriria direto a aba que ficou marcada como ativa.
+    if (activeTab === 'avancado') setActiveTab('geral');
+  };
+
   const { active } = useVaults();
 
   useEffect(() => {
@@ -168,14 +183,26 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   }, [isOpen, initialTab]);
 
 
+  const pendingChanges = useMemo(() => {
+    if (!backendSettings) return 0;
+    const saved = draftsFrom(backendSettings);
+    return Object.keys(saved).filter((key) => (settingDrafts[key] ?? '') !== saved[key]).length;
+  }, [backendSettings, settingDrafts]);
+
+  // Com rascunho pendente, fechar pede confirmação antes de descartar.
+  const requestClose = useCallback(() => {
+    if (pendingChanges > 0) setIsConfirmingClose(true);
+    else onClose();
+  }, [pendingChanges, onClose]);
+
   // Fecha o modal ao pressionar Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') requestClose();
     };
     if (isOpen) document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, requestClose]);
 
   // Foca o modal quando abre (acessibilidade)
   useEffect(() => {
@@ -197,6 +224,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
         setBackendSettings(settings);
         setSettingDrafts(draftsFrom(settings));
         setIsConfirmingKeyRemoval(false);
+        setIsConfirmingClose(false);
       })
       .catch((error) => {
         console.error('[SettingsModal] Erro ao carregar settings do backend:', error);
@@ -236,12 +264,6 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
       window.clearTimeout(timer);
     };
   }, [isOpen, activeTab, draftProvider, draftBaseUrl]);
-
-  const pendingChanges = useMemo(() => {
-    if (!backendSettings) return 0;
-    const saved = draftsFrom(backendSettings);
-    return Object.keys(saved).filter((key) => (settingDrafts[key] ?? '') !== saved[key]).length;
-  }, [backendSettings, settingDrafts]);
 
   // Carrega o catálogo de modelos de voz (com estado instalado) quando o modal abre.
   useEffect(() => {
@@ -605,7 +627,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
         className="modal-backdrop"
         aria-label="Fechar configurações clicando fora"
         tabIndex={-1}
-        onClick={onClose}
+        onClick={requestClose}
       />
       {/* Janela do modal — filho direto do overlay flex */}
       <div
@@ -624,7 +646,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
             type="button"
             className="modal__close"
             aria-label="Fechar configurações"
-            onClick={onClose}
+            onClick={requestClose}
           >
             <XIcon size={16} />
           </button>
@@ -658,6 +680,11 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                     ? `Desbloquear avançado (${advancedClicks}/${ADVANCED_UNLOCK_CLICKS})`
                     : 'Desbloquear avançado'}
                 </span>
+              </button>
+            )}
+            {advancedUnlocked && (
+              <button type="button" className="settings-nav__item settings-nav__unlock" onClick={handleHideAdvanced}>
+                <span>Ocultar Avançado</span>
               </button>
             )}
           </nav>
@@ -711,7 +738,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                         <dd className="mono">{backendSettings.notes_count.toLocaleString('pt-BR')}</dd>
                       </div>
                       <div className="doctor__stat">
-                        <dt>Chunks no SQLite</dt>
+                        <dt>Trechos no SQLite</dt>
                         <dd className="mono">{backendSettings.sqlite_chunks_count.toLocaleString('pt-BR')}</dd>
                       </div>
                       <div className="doctor__stat">
@@ -974,7 +1001,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                         <span className="settings-item__label">{preset.label}</span>
                         <span className="settings-item__description">{preset.description}</span>
                         <dl className="preset__values">
-                          {Object.entries(preset.values).map(([key, value]) => (
+                          {Object.entries(preset.values).filter(([key]) => !DESKTOP_HIDDEN_KEYS.includes(key)).map(([key, value]) => (
                             <div key={key}>
                               <dt>{catalogLabel(key)}</dt>
                               <dd className="mono">{String(value)}</dd>
@@ -986,7 +1013,8 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                         type="button"
                         className="btn btn--sm preset__apply"
                         onClick={() => handleApplyPreset(preset.key)}
-                        disabled={Boolean(applyingPreset)}
+                        disabled={Boolean(applyingPreset) || pendingChanges > 0}
+                        title={pendingChanges > 0 ? 'Salve ou descarte antes de aplicar' : undefined}
                         aria-label={`Aplicar preset ${preset.label}`}
                       >
                         {applyingPreset === preset.key ? 'Aplicando…' : 'Aplicar'}
@@ -1001,7 +1029,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   <h3 id="settings-advanced" className="settings-section__title">
                     Avançado
                   </h3>
-                  <p className="settings-section__lede">Ajustes finos de busca, chunks e indexação. Mude só se souber o efeito.</p>
+                  <p className="settings-section__lede">Ajustes finos de busca, trechos e indexação. Mude só se souber o efeito.</p>
                   {advancedRows.map((row) => renderSettingRow(row))}
                 </section>
               </>
@@ -1078,8 +1106,31 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
           </div>
         )}
 
+        {/* Fechar com rascunho pendente: confirma antes de descartar. */}
+        {pendingChanges > 0 && isConfirmingClose && (
+          <div className="modal__footer settings-savebar" role="region" aria-label="Fechar sem salvar">
+            <span className="modal__pending">Fechar sem salvar? As alterações serão descartadas.</span>
+            <div className="modal__footer-actions">
+              <button type="button" className="btn btn--ghost" onClick={() => setIsConfirmingClose(false)}>
+                Continuar editando
+              </button>
+              <button
+                type="button"
+                className="btn btn--danger"
+                onClick={() => {
+                  discardDrafts();
+                  setIsConfirmingClose(false);
+                  onClose();
+                }}
+              >
+                Descartar alterações
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Barra de salvar: só existe com alteração pendente (sem "Nenhuma alteração" parado no rodapé). */}
-        {pendingChanges > 0 && (
+        {pendingChanges > 0 && !isConfirmingClose && (
           <div className="modal__footer settings-savebar" role="region" aria-label="Alterações não salvas">
             <span className="modal__pending" aria-live="polite">
               <span className="modal__pending-dot" aria-hidden="true" />
