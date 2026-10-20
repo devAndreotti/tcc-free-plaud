@@ -383,6 +383,13 @@ class Api:
                 del self._ask_jobs[ask_id]
         return snapshot
 
+    def cancelAsk(self, ask_id: str) -> dict:
+        """Descarta a pergunta em andamento; pollAsk deixa de encontrá-la."""
+        # ponytail: a chamada ao provedor segue até o timeout dele; cancelar de verdade pede um token em ask_corpus.
+        with self._answer_lock:
+            self._ask_jobs.pop(ask_id, None)
+        return {'ok': True}
+
     def _prune_ask_jobs(self) -> None:
         """Descarta respostas terminadas há mais de 10 min que ninguém consultou (chamar com _answer_lock)."""
         limit = time.monotonic() - 600
@@ -455,10 +462,10 @@ class Api:
     def cancelIndexJob(self, job_id: str) -> dict:
         return cancel_index_job(job_id).model_dump(mode='json')
 
-    def getBackendSettings(self) -> dict:
+    def getBackendSettings(self, doctor: bool = True) -> dict:
         settings = get_settings()
         status = corpus_status_from_tui(settings=settings)
-        doctor = run_doctor(settings=settings)
+        report = run_doctor(settings=settings) if doctor else None
         return {
             'answer_provider': settings.answer_provider,
             'answer_model': settings.answer_model,
@@ -471,7 +478,7 @@ class Api:
             'vector_chunks_count': status.vector_chunks_count,
             'settings_catalog': settings_catalog_payload(settings),
             'settings_presets': [preset.model_dump(mode='json') for preset in list_settings_presets()],
-            'doctor': doctor.model_dump(mode='json'),
+            'doctor': report.model_dump(mode='json') if report is not None else None,
         }
 
     def getDoctor(self) -> dict:
@@ -489,7 +496,8 @@ class Api:
         }
 
     def applySettingsPreset(self, name: str) -> dict:
-        result = apply_settings_preset(name)
+        # embedding_model fica com a vault ativa; o preset não o grava no global.
+        result = apply_settings_preset(name, exclude=('embedding_model',))
         self.runtime.clear()
         return {
             'ok': True,

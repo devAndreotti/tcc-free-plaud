@@ -259,6 +259,13 @@ describe('streaming de resposta (startAsk / pollAsk)', () => {
     expect((await bridge.pollAsk(ask_id)).stage).toBe('error');
   });
 
+  it('cancelAsk descarta a pergunta no mock: pollAsk depois devolve erro', async () => {
+    const { ask_id } = await bridge.startAsk('q');
+    expect(await bridge.cancelAsk(ask_id)).toEqual({ ok: true });
+    expect((await bridge.pollAsk(ask_id)).stage).toBe('error');
+    expect(await bridge.cancelAsk('nao-existe')).toEqual({ ok: true });
+  });
+
   it('com IA: writing com o texto crescendo até done', async () => {
     await bridge.saveBackendSettings({ answer_provider: 'ollama' });
     const { ask_id } = await bridge.startAsk('q');

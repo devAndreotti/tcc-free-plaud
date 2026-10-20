@@ -36,7 +36,7 @@ SETTING_PRESETS: tuple[SettingPreset, ...] = (
     SettingPreset(
         key='cpu_rapido',
         label='CPU rápido',
-        description='Notebook sem GPU dedicada; usa embeddings Chroma e busca hybrid.',
+        description='Notebook sem GPU dedicada; usa o modelo de busca semântica Chroma e busca hybrid.',
         values={
             'embedding_model': 'chroma-default',
             'embedding_device': 'cpu',
@@ -123,13 +123,17 @@ def preview_settings_preset(key: str, *, settings: Settings | None = None) -> Se
     return SettingPresetPreview(preset=preset, values=values, changes=changes)
 
 
-def apply_settings_preset(key: str, *, settings: Settings | None = None) -> SettingPresetApplyResult:
+def apply_settings_preset(
+    key: str, *, settings: Settings | None = None, exclude: tuple[str, ...] = ()
+) -> SettingPresetApplyResult:
     resolved = settings or get_settings()
     preview = preview_settings_preset(key, settings=resolved)
-    updated = save_user_settings(preview.values, settings=resolved if settings is not None else None)
+    values = {field: value for field, value in preview.values.items() if field not in exclude}
+    changes = {field: change for field, change in preview.changes.items() if field not in exclude}
+    updated = save_user_settings(values, settings=resolved if settings is not None else None)
     return SettingPresetApplyResult(
         preset=preview.preset,
-        values=preview.values,
-        changes=preview.changes,
+        values=values,
+        changes=changes,
         settings=updated,
     )

@@ -206,7 +206,7 @@ export interface BackendSettings {
   vector_chunks_count: number;
   settings_catalog: SettingRow[];
   settings_presets: SettingPreset[];
-  doctor?: DoctorReport;
+  doctor?: DoctorReport | null;
 }
 
 export interface SaveApiKeyResult {
@@ -570,6 +570,9 @@ interface PythonApi {
   /** Estado da pergunta: estágio, texto gerado até agora e, ao terminar, o resultado. */
   pollAsk?: (askId: string) => Promise<AskProgress>;
 
+  /** Descarta a pergunta em andamento; o pollAsk dela deixa de encontrá-la. */
+  cancelAsk?: (askId: string) => Promise<{ ok: boolean }>;
+
   /** Carrega o modelo de resposta na memória, para a primeira pergunta não esperar. */
   warmAnswerModel?: () => Promise<{ ok: boolean; started: boolean }>;
 
@@ -654,7 +657,7 @@ interface PythonApi {
   cancelVoiceModelDownload?: (jobId: string) => Promise<VoiceModelDownloadSnapshot>;
 
   /** Retorna resumo das configurações/backend para o modal. */
-  getBackendSettings?: () => Promise<BackendSettings>;
+  getBackendSettings?: (doctor?: boolean) => Promise<BackendSettings>;
 
   /** Retorna diagnostico estruturado do backend. */
   getDoctor?: () => Promise<DoctorReport>;
@@ -771,7 +774,7 @@ const MOCK_CITATIONS: AskCitation[] = [
     note_id: 'arquitetura--3f9a1c',
     note_version: 1,
     chunk_id: 'arquitetura--3f9a1c::v1::ofs-000680-001480::9a41',
-    snippet: 'O id de um chunk junta o id da nota, a versão e o deslocamento no texto.',
+    snippet: 'O id de um trecho junta o id da nota, a versão e o deslocamento no texto.',
     source_path: 'D:\\Notas\\Obsidian\\Projetos\\escolio\\Arquitetura do índice.md',
     char_start: 680,
     char_end: 1480,
@@ -789,7 +792,7 @@ const MOCK_CITATIONS: AskCitation[] = [
     note_id: 'pipeline--b21e07',
     note_version: 2,
     chunk_id: 'pipeline--b21e07::v2::ofs-000000-000800::1c3d',
-    snippet: 'Notas alteradas voltam para a fila e passam de novo pelo chunking.',
+    snippet: 'Notas alteradas voltam para a fila e passam de novo pela divisão em trechos.',
     source_path: 'D:\\Notas\\Obsidian\\Projetos\\escolio\\Pipeline de ingestão.md',
     char_start: 0,
     char_end: 800,
@@ -813,8 +816,8 @@ const mockDiscardedAnswer = (): Partial<AskResult> => ({
   generated: false,
   answer_discard_reason: 'unsupported_anchor',
   limitations: [
-    'A resposta se apoia em um único chunk recuperado.',
-    'unsupported_anchor: resposta generativa ignorada por anchor sem suporte: NAO_ENCONTRADO.',
+    'A resposta se apoia em um único trecho recuperado.',
+    'Resposta generativa ignorada por nome citado sem suporte: NAO_ENCONTRADO.',
   ],
   latency_ms: 2400,
 });
@@ -828,9 +831,9 @@ const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'):
     no_answer: false,
     answer: '(mock) Resposta de exemplo montada a partir de três trechos.',
     claims: [
-      { text: '(mock) Cada nota indexada guarda uma versão, e o id de cada chunk carrega essa versão.', citations: [c1], support_level: 'direct' },
+      { text: '(mock) Cada nota indexada guarda uma versão, e o id de cada trecho carrega essa versão.', citations: [c1], support_level: 'direct' },
       { text: 'Na indexação seguinte, o conteúdo é comparado pelo hash: se não mudou, a nota entra como inalterada.', citations: [c2], support_level: 'direct' },
-      { text: 'Quando o hash muda, a nota volta para a fila e é quebrada em chunks de novo.', citations: [c3], support_level: 'partial' },
+      { text: 'Quando o hash muda, a nota volta para a fila e é quebrada em trechos de novo.', citations: [c3], support_level: 'partial' },
     ],
     citations: MOCK_CITATIONS,
     limitations: ['As fontes não dizem o que acontece com vetores já gravados se a reindexação for interrompida.'],
@@ -845,9 +848,9 @@ const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'):
         ? mockDiscardedAnswer()
         : {
           answer:
-            '(mock) Cada nota guarda uma versão, e o id de cada chunk carrega essa versão. [1] ' +
+            '(mock) Cada nota guarda uma versão, e o id de cada trecho carrega essa versão. [1] ' +
             'Ao indexar de novo, o hash decide: se o conteúdo não mudou, a nota fica como está. [2] ' +
-            'Se mudou, ela volta para a fila e é quebrada em chunks outra vez. [3]',
+            'Se mudou, ela volta para a fila e é quebrada em trechos outra vez. [3]',
           answer_model: mockAnswer.model,
           answer_sources: MOCK_CITATIONS.map((citation) => citation.chunk_id),
           generated: true,
@@ -943,7 +946,7 @@ const MOCK_VAULT_NOTES: NoteDetail[] = [
       char_start: 680,
       char_end: 1480,
       token_count: 180,
-      snippet: 'O id de um chunk junta o id da nota, a versão e o deslocamento no texto.',
+      snippet: 'O id de um trecho junta o id da nota, a versão e o deslocamento no texto.',
     },
     {
       chunk_id: 'arquitetura--3f9a1c::v1::ofs-001360-002160::77c0',
@@ -961,7 +964,7 @@ const MOCK_VAULT_NOTES: NoteDetail[] = [
       char_start: 0,
       char_end: 800,
       token_count: 180,
-      snippet: 'Notas alteradas voltam para a fila e passam de novo pelo chunking.',
+      snippet: 'Notas alteradas voltam para a fila e passam de novo pela divisão em trechos.',
     },
   ]),
   mockVaultNote('roadmap--5c1d', 'Roadmap', 'Projetos\\escolio\\Roadmap.md'),
@@ -1349,6 +1352,15 @@ export const bridge = {
     return mockPollAsk(askId);
   },
 
+  /** Descarta a pergunta em andamento; o pollAsk dela deixa de encontrá-la. */
+  cancelAsk: async (askId: string): Promise<{ ok: boolean }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.cancelAsk) {
+      return window.pywebview.api.cancelAsk(askId);
+    }
+    mockAskJobs.delete(askId);
+    return { ok: true };
+  },
+
   /** Aquece o modelo de resposta (Ollama): a próxima pergunta não espera o carregamento. */
   warmAnswerModel: async (): Promise<{ ok: boolean; started: boolean }> => {
     if ((await whenDesktopReady()) && window.pywebview?.api.warmAnswerModel) {
@@ -1576,9 +1588,9 @@ export const bridge = {
     return [];
   },
 
-  getBackendSettings: async (): Promise<BackendSettings> => {
+  getBackendSettings: async (options?: { doctor?: boolean }): Promise<BackendSettings> => {
     if ((await whenDesktopReady()) && window.pywebview?.api.getBackendSettings) {
-      return window.pywebview.api.getBackendSettings();
+      return window.pywebview.api.getBackendSettings(options?.doctor ?? true);
     }
     return {
       answer_provider: mockAnswer.provider,
@@ -1594,9 +1606,8 @@ export const bridge = {
         {
           key: 'cpu_rapido',
           label: 'CPU rápido',
-          description: 'Notebook sem GPU dedicada; usa embeddings Chroma e busca hybrid.',
+          description: 'Notebook sem GPU dedicada; usa o modelo de busca semântica Chroma e busca hybrid.',
           values: {
-            embedding_model: 'chroma-default',
             embedding_device: 'cpu',
             retrieval_top_k: 4,
           },
@@ -1608,7 +1619,7 @@ export const bridge = {
           {
             code: 'mock',
             status: 'warning',
-            message: 'Doctor mock; abra via PyWebView para diagnostico real.',
+            message: 'Doctor mock; abra via PyWebView para diagnóstico real.',
             action: null,
             latency_ms: 0,
             details: {},
@@ -1623,9 +1634,9 @@ export const bridge = {
         mockSettingRow({
           index: 1,
           key: 'embedding_device',
-          label: 'Device de embedding',
-          description: 'Onde roda o modelo de embedding quando ele suporta device.',
-          group: 'Embeddings',
+          label: 'Device do modelo de busca semântica',
+          description: 'Onde roda o modelo de busca semântica quando ele suporta device.',
+          group: 'Busca semântica',
           value_type: 'enum',
           layer: 'simple',
           value: 'cpu',
@@ -1682,7 +1693,7 @@ export const bridge = {
         mockSettingRow({
           index: 3,
           key: 'answer_base_url',
-          label: 'URL do provider',
+          label: 'URL do provedor de resposta',
           description: 'Endereço do servidor da IA; vazio usa o padrão do provedor escolhido.',
           group: 'LLM',
           value_type: 'string',
@@ -1695,8 +1706,8 @@ export const bridge = {
         mockSettingRow({
           index: 4,
           key: 'retrieval_top_k',
-          label: 'Chunks por pergunta',
-          description: 'Quantos chunks o Ask recupera para montar evidências e resposta.',
+          label: 'Trechos por pergunta',
+          description: 'Quantos trechos o Ask recupera para montar evidências e resposta.',
           group: 'Retrieval',
           value_type: 'int',
           layer: 'advanced',
@@ -1791,7 +1802,7 @@ export const bridge = {
         {
           code: 'mock',
           status: 'warning',
-          message: 'Doctor mock; abra via PyWebView para diagnostico real.',
+          message: 'Doctor mock; abra via PyWebView para diagnóstico real.',
           action: null,
           latency_ms: 0,
           details: {},
@@ -1812,9 +1823,8 @@ export const bridge = {
       {
         key: 'cpu_rapido',
         label: 'CPU rápido',
-        description: 'Notebook sem GPU dedicada; usa embeddings Chroma e busca hybrid.',
+        description: 'Notebook sem GPU dedicada; usa o modelo de busca semântica Chroma e busca hybrid.',
         values: {
-          embedding_model: 'chroma-default',
           embedding_device: 'cpu',
           retrieval_top_k: 4,
         },
@@ -1881,7 +1891,7 @@ export const bridge = {
       models: [],
       latency_ms: 4,
       cached: false,
-      message: provider === 'lmstudio' ? 'Servidor indisponivel ou timeout.' : null,
+      message: provider === 'lmstudio' ? 'Servidor indisponível ou timeout.' : null,
     };
   },
 
@@ -1978,7 +1988,7 @@ export const bridge = {
     }
     await new Promise((resolve) => setTimeout(resolve, 180));
     const note = MOCK_NOTES.find((item) => item.note_id === noteId);
-    if (!note) throw new Error(`Nota nao encontrada: ${noteId}`);
+    if (!note) throw new Error(`Nota não encontrada: ${noteId}`);
     return note;
   },
 
