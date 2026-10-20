@@ -426,6 +426,7 @@ const ChatInput = ({
           onKeyDown={handleKeyDown}
           onFocus={onFocus}
           rows={2}
+          autoComplete="off"
           aria-label="Campo de mensagem"
           aria-multiline="true"
           disabled={isLoading}
