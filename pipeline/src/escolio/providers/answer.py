@@ -75,7 +75,7 @@ def build_grounded_chat_messages(question: str, contexts: list[str]) -> list[dic
                 f'PERGUNTA:\n{question}\n\n'
                 'CONTEXTOS:\n'
                 + '\n\n'.join(contexts)
-                + '\n\nResponda curto e direto usando somente os CONTEXTOS.'
+                + "\n\nResponda curto e direto usando somente os CONTEXTOS. Lembrete: fale com quem pergunta usando voce (ex.: 'Voce estudou redes [1].'). Nao use eu nem verbos em primeira pessoa."
             ),
         },
     ]
