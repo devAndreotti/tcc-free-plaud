@@ -2665,7 +2665,7 @@
   visibility: hidden;
 }
 
-.strategy__item[aria-checked='true'] > svg {
+.strategy__item[aria-pressed='true'] > svg {
   visibility: visible;
 }
 
@@ -2763,7 +2763,7 @@
   background: var(--bg-surface-hover);
 }
 
-.answer__item[aria-selected='true'] {
+.answer__item[aria-pressed='true'] {
   background: color-mix(in srgb, var(--accent-blue) 14%, transparent);
 }
 
@@ -2814,67 +2814,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-/* ============================================================
-   ARQUIVO ANEXADO
-   ============================================================ */
-.attachment-preview {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  margin-bottom: var(--spacing-xs);
-  max-width: 260px;
-}
-
-.attachment-preview__icon {
-  width: 28px;
-  height: 28px;
-  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.attachment-preview__icon svg {
-  width: 14px;
-  height: 14px;
-  color: var(--accent-blue-light);
-}
-
-.attachment-preview__name {
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
-.attachment-preview__remove {
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  transition: all var(--transition-fast);
-}
-
-.attachment-preview__remove:hover {
-  background: var(--bg-surface-hover);
-  color: var(--text-secondary);
 }
 
 /* ============================================================
@@ -4606,7 +4545,7 @@
   cursor: pointer;
 }
 .sb__vault-item:hover { background: var(--bg-surface-hover); }
-.sb__vault-item[aria-checked='true'] { background: var(--accent-soft); }
+.sb__vault-item[aria-pressed='true'] { background: var(--accent-soft); }
 .sb__vault-item > svg { flex-shrink: 0; color: var(--text-secondary); }
 .sb__vault-item .vault-glyph { width: 28px; height: 28px; border-radius: 7px; }
 .sb__vault-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }

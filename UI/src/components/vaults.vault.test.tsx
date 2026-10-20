@@ -54,7 +54,7 @@ describe('vaults: seletor, criação e aba Vaults', () => {
       <Sidebar activeView="chat" onNavigate={() => {}} onOpenSettings={() => {}} healthKey={0} />
     );
     await user.click(await screen.findByRole('button', { name: /Vault ativa: Obsidian/ }));
-    await user.click(screen.getByRole('menuitemradio', { name: /Culinária/ }));
+    await user.click(screen.getByRole('button', { name: /Culinária/ }));
 
     await waitFor(() => expect(selectSpy).toHaveBeenCalledWith('culinaria'));
     await waitFor(() => expect(changed).toHaveBeenCalled());
@@ -97,13 +97,15 @@ describe('vaults: seletor, criação e aba Vaults', () => {
     expect(switcher.textContent).toContain('42 notas · 2 pastas');
 
     await user.click(switcher);
-    const menu = screen.getByRole('menu', { name: 'Vaults' });
-    expect(within(menu).getByRole('menuitemradio', { name: /Culinária/ }).textContent).toContain('7 notas · 0 pastas');
-    expect(within(menu).getByRole('menuitem', { name: 'Nova vault' })).toBeTruthy();
-    expect(within(menu).getByRole('menuitem', { name: 'Gerenciar vaults' })).toBeTruthy();
+    const menu = screen.getByRole('group', { name: 'Vaults' });
+    expect(document.querySelector('[role="menu"], [role="menuitem"], [role="menuitemradio"]')).toBeNull();
+    expect(within(menu).getByRole('button', { name: /Obsidian/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(menu).getByRole('button', { name: /Culinária/ }).textContent).toContain('7 notas · 0 pastas');
+    expect(within(menu).getByRole('button', { name: 'Nova vault' })).toBeTruthy();
+    expect(within(menu).getByRole('button', { name: 'Gerenciar vaults' })).toBeTruthy();
 
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('menu', { name: 'Vaults' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Vaults' })).toBeNull();
   });
 
   it('vault: aba Vaults mostra a lista e o detalhe com as pastas reais da vault', async () => {

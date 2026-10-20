@@ -98,9 +98,9 @@ describe('NoteDetailView', () => {
     const user = userEvent.setup();
     renderView();
 
-    await user.click(screen.getByRole('checkbox', { name: 'Mostrar chunks' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Mostrar trechos' }));
 
-    const list = screen.getByRole('list', { name: 'Chunks indexados' });
+    const list = screen.getByRole('list', { name: 'Trechos indexados' });
     expect(within(list).getAllByRole('listitem')).toHaveLength(2);
     expect(within(list).getByText(/120 sobrepostos/)).toBeTruthy();
   });
@@ -112,21 +112,22 @@ describe('NoteDetailView', () => {
     const { onDelete } = renderView();
 
     await user.click(screen.getByRole('button', { name: 'Mais ações' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Copiar caminho' }));
+    expect(document.querySelector('[role="menu"], [role="menuitem"]')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Copiar caminho' }));
     expect(writeText).toHaveBeenCalledWith('C:\\vault\\reunioes\\ata.md');
     expect(await screen.findByText('caminho copiado')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Mais ações' }));
-    await user.click(screen.getByRole('menuitem', { name: /Apagar do corpus/ }));
+    await user.click(screen.getByRole('button', { name: /Apagar do corpus/ }));
     await user.click(screen.getByRole('button', { name: 'Cancelar' }));
     expect(onDelete).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Mais ações' }));
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Copiar caminho' })).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Mais ações' }));
-    await user.click(screen.getByRole('menuitem', { name: /Apagar do corpus/ }));
+    await user.click(screen.getByRole('button', { name: /Apagar do corpus/ }));
     await user.click(screen.getByRole('button', { name: 'Apagar do corpus' }));
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
@@ -141,10 +142,10 @@ describe('NoteDetailView', () => {
 
     await user.click(screen.getByRole('button', { name: 'Mais ações' }));
     await user.click(document.body);
-    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Copiar caminho' })).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Mais ações' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Copiar caminho' }));
+    await user.click(screen.getByRole('button', { name: 'Copiar caminho' }));
     expect(screen.queryByText('caminho copiado')).toBeNull();
   });
 
@@ -153,12 +154,12 @@ describe('NoteDetailView', () => {
     Element.prototype.scrollIntoView = scrollIntoView;
     renderView({ highlightChunkId: 'c2' });
 
-    const list = screen.getByRole('list', { name: 'Chunks indexados' });
+    const list = screen.getByRole('list', { name: 'Trechos indexados' });
     const cited = within(list).getByText('Segundo trecho').closest('li') as HTMLElement;
     expect(cited.classList.contains('reader__chunk--cited')).toBe(true);
     expect(within(cited).getByText('trecho citado')).toBeTruthy();
     expect(within(list).getByText('Primeiro trecho').closest('li')?.classList.contains('reader__chunk--cited')).toBe(false);
-    expect((screen.getByRole('checkbox', { name: 'Mostrar chunks' }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('checkbox', { name: 'Mostrar trechos' }) as HTMLInputElement).checked).toBe(true);
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
   });
@@ -166,7 +167,7 @@ describe('NoteDetailView', () => {
   it('trecho que a nota não tem mais: abre a leitura normal, sem destaque nem erro', () => {
     renderView({ highlightChunkId: 'c-antigo' });
 
-    expect(screen.queryByRole('list', { name: 'Chunks indexados' })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Trechos indexados' })).toBeNull();
     expect(document.querySelector('.reader__chunk--cited')).toBeNull();
     expect(document.querySelector('.reader__body')).toBeTruthy();
   });

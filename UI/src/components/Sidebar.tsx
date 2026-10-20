@@ -154,7 +154,6 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
           type="button"
           id="btn-vault-switcher"
           className="sb__vault"
-          aria-haspopup="menu"
           aria-expanded={menuOpen}
           aria-label={`Vault ativa: ${active?.name ?? 'nenhuma'}. Trocar vault`}
           onClick={() => setMenuOpen((prev) => !prev)}
@@ -174,14 +173,13 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
           <span className="sb__tip">{active?.name ?? 'Vault'}<small>trocar vault</small></span>
         </button>
         {menuOpen && (
-          <div className="sb__vault-menu" role="menu" aria-label="Vaults">
+          <div className="sb__vault-menu" role="group" aria-label="Vaults">
             <div className="sb__vault-menu-head" aria-hidden="true">Trocar de vault</div>
             {vaults.map((vault) => (
               <button
                 key={vault.id}
                 type="button"
-                role="menuitemradio"
-                aria-checked={vault.id === active?.id}
+                aria-pressed={vault.id === active?.id}
                 className="sb__vault-item"
                 onClick={() => {
                   setMenuOpen(false);
@@ -199,7 +197,6 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
             <div className="sb__sep" role="separator" />
             <button
               type="button"
-              role="menuitem"
               className="sb__vault-item"
               onClick={() => {
                 setMenuOpen(false);
@@ -211,7 +208,6 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
             </button>
             <button
               type="button"
-              role="menuitem"
               className="sb__vault-item"
               onClick={() => {
                 setMenuOpen(false);
@@ -264,7 +260,7 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
             <span className="sb__label">Configurações</span>
             <span className="sb__tip">Configurações</span>
           </button>
-          <div className="sb__flyout" role="menu" aria-label="Seções de configuração">
+          <div className="sb__flyout" role="group" aria-label="Seções de configuração">
             <div className="sb__flyout-head">
               <span>Configurações</span>
             </div>
@@ -272,7 +268,6 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
               <button
                 key={tab}
                 type="button"
-                role="menuitem"
                 className="sb__fly-item"
                 onClick={() => onOpenSettings(tab)}
               >
@@ -303,7 +298,7 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
         </span>
         {health && (
           <span className="sb__health-sub mono">
-            {plural(health.notes, 'nota', 'notas')} · {plural(health.chunks, 'chunk', 'chunks')}
+            {plural(health.notes, 'nota', 'notas')} · {plural(health.chunks, 'trecho', 'trechos')}
           </span>
         )}
         {vaultName && (

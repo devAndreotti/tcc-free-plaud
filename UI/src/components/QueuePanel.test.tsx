@@ -117,7 +117,7 @@ describe('QueuePanel', () => {
 
     expect(await screen.findByText('job-queue-1')).toBeTruthy();
     // Etapa atual marcada, com o lote do embedding.
-    expect(screen.getByText('Embedding').closest('li')?.getAttribute('aria-current')).toBe('step');
+    expect(screen.getByText('Modelo de busca semântica').closest('li')?.getAttribute('aria-current')).toBe('step');
     expect(screen.getByText('lote 1 de 2')).toBeTruthy();
     expect(screen.getByText('de 3 arquivos')).toBeTruthy();
     expect(screen.getByText('10,0')).toBeTruthy();
@@ -408,5 +408,19 @@ describe('QueuePanel', () => {
     expect(await screen.findByText('Backend indisponível')).toBeTruthy();
     expect(within(row).queryByRole('button', { name: 'Removendo…' })).toBeNull();
     expect((within(row).getByRole('button', { name: 'Remover do corpus' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('regressao: o campo de confirmação de Remover ganha foco e Esc cancela sem remover', async () => {
+    bridgeMock.listCorpusRoots.mockResolvedValue(CORPUS_ROOTS);
+    const user = userEvent.setup();
+    renderQueuePanel();
+
+    const row = (await screen.findByText('Culinaria')).closest('li') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Remover' }));
+    expect(document.activeElement).toBe(within(row).getByLabelText('Digite REMOVER para confirmar'));
+
+    await user.keyboard('{Escape}');
+    expect(within(row).queryByRole('alertdialog')).toBeNull();
+    expect(bridgeMock.removeCorpusRoot).not.toHaveBeenCalled();
   });
 });

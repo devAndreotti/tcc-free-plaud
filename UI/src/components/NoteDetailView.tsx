@@ -224,7 +224,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
               onChange={(event) => setShowChunks(event.target.checked)}
             />
             <span className="switch__track" aria-hidden="true" />
-            <span>Mostrar chunks</span>
+            <span>Mostrar trechos</span>
           </label>
           <span className="nd__vr" aria-hidden="true" />
           <button type="button" className="btn btn--sm" onClick={onReindex} disabled={busy}>
@@ -235,7 +235,6 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
             type="button"
             className="btn-icon"
             aria-label="Mais ações"
-            aria-haspopup="menu"
             aria-expanded={menu !== 'closed'}
             onClick={() => setMenu((prev) => (prev === 'closed' ? 'menu' : 'closed'))}
           >
@@ -243,15 +242,14 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
           </button>
 
           {menu === 'menu' && (
-            <div className="popover nd__menu" role="menu">
-              <button type="button" role="menuitem" className="popover__item" onClick={copyPath}>
+            <div className="popover nd__menu">
+              <button type="button" className="popover__item" onClick={copyPath}>
                 <CopyIcon size={15} />
                 Copiar caminho
               </button>
               <hr />
               <button
                 type="button"
-                role="menuitem"
                 className="popover__item popover__item--danger"
                 onClick={() => setMenu('confirm')}
                 disabled={busy}
@@ -266,7 +264,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
             <div className="popover nd__confirm" role="alertdialog" aria-labelledby="nd-confirm-title" aria-describedby="nd-confirm-desc">
               <h4 id="nd-confirm-title">Apagar do corpus?</h4>
               <p id="nd-confirm-desc">
-                Remove <b>{detail.title}</b> e {chunks.length === 1 ? 'seu chunk' : `seus ${chunks.length} chunks`} do SQLite e do
+                Remove <b>{detail.title}</b> e {chunks.length === 1 ? 'seu trecho' : `seus ${chunks.length} trechos`} do SQLite e do
                 Chroma. O arquivo no vault não é alterado.
               </p>
               <div className="nd__confirm-actions">
@@ -295,7 +293,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
           <div className="reader__meta">
             <span>{typeLabel(detail.source_type)}</span>
             <span className="reader__sep">·</span>
-            <span>{chunks.length} {chunks.length === 1 ? 'chunk' : 'chunks'}</span>
+            <span>{chunks.length} {chunks.length === 1 ? 'trecho' : 'trechos'}</span>
             {tokens > 0 && (
               <>
                 <span className="reader__sep">·</span>
@@ -314,7 +312,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
           </div>
 
           {showChunks ? (
-            <ol className="reader__chunks" aria-label="Chunks indexados">
+            <ol className="reader__chunks" aria-label="Trechos indexados">
               {chunks.map((chunk, i) => {
                 const overlap = i > 0 ? chunks[i - 1].char_end - chunk.char_start : 0;
                 const cited = chunk.chunk_id === highlightChunkId;

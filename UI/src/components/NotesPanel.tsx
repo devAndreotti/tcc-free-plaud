@@ -174,7 +174,7 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
     setStatus('Reindexando nota…');
     try {
       const result: NoteReindexResult = await bridge.reindexNote(detail.note_id);
-      setStatus(`Nota reindexada · ${result.chunks_indexed} ${result.chunks_indexed === 1 ? 'chunk' : 'chunks'}. ${result.message ?? ''}`.trim());
+      setStatus(`Nota reindexada · ${result.chunks_indexed} ${result.chunks_indexed === 1 ? 'trecho' : 'trechos'}. ${result.message ?? ''}`.trim());
       await loadNotes();
       setSelectedId(result.note_id ?? detail.note_id);
       notifyCorpusChanged();
@@ -255,7 +255,7 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
                         <span className="notes__item-body">
                           <span className="notes__item-title">{note.title}</span>
                           <span className="notes__item-meta">
-                            {note.chunk_count ?? 0} {note.chunk_count === 1 ? 'chunk' : 'chunks'}
+                            {note.chunk_count ?? 0} {note.chunk_count === 1 ? 'trecho' : 'trechos'}
                             {date && ` · ${date}`}
                           </span>
                         </span>
@@ -265,7 +265,7 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
                 </div>
               ))}
 
-              {!isLoadingList && visibleCount === 0 && (
+              {!isLoadingList && visibleCount === 0 && (notes.length > 0 || !status) && (
                 <div className="notes__empty">
                   {notes.length === 0 ? 'Nenhuma nota indexada ainda. Indexe uma pasta na Fila.' : 'Nenhuma nota com esse filtro.'}
                 </div>

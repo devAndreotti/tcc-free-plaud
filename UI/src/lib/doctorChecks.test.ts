@@ -14,6 +14,7 @@ const check = (code: string, status: DoctorCheck['status']): DoctorCheck => ({
 describe('checkLabel', () => {
   it('traduz códigos conhecidos', () => {
     expect(checkLabel('sqlite')).toBe('Banco de notas (SQLite)');
+    expect(checkLabel('fts')).toBe('Busca por palavras');
     expect(checkLabel('audio.device')).toBe('Dispositivo da transcrição');
     expect(checkLabel('audio.runtime')).toBe('Diagnóstico de áudio');
   });

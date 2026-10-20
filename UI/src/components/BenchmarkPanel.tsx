@@ -5,8 +5,8 @@ import { CopyIcon, FolderIcon, RefreshIcon } from './Icons';
 const STRATEGY_ORDER = ['lexical', 'vector', 'hybrid'];
 
 const STRATEGY_NAME: Record<string, { label: string; lower: string; sub: string }> = {
-  lexical: { label: 'Lexical', lower: 'lexical', sub: 'FTS5' },
-  vector: { label: 'Vetorial', lower: 'vetorial', sub: 'embeddings' },
+  lexical: { label: 'Lexical', lower: 'lexical', sub: 'busca por palavras' },
+  vector: { label: 'Vetorial', lower: 'vetorial', sub: 'modelo de busca semântica' },
   hybrid: { label: 'Híbrida', lower: 'híbrida', sub: 'RRF' },
 };
 
@@ -250,10 +250,10 @@ const BenchmarkPanel = () => {
           <>
             {snap && (
               <div className="bench__snap" aria-label="Configuração usada">
-                <span><em>embedding</em>{snap.embedding_model}</span>
+                <span><em>modelo de busca semântica</em>{snap.embedding_model}</span>
                 <span><em>device</em>{snap.embedding_device}</span>
                 <span><em>top_k</em>{snap.retrieval_top_k}</span>
-                <span><em>chunk</em>{snap.default_chunk_size} / {snap.default_chunk_overlap}</span>
+                <span><em>trecho</em>{snap.default_chunk_size} / {snap.default_chunk_overlap}</span>
                 <span><em>resposta</em>{snap.answer_provider}</span>
                 <span className="bench__id">
                   <b>{result.comparison_id}</b> · {result.suite_name}
