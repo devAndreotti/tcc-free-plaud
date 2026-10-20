@@ -150,6 +150,21 @@ def test_job_queue_transcribes_only_after_stop(tmp_path, microphone):
         manager.close()
 
 
+def test_cancel_removes_partial_recording(tmp_path, microphone):
+    runtime = SimpleNamespace(
+        root=tmp_path,
+        prepare=lambda options: None,
+        detector=lambda: SpeechDetector(lambda audio: 0.9),
+    )
+    manager = AudioJobManager(runtime)
+    try:
+        job = manager.start()
+        manager.cancel(job.job_id)
+        assert not job.source_path.exists()
+    finally:
+        manager.close()
+
+
 MME, DIRECTSOUND, WASAPI = 1, 0, 2
 QCY = "Headset (QCY H3 Pro)"
 DEVICES = [

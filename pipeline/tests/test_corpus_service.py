@@ -328,6 +328,23 @@ def test_index_corpus_file_reports_unsupported_extension(tmp_path: Path) -> None
     assert result.chunks_indexed == 0
 
 
+def test_index_corpus_file_reports_os_error_as_failed(tmp_path: Path, monkeypatch) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'trancado.md'
+    source.write_text('# Trancado\n\nConteudo.\n', encoding='utf-8')
+
+    def denied(path):
+        raise PermissionError('Acesso negado')
+
+    monkeypatch.setattr('escolio.corpus.service.load_document', denied)
+
+    result = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
+
+    assert result.status == 'failed'
+    assert result.error_code == 'PermissionError'
+    assert result.note_id is None
+
+
 def test_index_corpus_file_reports_indexing_failure_without_partial_sqlite_write(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     source = tmp_path / 'broken.md'
