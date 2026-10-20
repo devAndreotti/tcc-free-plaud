@@ -2,6 +2,8 @@ from pathlib import Path
 
 from escolio.app.config import Settings
 from escolio.corpus.ask import (
+    _with_cited_context_citations,
+    _with_source_limitations,
     answer_corpus_with_citations,
     build_answer_context_items,
     build_answer_contexts,
@@ -250,8 +252,22 @@ def _answer_claim(chunk_id: str, text: str) -> AnswerClaim:
     return AnswerClaim(text=text, citations=[citation], support_level='direct')
 
 
-def test_build_answer_context_items_usa_so_os_trechos_dos_claims() -> None:
-    # Hit fora dos claims não entra: no experimento 17 ele fazia o qchat recusar perguntas que sabia responder.
+def test_build_answer_context_items_sem_hits_usa_so_os_trechos_dos_claims() -> None:
+    # Com include_hits=False o contexto é só o claim (modo antigo, usado no experimento 17 com o 3B).
+    claim_text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    hits = [
+        _search_hit('chunk-1', claim_text),
+        _search_hit('chunk-2', 'O runbook do broker fica com a equipe de Plataforma.'),
+    ]
+
+    items = build_answer_context_items([_answer_claim('chunk-1', claim_text)], hits, {}, include_hits=False)
+
+    assert [chunk_id for _, chunk_id in items] == ['chunk-1']
+    assert items[0][0].startswith('[1]\n') and 'claim_extrativo:' in items[0][0]
+    assert 'runbook do broker' not in items[0][0]
+
+
+def test_build_answer_context_items_inclui_os_outros_trechos_depois_dos_claims() -> None:
     claim_text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
     hits = [
         _search_hit('chunk-1', claim_text),
@@ -260,9 +276,33 @@ def test_build_answer_context_items_usa_so_os_trechos_dos_claims() -> None:
 
     items = build_answer_context_items([_answer_claim('chunk-1', claim_text)], hits, {})
 
-    assert [chunk_id for _, chunk_id in items] == ['chunk-1']
-    assert items[0][0].startswith('[1]\n') and 'claim_extrativo:' in items[0][0]
-    assert 'runbook do broker' not in items[0][0]
+    assert [chunk_id for _, chunk_id in items] == ['chunk-1', 'chunk-2']
+    assert items[1][0].startswith('[2]\n') and 'claim_extrativo:' not in items[1][0]
+    assert 'runbook do broker' in items[1][0]
+
+
+def test_resposta_que_cita_trecho_extra_entra_nas_fontes_e_some_a_limitacao_de_um_chunk() -> None:
+    claim_text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    hits = [
+        _search_hit('chunk-1', claim_text),
+        _search_hit('chunk-2', 'O runbook do broker fica com a equipe de Plataforma.'),
+    ]
+    claims = [_answer_claim('chunk-1', claim_text)]
+    answer_sources = ['chunk-1', 'chunk-2']
+
+    citations = _with_cited_context_citations(
+        'RabbitMQ é o broker [1]. O runbook fica com a Plataforma [2].',
+        answer_sources,
+        [claims[0].citations[0]],
+        hits,
+        {},
+    )
+    assert [citation.chunk_id for citation in citations] == ['chunk-1', 'chunk-2']
+    assert _with_source_limitations(['A resposta se apoia em um único chunk recuperado.'], citations, []) == []
+
+    so_um = _with_cited_context_citations('RabbitMQ é o broker [1].', answer_sources, [claims[0].citations[0]], hits, {})
+    assert [citation.chunk_id for citation in so_um] == ['chunk-1']
+    assert _with_source_limitations([], so_um, []) == ['A resposta se apoia em um único chunk recuperado.']
 
 
 def test_validate_generated_answer_ignora_marcadores_de_fonte() -> None:
