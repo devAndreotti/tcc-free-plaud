@@ -6,7 +6,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from escolio.corpus.answer_context import build_answer_context_items, normalize_answer_markers
+from escolio.corpus.answer_context import (
+    build_answer_context_items,
+    normalize_answer_markers,
+)
 from escolio.notes.readable import readable_chunk_text
 from escolio.notes.schemas import Note
 from escolio.providers.answer import AnswerProvider
