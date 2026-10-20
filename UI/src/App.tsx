@@ -28,9 +28,22 @@ const generateId = () =>
 const ASK_POLL_MS = 150;
 // O Ollama descarrega o modelo após 5 min parado: o aquecimento roda no máximo a cada 4 min.
 const WARM_INTERVAL_MS = 4 * 60 * 1000;
+// Prazo de uma pergunta em streaming: passa do limite de 300 s do provedor, então só estoura se o backend travar.
+const STREAM_DEADLINE_MS = 6 * 60 * 1000;
 
 const isAskStrategy = (value: unknown): value is AskStrategy =>
   value === 'hybrid' || value === 'vector' || value === 'lexical';
+
+// Pergunta em andamento de uma aba: o id que o backend devolveu e se o usuário mandou parar.
+interface AskRun {
+  askId?: string;
+  stopped: boolean;
+}
+
+// Descarta a pergunta no backend. Falha só vai ao console: a tela já deixou de esperar por ela.
+const discardAsk = (askId: string) => {
+  bridge.cancelAsk(askId).catch((error: unknown) => console.error('[App] Não foi possível cancelar a pergunta:', error));
+};
 
 // Conversas: abas (cada uma presa a uma vault), aba ativa e mensagens/digitação por aba.
 interface ChatState {
@@ -268,6 +281,10 @@ function AppContent() {
   // Progresso de cada aba (estágio e texto escrito até agora). Fica fora do ChatState: não vai para o arquivo de conversas.
   const [askProgress, setAskProgress] = useState<Record<string, { stage: AskStage; partial: string }>>({});
   const activeProgress = activeTabId ? askProgress[activeTabId] : undefined;
+  // Rascunho de cada aba (o que foi digitado e ainda não foi enviado). Também fica fora do ChatState.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  // Pergunta em andamento de cada aba, para o botão Parar.
+  const askRunsRef = useRef<Record<string, AskRun>>({});
 
   // Mantém o scroll sempre no final da lista de mensagens da aba ativa
   const scrollToBottom = useCallback(() => {
@@ -288,9 +305,10 @@ function AppContent() {
     setChat((c) => ({ ...c, tabs: c.tabs.map((tab) => (tab.id === id ? { ...tab, label } : tab)) }));
   }, [setChat]);
 
-  // Fecha uma aba; limpa seu estado e ativa a vizinha
+  // Fecha uma aba; limpa seu estado (rascunho incluído) e ativa a vizinha
   const handleCloseTab = useCallback(
     (id: string) => {
+      setDrafts((prev) => withoutKey(prev, id));
       setChat((c) => {
         const tabMessages = withoutKey(c.tabMessages, id);
         const tabTyping = withoutKey(c.tabTyping, id);
@@ -325,13 +343,18 @@ function AppContent() {
   // Provedor e modelo que escrevem a resposta (barra do chat e cabeçalho "Escrevendo com …") e a estratégia padrão.
   // Lidos ao abrir, ao fechar Configurações (healthKey muda) e ao trocar o modelo na barra; não há chamada por pergunta.
   const [answerConfig, setAnswerConfig] = useState<{ provider: string; model: string | null } | null>(null);
+  // Última estratégia padrão lida do backend: só uma mudança dela entra no chat, sem desfazer a escolha da sessão.
+  const lastDefaultStrategyRef = useRef<AskStrategy | null>(null);
   const applyBackendSettings = useCallback((settings: BackendSettings) => {
     setAnswerConfig({ provider: settings.answer_provider, model: settings.answer_model });
-    if (isAskStrategy(settings.default_ask_strategy)) setStrategy(settings.default_ask_strategy);
+    if (isAskStrategy(settings.default_ask_strategy) && settings.default_ask_strategy !== lastDefaultStrategyRef.current) {
+      lastDefaultStrategyRef.current = settings.default_ask_strategy;
+      setStrategy(settings.default_ask_strategy);
+    }
   }, []);
   useEffect(() => {
     bridge
-      .getBackendSettings()
+      .getBackendSettings({ doctor: false })
       .then(applyBackendSettings)
       .catch(() => setAnswerConfig(null));
   }, [healthKey, applyBackendSettings]);
@@ -350,10 +373,21 @@ function AppContent() {
 
   // Espera uma pergunta em streaming terminar, mostrando o texto que a IA já escreveu. Devolve null se a aba fechar no meio.
   const streamAsk = useCallback(
-    async (tabId: string, text: string, askStrategy: AskStrategy, askSourceRoot: string | null): Promise<AskResult | null> => {
+    async (tabId: string, run: AskRun, text: string, askStrategy: AskStrategy, askSourceRoot: string | null): Promise<AskResult | null> => {
       const { ask_id: askId } = await bridge.startAsk(text, askStrategy, askSourceRoot);
+      run.askId = askId;
+      // Parar veio antes de o backend devolver o id: a pergunta recém-aceita é descartada aqui.
+      if (run.stopped) {
+        discardAsk(askId);
+        return null;
+      }
+      const deadline = Date.now() + STREAM_DEADLINE_MS;
       for (;;) {
-        if (!tabsRef.current.some((tab) => tab.id === tabId)) return null;
+        if (run.stopped || !tabsRef.current.some((tab) => tab.id === tabId)) return null;
+        if (Date.now() > deadline) {
+          discardAsk(askId);
+          throw new Error('A pergunta passou do prazo.');
+        }
         const progress = await bridge.pollAsk(askId);
         if (progress.stage === 'done' && progress.result) return progress.result;
         if (progress.stage === 'done' || progress.stage === 'error') {
@@ -369,12 +403,14 @@ function AppContent() {
   // Pergunta ao corpus e anexa a resposta (estruturada, quando o backend a devolve). Com streaming, a tela mostra o texto enquanto a IA escreve.
   const askInTab = useCallback(
     async (tabId: string, text: string, askStrategy: AskStrategy, askSourceRoot: string | null) => {
+      const run: AskRun = { stopped: false };
+      askRunsRef.current[tabId] = run;
       updateTab(tabId, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: true } }));
       try {
         const ask = (await bridge.supportsAskStreaming())
-          ? await streamAsk(tabId, text, askStrategy, askSourceRoot)
+          ? await streamAsk(tabId, run, text, askStrategy, askSourceRoot)
           : await bridge.askCorpus(text, askStrategy, askSourceRoot);
-        if (!ask) return; // aba fechada no meio: a resposta não tem para onde ir
+        if (!ask || run.stopped) return; // aba fechada ou pergunta parada: a resposta não tem para onde ir
         appendMessage(tabId, {
           id: `msg-${generateId()}`,
           role: 'assistant',
@@ -383,12 +419,14 @@ function AppContent() {
           ask,
         });
       } catch (error) {
-        // Exibe erro como mensagem do assistente para não travar a UI
+        if (run.stopped) return;
+        // Exibe erro como mensagem do assistente para não travar a UI; "Tentar de novo" repete a mesma pergunta
         appendMessage(tabId, {
           id: `msg-${generateId()}`,
           role: 'assistant',
           content: 'Ocorreu um erro ao processar sua mensagem. Tente novamente.',
           timestamp: new Date(),
+          retry: { query: text, strategy: askStrategy },
         });
         console.error('[App] Erro ao perguntar ao corpus:', error);
       } finally {
@@ -398,6 +436,14 @@ function AppContent() {
     },
     [appendMessage, updateTab, streamAsk]
   );
+
+  // Parar: a pergunta da aba é descartada no backend, e a resposta dela não entra na conversa.
+  const stopAsk = useCallback((tabId: string) => {
+    const run = askRunsRef.current[tabId];
+    if (!run) return;
+    run.stopped = true;
+    if (run.askId) discardAsk(run.askId);
+  }, []);
 
   // Envia mensagem na conversa da aba ativa
   const handleSendMessage = useCallback(
@@ -521,7 +567,10 @@ function AppContent() {
             {/* Input de mensagem (visível apenas com aba de chat ativa) */}
             {workspaceView === 'chat' && activeTab?.type === 'chat' && (
               <ChatInput
+                value={drafts[activeTab.id] ?? ''}
+                onChange={(text) => setDrafts((prev) => ({ ...prev, [activeTab.id]: text }))}
                 onSendMessage={handleSendMessage}
+                onStop={isTyping ? () => stopAsk(activeTab.id) : undefined}
                 onFocus={warmAnswerModel}
                 isLoading={isTyping || switchingVault}
                 answerProvider={answerConfig?.provider}

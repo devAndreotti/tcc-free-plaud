@@ -51,6 +51,7 @@ describe('MessageBubble', () => {
     expect(screen.getByText('Docker roda')).toBeTruthy();
     expect(screen.getByText('em containers').querySelector('.msg__cursor')).toBeTruthy();
     expect(container.querySelectorAll('.msg__cursor')).toHaveLength(1);
+    expect(screen.getByText('rascunho, ainda sendo validado')).toBeTruthy();
   });
 
   it('indicador de digitação: sem modelo, diz que está escrevendo a resposta', () => {

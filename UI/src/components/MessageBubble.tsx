@@ -12,6 +12,8 @@ export interface MessageData {
   timestamp: Date;
   /** Resposta estruturada do corpus, quando o backend a devolve. */
   ask?: AskResult;
+  /** Pergunta que falhou: "Tentar de novo" a repete com a mesma estratégia. */
+  retry?: { query: string; strategy: AskStrategy };
 }
 
 interface MessageBubbleProps {
@@ -63,7 +65,10 @@ export const TypingIndicator = ({ stage, partial = '', model }: TypingIndicatorP
       </div>
       {/* aria-live off: o texto muda a cada consulta; a resposta final é anunciada pelo histórico. */}
       <div className="msg__answer" aria-live="off">
-        {renderFormattedContent(partial.trimStart(), <span className="msg__cursor" aria-hidden="true" />)}
+        <div className="msg__draft">
+          <span className="msg__head-sub">rascunho, ainda sendo validado</span>
+          {renderFormattedContent(partial.trimStart(), <span className="msg__cursor" aria-hidden="true" />)}
+        </div>
       </div>
     </div>
   );
@@ -182,7 +187,12 @@ const NoAnswer = ({ ask, onRetry }: { ask: AskResult; onRetry?: MessageBubblePro
           : ask.limitations[0] ??
             'Nenhum trecho recuperado responde à pergunta com segurança. Se a informação estiver numa nota, reindexe a pasta dela ou cite o nome da nota na pergunta.'}
       </p>
-      {ask.reason_for_no_answer && <div className="msg__why mono">motivo: {ask.reason_for_no_answer}</div>}
+      {ask.reason_for_no_answer && (
+        <details className="msg__details">
+          <summary>Detalhes técnicos</summary>
+          <div className="mono">motivo: {ask.reason_for_no_answer}</div>
+        </details>
+      )}
       {onRetry && ask.strategy !== 'lexical' && !NO_LEXICAL_RETRY.has(ask.reason_for_no_answer ?? '') && (
         <button type="button" className="msg__btn" onClick={() => onRetry(ask.query, 'lexical')}>
           Buscar só por palavra-chave
@@ -201,13 +211,14 @@ const DISCARD_TEXT = new Map<string, string>([
   ['unsupported_anchor', 'A IA citou algo que não está nos trechos'],
   ['low_claim_overlap', 'A IA escreveu longe dos trechos'],
   ['empty_generated_answer', 'A IA devolveu só [n], sem texto'],
+  ['no_source_marker', 'A IA escreveu sem citar nenhum trecho'],
   ['echoed_title', 'A IA copiou um título em vez de responder'],
   ['echoed_question', 'A IA repetiu a pergunta em vez de responder'],
   ['provider_error', 'A IA falhou; mostramos o trecho'],
 ]);
 
 // Limitações que vêm da tentativa do modelo (descarte, falha do provedor): vão para os detalhes técnicos.
-const MODEL_LIMITATION = /^(Resposta generativa ignorada|Provider de resposta falhou|unsupported_)/;
+const MODEL_LIMITATION = /^(Resposta generativa ignorada|A IA falhou|A IA declarou|A IA respondeu com uma negativa)/;
 
 /** Quem escreveu a resposta, sempre visível: a IA, só os trechos, ou a IA que foi descartada. */
 const AnswerFooter = ({ ask }: { ask: AskResult }) => {
@@ -368,7 +379,7 @@ const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?
                 <div className="msg__source-meta mono">
                   <span title="Versão da nota">v{source.note_version}</span>
                   <span>{source.char_start}–{source.char_end}</span>
-                  {claims.length > 0 && (
+                  {showClaims && (
                     <span className={`msg__support msg__support--${support[i]}`}>
                       {support[i] === 'direct' ? 'apoio direto' : 'apoio parcial'}
                     </span>
@@ -405,7 +416,7 @@ const MessageBubble = ({ message, onRetry, onOpenSource }: MessageBubbleProps) =
     );
   }
 
-  const { ask } = message;
+  const { ask, retry } = message;
   return (
     <article className="msg msg--ai fade-in" aria-label="Resposta">
       {ask?.no_answer ? (
@@ -426,6 +437,11 @@ const MessageBubble = ({ message, onRetry, onOpenSource }: MessageBubbleProps) =
             <b>Resposta</b>
           </div>
           <div className="msg__answer">{renderFormattedContent(message.content)}</div>
+          {retry && onRetry && (
+            <button type="button" className="msg__btn" onClick={() => onRetry(retry.query, retry.strategy)}>
+              Tentar de novo
+            </button>
+          )}
         </>
       )}
     </article>

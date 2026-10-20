@@ -92,7 +92,6 @@ export const AnswerPicker = ({ provider, model, onSaved }: AnswerPickerProps) =>
       <button
         type="button"
         className={`strategy__chip answer__chip${isAi ? ' answer__chip--ai' : ''}`}
-        aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Como responder: ${label}`}
         onClick={toggle}
@@ -112,11 +111,10 @@ export const AnswerPicker = ({ provider, model, onSaved }: AnswerPickerProps) =>
       </button>
       {open && (
         <div className="strategy__menu answer__menu">
-          <div role="listbox" aria-label="Como responder" aria-busy={saving}>
+          <div role="group" aria-label="Como responder" aria-busy={saving}>
             <button
               type="button"
-              role="option"
-              aria-selected={!isAi}
+              aria-pressed={!isAi}
               className="answer__item"
               disabled={saving}
               onClick={() => void choose(EXTRACTIVE, null)}
@@ -138,8 +136,7 @@ export const AnswerPicker = ({ provider, model, onSaved }: AnswerPickerProps) =>
                 <button
                   key={item.id}
                   type="button"
-                  role="option"
-                  aria-selected={selected}
+                  aria-pressed={selected}
                   className="answer__item"
                   disabled={saving}
                   onClick={() => void choose(listProvider, item.id)}

@@ -114,6 +114,42 @@ describe('App: resposta em streaming', () => {
     expect(pollAsk.mock.calls.length).toBe(depois);
   });
 
+  it('Parar descarta a pergunta no backend, para de consultar e não grava resposta na conversa', async () => {
+    const cancel = vi.spyOn(bridge, 'cancelAsk').mockResolvedValue({ ok: true });
+    const pollAsk = streamingBackend((askId) => progress(askId, 'writing', 'Docker roda'));
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForVault();
+    await send(user, 'Pergunta parada');
+    expect(await screen.findByText('Docker roda')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Parar resposta' }));
+
+    expect(cancel).toHaveBeenCalledWith('ask-teste');
+    await pausa(400);
+    expect(screen.queryByText('Docker roda')).toBeNull();
+    expect(screen.queryByRole('article', { name: 'Resposta' })).toBeNull();
+    const depois = pollAsk.mock.calls.length;
+    await pausa(400);
+    expect(pollAsk.mock.calls.length).toBe(depois);
+  });
+
+  it('erro: "Tentar de novo" repete a mesma pergunta com a mesma estratégia', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    streamingBackend((askId, call) =>
+      call === 1 ? { ...progress(askId, 'error'), error: 'modelo indisponível' } : { ...progress(askId, 'done'), result: ANSWER }
+    );
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForVault();
+    await send(user, 'Pergunta que falha');
+
+    await user.click(await screen.findByRole('button', { name: 'Tentar de novo' }));
+
+    expect(bridge.startAsk).toHaveBeenLastCalledWith('Pergunta que falha', 'hybrid', null);
+    expect(await screen.findByText('Docker roda containers isolados.')).toBeTruthy();
+  });
+
   it('aquece o modelo ao abrir e, ao focar o campo, no máximo uma vez a cada 4 min', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-19T10:00:00Z'));
