@@ -1,4 +1,5 @@
 from escolio.providers.answer_quality import (
+    has_source_marker,
     is_echoed_question,
     is_echoed_title,
     is_no_answer_sentinel,
@@ -96,3 +97,9 @@ def test_resposta_legitima_nao_e_eco_da_pergunta() -> None:
         'A tabela eventos atingiu 180 milhões de registros em fevereiro de 2025',
     )
     assert not is_echoed_question('Quem e responsavel pelo teste em staging?', 'Rafael')
+
+
+def test_marcador_so_conta_se_aponta_para_um_trecho_existente() -> None:
+    assert has_source_marker('O prazo de entrega é de 15 dias úteis [1].', 1)
+    assert not has_source_marker('O prazo de entrega é de 15 dias úteis [2].', 1)
+    assert not has_source_marker('O prazo de entrega é de 15 dias úteis.', 1)

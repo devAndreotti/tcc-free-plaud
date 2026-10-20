@@ -61,7 +61,7 @@ class FakeAnswerProvider:
 
     def answer(self, question: str, contexts: list[str]) -> str:
         self.calls.append((question, contexts))
-        return 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+        return 'RabbitMQ foi adotado como message broker padrao do pipeline. [1]'
 
 
 class UnsupportedNumberAnswerProvider:
@@ -308,11 +308,11 @@ def test_resposta_que_cita_trecho_extra_entra_nas_fontes_e_some_a_limitacao_de_u
         {},
     )
     assert [citation.chunk_id for citation in citations] == ['chunk-1', 'chunk-2']
-    assert _with_source_limitations(['A resposta se apoia em um único chunk recuperado.'], citations, []) == []
+    assert _with_source_limitations(['A resposta se apoia em um único trecho recuperado.'], citations, []) == []
 
     so_um = _with_cited_context_citations('RabbitMQ é o broker [1].', answer_sources, [claims[0].citations[0]], hits, {})
     assert [citation.chunk_id for citation in so_um] == ['chunk-1']
-    assert _with_source_limitations([], so_um, []) == ['A resposta se apoia em um único chunk recuperado.']
+    assert _with_source_limitations([], so_um, []) == ['A resposta se apoia em um único trecho recuperado.']
 
 
 def test_validate_generated_answer_ignora_marcadores_de_fonte() -> None:
@@ -360,7 +360,7 @@ def test_validate_generated_answer_rejects_unsupported_numbers(tmp_path: Path) -
 def test_validate_generated_answer_aceita_numero_seguido_de_palavra_comum() -> None:
     aceita = validate_generated_answer(
         'Qual versão foi lançada?',
-        'Versão 2.1 foi lançada em março.',
+        'Versão 2.1 foi lançada em março [1].',
         ['Versão 2.1, lançada em março com o painel novo.'],
         [],
     )
@@ -406,7 +406,7 @@ def test_validate_generated_answer_accepts_faithful_short_answer(tmp_path: Path)
 
     validation = validate_generated_answer(
         'Qual message broker foi adotado?',
-        'RabbitMQ foi adotado como message broker padrao do pipeline.',
+        'RabbitMQ foi adotado como message broker padrao do pipeline. [1]',
         ['RabbitMQ foi adotado como message broker padrao do pipeline.'],
         [claim],
     )
@@ -431,7 +431,7 @@ VLAN_CONTEXT = (
 def test_validate_generated_answer_mede_sobreposicao_contra_o_trecho_e_nao_so_o_titulo() -> None:
     validation = validate_generated_answer(
         'o que é VLAN?',
-        'Inicialmente, VLAN faz a segmentação lógica da rede, com isolamento entre portas trunk e access.',
+        'Inicialmente, VLAN faz a segmentação lógica da rede, com isolamento entre portas trunk e access. [1]',
         [VLAN_CONTEXT],
         [_title_claim('VLAN - [!note]')],
     )
@@ -495,6 +495,52 @@ def test_validate_generated_answer_titulo_copiado_vira_extrativa() -> None:
 
     assert validation.action == 'fallback_extractive'
     assert validation.reason == 'echoed_title'
+
+
+def test_validate_generated_answer_sem_marcador_de_fonte_vira_extrativa() -> None:
+    contexto = '[1]\nsource_path: prazo.md\ntitle: Prazo\nnote_id: prazo\nchunk_id: prazo::1\ntrecho:\nO prazo de entrega é de 15 dias úteis.'
+
+    validation = validate_generated_answer('Qual o prazo?', 'O prazo de entrega é de 15 dias úteis.', [contexto], [])
+
+    assert validation.action == 'fallback_extractive'
+    assert validation.reason == 'no_source_marker'
+
+
+def test_validate_generated_answer_termo_so_no_cabecalho_nao_conta_como_suporte() -> None:
+    contexto = (
+        '[1]\nsource_path: Juniper.md\ntitle: VLAN\nnote_id: vlan\nchunk_id: vlan::1\n'
+        'trecho:\nVLAN faz a segmentação lógica da rede, com isolamento entre portas trunk e access.'
+    )
+
+    validation = validate_generated_answer(
+        'o que é VLAN?',
+        'VLAN faz a segmentação lógica da rede, segundo a Juniper, com portas trunk e access. [1]',
+        [contexto],
+        [_title_claim('VLAN - [!note]')],
+    )
+
+    assert validation.reason == 'unsupported_anchor'
+
+
+def test_validate_generated_answer_recusa_curta_vira_abstencao() -> None:
+    contexto = '[1]\nsource_path: prazo.md\ntitle: Prazo\ntrecho:\nO prazo de entrega é de 15 dias úteis.'
+
+    curta = validate_generated_answer('Qual o prazo do contrato?', 'Não encontrei essa informação nos trechos. [1]', [contexto], [])
+    longa = validate_generated_answer(
+        'Qual o prazo?',
+        'Não encontrei o prazo exato, mas a nota diz que a entrega leva 15 dias úteis. [1]',
+        [contexto],
+        [],
+    )
+
+    assert curta.action == 'no_answer'
+    assert longa.action != 'no_answer'
+
+
+def test_validate_generated_answer_compara_unidade_kb_e_mb() -> None:
+    validation = validate_generated_answer('Qual o limite?', 'O limite é de 10 MB. [1]', ['O limite é de 10 KB por requisição.'], [])
+
+    assert validation.reason == 'unsupported_number'
 
 
 def test_answer_corpus_with_citations_stitches_multiple_files(tmp_path: Path) -> None:
@@ -729,7 +775,7 @@ def _indexed_connection(tmp_path: Path):
 
 def test_answer_corpus_usa_answer_stream_quando_recebe_callback(tmp_path: Path) -> None:
     connection = _indexed_connection(tmp_path)
-    text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    text = 'RabbitMQ foi adotado como message broker padrao do pipeline. [1]'
     provider = StreamingAnswerProvider(text)
     pieces: list[str] = []
 
@@ -767,12 +813,12 @@ def test_answer_corpus_stream_mantem_a_validacao_sobre_o_texto_final(tmp_path: P
     assert pieces  # o texto já foi repassado antes da validação
     assert response.generated is False
     assert '64 KB' not in (response.answer or '')
-    assert any('unsupported_number' in limitation for limitation in response.limitations)
+    assert any('número sem suporte' in limitation for limitation in response.limitations)
 
 
 def test_answer_corpus_sem_callback_continua_usando_answer(tmp_path: Path) -> None:
     connection = _indexed_connection(tmp_path)
-    provider = StreamingAnswerProvider('RabbitMQ foi adotado como message broker padrao do pipeline.')
+    provider = StreamingAnswerProvider('RabbitMQ foi adotado como message broker padrao do pipeline. [1]')
 
     response = answer_corpus_with_citations(
         'Qual message broker foi adotado?',
@@ -949,7 +995,7 @@ def test_answer_corpus_calls_answer_provider_only_after_citations(tmp_path: Path
     )
 
     assert response.status == 'answer'
-    assert response.answer == 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    assert response.answer == 'RabbitMQ foi adotado como message broker padrao do pipeline. [1]'
     assert response.generated is True
     assert response.citations
     assert len(provider.calls) == 1
@@ -979,7 +1025,7 @@ def test_answer_corpus_falls_back_when_generated_answer_has_unsupported_number(t
     assert '64 KB' not in (response.answer or '')
     assert 'RabbitMQ foi adotado' in (response.answer or '')
     assert response.generated is False
-    assert any('unsupported_number' in limitation for limitation in response.limitations)
+    assert any('número sem suporte' in limitation for limitation in response.limitations)
 
 
 def test_answer_corpus_turns_generated_sentinel_into_no_answer(tmp_path: Path) -> None:
@@ -1095,7 +1141,7 @@ def test_answer_corpus_falls_back_to_extractive_answer_when_provider_fails(tmp_p
 
     assert response.status == 'answer'
     assert 'RabbitMQ' in (response.answer or '')
-    assert any('provider de resposta falhou' in limitation.lower() for limitation in response.limitations)
+    assert any('a ia falhou' in limitation.lower() for limitation in response.limitations)
 
 
 def test_answer_corpus_erro_de_codigo_fora_do_provider_propaga(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1137,7 +1183,7 @@ def test_answer_corpus_sanitizes_provider_failure_message(tmp_path: Path) -> Non
     serialized = ' '.join(response.limitations)
 
     assert response.status == 'answer'
-    assert 'Provider de resposta falhou' in serialized
+    assert 'A IA falhou' in serialized
     assert 'RuntimeError' in serialized
     assert 'sk-secret' not in serialized
     assert 'bad key' not in serialized
@@ -1206,7 +1252,8 @@ def test_answer_corpus_filters_stale_vector_hits_before_citations(tmp_path: Path
     assert response.no_answer is True
     assert response.citations == []
     assert all(source.doc_id != 'stale-filas' for source in response.used_sources)
-    assert any('stale' in limitation.lower() or 'obsoleto' in limitation.lower() for limitation in response.limitations)
+    assert 'desatualizados' not in response.limitations[0]
+    assert 'desatualizados' in response.limitations[-1]
 
 
 def test_answer_corpus_uses_valid_vector_hit_after_dropping_stale_hit(tmp_path: Path) -> None:

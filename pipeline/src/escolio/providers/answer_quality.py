@@ -1,4 +1,4 @@
-"""Qualidade da resposta gerativa: sentinela de abstenção fora do começo e título copiado do contexto."""
+"""Qualidade da resposta gerativa: sentinela de abstenção fora do começo, título copiado do contexto e [n] ausente."""
 
 import re
 
@@ -12,6 +12,9 @@ ECHOED_TITLE_MAX_WORDS = 10
 # quando a medição com qchat mostrar cópias sem rejeitar respostas legítimas.
 TITLE_LINE_PATTERN = re.compile(r'^[ \t]*(?:#{1,6}[ \t]+|title:[ \t]*)(.+)$', re.IGNORECASE | re.MULTILINE)
 ANSWER_LABEL_PATTERN = re.compile(r'^\s*(?:t[ií]tulo|title)\s*:', re.IGNORECASE)
+# Marcador [n] que o modelo põe no fim das frases, com o espaço antes dele.
+# ponytail: só [n]; "[1, 2]" não vira fonte. Aceitar lista se o modelo passar a escrever assim.
+ANSWER_MARKER_PATTERN = re.compile(r'[ \t]*\[(\d+)\]')
 
 
 def _tokens(text: str) -> list[str]:
@@ -69,3 +72,8 @@ def is_echoed_question(question: str, answer: str) -> bool:
     question_words = set(_tokens(question))
     # Só conta quando nenhuma palavra da resposta fica fora da pergunta; "em memória" com "tmpfs" não é cópia.
     return len(tokens) >= 2 and all(token in question_words for token in tokens)
+
+
+def has_source_marker(answer: str, count: int) -> bool:
+    """Alguma frase cita um trecho com [n] entre 1 e count; marcador inventado não conta."""
+    return any(1 <= int(number) <= count for number in ANSWER_MARKER_PATTERN.findall(answer))

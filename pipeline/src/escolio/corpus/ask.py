@@ -14,7 +14,9 @@ from escolio.corpus.answer_context import (
 from escolio.notes.schemas import Note
 from escolio.providers.answer import AnswerProvider, AnswerProviderError
 from escolio.providers.answer_quality import (
+    ANSWER_MARKER_PATTERN,
     contains_token_sequence,
+    has_source_marker,
     is_echoed_question,
     is_echoed_title,
     is_no_answer_sentinel,
@@ -96,11 +98,8 @@ def corpus_vocabulary_stems(connection: sqlite3.Connection) -> frozenset[str] | 
     return stems
 TEAM_ANSWER_PATTERN = re.compile(r'\bequipe\s+(?:de|da|do|dos|das)\s+[0-9A-Za-zÀ-ÖØ-öø-ÿ_-]+')
 CONTEXT_METADATA_KEYS = ('source_path:', 'note_id:', 'chunk_id:', 'claim_extrativo:')
-# Marcador [n] que o modelo põe no fim das frases, com o espaço antes dele.
-# ponytail: só [n]; "[1, 2]" não vira fonte. Aceitar lista se o modelo passar a escrever assim.
-ANSWER_MARKER_PATTERN = re.compile(r'[ \t]*\[(\d+)\]')
-# Unidade só conta quando é conhecida ("2.1 foi" é 2.1 e uma palavra). ponytail: KB, MB e R$ ficam de fora; incluir aqui se a comparação precisar.
-GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*(?:%|(?:dias?|m[êe]s(?:es)?|anos?|horas?|minutos?|semanas?)\b))?', re.IGNORECASE)
+# Unidade só conta quando é conhecida ("2.1 foi" é 2.1 e uma palavra). ponytail: R$ fica de fora; incluir aqui se a comparação precisar.
+GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*(?:%|(?:kb|mb|gb|tb|dias?|m[êe]s(?:es)?|anos?|horas?|minutos?|semanas?)\b))?', re.IGNORECASE)
 GENERATED_ANCHOR_PATTERN = re.compile(r'\b[A-ZÀ-Ö][A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{2,}\b')
 GENERIC_NO_ANSWER_MARKERS = (
     'nao consegui recuperar',
@@ -135,7 +134,7 @@ class GeneratedAnswerValidation(BaseModel):
 
 def _provider_failure_limitation(exc: Exception) -> str:
     detail = str(exc)[:200].rstrip('.') if isinstance(exc, AnswerProviderError) else type(exc).__name__
-    return f'Provider de resposta falhou; usando resposta extrativa. Erro: {detail}.'
+    return f'A IA falhou; usando resposta extrativa. Erro: {detail}.'
 
 
 def _citation_from_corpus_hit(hit: SearchHit, note_lookup: dict[str, Note], claim_text: str | None = None) -> Citation:
@@ -180,8 +179,8 @@ def _hits_for_citations(hits: list[SearchHit], citations: list[Citation]) -> lis
     return [hit for hit in hits if hit.chunk.chunk_id in cited_chunk_ids]
 
 
-SINGLE_CHUNK_LIMITATION = 'A resposta se apoia em um único chunk recuperado.'
-MULTI_FILE_LIMITATION = 'A resposta combina evidência de multiplos arquivos do corpus.'
+SINGLE_CHUNK_LIMITATION = 'A resposta se apoia em um único trecho recuperado.'
+MULTI_FILE_LIMITATION = 'A resposta combina evidência de múltiplos arquivos do corpus.'
 
 
 def _with_cited_context_citations(
@@ -233,7 +232,7 @@ def _drop_unknown_answer_markers(text: str, context_count: int) -> str:
 
 
 def _normalized_support_text(contexts: list[str], claims: list[AnswerClaim]) -> str:
-    return '\n'.join([*contexts, *(claim.text for claim in claims)]).casefold()
+    return '\n'.join([*(context.split('trecho:\n', 1)[-1] for context in contexts), *(claim.text for claim in claims)]).casefold()
 
 
 def _unsupported_generated_numbers(answer: str, support_text: str) -> list[str]:
@@ -267,8 +266,8 @@ def _unsupported_generated_anchors(answer: str, support_text: str) -> list[str]:
 
 def _is_generic_generated_no_answer(answer: str) -> bool:
     lowered = answer.casefold()
-    return any(marker in lowered for marker in GENERIC_NO_ANSWER_MARKERS) and any(
-        marker in lowered for marker in GENERIC_SUGGESTION_MARKERS
+    return (len(lowered.split()) <= 12 and lowered.startswith(GENERIC_NO_ANSWER_MARKERS)) or (
+        any(marker in lowered for marker in GENERIC_NO_ANSWER_MARKERS) and any(marker in lowered for marker in GENERIC_SUGGESTION_MARKERS)
     )
 
 
@@ -292,13 +291,13 @@ def validate_generated_answer(
         return GeneratedAnswerValidation(
             action='no_answer',
             reason='generated_no_answer_sentinel',
-            limitations=['Provider generativo declarou que os contextos não sustentam resposta.'],
+            limitations=['A IA declarou que os contextos não sustentam resposta.'],
         )
     if _is_generic_generated_no_answer(cleaned_answer):
         return GeneratedAnswerValidation(
             action='no_answer',
             reason='generated_generic_no_answer',
-            limitations=['Provider generativo retornou negativa generica em vez de resposta sustentada.'],
+            limitations=['A IA respondeu com uma negativa genérica em vez de uma resposta sustentada.'],
         )
     # Trecho vazio (nota só com frontmatter) faz modelo pequeno copiar o cabeçalho do contexto.
     if any(key in cleaned_answer for key in CONTEXT_METADATA_KEYS):
@@ -326,9 +325,7 @@ def validate_generated_answer(
         return GeneratedAnswerValidation(
             action='fallback_extractive',
             reason='unsupported_number',
-            limitations=[
-                f'unsupported_number: resposta generativa ignorada por numero sem suporte: {", ".join(unsupported_numbers)}.'
-            ],
+            limitations=[f'Resposta generativa ignorada por número sem suporte: {", ".join(unsupported_numbers)}.'],
         )
 
     unsupported_anchors = _unsupported_generated_anchors(cleaned_answer, support_text)
@@ -336,9 +333,7 @@ def validate_generated_answer(
         return GeneratedAnswerValidation(
             action='fallback_extractive',
             reason='unsupported_anchor',
-            limitations=[
-                f'unsupported_anchor: resposta generativa ignorada por anchor sem suporte: {", ".join(unsupported_anchors)}.'
-            ],
+            limitations=[f'Resposta generativa ignorada por nome citado sem suporte: {", ".join(unsupported_anchors)}.'],
         )
 
     # Sobreposição com os trechos entregues ao modelo, não só com o claim extraído: em nota
@@ -350,8 +345,13 @@ def validate_generated_answer(
             return GeneratedAnswerValidation(
                 action='fallback_extractive',
                 reason='low_claim_overlap',
-                limitations=['Resposta generativa ignorada por baixa sobreposicao com claims citaveis.'],
+                limitations=['Resposta generativa ignorada por baixa sobreposição com os trechos e as frases extraídas.'],
             )
+    if not has_source_marker(answer, len(contexts)):
+        return GeneratedAnswerValidation(
+            action='fallback_extractive', reason='no_source_marker',
+            limitations=['Resposta generativa ignorada: o modelo não citou nenhum trecho com [n].'],
+        )
 
     return GeneratedAnswerValidation(action='accept')
 
@@ -751,7 +751,7 @@ def answer_corpus_with_citations(
         return _no_answer('query_without_content', ['A pergunta não contém termos informativos suficientes para recuperação.'], [])
 
     if count_chunks(connection) == 0:
-        return _no_answer('empty_corpus', ['O corpus persistido ainda não contém chunks indexados.'], [])
+        return _no_answer('empty_corpus', ['O corpus persistido ainda não contém trechos indexados.'], [])
 
     note_ids: frozenset[str] | None = None
     if source_root:
@@ -787,13 +787,13 @@ def answer_corpus_with_citations(
     )
     hits = _dedupe_hits(raw_hits)
     stale_limitations = (
-        [f'{stale_vector_hits_count} hit(s) vetoriais stale foram descartados por nao existirem no SQLite.']
+        [f'{stale_vector_hits_count} hit(s) vetoriais desatualizados foram descartados por não existirem no SQLite.']
         if stale_vector_hits_count
         else []
     )
 
     def _with_stale_limitations(limitations: list[str]) -> list[str]:
-        return [*stale_limitations, *limitations]
+        return [*limitations, *stale_limitations]
 
     note_lookup = get_notes_by_id(connection, [hit.chunk.note_id for hit in hits])
     hits = _rerank_hits_by_short_anchor(question, hits, note_lookup)
@@ -803,7 +803,7 @@ def answer_corpus_with_citations(
     if not hits:
         return _no_answer(
             'no_retrieval_hits',
-            _with_stale_limitations(['Nenhum chunk do corpus contém termos informativos suficientes da pergunta.']),
+            _with_stale_limitations(['Nenhum trecho do corpus contém termos informativos suficientes da pergunta.']),
             used_sources,
         )
 
@@ -855,7 +855,7 @@ def answer_corpus_with_citations(
     if not claims or any(not claim.citations for claim in claims):
         return _no_answer(
             'citation_validation_failed',
-            _with_stale_limitations(['A evidência foi recuperada, mas não gerou claims citaveis de forma consistente.']),
+            _with_stale_limitations(['A evidência foi recuperada, mas não gerou frases extraídas citáveis de forma consistente.']),
             used_sources,
             rejected_hits=hits,
         )
@@ -865,13 +865,13 @@ def answer_corpus_with_citations(
             reason = 'insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity'
             return _no_answer(
                 reason,
-                _with_stale_limitations(['Os claims gerados não trouxeram especificidade textual suficiente.']),
+                _with_stale_limitations(['As frases extraídas não trouxeram especificidade textual suficiente.']),
                 used_sources,
                 rejected_hits=hits,
             )
         return _no_answer(
             'insufficient_grounded_claims',
-            _with_stale_limitations(['Os claims gerados não mantiveram ancoragem textual suficiente com a pergunta.']),
+            _with_stale_limitations(['As frases extraídas não mantiveram ancoragem textual suficiente com a pergunta.']),
             used_sources,
             rejected_hits=hits,
         )
@@ -881,7 +881,7 @@ def answer_corpus_with_citations(
         if named_coverage < 1.0:
             return _no_answer(
                 'missing_named_anchor',
-                _with_stale_limitations(['A resposta não sustentou os anchors nomeados presentes na pergunta.']),
+                _with_stale_limitations(['A resposta não sustentou os nomes citados na pergunta.']),
                 used_sources,
                 rejected_hits=hits,
             )
@@ -904,13 +904,13 @@ def answer_corpus_with_citations(
             )
 
     cited_sources = _summarize_corpus_sources(_hits_for_citations(hits, citations), note_lookup)
-    limitations: list[str] = list(stale_limitations)
+    limitations: list[str] = []
     if any(claim.support_level == 'partial' for claim in claims):
         limitations.append('Parte da resposta depende de evidência parcial recuperada.')
     if len(citations) == 1:
-        limitations.append('A resposta se apoia em um único chunk recuperado.')
+        limitations.append(SINGLE_CHUNK_LIMITATION)
     if len(cited_sources) > 1:
-        limitations.append('A resposta combina evidência de multiplos arquivos do corpus.')
+        limitations.append(MULTI_FILE_LIMITATION)
 
     generated = False
     answer_sources: list[str] = []
@@ -966,7 +966,7 @@ def answer_corpus_with_citations(
         answer_sources=answer_sources,
         claims=claims,
         citations=citations,
-        limitations=limitations,
+        limitations=[*limitations, *stale_limitations],
         reason_for_no_answer=None,
         used_sources=cited_sources,
         latency_ms=int((perf_counter() - started_at) * 1000),
