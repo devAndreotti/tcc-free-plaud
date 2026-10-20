@@ -1,7 +1,14 @@
 from pathlib import Path
 
+import pytest
+
 from escolio.app.config import Settings
 from escolio.app.doctor import run_doctor
+from escolio.providers.model_discovery import (
+    ModelDiscoveryResult,
+    ModelDiscoveryStatus,
+    ModelInfo,
+)
 from escolio.retrieval.models import Chunk
 from escolio.storage.sqlite import init_sqlite
 from escolio.storage.vector import LocalVectorStore
@@ -48,8 +55,23 @@ def _by_code(report) -> dict[str, object]:
     return {check.code: check for check in report.checks}
 
 
+def _fake_discovery(status: ModelDiscoveryStatus, models: tuple[str, ...] = (), message: str | None = None):
+    def run(settings: Settings, **_: object) -> ModelDiscoveryResult:
+        return ModelDiscoveryResult(
+            provider=settings.answer_provider,
+            base_url=None,
+            status=status,
+            models=[ModelInfo(id=model, label=model, provider=settings.answer_provider) for model in models],
+            latency_ms=1,
+            message=message,
+        )
+
+    return run
+
+
 def test_doctor_reports_fake_hash_as_error_without_leaking_secrets(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv('ESCOLIO_ANSWER_API_KEY', raising=False)
+    monkeypatch.setattr('escolio.app.doctor.list_answer_models', _fake_discovery('ok'))
     settings = _settings(
         tmp_path,
         embedding_model='fake-hash',
@@ -94,6 +116,7 @@ def test_doctor_errors_when_sentence_transformer_cuda_is_unavailable(tmp_path: P
 
 def test_doctor_keeps_extractive_without_api_key_ok_and_warns_for_remote_provider(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv('ESCOLIO_ANSWER_API_KEY', raising=False)
+    monkeypatch.setattr('escolio.app.doctor.list_answer_models', _fake_discovery('ok'))
 
     extractive = run_doctor(settings=_settings(tmp_path / 'extractive', answer_provider='extractive'))
     remote = run_doctor(
@@ -137,3 +160,36 @@ def test_doctor_returns_structured_errors_when_corpus_status_crashes(tmp_path: P
     assert checks['fts'].status == 'error'  # type: ignore[attr-defined]
     assert checks['corpus'].status == 'error'  # type: ignore[attr-defined]
     assert 'chroma indisponivel' in checks['corpus'].message  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    ('status', 'models', 'answer_model', 'expected'),
+    [
+        ('ok', ('qwen2.5:7b',), 'qwen2.5:7b', 'ok'),
+        ('ok', ('qchat:latest',), 'qchat', 'ok'),
+        ('ok', ('outro:latest',), 'qwen2.5:7b', 'warning'),
+        ('not_applicable', (), 'qwen2.5:7b', 'warning'),
+        ('offline', (), 'qwen2.5:7b', 'error'),
+    ],
+)
+def test_doctor_marks_answer_provider_by_model_discovery(
+    tmp_path: Path, monkeypatch, status, models, answer_model, expected
+) -> None:
+    discovery = _fake_discovery(status, models, 'Servidor indisponivel ou timeout.')
+    monkeypatch.setattr('escolio.app.doctor.list_answer_models', discovery)
+
+    settings = _settings(tmp_path, answer_provider='ollama', answer_model=answer_model)
+    check = _by_code(run_doctor(settings=settings))['answer_provider']
+
+    assert check.status == expected  # type: ignore[attr-defined]
+
+
+def test_doctor_does_not_query_provider_for_extractive(tmp_path: Path, monkeypatch) -> None:
+    def fail_if_called(settings: Settings, **_: object) -> ModelDiscoveryResult:
+        raise AssertionError('extractive nao deve consultar provider')
+
+    monkeypatch.setattr('escolio.app.doctor.list_answer_models', fail_if_called)
+
+    checks = _by_code(run_doctor(settings=_settings(tmp_path)))
+
+    assert checks['answer_provider'].status == 'ok'  # type: ignore[attr-defined]

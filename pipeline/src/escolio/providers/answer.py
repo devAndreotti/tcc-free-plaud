@@ -121,8 +121,7 @@ def _empty_answer_error_message(message: dict[str, object], finish_reason: objec
 
 def _transport_error(exc: Exception) -> AnswerProviderError:
     if isinstance(exc, HTTPError):
-        error_body = exc.read().decode('utf-8', errors='replace')
-        return AnswerProviderError(f'Provider respondeu HTTP {exc.code}: {error_body}')
+        return AnswerProviderError(f'Provider respondeu HTTP {exc.code}.')
     if isinstance(exc, URLError):
         return AnswerProviderError(f'Provider indisponivel: {exc.reason}')
     if isinstance(exc, TimeoutError):

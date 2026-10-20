@@ -534,7 +534,7 @@ class Api:
         self.runtime.clear()
         return self.getBackendSettings()
 
-    def loadConversations(self) -> dict | None:
+    def loadConversations(self) -> dict:
         return load_conversations()
 
     def saveConversations(self, payload: dict) -> dict:

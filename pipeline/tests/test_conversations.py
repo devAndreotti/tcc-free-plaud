@@ -30,19 +30,20 @@ def test_salva_e_le_de_volta_sem_deixar_tmp(tmp_path: Path) -> None:
     assert not (tmp_path / 'conversations.json.tmp').exists()
 
 
-def test_sem_arquivo_devolve_none(tmp_path: Path) -> None:
-    assert load_conversations(settings=_settings(tmp_path)) is None
+def test_sem_arquivo_devolve_lista_vazia(tmp_path: Path) -> None:
+    assert load_conversations(settings=_settings(tmp_path)) == {'tabs': [], 'activeTabId': None, 'tabMessages': {}}
 
 
 @pytest.mark.parametrize(
     'conteudo',
     ['{nao e json', '[1, 2, 3]', '{"tabs": "x", "activeTabId": null, "tabMessages": {}}'],
 )
-def test_arquivo_corrompido_ou_invalido_devolve_none(tmp_path: Path, conteudo: str) -> None:
+def test_arquivo_corrompido_ou_invalido_levanta_value_error(tmp_path: Path, conteudo: str) -> None:
     settings = _settings(tmp_path)
     (tmp_path / 'conversations.json').write_text(conteudo, encoding='utf-8')
 
-    assert load_conversations(settings=settings) is None
+    with pytest.raises(ValueError):
+        load_conversations(settings=settings)
 
 
 @pytest.mark.parametrize(

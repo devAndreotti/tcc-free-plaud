@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from escolio.app.config import Settings
 from escolio.corpus.answer_context import build_answer_contexts
 from escolio.corpus.ask import (
@@ -13,6 +15,7 @@ from escolio.corpus.service import index_corpus_path
 from escolio.notes.metadata import build_note_id
 from escolio.notes.schemas import Note
 from escolio.notes.service import delete_note
+from escolio.providers.answer import AnswerProviderError
 from escolio.retrieval.models import AnswerClaim, Chunk, Citation, SearchHit
 from escolio.retrieval.rag import (
     _clean_claim_candidate,
@@ -105,6 +108,13 @@ class SecretLeakingAnswerProvider:
 
     def answer(self, question: str, contexts: list[str]) -> str:
         raise RuntimeError('HTTP 401: {"error":"bad key sk-secret"}')
+
+
+class TimeoutAnswerProvider:
+    provider_name = 'timeout'
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        raise AnswerProviderError('Provider excedeu timeout.')
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -345,6 +355,24 @@ def test_validate_generated_answer_rejects_unsupported_numbers(tmp_path: Path) -
 
     assert validation.action == 'fallback_extractive'
     assert validation.reason == 'unsupported_number'
+
+
+def test_validate_generated_answer_aceita_numero_seguido_de_palavra_comum() -> None:
+    aceita = validate_generated_answer(
+        'Qual versão foi lançada?',
+        'Versão 2.1 foi lançada em março.',
+        ['Versão 2.1, lançada em março com o painel novo.'],
+        [],
+    )
+    unidade_diferente = validate_generated_answer(
+        'Qual o prazo?',
+        'O prazo é de 15 dias.',
+        ['Prazo de 15 meses.'],
+        [],
+    )
+
+    assert aceita.action == 'accept'
+    assert unidade_diferente.reason == 'unsupported_number'
 
 
 def test_validate_generated_answer_turns_sentinel_into_no_answer() -> None:
@@ -1070,6 +1098,28 @@ def test_answer_corpus_falls_back_to_extractive_answer_when_provider_fails(tmp_p
     assert any('provider de resposta falhou' in limitation.lower() for limitation in response.limitations)
 
 
+def test_answer_corpus_erro_de_codigo_fora_do_provider_propaga(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    def validacao_quebrada(*_args: object) -> None:
+        raise TypeError('bug na validacao')
+
+    monkeypatch.setattr('escolio.corpus.ask.validate_generated_answer', validacao_quebrada)
+
+    with pytest.raises(TypeError, match='bug na validacao'):
+        answer_corpus_with_citations(
+            'Qual message broker foi adotado?',
+            connection=connection,
+            strategy='lexical',
+            top_k=4,
+            answer_provider=FakeAnswerProvider(),
+        )
+
+
 def test_answer_corpus_sanitizes_provider_failure_message(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     root = tmp_path / 'corpus'
@@ -1091,6 +1141,24 @@ def test_answer_corpus_sanitizes_provider_failure_message(tmp_path: Path) -> Non
     assert 'RuntimeError' in serialized
     assert 'sk-secret' not in serialized
     assert 'bad key' not in serialized
+
+
+def test_answer_corpus_limitation_shows_safe_provider_error(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=TimeoutAnswerProvider(),
+    )
+
+    assert 'Erro: Provider excedeu timeout.' in ' '.join(response.limitations)
 
 
 def test_answer_corpus_with_citations_returns_no_answer_for_irrelevant_question(tmp_path: Path) -> None:

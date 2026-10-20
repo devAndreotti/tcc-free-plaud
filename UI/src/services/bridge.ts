@@ -1923,12 +1923,8 @@ export const bridge = {
     if ((await whenDesktopReady()) && window.pywebview?.api.loadConversations) {
       return window.pywebview.api.loadConversations();
     }
-    try {
-      const raw = window.localStorage.getItem(CONVERSATIONS_STORAGE_KEY);
-      return raw === null ? null : (JSON.parse(raw) as SavedConversations);
-    } catch {
-      return null;
-    }
+    const raw = window.localStorage.getItem(CONVERSATIONS_STORAGE_KEY);
+    return raw === null ? null : (JSON.parse(raw) as SavedConversations);
   },
 
   /** Grava as conversas (backend, ou localStorage no navegador). */

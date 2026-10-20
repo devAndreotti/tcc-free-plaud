@@ -149,6 +149,7 @@ function AppContent() {
   // Conversas salvas entre aberturas. A carga corre uma vez ao abrir; o salvamento só liga depois dela,
   // para nunca gravar a tela vazia por cima do arquivo.
   const [conversasCarregadas, setConversasCarregadas] = useState(false);
+  const [conversasIlegiveis, setConversasIlegiveis] = useState(false);
   useEffect(() => {
     let active = true;
     bridge
@@ -166,6 +167,7 @@ function AppContent() {
       .catch((error: unknown) => {
         // Sem a carga não se sabe o que está no arquivo: nesta abertura nada é gravado.
         console.error('[App] Não foi possível carregar as conversas salvas:', error);
+        if (active) setConversasIlegiveis(true);
       });
     return () => {
       active = false;
@@ -399,16 +401,16 @@ function AppContent() {
 
   // Envia mensagem na conversa da aba ativa
   const handleSendMessage = useCallback(
-    async (text: string, attachment?: File) => {
+    async (text: string) => {
       if (!activeTabId) return;
-      if (!text.trim() && !attachment) return;
+      if (!text.trim()) return;
       const tabId = activeTabId;
       const title = text.trim();
 
       appendMessage(tabId, {
         id: `msg-${generateId()}`,
         role: 'user',
-        content: text || `[Arquivo: ${attachment?.name}]`,
+        content: text,
         timestamp: new Date(),
       });
       // O nome da primeira pergunta vira o título da aba
@@ -462,6 +464,12 @@ function AppContent() {
               isGraphPanelOpen={isGraphPanelOpen}
               onToggleGraphPanel={handleToggleGraphPanel}
             />
+
+            {conversasIlegiveis && (
+              <p className="issues__notice" role="status">
+                Não foi possível ler as conversas salvas. Elas não serão gravadas nesta sessão, para não sobrescrever o arquivo.
+              </p>
+            )}
 
             {/* View ativa conforme a aba selecionada */}
             {workspaceView === 'notes' && <NotesPanel key={pendingNote ? `nota-${pendingNote.at}` : `lista-${vaultVersion}`} initialNoteId={pendingNote?.noteId ?? null} initialChunkId={pendingNote?.chunkId ?? null} />}

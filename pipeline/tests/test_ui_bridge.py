@@ -267,6 +267,11 @@ def test_desktop_api_exposes_watcher_methods(monkeypatch, tmp_path: Path) -> Non
 
 def test_desktop_api_exposes_settings_catalog(monkeypatch) -> None:
     module = _load_ui_main(monkeypatch)
+    # getBackendSettings roda o doctor, que consultaria o provider configurado no user_settings real.
+    monkeypatch.setattr(
+        "escolio.app.doctor.list_answer_models",
+        lambda settings, **_: SimpleNamespace(status="not_applicable", models=[], message=None),
+    )
 
     result = module.Api().getBackendSettings()
 

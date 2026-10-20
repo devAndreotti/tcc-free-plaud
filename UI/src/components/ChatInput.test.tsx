@@ -288,4 +288,15 @@ describe('ChatInput - resposta da barra', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
     expect(bridgeMock.saveBackendSettings).not.toHaveBeenCalled();
   });
+
+  it('com o Ollama desligado, mostra o aviso de conexão em vez de Nenhum modelo', async () => {
+    const user = userEvent.setup();
+    bridgeMock.listAnswerModels.mockResolvedValue({ provider: 'ollama', base_url: 'http://localhost:11434', status: 'offline', models: [], latency_ms: 5, cached: false, message: 'Servidor indisponivel ou timeout.' });
+    render(<ChatInput onSendMessage={vi.fn()} answerProvider="ollama" answerModel="qchat:latest" onAnswerSaved={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Como responder: qchat' }));
+
+    expect(await screen.findByText('Não consegui conectar ao Ollama em http://localhost:11434. Inicie o Ollama e tente de novo.')).toBeTruthy();
+    expect(screen.queryByText('Nenhum modelo de conversa instalado.')).toBeNull();
+  });
 });

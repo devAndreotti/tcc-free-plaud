@@ -11,6 +11,11 @@ const DEFAULT_PROVIDER = 'ollama';
 const displayName = (id: string) => id.replace(/:latest$/, '');
 const isRecommended = (id: string) => displayName(id) === 'qchat';
 const isEmbedding = (id: string) => id.includes('embed');
+const PROVIDER_NAME: Record<string, string> = { ollama: 'Ollama', lmstudio: 'LM Studio', 'openai-compatible': 'provedor' };
+const connectError = (provider: string, url: string | null) => {
+  const name = PROVIDER_NAME[provider] ?? 'provedor';
+  return `Não consegui conectar ao ${name}${url ? ` em ${url}` : ''}. Inicie o ${name} e tente de novo.`;
+};
 
 interface AnswerPickerProps {
   /** Provedor salvo: 'extractive' (só trechos) ou o generativo, como 'ollama'. */
@@ -46,10 +51,21 @@ export const AnswerPicker = ({ provider, model, onSaved }: AnswerPickerProps) =>
     }
     setOpen(true);
     setModels(null);
+    setError('');
+    const fail = (url: string | null) => {
+      setModels([]);
+      setError(connectError(listProvider, url));
+    };
     bridge
       .listAnswerModels({ provider: listProvider })
-      .then((result) => setModels(result.models))
-      .catch(() => setModels([]));
+      .then((result) => {
+        if (result.status === 'ok') {
+          setModels(result.models);
+        } else {
+          fail(result.base_url);
+        }
+      })
+      .catch(() => fail(null));
   };
 
   const choose = async (nextProvider: string, nextModel: string | null) => {
@@ -142,7 +158,7 @@ export const AnswerPicker = ({ provider, model, onSaved }: AnswerPickerProps) =>
             })}
           </div>
           {models === null && <p className="answer__status">Listando modelos…</p>}
-          {models !== null && options.length === 0 && <p className="answer__status">Nenhum modelo de conversa instalado.</p>}
+          {models !== null && options.length === 0 && !error && <p className="answer__status">Nenhum modelo de conversa instalado.</p>}
           {error && <p className="answer__status answer__status--error" role="alert">{error}</p>}
           <div className="answer__legend">
             <span>

@@ -185,8 +185,8 @@ def _failure_result(
 
 
 def _error_code_for_exception(exc: Exception) -> str:
-    if isinstance(exc, FileNotFoundError):
-        return 'INPUT_NOT_FOUND'
+    if isinstance(exc, OSError):
+        return 'INPUT_NOT_FOUND' if isinstance(exc, FileNotFoundError) else exc.__class__.__name__
     if isinstance(exc, ValueError):
         text = str(exc)
         if text == 'EMPTY_CONTENT':
@@ -1151,7 +1151,7 @@ def _load_structure_chunk_corpus_file(
             note=note,
             chunks=index_note(note, chunk_size=chunk_size, overlap=overlap),
         )
-    except (FileNotFoundError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         return _PreparationFailure(
             source_path=path,
             error_code=_error_code_for_exception(exc),

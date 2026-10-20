@@ -44,8 +44,8 @@ interface SettingsModalProps {
 // Chaves do catálogo que pertencem à aba IA (o resto de layer não-secreto vai para Avançado)
 const IA_CATALOG_KEYS = ['answer_provider', 'answer_model', 'answer_base_url'];
 
-// Chaves de preset que não são editáveis e por isso não estão no catálogo.
-const PRESET_KEY_LABELS: Record<string, string> = { embedding_model: 'Modelo de embedding' };
+// Chaves que o desktop não mostra nem grava: o embedding em uso é o da vault ativa (config.py, _apply_active_vault).
+const DESKTOP_HIDDEN_KEYS = ['embedding_model'];
 
 const MODEL_STATUS: Record<string, string> = { offline: 'offline', unauthorized: 'sem autorização', error: 'erro' };
 
@@ -134,6 +134,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [backendSettings, setBackendSettings] = useState<BackendSettings | null>(null);
   const [settingDrafts, setSettingDrafts] = useState<Record<string, string>>({});
   const [isSavingApiKey, setIsSavingApiKey] = useState(false);
+  const [isConfirmingKeyRemoval, setIsConfirmingKeyRemoval] = useState(false);
   const [isSavingBackendSettings, setIsSavingBackendSettings] = useState(false);
   const [applyingPreset, setApplyingPreset] = useState('');
   const [isTestingProvider, setIsTestingProvider] = useState(false);
@@ -195,6 +196,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
       .then((settings) => {
         setBackendSettings(settings);
         setSettingDrafts(draftsFrom(settings));
+        setIsConfirmingKeyRemoval(false);
       })
       .catch((error) => {
         console.error('[SettingsModal] Erro ao carregar settings do backend:', error);
@@ -318,11 +320,12 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     }
   };
 
-  const handleSaveApiKey = async () => {
+  // Vazio apaga a chave no backend: só o botão Remover chave manda campo vazio.
+  const handleSaveApiKey = async (value: string) => {
     if (isSavingApiKey) return;
     setIsSavingApiKey(true);
     try {
-      const result = await bridge.saveApiKey(apiKey);
+      const result = await bridge.saveApiKey(value);
       setApiKey('');
       setToast({ tone: 'ok', text: result.configured ? 'API key salva no .env local.' : 'API key removida do .env local.' });
       const settings = await bridge.getBackendSettings();
@@ -332,6 +335,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
       setToast({ tone: 'error', text: 'Não foi possível salvar a API key.' });
     } finally {
       setIsSavingApiKey(false);
+      setIsConfirmingKeyRemoval(false);
     }
   };
 
@@ -339,7 +343,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     if (!backendSettings || isSavingBackendSettings) return;
     setIsSavingBackendSettings(true);
     try {
-      const editableRows = backendSettings.settings_catalog.filter((row) => !row.secret);
+      const editableRows = backendSettings.settings_catalog.filter((row) => !row.secret && !DESKTOP_HIDDEN_KEYS.includes(row.key));
       const values = Object.fromEntries(
         editableRows.map((row) => [row.key, settingDrafts[row.key] ?? ''])
       );
@@ -567,7 +571,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
       : false,
   }));
   const catalogLabel = (key: string) =>
-    backendSettings?.settings_catalog.find((row) => row.key === key)?.label ?? PRESET_KEY_LABELS[key] ?? key;
+    backendSettings?.settings_catalog.find((row) => row.key === key)?.label ?? key;
   // Modelo, URL, API key, Testar e Listar só existem para provedores generativos.
   const isGenerative = draftProvider !== 'extractive';
   const needsApiKey = draftProvider === 'openai-compatible';
@@ -587,7 +591,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   }
   const iaCatalogRows = backendSettings?.settings_catalog.filter((row) => IA_CATALOG_KEYS.includes(row.key) && !row.secret) ?? [];
   const advancedRows = backendSettings?.settings_catalog.filter(
-    (row) => !row.secret && row.group !== 'Áudio' && !IA_CATALOG_KEYS.includes(row.key)
+    (row) => !row.secret && row.group !== 'Áudio' && !IA_CATALOG_KEYS.includes(row.key) && !DESKTOP_HIDDEN_KEYS.includes(row.key)
   ) ?? [];
 
   // Renderiza diretamente no document.body via Portal.
@@ -792,12 +796,27 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                             id="btn-save-api-key"
                             type="button"
                             className="btn"
-                            onClick={handleSaveApiKey}
-                            disabled={isSavingApiKey}
+                            onClick={() => handleSaveApiKey(apiKey)}
+                            disabled={isSavingApiKey || !apiKey.trim()}
                             aria-label="Salvar API key"
                           >
                             {isSavingApiKey ? 'Salvando…' : 'Salvar'}
                           </button>
+                          {backendSettings?.answer_api_key_configured && (
+                            <button
+                              id="btn-remove-api-key"
+                              type="button"
+                              className={`btn${isConfirmingKeyRemoval ? ' btn--danger' : ''}`}
+                              onClick={() => {
+                                if (isConfirmingKeyRemoval) void handleSaveApiKey('');
+                                else setIsConfirmingKeyRemoval(true);
+                              }}
+                              onBlur={() => setIsConfirmingKeyRemoval(false)}
+                              disabled={isSavingApiKey}
+                            >
+                              {isConfirmingKeyRemoval ? 'Confirmar remoção' : 'Remover chave'}
+                            </button>
+                          )}
                         </>
                       )}
                       <button

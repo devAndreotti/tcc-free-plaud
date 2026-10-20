@@ -276,6 +276,6 @@ def list_answer_models(
         timeout_seconds=timeout_seconds,
         started_at=started_at,
     )
-    if use_cache:
+    if use_cache and result.status == 'ok':
         _save_cache(key, result)
     return result

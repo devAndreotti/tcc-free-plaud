@@ -3,9 +3,12 @@ import re
 from escolio.notes.readable import readable_chunk_text
 from escolio.notes.schemas import Note
 from escolio.retrieval.models import AnswerClaim, SearchHit
+from escolio.retrieval.rag import _shorten_snippet
+from escolio.retrieval.search import normalize_query_terms
 
 ANSWER_CONTEXT_TOTAL_CHAR_BUDGET = 6000
 ANSWER_CONTEXT_MAX_CHARS = 1500
+CITATION_SNIPPET_MAX_CHARS = 400
 MULTI_MARKER_PATTERN = re.compile(r'\[(\d{1,2}(?:\s*,\s*\d{1,2})+)\]')
 
 
@@ -121,3 +124,19 @@ def build_answer_contexts(
         include_hits=include_hits,
     )
     return [context for context, _ in items]
+
+
+def citation_snippet(chunk_text: str, claim_text: str | None) -> str:
+    """Trecho da citação: a passagem que sustenta o claim; sem claim, o começo do chunk."""
+    text = ' '.join(readable_chunk_text(chunk_text).split())
+    claim = ' '.join((claim_text or '').split())
+    if not claim:
+        return _shorten_snippet(text)
+    lowered = text.lower()
+    if claim.lower() in lowered:
+        return _shorten_snippet(claim, CITATION_SNIPPET_MAX_CHARS)
+    # A extração tira marcações (** e `, por exemplo): sem o claim literal, a janela segue o primeiro termo dele.
+    positions = [lowered.find(term) for term in normalize_query_terms(claim)]
+    position = min((found for found in positions if found >= 0), default=0)
+    start = max(0, min(position - CITATION_SNIPPET_MAX_CHARS // 2, len(text) - CITATION_SNIPPET_MAX_CHARS))
+    return text[start : start + CITATION_SNIPPET_MAX_CHARS]

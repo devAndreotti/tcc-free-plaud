@@ -186,7 +186,27 @@ def test_connection_error_is_offline(monkeypatch, tmp_path) -> None:
     result = list_answer_models(_settings(tmp_path, provider='ollama'))
 
     assert result.status == 'offline'
+    assert result.base_url == 'http://localhost:11434'
     assert result.models == []
+
+
+def test_offline_result_is_not_cached(monkeypatch, tmp_path) -> None:
+    clear_model_discovery_cache()
+    online = False
+
+    def fake_urlopen(request, timeout):
+        if not online:
+            raise URLError('connection refused')
+        return FakeResponse({'models': [{'name': 'qchat:latest'}]})
+
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fake_urlopen)
+
+    offline = list_answer_models(_settings(tmp_path, provider='ollama'))
+    online = True
+    retry = list_answer_models(_settings(tmp_path, provider='ollama'))
+
+    assert offline.status == 'offline'
+    assert retry.status == 'ok'
 
 
 def test_invalid_json_is_error(monkeypatch, tmp_path) -> None:

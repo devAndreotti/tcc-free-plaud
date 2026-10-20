@@ -8,6 +8,7 @@ from escolio.app.doctor_corpus import safe_corpus_checks
 from escolio.app.doctor_models import DoctorCheck, DoctorReport, DoctorStatus
 from escolio.app.local_env import answer_api_key_is_configured
 from escolio.providers import embed as embed_provider
+from escolio.providers.model_discovery import list_answer_models
 from escolio.storage.sqlite import init_sqlite
 from escolio.storage.vector import LocalVectorStore
 
@@ -175,15 +176,42 @@ def _answer_provider_check(settings: Settings) -> DoctorCheck:
             action="Configure answer_model nas settings.",
             details={"answer_provider": settings.answer_provider},
         )
+    details = {
+        "answer_provider": settings.answer_provider,
+        "answer_model": settings.answer_model,
+        "answer_base_url": settings.answer_base_url or "default",
+    }
+    discovery = list_answer_models(settings)
+    if discovery.status == "not_applicable":
+        return DoctorCheck(
+            code="answer_provider",
+            status="warning",
+            message="Teste do provider generativo não se aplica.",
+            details=details,
+        )
+    if discovery.status != "ok":
+        return DoctorCheck(
+            code="answer_provider",
+            status="error",
+            message=f"Provider generativo indisponível: {discovery.message or discovery.status}.",
+            action="Inicie o provider ou confira base_url e API key nas settings.",
+            details=details,
+        )
+    model = settings.answer_model.strip()
+    installed = {item.id for item in discovery.models}
+    if model not in installed and f"{model}:latest" not in installed:
+        return DoctorCheck(
+            code="answer_provider",
+            status="warning",
+            message=f"Modelo {model} não aparece na lista do provider.",
+            action="Confira o nome do modelo ou baixe-o no provider.",
+            details=details,
+        )
     return DoctorCheck(
         code="answer_provider",
         status="ok",
-        message=f"Provider generativo configurado: {settings.answer_provider}.",
-        details={
-            "answer_provider": settings.answer_provider,
-            "answer_model": settings.answer_model,
-            "answer_base_url": settings.answer_base_url or "default",
-        },
+        message=f"Provider generativo respondeu e listou o modelo: {settings.answer_provider}.",
+        details=details,
     )
 
 

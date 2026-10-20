@@ -8,11 +8,11 @@ from pydantic import BaseModel, Field
 
 from escolio.corpus.answer_context import (
     build_answer_context_items,
+    citation_snippet,
     normalize_answer_markers,
 )
-from escolio.notes.readable import readable_chunk_text
 from escolio.notes.schemas import Note
-from escolio.providers.answer import AnswerProvider
+from escolio.providers.answer import AnswerProvider, AnswerProviderError
 from escolio.providers.answer_quality import (
     contains_token_sequence,
     is_echoed_question,
@@ -38,7 +38,6 @@ from escolio.retrieval.rag import (
     _is_question_like,
     _question_needs_multiple_claims,
     _rank_claim_candidates,
-    _shorten_snippet,
     _support_level,
     _trim_claim_span,
 )
@@ -100,7 +99,8 @@ CONTEXT_METADATA_KEYS = ('source_path:', 'note_id:', 'chunk_id:', 'claim_extrati
 # Marcador [n] que o modelo põe no fim das frases, com o espaço antes dele.
 # ponytail: só [n]; "[1, 2]" não vira fonte. Aceitar lista se o modelo passar a escrever assim.
 ANSWER_MARKER_PATTERN = re.compile(r'[ \t]*\[(\d+)\]')
-GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*[A-Za-zÀ-ÖØ-öø-ÿ%]{1,8})?')
+# Unidade só conta quando é conhecida ("2.1 foi" é 2.1 e uma palavra). ponytail: KB, MB e R$ ficam de fora; incluir aqui se a comparação precisar.
+GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*(?:%|(?:dias?|m[êe]s(?:es)?|anos?|horas?|minutos?|semanas?)\b))?', re.IGNORECASE)
 GENERATED_ANCHOR_PATTERN = re.compile(r'\b[A-ZÀ-Ö][A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{2,}\b')
 GENERIC_NO_ANSWER_MARKERS = (
     'nao consegui recuperar',
@@ -134,17 +134,18 @@ class GeneratedAnswerValidation(BaseModel):
 
 
 def _provider_failure_limitation(exc: Exception) -> str:
-    return f'Provider de resposta falhou; usando resposta extrativa. Erro: {type(exc).__name__}.'
+    detail = str(exc)[:200].rstrip('.') if isinstance(exc, AnswerProviderError) else type(exc).__name__
+    return f'Provider de resposta falhou; usando resposta extrativa. Erro: {detail}.'
 
 
-def _citation_from_corpus_hit(hit: SearchHit, note_lookup: dict[str, Note]) -> Citation:
+def _citation_from_corpus_hit(hit: SearchHit, note_lookup: dict[str, Note], claim_text: str | None = None) -> Citation:
     chunk = hit.chunk
     note = note_lookup.get(chunk.note_id)
     return Citation(
         note_id=chunk.note_id,
         note_version=chunk.note_version,
         chunk_id=chunk.chunk_id,
-        snippet=_shorten_snippet(readable_chunk_text(chunk.chunk_text)),
+        snippet=citation_snippet(chunk.chunk_text, claim_text),
         source_path=str(note.source_path) if note else None,
         char_start=chunk.char_start,
         char_end=chunk.char_end,
@@ -618,7 +619,7 @@ def _build_corpus_claims(
         claims.append(
             AnswerClaim(
                 text=trimmed_claim,
-                citations=[_citation_from_corpus_hit(hit, note_lookup)],
+                citations=[_citation_from_corpus_hit(hit, note_lookup, trimmed_claim)],
                 support_level=_support_level(hit, query_terms),
             )
         )
@@ -915,21 +916,24 @@ def answer_corpus_with_citations(
     answer_sources: list[str] = []
     discard_reason: str | None = None
     if answer_provider is not None:
-        try:
-            context_started_at = perf_counter()
-            context_items = build_answer_context_items(claims, hits, note_lookup)
-            answer_contexts = [context for context, _ in context_items]
-            stage_timings.context_build_ms = _elapsed_ms(context_started_at)
+        context_started_at = perf_counter()
+        context_items = build_answer_context_items(claims, hits, note_lookup)
+        answer_contexts = [context for context, _ in context_items]
+        stage_timings.context_build_ms = _elapsed_ms(context_started_at)
 
-            provider_started_at = perf_counter()
-            try:
-                if on_answer_delta is not None and hasattr(answer_provider, 'answer_stream'):
-                    generated_answer = answer_provider.answer_stream(question, answer_contexts, on_answer_delta)
-                else:
-                    generated_answer = answer_provider.answer(question, answer_contexts)
-                generated_answer = normalize_answer_markers(generated_answer)
-            finally:
-                stage_timings.provider_ms = _elapsed_ms(provider_started_at)
+        provider_started_at = perf_counter()
+        try:
+            if on_answer_delta is not None and hasattr(answer_provider, 'answer_stream'):
+                generated_answer = answer_provider.answer_stream(question, answer_contexts, on_answer_delta)
+            else:
+                generated_answer = answer_provider.answer(question, answer_contexts)
+        except Exception as exc:
+            stage_timings.provider_ms = _elapsed_ms(provider_started_at)
+            discard_reason = 'provider_error'
+            limitations.append(_provider_failure_limitation(exc))
+        else:
+            stage_timings.provider_ms = _elapsed_ms(provider_started_at)
+            generated_answer = normalize_answer_markers(generated_answer)
 
             validation_started_at = perf_counter()
             validation = validate_generated_answer(question, generated_answer, answer_contexts, claims)
@@ -952,9 +956,6 @@ def answer_corpus_with_citations(
             else:
                 discard_reason = validation.reason
                 limitations.extend(validation.limitations)
-        except Exception as exc:
-            discard_reason = 'provider_error'
-            limitations.append(_provider_failure_limitation(exc))
 
     return AskResponse(
         query=question,
