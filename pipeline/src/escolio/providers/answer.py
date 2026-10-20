@@ -30,7 +30,7 @@ GROUNDED_SYSTEM_PROMPT = (
     'Se os CONTEXTOS nao responderem diretamente a PERGUNTA, responda exatamente: '
     f'{NO_ANSWER_SENTINEL} '
     'Responda a PERGUNTA em frases completas, com suas proprias palavras. Termine cada frase com o numero do CONTEXTO que a sustenta entre colchetes, e use mais de um CONTEXTO quando a PERGUNTA pedir mais de um assunto (uma frase por assunto), '
-    'por exemplo: O VLAN separa dominios de broadcast [1]. Nunca copie titulos, nomes de nota ou linhas de cabecalho. Nunca responda so com colchetes. '
+    'por exemplo: O VLAN separa dominios de broadcast [1]. Se a PERGUNTA tiver dois assuntos, cite um CONTEXTO para cada um: O item A fica no contexto [1]. O item B fica no contexto [2]. Nunca copie titulos, nomes de nota ou linhas de cabecalho. Nunca responda so com colchetes. '
     'Preserve numeros, nomes e termos tecnicos exatamente como aparecem.'
 )
 

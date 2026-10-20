@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from escolio.corpus.answer_context import build_answer_context_items
+from escolio.corpus.answer_context import build_answer_context_items, normalize_answer_markers
 from escolio.notes.readable import readable_chunk_text
 from escolio.notes.schemas import Note
 from escolio.providers.answer import AnswerProvider
@@ -924,6 +924,7 @@ def answer_corpus_with_citations(
                     generated_answer = answer_provider.answer_stream(question, answer_contexts, on_answer_delta)
                 else:
                     generated_answer = answer_provider.answer(question, answer_contexts)
+                generated_answer = normalize_answer_markers(generated_answer)
             finally:
                 stage_timings.provider_ms = _elapsed_ms(provider_started_at)
 

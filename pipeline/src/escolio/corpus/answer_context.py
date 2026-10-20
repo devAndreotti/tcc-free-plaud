@@ -1,9 +1,17 @@
+import re
+
 from escolio.notes.readable import readable_chunk_text
 from escolio.notes.schemas import Note
 from escolio.retrieval.models import AnswerClaim, SearchHit
 
 ANSWER_CONTEXT_TOTAL_CHAR_BUDGET = 6000
 ANSWER_CONTEXT_MAX_CHARS = 1500
+MULTI_MARKER_PATTERN = re.compile(r'\[(\d{1,2}(?:\s*,\s*\d{1,2})+)\]')
+
+
+def normalize_answer_markers(text: str) -> str:
+    """Troca '[1, 2]' por '[1] [2]': só o formato [n] vira fonte clicável no app."""
+    return MULTI_MARKER_PATTERN.sub(lambda match: ' '.join(f'[{n}]' for n in re.findall(r'\d+', match.group(1))), text)
 
 
 def _clip_context_text(text: str, max_chars: int) -> str:
