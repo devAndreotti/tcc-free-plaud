@@ -78,6 +78,26 @@ const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: 'aparencia', label: 'Aparência' },
 ];
 
+// Avançado fica escondido: "Desbloquear avançado" libera a aba depois de alguns cliques, e a liberação fica gravada.
+const ADVANCED_UNLOCK_CLICKS = 5;
+const ADVANCED_UNLOCK_KEY = 'escolio.avancadoLiberado';
+
+function readAdvancedUnlocked(): boolean {
+  try {
+    return window.localStorage.getItem(ADVANCED_UNLOCK_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveAdvancedUnlocked(): void {
+  try {
+    window.localStorage.setItem(ADVANCED_UNLOCK_KEY, '1');
+  } catch {
+    // Sem storage (modo privado): a liberação vale só até fechar o app.
+  }
+}
+
 const TAB_ICONS: Record<SettingsTab, ComponentType<{ size?: number }>> = {
   geral: SlidersIcon,
   vaults: VaultIcon,
@@ -125,6 +145,20 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [downloadJob, setDownloadJob] = useState<VoiceModelDownloadSnapshot | null>(null);
   const [downloadError, setDownloadError] = useState('');
   const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice);
+  const [advancedUnlocked, setAdvancedUnlocked] = useState(readAdvancedUnlocked);
+  const [advancedClicks, setAdvancedClicks] = useState(0);
+  // Sem a aba liberada, "Avançado" não aparece e nunca é o painel exibido.
+  const currentTab: SettingsTab = activeTab === 'avancado' && !advancedUnlocked ? 'geral' : activeTab;
+
+  const handleAdvancedUnlockClick = () => {
+    if (advancedClicks + 1 < ADVANCED_UNLOCK_CLICKS) {
+      setAdvancedClicks(advancedClicks + 1);
+      return;
+    }
+    saveAdvancedUnlocked();
+    setAdvancedUnlocked(true);
+    setAdvancedClicks(0);
+  };
   const { active } = useVaults();
 
   useEffect(() => {
@@ -595,12 +629,12 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
         {/* Corpo do modal: navegação lateral + painel da aba ativa */}
         <div className="modal__body modal__body--settings">
           <nav className="settings-nav" aria-label="Categorias de configuração">
-            {SETTINGS_TABS.map((tab) => (
+            {SETTINGS_TABS.filter((tab) => tab.id !== 'avancado' || advancedUnlocked).map((tab) => (
               <button
                 key={tab.id}
                 type="button"
-                className={`settings-nav__item${activeTab === tab.id ? ' settings-nav__item--active' : ''}`}
-                aria-current={activeTab === tab.id ? 'page' : undefined}
+                className={`settings-nav__item${currentTab ===tab.id ? ' settings-nav__item--active' : ''}`}
+                aria-current={currentTab ===tab.id ? 'page' : undefined}
                 onClick={() => setActiveTab(tab.id)}
               >
                 {(() => {
@@ -613,10 +647,19 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                 )}
               </button>
             ))}
+            {!advancedUnlocked && (
+              <button type="button" className="settings-nav__item settings-nav__unlock" onClick={handleAdvancedUnlockClick}>
+                <span>
+                  {advancedClicks > 0
+                    ? `Desbloquear avançado (${advancedClicks}/${ADVANCED_UNLOCK_CLICKS})`
+                    : 'Desbloquear avançado'}
+                </span>
+              </button>
+            )}
           </nav>
 
           <div className="settings-panel">
-            {activeTab === 'geral' && (
+            {currentTab ==='geral' && (
               <section className="settings-section" aria-labelledby="settings-doctor">
                 <h3 id="settings-doctor" className={`settings-section__title${active ? ' settings-section__title--vault' : ''}`}>
                   {active ? (
@@ -702,9 +745,9 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
               </section>
             )}
 
-            {activeTab === 'vaults' && <VaultsTab onOpenQueue={() => onOpenQueue?.()} />}
+            {currentTab ==='vaults' && <VaultsTab onOpenQueue={() => onOpenQueue?.()} />}
 
-            {activeTab === 'ia' && (
+            {currentTab ==='ia' && (
               <section className="settings-section" aria-labelledby="settings-ai">
                 <h3 id="settings-ai" className="settings-section__title">
                   IA
@@ -799,7 +842,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
               </section>
             )}
 
-            {activeTab === 'voz' && (
+            {currentTab ==='voz' && (
               <section className="settings-section" aria-labelledby="settings-voz">
                 <h3 id="settings-voz" className="settings-section__title">
                   Voz
@@ -899,7 +942,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
               </section>
             )}
 
-            {activeTab === 'avancado' && (
+            {currentTab ==='avancado' && (
               <>
                 <section className="settings-section" aria-labelledby="settings-presets">
                   <h3 id="settings-presets" className="settings-section__title">
@@ -945,7 +988,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
               </>
             )}
 
-            {activeTab === 'aparencia' && (
+            {currentTab ==='aparencia' && (
               <>
                 <section className="settings-section" aria-labelledby="settings-appearance">
                   <h3 id="settings-appearance" className="settings-section__title">
