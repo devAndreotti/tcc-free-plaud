@@ -178,6 +178,26 @@ Leitura:
 - O único erro de voz que sobrou no 7B é de concordância: "Voce configurei o Pi-hole" (1 de 12).
 - O 7B roda no Emerald (GPU GTX 1060 6 GB). O Ollama do Emerald escuta só no IP da tailnet. Com o Emerald desligado, a IA cai para a resposta extrativa.
 
+## Trechos recuperados e fontes (2026-10-20, qwen2.5:7b)
+
+Motivo: a resposta usava um trecho só, mesmo com top-k = 4. A IA recebia só os claims, e os claims costumam ser um por pergunta. Agora a IA recebe também os outros trechos recuperados, e cada trecho citado com [n] vira fonte.
+
+Gate oficial (híbrida, 73 perguntas; acurácia = positivas respondidas + negativas abstidas):
+
+| Configuração | Positivas com texto gerado | Negativas com texto gerado | Acurácia |
+|---|---|---|---|
+| Só claims (prompt V3 + regra de voz) | 33/39 | 2/34 | 0,945 |
+| Claims + trechos recuperados (prompt V3 + regra de voz) | 35/39 | 4/34 | 0,932 |
+| Claims + trechos + prompt com uma frase por assunto (V8) | 35/39 | 4/34 | 0,918 |
+| V8 + exemplo de dois assuntos no prompt | 34/39 | 4/34 | 0,890 |
+| **Final: V8 + trechos + normalização de [1, 2]** | 36/39 | 3/34 | **0,945** |
+
+O exemplo de dois assuntos no prompt foi tirado: derrubou a acurácia e não resolveu o caso "linux e windows".
+
+Sonda de dois assuntos (6 perguntas com 2 ou 3 trechos): ferramentas no trabalho e em casa, prazo e responsável, moro e trabalho, curso de Azure e curso da Cisco. Nessas, as duas fontes aparecem. Em "linux e windows", com este prompt, o modelo continua citando só o trecho do Windows.
+
+Sonda de voz (12 casos com notas em primeira pessoa, um trecho): 12 de 12 em segunda pessoa, foco 12 de 12.
+
 ## Próximos passos
 
 - Repetir a medição três vezes para medir a variação.
