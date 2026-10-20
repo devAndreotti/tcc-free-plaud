@@ -1,12 +1,12 @@
 from pathlib import Path
 
 from escolio.app.config import Settings
+from escolio.corpus.answer_context import build_answer_contexts
 from escolio.corpus.ask import (
     _with_cited_context_citations,
     _with_source_limitations,
     answer_corpus_with_citations,
     build_answer_context_items,
-    build_answer_contexts,
     validate_generated_answer,
 )
 from escolio.corpus.service import index_corpus_path
@@ -773,8 +773,8 @@ def test_answer_corpus_accepted_answer_lists_claim_chunks_as_sources(tmp_path: P
     _, contexts = provider.calls[0]
     claim_ids = [claim.citations[0].chunk_id for claim in response.claims]
     assert response.generated is True
-    assert len(contexts) == len(claim_ids)  # o corpus tem hit fora dos claims, e ele não vai para o modelo
-    assert response.answer_sources == claim_ids
+    assert len(contexts) >= len(claim_ids)  # os trechos recuperados vêm depois dos claims
+    assert response.answer_sources[: len(claim_ids)] == claim_ids
     assert [citation.chunk_id for citation in response.citations] == claim_ids
 
 
