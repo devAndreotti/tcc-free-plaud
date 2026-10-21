@@ -202,6 +202,7 @@ const DISCARD_TEXT = new Map<string, string>([
   ['low_claim_overlap', 'A IA escreveu longe dos trechos'],
   ['empty_generated_answer', 'A IA devolveu só [n], sem texto'],
   ['echoed_title', 'A IA copiou um título em vez de responder'],
+  ['echoed_question', 'A IA repetiu a pergunta em vez de responder'],
   ['provider_error', 'A IA falhou; mostramos o trecho'],
 ]);
 

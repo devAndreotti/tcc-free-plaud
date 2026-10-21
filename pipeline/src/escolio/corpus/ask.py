@@ -6,11 +6,16 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from escolio.corpus.answer_context import (
+    build_answer_context_items,
+    normalize_answer_markers,
+)
 from escolio.notes.readable import readable_chunk_text
 from escolio.notes.schemas import Note
 from escolio.providers.answer import AnswerProvider
 from escolio.providers.answer_quality import (
     contains_token_sequence,
+    is_echoed_question,
     is_echoed_title,
     is_no_answer_sentinel,
 )
@@ -95,8 +100,6 @@ CONTEXT_METADATA_KEYS = ('source_path:', 'note_id:', 'chunk_id:', 'claim_extrati
 # Marcador [n] que o modelo põe no fim das frases, com o espaço antes dele.
 # ponytail: só [n]; "[1, 2]" não vira fonte. Aceitar lista se o modelo passar a escrever assim.
 ANSWER_MARKER_PATTERN = re.compile(r'[ \t]*\[(\d+)\]')
-ANSWER_CONTEXT_TOTAL_CHAR_BUDGET = 6000
-ANSWER_CONTEXT_MAX_CHARS = 1500
 GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*[A-Za-zÀ-ÖØ-öø-ÿ%]{1,8})?')
 GENERATED_ANCHOR_PATTERN = re.compile(r'\b[A-ZÀ-Ö][A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{2,}\b')
 GENERIC_NO_ANSWER_MARKERS = (
@@ -176,15 +179,44 @@ def _hits_for_citations(hits: list[SearchHit], citations: list[Citation]) -> lis
     return [hit for hit in hits if hit.chunk.chunk_id in cited_chunk_ids]
 
 
-def _clip_context_text(text: str, max_chars: int) -> str:
-    if max_chars <= 0:
-        return ''
-    if len(text) <= max_chars:
-        return text
-    marker = '\n...[truncado]'
-    if max_chars <= len(marker):
-        return text[:max_chars]
-    return f'{text[: max_chars - len(marker)].rstrip()}{marker}'
+SINGLE_CHUNK_LIMITATION = 'A resposta se apoia em um único chunk recuperado.'
+MULTI_FILE_LIMITATION = 'A resposta combina evidência de multiplos arquivos do corpus.'
+
+
+def _with_cited_context_citations(
+    answer: str,
+    answer_sources: list[str],
+    citations: list[Citation],
+    hits: list[SearchHit],
+    note_lookup: dict[str, Note],
+) -> list[Citation]:
+    """Acrescenta a citação dos trechos que a resposta gerada cita com [n] e que os claims não trouxeram."""
+    cited_ids = {
+        answer_sources[int(match.group(1)) - 1]
+        for match in ANSWER_MARKER_PATTERN.finditer(answer)
+        if 1 <= int(match.group(1)) <= len(answer_sources)
+    }
+    known_ids = {citation.chunk_id for citation in citations}
+    extra = [
+        _citation_from_corpus_hit(hit, note_lookup)
+        for hit in hits
+        if hit.chunk.chunk_id in cited_ids and hit.chunk.chunk_id not in known_ids
+    ]
+    return [*citations, *extra]
+
+
+def _with_source_limitations(
+    limitations: list[str],
+    citations: list[Citation],
+    cited_sources: list[UsedSource],
+) -> list[str]:
+    kept = [line for line in limitations if line not in {SINGLE_CHUNK_LIMITATION, MULTI_FILE_LIMITATION}]
+    if len(citations) == 1:
+        kept.append(SINGLE_CHUNK_LIMITATION)
+    if len(cited_sources) > 1:
+        kept.append(MULTI_FILE_LIMITATION)
+    return kept
+
 
 
 def _without_answer_markers(text: str) -> str:
@@ -197,80 +229,6 @@ def _drop_unknown_answer_markers(text: str, context_count: int) -> str:
         lambda match: match.group() if 1 <= int(match.group(1)) <= context_count else '',
         text,
     )
-
-
-def build_answer_context_items(
-    claims: list[AnswerClaim],
-    hits: list[SearchHit],
-    note_lookup: dict[str, Note],
-    *,
-    max_total_chars: int = ANSWER_CONTEXT_TOTAL_CHAR_BUDGET,
-    max_context_chars: int = ANSWER_CONTEXT_MAX_CHARS,
-) -> list[tuple[str, str]]:
-    """Contextos (texto, chunk_id principal) dos claims, até o budget; o [n] de cada um é a posição na lista.
-
-    Só os claims: com os demais hits junto, o qchat (3B) recusou 8 de 39 positivas em vez de 2 e a
-    accuracy caiu de 0,932 para 0,781 (docs/experimentos/17_ia_local_qchat.md).
-    """
-    hit_by_chunk_id = {hit.chunk.chunk_id: hit for hit in hits}
-    blocks: list[tuple[str, list[str], str]] = []  # (cabeçalho sem [n], trechos, chunk_id principal)
-    for claim in claims:
-        citation = claim.citations[0] if claim.citations else None
-        if citation is None:
-            continue
-
-        note = note_lookup.get(citation.note_id)
-        source_path = str(note.source_path) if note else citation.source_path or ''
-        title = note.title if note else ''
-        chunk_ids = ', '.join(item.chunk_id for item in claim.citations)
-        evidence_parts: list[str] = []
-        for item in claim.citations:
-            cited_hit = hit_by_chunk_id.get(item.chunk_id)
-            raw_text = cited_hit.chunk.chunk_text if cited_hit else item.snippet
-            evidence = readable_chunk_text(raw_text)
-            if evidence:
-                evidence_parts.append(evidence)
-        body = (
-            f'source_path: {source_path}\n'
-            f'title: {title}\n'
-            f'note_id: {citation.note_id}\n'
-            f'chunk_id: {chunk_ids}\n'
-            f'claim_extrativo: {claim.text}\n'
-            'trecho:\n'
-        )
-        blocks.append((body, evidence_parts, citation.chunk_id))
-
-    items: list[tuple[str, str]] = []
-    total_chars = 0
-    for body, evidence_parts, chunk_id in blocks:
-        header = f'[{len(items) + 1}]\n{body}'
-        allowed_context_chars = min(max_context_chars, max_total_chars - total_chars)
-        if allowed_context_chars <= len(header):
-            break
-        evidence_text = _clip_context_text('\n\n'.join(evidence_parts), allowed_context_chars - len(header))
-        context = f'{header}{evidence_text}'
-        items.append((context, chunk_id))
-        total_chars += len(context)
-    return items
-
-
-def build_answer_contexts(
-    claims: list[AnswerClaim],
-    hits: list[SearchHit],
-    note_lookup: dict[str, Note],
-    *,
-    max_total_chars: int = ANSWER_CONTEXT_TOTAL_CHAR_BUDGET,
-    max_context_chars: int = ANSWER_CONTEXT_MAX_CHARS,
-) -> list[str]:
-    """Monta contexto generativo com evidencia citavel real e budget fixo (só os textos)."""
-    items = build_answer_context_items(
-        claims,
-        hits,
-        note_lookup,
-        max_total_chars=max_total_chars,
-        max_context_chars=max_context_chars,
-    )
-    return [context for context, _ in items]
 
 
 def _normalized_support_text(contexts: list[str], claims: list[AnswerClaim]) -> str:
@@ -320,7 +278,6 @@ def validate_generated_answer(
     claims: list[AnswerClaim],
 ) -> GeneratedAnswerValidation:
     """Valida se resposta gerativa pode substituir a resposta extrativa."""
-    _ = question
     # Os [n] são só ponteiros para o contexto: número, anchor e sobreposição são checados sem eles.
     cleaned_answer = _without_answer_markers(answer).strip()
     # O qchat às vezes devolve só "[1]": sem os marcadores não sobra texto, e nada abaixo recusaria.
@@ -354,6 +311,12 @@ def validate_generated_answer(
             action='fallback_extractive',
             reason='echoed_title',
             limitations=['Resposta generativa ignorada: o modelo copiou um título do contexto em vez de responder.'],
+        )
+    if is_echoed_question(question, cleaned_answer):
+        return GeneratedAnswerValidation(
+            action='fallback_extractive',
+            reason='echoed_question',
+            limitations=['Resposta generativa ignorada: o modelo repetiu a pergunta em vez de responder.'],
         )
 
     support_text = _normalized_support_text(contexts, claims)
@@ -964,6 +927,7 @@ def answer_corpus_with_citations(
                     generated_answer = answer_provider.answer_stream(question, answer_contexts, on_answer_delta)
                 else:
                     generated_answer = answer_provider.answer(question, answer_contexts)
+                generated_answer = normalize_answer_markers(generated_answer)
             finally:
                 stage_timings.provider_ms = _elapsed_ms(provider_started_at)
 
@@ -974,6 +938,9 @@ def answer_corpus_with_citations(
                 answer = _drop_unknown_answer_markers(generated_answer, len(answer_contexts))
                 generated = True
                 answer_sources = [chunk_id for _, chunk_id in context_items]
+                citations = _with_cited_context_citations(answer, answer_sources, citations, hits, note_lookup)
+                cited_sources = _summarize_corpus_sources(_hits_for_citations(hits, citations), note_lookup)
+                limitations = _with_source_limitations(limitations, citations, cited_sources)
             elif validation.action == 'no_answer':
                 return _no_answer(
                     validation.reason or 'generated_answer_rejected',

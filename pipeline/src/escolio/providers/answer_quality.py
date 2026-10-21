@@ -58,3 +58,14 @@ def is_echoed_title(answer: str, contexts: list[str]) -> bool:
         if single_line and shared >= 0.8 * len(answer_words) and shared >= 0.8 * len(set(title)):
             return True
     return False
+
+
+def is_echoed_question(question: str, answer: str) -> bool:
+    """Resposta que é a própria pergunta, ou só palavras dela: devolve a pergunta em vez de responder."""
+    text = answer.strip()
+    if text.endswith('?'):
+        return True
+    tokens = _tokens(text)
+    question_words = set(_tokens(question))
+    # Só conta quando nenhuma palavra da resposta fica fora da pergunta; "em memória" com "tmpfs" não é cópia.
+    return len(tokens) >= 2 and all(token in question_words for token in tokens)

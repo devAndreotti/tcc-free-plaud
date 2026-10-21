@@ -95,12 +95,24 @@ def test_grounded_chat_messages_forbid_external_knowledge_and_define_sentinel() 
     assert 'Nao complete lacunas' in system_prompt
     assert 'NAO_ENCONTRADO' in system_prompt
     assert 'nao sustentam resposta' in system_prompt
-    assert 'Escreva a resposta em frases completas' in system_prompt
+    assert 'Responda a PERGUNTA em frases completas' in system_prompt
+    assert 'use mais de um CONTEXTO' in system_prompt
     assert 'Nunca responda so com colchetes' in system_prompt
     assert 'Preserve numeros, nomes e termos tecnicos exatamente' in system_prompt
     assert 'seja criativo' not in system_prompt.lower()
     assert 'PERGUNTA:\nQual broker?' in user_prompt
     assert 'CONTEXTOS:\n[1]' in user_prompt
+
+
+def test_grounded_user_message_asks_second_person_and_forbids_first_person() -> None:
+    messages = build_grounded_chat_messages(
+        'O que estudei na Cisco?',
+        ['[1]\nsource_path: note.md\nchunk_id: c1\ntrecho:\nEstudei redes e seguranca de perimetro.'],
+    )
+
+    user_prompt = messages[1]['content']
+    assert 'fale com quem pergunta usando voce' in user_prompt
+    assert 'Nao use eu nem verbos em primeira pessoa' in user_prompt
 
 
 def test_openai_compatible_provider_wraps_http_errors(monkeypatch) -> None:

@@ -149,6 +149,55 @@ Busca léxica sobre as 73 perguntas (39 positivas, 34 negativas), `qchat:latest`
 - Os outros hits no contexto também atrapalham o modelo de 3B: a configuração 3 recusou 8 perguntas positivas (medido com o prompt antigo).
 - Limite: 73 perguntas sobre 10 notas. Uma pergunta a mais ou a menos muda a accuracy em cerca de 1,4 ponto.
 
+## Medição com qwen2.5:7b e regra de voz (2026-10-20, Emerald)
+
+Motivo: a IA respondia com primeira pessoa e perdia o foco quando a nota estava em primeira pessoa ("Estudei redes… Concluí a trilha…" para "o que estudei na Cisco?"). A regra de voz pede segunda pessoa ("fale com quem pergunta usando você") e vai na mensagem do usuário, junto de "Responda curto e direto usando somente os CONTEXTOS".
+
+Gate oficial (híbrida, 73 perguntas; acurácia = positivas respondidas + negativas abstidas):
+
+| Configuração | Positivas com texto gerado | Negativas com texto gerado | Acurácia |
+|---|---|---|---|
+| qchat (3B), V2 (main, medição de 2026-10-19) | 33/39 | 2/34 | 0,918 |
+| qchat (3B), V3 + regra de eco | 30/39 | 2/34 | 0,904 |
+| qchat (3B), V3 + regra de voz | 37/39 | 10/34 | 0,836 |
+| qwen2.5:7b, V3 + regra de eco | 34/39 | 1/34 | 0,945 |
+| qwen2.5:7b, V3 + regra de eco + regra de voz | 35/39 | 1/34 | 0,959 |
+
+Sonda de voz e foco (12 casos com notas em primeira pessoa):
+
+| Configuração | Respostas em 1ª pessoa | Em 2ª pessoa | Aprovadas | Foco |
+|---|---|---|---|---|
+| qchat, V3 | 10/12 | 0/12 | 0/12 | 11/12 |
+| qchat, V3 + regra de voz | 0/12 | 12/12 | 6/12 | 6/12 |
+| qwen2.5:7b, V3 | 8/12 | 3/12 | 3/12 | 12/12 |
+| qwen2.5:7b, V3 + regra de voz | 1/12 | 12/12 | 11/12 | 12/12 |
+
+Leitura:
+- A regra de voz só entra com o qwen2.5:7b. No qchat, ela derruba o foco e faz o modelo responder perguntas que deveriam ser abstidas.
+- O gate usa notas impessoais, então a voz só é medida na sonda de 12 casos.
+- O único erro de voz que sobrou no 7B é de concordância: "Voce configurei o Pi-hole" (1 de 12).
+- O 7B roda no Emerald (GPU GTX 1060 6 GB). O Ollama do Emerald escuta só no IP da tailnet. Com o Emerald desligado, a IA cai para a resposta extrativa.
+
+## Trechos recuperados e fontes (2026-10-20, qwen2.5:7b)
+
+Motivo: a resposta usava um trecho só, mesmo com top-k = 4. A IA recebia só os claims, e os claims costumam ser um por pergunta. Agora a IA recebe também os outros trechos recuperados, e cada trecho citado com [n] vira fonte.
+
+Gate oficial (híbrida, 73 perguntas; acurácia = positivas respondidas + negativas abstidas):
+
+| Configuração | Positivas com texto gerado | Negativas com texto gerado | Acurácia |
+|---|---|---|---|
+| Só claims (prompt V3 + regra de voz) | 33/39 | 2/34 | 0,945 |
+| Claims + trechos recuperados (prompt V3 + regra de voz) | 35/39 | 4/34 | 0,932 |
+| Claims + trechos + prompt com uma frase por assunto (V8) | 35/39 | 4/34 | 0,918 |
+| V8 + exemplo de dois assuntos no prompt | 34/39 | 4/34 | 0,890 |
+| **Final: V8 + trechos + normalização de [1, 2]** | 36/39 | 3/34 | **0,945** |
+
+O exemplo de dois assuntos no prompt foi tirado: derrubou a acurácia e não resolveu o caso "linux e windows".
+
+Sonda de dois assuntos (6 perguntas com 2 ou 3 trechos): ferramentas no trabalho e em casa, prazo e responsável, moro e trabalho, curso de Azure e curso da Cisco. Nessas, as duas fontes aparecem. Em "linux e windows", com este prompt, o modelo continua citando só o trecho do Windows.
+
+Sonda de voz (12 casos com notas em primeira pessoa, um trecho): 12 de 12 em segunda pessoa, foco 12 de 12.
+
 ## Próximos passos
 
 - Repetir a medição três vezes para medir a variação.

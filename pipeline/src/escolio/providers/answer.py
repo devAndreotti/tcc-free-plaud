@@ -29,8 +29,8 @@ GROUNDED_SYSTEM_PROMPT = (
     'Nao crie exemplos, listas ou explicacoes que nao estejam nos CONTEXTOS. '
     'Se os CONTEXTOS nao responderem diretamente a PERGUNTA, responda exatamente: '
     f'{NO_ANSWER_SENTINEL} '
-    'Escreva a resposta em frases completas. No fim de cada frase, escreva entre colchetes o numero do CONTEXTO que a sustenta, '
-    'por exemplo: O VLAN separa dominios de broadcast [1]. Nunca responda so com colchetes. '
+    'Responda a PERGUNTA em frases completas, com suas proprias palavras. Termine cada frase com o numero do CONTEXTO que a sustenta entre colchetes, e use mais de um CONTEXTO quando a PERGUNTA pedir mais de um assunto (uma frase por assunto), '
+    'por exemplo: O VLAN separa dominios de broadcast [1]. Nunca copie titulos, nomes de nota ou linhas de cabecalho. Nunca responda so com colchetes. '
     'Preserve numeros, nomes e termos tecnicos exatamente como aparecem.'
 )
 
@@ -75,7 +75,7 @@ def build_grounded_chat_messages(question: str, contexts: list[str]) -> list[dic
                 f'PERGUNTA:\n{question}\n\n'
                 'CONTEXTOS:\n'
                 + '\n\n'.join(contexts)
-                + '\n\nResponda curto e direto usando somente os CONTEXTOS.'
+                + "\n\nResponda curto e direto usando somente os CONTEXTOS. Lembrete: fale com quem pergunta usando voce (ex.: 'Voce estudou redes [1].'). Nao use eu nem verbos em primeira pessoa."
             ),
         },
     ]
