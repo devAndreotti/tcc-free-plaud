@@ -1,0 +1,376 @@
+AUDITORIA TECNICA - ESCOLIO (APS DE QUALIDADE)
+Arquivo 01: dados do projeto e arquitetura
+==========================================================================================
+
+Repositorio : devAndreotti/tcc-free-plaud (GitHub, privado)
+Projeto     : Escólio (antes "free-plaud" / "Evil Plaud"; renomeado no PR #119)
+Branch      : docs/aps-qualidade (worktree), main em dbb82fe
+Data da coleta: 2026-10-14
+Convencao   : "(verificado em 2026-10-14)" = fato conferido pelo agente principal
+              e registrado em docs_aps_qualidade/_fontes/fatos_verificados.md.
+              Demais fontes: caminho:linha, comando git/gh, hash de commit ou PR.
+
+
+1. VISAO GERAL
+==========================================================================================
+
+1.1 O que o sistema faz
+-----------------------
+- Sistema desktop local-first para captura multimodal, estruturacao automatica em Markdown e
+  recuperacao semantica de conhecimento pessoal em portugues brasileiro.
+  (README.md:5)
+- Ingere PDF, TXT, MD, vaults Obsidian e audio do microfone (transcricao local com Whisper).
+  (README.md:27)
+- Estrutura o conteudo em notas Markdown canonicas com frontmatter e indexa em chunks com offsets
+  de caracteres (start_char / end_char) para rastrear citacoes. (README.md:28)
+- Responde perguntas com RRF hibrido (BM25 em SQLite FTS5 + vetorial em ChromaDB), com citacao
+  obrigatoria, ou abstem-se com `no_answer` quando a evidencia e insuficiente. (README.md:30)
+
+1.2 Problema que resolve
+------------------------
+- Informacao capturada em audio, imagem, PDF e texto se perde porque transformar isso em notas
+  pesquisaveis exige disciplina manual alta. (README.md:24)
+- Premissa do TCC: modelos de proposito geral, sem fine-tuning, podem bastar se o pipeline for bem
+  desenhado e seus parametros forem avaliados empiricamente. (docs/tcc/texto/TCC.md:20)
+- Objetivo geral: pipeline de captura multimodal e recuperacao semantica em pt-BR, com
+  infraestrutura local e chaves de API do proprio usuario. (docs/tcc/texto/TCC.md:36)
+
+1.3 Perfil do usuario
+---------------------
+- Usuario principal: o proprio autor (Ricardo A. Gonçalves), que captura notas pessoais e
+  profissionais e as consulta depois. Single-user, PC Windows como ambiente de uso.
+  (git log --format=%an origin/main; docs_aps_qualidade/_fontes/fatos_verificados.md, secao Projeto)
+- Perfil de desenvolvedor: uso de CLI (`es.ps1`, `./es`), TUI Textual e app desktop.
+  (README.md:32-61)
+- Nao ha perfil de usuario multiusuario, conta, login ou nuvem no repositorio.
+  Nao encontrado no repositorio: autenticacao de usuario, multitenancy, sincronizacao remota.
+
+1.4 Privacidade e provedores
+----------------------------
+- Embeddings e transcricao: 100% locais (Hugging Face, faster-whisper, Silero VAD, CUDA 12 ou CPU).
+  (README.md:67)
+- Respostas (LLM): apontam para provedores locais (Ollama, LM Studio) ou remotos compativeis com
+  OpenAI. (README.md:68)
+- Chave de API somente em `pipeline/.env`, fora do Git. (README.md:70; .gitignore:12-14)
+
+1.5 Estado do projeto (declarado vs. verificado)
+-------------------------------------------------
+- README declara cobertura "travada em 89.0%". O baseline versionado tem lines 88.98372.
+  (README.md:19; scripts/baseline.json)
+- README e AGENTS.md citam Tailwind e Zustand. Em UI/package.json nao ha dependencia de Tailwind
+  nem de Zustand (grep sem resultado). (README.md:18; AGENTS.md:Phase 2; UI/package.json)
+- O TCC.md usa numeros do Experimento 15 (MRR 0.884). Em docs_aps_qualidade/_fontes/fatos_verificados.md o exp. 15
+  esta marcado como NAO REPRODUZIVEL (sem n, comando nem artefato) e contradiz os exp. 01/07/08.
+  Nao usar como metrica confiavel. (docs/tcc/texto/TCC.md:66,86; fatos_verificados.md)
+- Corpus real do autor (verificado em 2026-10-14, comando `escolio corpus status` no PC Windows):
+  668 notas, 4.195 chunks em SQLite, 4.195 em FTS5 e 4.195 vetores. Status `inconsistent` por
+  `embedding_model_mismatch_count = 4195`: indice gerado com `chroma-default`, configuracao atual
+  com `paraphrase-multilingual-MiniLM-L12-v2` em CUDA. (fatos_verificados.md, secao Projeto)
+
+
+2. STACK TECNOLOGICA
+==========================================================================================
+
+Versoes exatas: pipeline/uv.lock (Python), UI/package-lock.json (npm). Faixas declaradas:
+pipeline/pyproject.toml e UI/package.json. Itens sem arquivo de origem estao marcados.
+
+2.1 Tabela de stack
+-------------------
++----------------+-----------------------------+--------------------------------+------------------+
+| Camada         | Tecnologia                  | Versao / faixa                 | Fonte            |
++----------------+-----------------------------+--------------------------------+------------------+
+| Linguagens     | Python                      | >=3.12 (lock: .python-version   | pyproject.toml:6;|
+|                |                             | = 3.12)                        | pipeline/.python-|
+|                |                             |                                | version          |
+|                | TypeScript                  | ~5.9.3 (lock 5.9.3)            | UI/package.json  |
+|                | TCSS (estilos Textual)      | -                              | tui/app.tcss     |
++----------------+-----------------------------+--------------------------------+------------------+
+| Backend        | uv (gerenciador)            | sem versao fixada no repo;     | quality-gate.yml |
+|                |                             | CI usa setup-uv@v7             | (setup-uv)       |
+|                | Typer (CLI)                 | 0.27.2 (lock); >=0.16.0        | uv.lock; pyproj. |
+|                | Textual (TUI)               | 8.2.8 (lock); >=8.2.7          | uv.lock; pyproj. |
+|                | Pydantic                    | 2.13.5 (lock); >=2.11.0        | uv.lock; pyproj. |
+|                | faster-whisper (ASR)        | 1.2.1 (lock, extra audio)      | uv.lock; pyproj. |
+|                | sentence-transformers       | 6.0.1 (lock); >=5.4.1          | uv.lock; pyproj. |
+|                | torch                       | 2.14.1+cpu e 2.11.0+cu128      | uv.lock (dois    |
+|                |                             | (entradas do lock)             | indices)         |
+|                | sherpa-onnx / onnxruntime   | 1.13.8 / >=1.20,<2             | pyproj. (audio)  |
+|                | PyInstaller (empacotamento) | 6.22.2 (lock)                  | uv.lock          |
++----------------+-----------------------------+--------------------------------+------------------+
+| Frontend       | React                       | 19.3.0 (lock); ^19.2.9         | package-lock.json|
+|                | Vite                        | 8.3.4 (lock)                   | package-lock.json|
+|                | PyWebView (desktop)         | 6.2.1 (lock); >=5.0            | uv.lock; pyproj. |
+|                | Tailwind / Zustand          | NAO ENCONTRADO no package.json | UI/package.json  |
++----------------+-----------------------------+--------------------------------+------------------+
+| Bancos         | SQLite + FTS5               | biblioteca padrao do Python    | storage/sqlite.py|
+|                | ChromaDB                    | 1.5.9 (lock); >=1.5.7          | uv.lock; pyproj. |
++----------------+-----------------------------+--------------------------------+------------------+
+| Mensageria     | Nenhuma                     | -                              | Nao encontrado   |
+|                |                             |                                | no repositorio   |
++----------------+-----------------------------+--------------------------------+------------------+
+| Ferramentas    | Ruff (lint Python)          | 0.16.6 (lock); >=0.16.3        | uv.lock          |
+|                | pytest / pytest-cov         | 9.1.1 (lock); >=8.3.0          | uv.lock; pyproj. |
+|                | Vitest / coverage-v8        | 5.0.3 (lock)                   | package-lock     |
+|                | ESLint                      | 10.12.0 (lock)                 | package-lock     |
+|                | Playwright (E2E)            | 1.64.0 (package.json)          | UI/package.json  |
+|                | npm                         | sem versao fixada              | quality-gate.yml |
+|                | SonarCloud                  | SonarSource scan action @v8    | quality-gate.yml |
+|                | Docker                      | Apenas o gate (script Node);   | scripts/         |
+|                |                             | nenhum Dockerfile no repo      | docker-gate.cjs  |
+|                | GitHub Actions              | runner self-hosted (ostg02)    | quality-gate.yml |
++----------------+-----------------------------+--------------------------------+------------------+
+
+2.2 Observacoes sobre a stack
+-----------------------------
+- Docker: nao ha Dockerfile nem docker-compose versionado.
+  Nao encontrado no repositorio: Dockerfile (busca por *docker* e Dockerfile*). O job "Docker image
+  gate" existe, mas sai como `skipped` quando nao ha arquivos Docker (ver 05, secao 3).
+  (scripts/docker-gate.cjs:231-232; .github/workflows/quality-gate.yml:203-220)
+- Mensageria: Nao encontrado no repositorio. Nao ha Celery, RabbitMQ, Kafka, Redis nem fila
+  externa (busca por celery, rabbit, kafka, redis, dramatiq, rq em pipeline/ e UI/).
+  A "fila" do app e interna (jobs de indexacao e dropzone, PR #101).
+  (fatos_verificados.md, secao Projeto; corpus/jobs.py; PR #101)
+- Migracoes de banco: Nao encontrado no repositorio (nenhum Alembic ou migrador). O schema SQLite
+  e criado por init_sqlite. (storage/sqlite.py:127)
+- Torch: o pyproject declara extras `cpu` e `gpu-cu128`. O uv.lock contem entradas para os dois.
+  O CI usa `--extra cpu`. (pipeline/pyproject.toml:36-43; uv.lock:957-967)
+- Lock de UI com CRLF: UI/package-lock.json tem 3.852 linhas, todas com CRLF no HEAD.
+  (git show HEAD:UI/package-lock.json)
+
+
+3. ARQUITETURA DE SOFTWARE
+==========================================================================================
+
+3.1 Padrao identificado
+-----------------------
+- Monolito modular em camadas, com um nucleo Python (`pipeline/`) e uma camada de apresentacao
+  com quatro interfaces sobre o mesmo runtime (README.md:12-19):
+    1. CLI Typer (`escolio.cli`, launchers `es.ps1` / `es`)
+    2. Menu terminal numerado (Rich) (`escolio.terminal_menu`)
+    3. TUI Textual (`escolio.tui.app`, classe EscolioApp em tui/app.py:1153)
+    4. App desktop PyWebView + React (`UI/main.py`, classe Api em UI/main.py:73)
+- O nucleo nao depende da UI. A UI importa o nucleo: UI/main.py importa `escolio.corpus.runtime`,
+  `escolio.corpus.ask`, `escolio.app.*` e `escolio.benchmark.service` (UI/main.py:38-47).
+  Nao foi encontrado nenhum import de UI dentro de pipeline/src/escolio.
+- Nao ha servidor REST, GraphQL nem HTTP no backend. Busca por fastapi, flask, uvicorn, aiohttp,
+  starlette e http.server sem resultado. Nao encontrado no repositorio.
+- Comunicacao UI <-> Python: ponte JS do PyWebView. O Python expoe os metodos da classe Api
+  (UI/main.py:73); o front chama `window.pywebview.api.<metodo>` pelo objeto `bridge` em
+  UI/src/services/bridge.ts:929. Ex.: askCorpus em bridge.ts:947 chama Api.askCorpus em
+  UI/main.py:147.
+- Em modo desenvolvimento no navegador (sem pywebview), bridge.ts devolve respostas simuladas
+  (bridge.ts:1-15).
+
+3.2 Abstracoes de provedores (Protocol)
+---------------------------------------
+- Padrao: `typing.Protocol` para trocar implementacoes sem tocar o nucleo.
+  +-----------------------------+----------------------------------------------+
+  | Protocol                    | Arquivo                                      |
+  +-----------------------------+----------------------------------------------+
+  | Embedder                    | pipeline/src/escolio/providers/embed.py:39   |
+  | AnswerProvider              | pipeline/src/escolio/providers/answer.py:50  |
+  | Transcriber                 | pipeline/src/escolio/providers/transcribe.py:4|
+  | StructurerProvider          | pipeline/src/escolio/providers/structure.py:7|
+  | VisionProvider              | pipeline/src/escolio/providers/vision.py:4   |
+  +-----------------------------+----------------------------------------------+
+- Implementacao concreta de resposta: OpenAICompatibleAnswerProvider
+  (providers/answer.py:122), que fala com endpoints compativeis com OpenAI (local ou remoto).
+- Embeddings aceitos: `fake-hash`, `chroma-default`, `sentence-transformer:<nome>`
+  (providers/embed.py:18-28).
+- Audio: WhisperEngine (providers/audio_engines.py:21) e OnnxEngine (audio_engines.py:106), com
+  fallback de GPU para CPU em _gpu_failure (audio_engines.py:13, uso em :97).
+- Limite: a validacao de provedor e feita por string (embed.py:18), nao por tipo.
+- Nao encontrado no repositorio: registro dinamico de plugins ou injecao de dependencias por
+  framework.
+
+3.3 Modelo local-first
+----------------------
+- Dados em disco local: SQLite (FTS5) + ChromaDB em diretorios do workspace (storage/sqlite.py,
+  storage/vector.py:52 LocalVectorStore).
+- Nenhuma chamada obrigatoria a nuvem para indexar ou transcrever. A unica chamada remota e a
+  geracao de resposta, e so se o provedor configurado for remoto (README.md:72-75).
+
+3.4 Estrutura de pastas (profundidade 2-3, sem node_modules, .venv e caches)
+----------------------------------------------------------------------------
+  .
+  |-- AGENTS.md  CLAUDE.md  README.md  CHANGELOG.md  LICENSE  VERSION
+  |-- es  es.ps1                         (launchers)
+  |-- sonar-project.properties
+  |-- pipeline/
+  |   |-- pyproject.toml  uv.lock  .python-version
+  |   |-- src/escolio/
+  |   |   |-- app/          config, doctor, local_env, settings_*, audio_service, legacy
+  |   |   |-- ingest/       extratores, obsidian_cleaner, watcher, audio_*, download_jobs
+  |   |   |-- notes/        structurer, normalizer, markdown, repository, schemas
+  |   |   |-- retrieval/    chunking, indexer, search (BM25/vetorial), rag, debug
+  |   |   |-- providers/    answer, embed, transcribe, structure, vision, audio_*
+  |   |   |-- storage/      sqlite.py, vector.py, models.py, cli.py
+  |   |   |-- corpus/       runtime, service, ask, jobs, dropped, discovery, models
+  |   |   |-- benchmark/    runners, metrics, datasets, reports, service, audio
+  |   |   |-- tui/          app.py, actions.py, audio_actions.py, app.tcss
+  |   |   |-- cli.py  config_cli.py  terminal_menu.py  terminal_settings.py
+  |   |-- tests/          53 arquivos test_*.py (pytest)
+  |-- UI/
+  |   |-- main.py         entrypoint PyWebView (classe Api)
+  |   |-- package.json  package-lock.json  vite.config.ts  playwright.config.ts
+  |   |-- src/
+  |   |   |-- components/ Chat, Fila, Notes, Benchmark, Settings, Sidebar
+  |   |   |-- services/   bridge.ts (ponte com o Python)
+  |   |   |-- contexts/  hooks/  lib/  theme.ts
+  |   |-- e2e/            7 specs Playwright (01 a 07)
+  |-- scripts/            gate de qualidade (quality-gate.js), docker-gate.cjs, pr-comment.js
+  |-- .quality-gate/      policy.json (requiredChecks, maxFileLines = 300)
+  |-- .github/workflows/  quality-gate.yml, desktop-release.yml
+  |-- docs/               arquitetura, spec-kit, experimentos, tcc (monografia e slides)
+  |-- data/datasets/      manual_validation (negativas.json, etc.)
+  |-- samples/            "manual validetion/" (documentos de teste; ver 05)
+  |-- Sprints/            historico Sprints 00 a 09
+
+  Fontes: `find` no repositorio (verificado em 2026-10-14); pipeline/tests (ls);
+  .quality-gate/policy.json:14.
+
+3.5 Tamanho do codigo (contagem bruta)
+--------------------------------------
+- pipeline/src/escolio: 16.809 linhas Python (find ... | xargs wc -l, verificado em 2026-10-14).
+- SonarCloud (analise do PR #119 = main atual): ncloc 14.839 (fatos_verificados.md, SonarCloud).
+- Arquivos Python e TS acima de 300 linhas: baseline de 9 (scripts/baseline.json, campo
+  oversizedFiles). Limite em .quality-gate/policy.json:maxFileLines = 300.
+
+
+4. FLUXOS CRITICOS
+==========================================================================================
+
+Criterio: operacoes cuja falha causa maior dano ao usuario. Ordem por impacto.
+
+4.1 FLUXO A - Ingestao e indexacao do corpus (SQLite FTS5 + ChromaDB)
+----------------------------------------------------------------------
+Entradas
+  - UI/main.py:158 indexVault, :173 startIndexJob, :360 indexDroppedFiles
+  - pipeline/src/escolio/corpus/service.py:1282 index_corpus_path
+  - pipeline/src/escolio/corpus/service.py:1180 index_corpus_file
+  - CLI: escolio corpus ... (corpus/cli.py); jobs em corpus/jobs.py
+
+Ordem de escrita (corpus/service.py:387 _commit_pending_items)
+  1. Gera embeddings em lotes (service.py:~440-470).
+  2. Remove vetores antigos do note (vector_store.delete_by_note_id) e grava os novos no
+     ChromaDB (vector_store.upsert_chunks, storage/vector.py:112).
+  3. Grava notas e chunks no SQLite (upsert_note storage/sqlite.py:135;
+     replace_chunks_for_note storage/sqlite.py:177), com commit em sqlite.py:174.
+
+Riscos
+  - Ordem nao atomica: ChromaDB e escrito antes do SQLite, e nao ha rollback em corpus/service.py
+    (busca por rollback sem resultado). Falha entre as etapas 2 e 3 deixa vetores sem chunk no SQLite.
+  - Vetores com modelo de embedding diferente do configurado (estado real do autor, 4.195 casos).
+  - Reindexacao com note_id duplicado (corrigido em PR #102, ver 05).
+
+Protecoes existentes
+  - get_corpus_status (corpus/service.py:529) compara IDs do SQLite com os do Chroma. Classifica
+    `empty`, `clean`, `sqlite_only` ou `inconsistent` (service.py:579-584).
+  - Filtro em consulta: _filter_hits_to_persisted_chunks (corpus/ask.py:423) descarta hits de
+    vetores que nao estao no SQLite; contador stale_vector_hits_count (corpus/ask.py:725).
+  - rebuild_corpus (corpus/service.py:998) com dry_run=True por padrao (service.py:1006).
+  - reset_corpus (corpus/service.py:611).
+  - Testes: test_corpus_status.py, test_corpus_rebuild.py, test_corpus_reset.py,
+    test_corpus_index_parallel.py, test_vector_store.py (14 funcoes), test_storage_sqlite.py
+    (7 funcoes).
+
+Lacunas
+  - Nao ha teste de falha injetada entre a escrita no Chroma e no SQLite (busca por
+    fault, inject e rollback em pipeline/tests sem resultado relevante). Validar.
+  - Migracoes de schema: Nao encontrado no repositorio.
+
+4.2 FLUXO B - Pergunta com RAG, citacao obrigatoria e abstencao
+---------------------------------------------------------------
+Este fluxo e o de maior impacto: resposta errada apresentada como fundamentada e a pior falha
+(TCC.md:109 afirma que a citacao obrigatoria "eliminou completamente respostas fabricadas".
+O smoke de 2026-10-14 achou uma resposta irrelevante com citacao valida, defeito a, que nao
+e fabricacao mas tambem nao responde a pergunta).
+
+Entradas
+  - UI/main.py:147 askCorpus -> tui/actions.py:51 ask_corpus (interface TUI).
+  - corpus/ask.py:635 answer_corpus_with_citations (fluxo com provedor).
+  - corpus/ask.py:593 retrieve_corpus_hits (busca BM25 + vetorial + RRF).
+  - retrieval/rag.py:796 answer_with_citations (decisao de abstencao, motivos em rag.py:834-942:
+    query_without_content rag.py:845, no_retrieval_hits rag.py:859, missing_named_anchor
+    rag.py:926).
+  - corpus/ask.py:718 filtro query_term_not_in_corpus (PR #112).
+  - corpus/ask.py:265 validate_generated_answer: aceita a resposta gerada ou cai no fallback
+    extrativo (acao em corpus/ask.py:116).
+  - Provedor: providers/answer.py:122 OpenAICompatibleAnswerProvider.
+
+Riscos
+  - Resposta irrelevante com citacao aparente (defeito a, 05 secao 2.3).
+  - Abstencao falsa: o sistema se recusa quando havia resposta (defeito b, 05 secao 2.3).
+  - Resposta gerada com numero ou ancora nao presente no contexto (verificado por
+    _unsupported_generated_numbers corpus/ask.py:238 e _unsupported_generated_anchors
+    corpus/ask.py:247).
+  - Span citado que nao contem a afirmacao (checagem em retrieval/rag.py:577 _citation_from_hit
+    e rag.py:623 _build_claims).
+
+Protecoes existentes
+  - Citacao com start_char / end_char (retrieval/rag.py:577).
+  - Validador da resposta gerada (corpus/ask.py:265).
+  - Benchmark de negativas: data/datasets/manual_validation/negativas.json (+120 linhas no PR #112).
+  - Testes: test_rag.py (37 funcoes), test_corpus_ask.py (27), test_grounded_answer.py (3).
+  - Smoke real na VPS (verificado em 2026-10-14, corpus de 10 docs e 78 chunks):
+    14/15 perguntas positivas respondidas com citacao; 5/6 negativas abstidas; 2 defeitos abertos.
+
+Lacunas
+  - O smoke de 2026-10-14 nao esta em CI. Nao ha job de teste de qualidade de resposta no
+    quality-gate.yml.
+  - O exp. 15 (MRR 0.884) nao e reproduzivel (fatos_verificados.md). Nao usar como prova.
+
+4.3 FLUXO C - Transcricao de audio e chave de API
+-------------------------------------------------
+4.3.1 Transcricao
+  Entradas
+    - ingest/audio_capture.py:15 AudioCapture (microfone).
+    - app/audio_service.py:17 audio_runtime; ingest/audio_jobs.py (jobs de transcricao).
+    - providers/transcribe.py:4 Transcriber (Protocol); providers/audio_engines.py:21 WhisperEngine.
+  Riscos
+    - Falta de GPU ou CUDA: a CLI leva cerca de 90 s por invocacao na VPS ARM (fatos_verificados).
+    - Erro de modelo: modelo de voz baixado de forma assincrona (ingest/download_jobs.py).
+  Protecoes
+    - Fallback de GPU para CPU (providers/audio_engines.py:13 _gpu_failure).
+    - Testes: test_audio_*.py (capture, transcription, vad, runtime_errors, catalog, actions).
+    - Medicao publicada: docs/spec-kit/AUDIO_VALIDATION.md (6 clipes FLEURS):
+      Whisper small em CPU WER 0,0790, CER 0,0673, RTF 0,78; em CUDA RTF 0,30; com VAD WER 0,0895.
+      (fatos_verificados.md, secao Evidencia de desempenho)
+    - Transcricao do fixture pt-BR em CPU identica a referencia (verificado em 2026-10-14).
+  Lacunas
+    - test_audio_capture.py mocka o sounddevice (linhas 15-39). Nao ha teste de captura real de
+      microfone no CI (libportaudio2 e instalado em quality-gate.yml:119-122). Validar.
+
+4.3.2 Chave de API (.env)
+  Entradas
+    - UI/main.py:232 saveApiKey -> app/local_env.py:88 save_answer_api_key.
+    - app/local_env.py:45 upsert_local_env_value grava ESCOLIO_ANSWER_API_KEY em pipeline/.env
+      (caminho em app/local_env.py:13).
+    - app/local_env.py:69 load_local_env carrega o arquivo para os.environ.
+  Protecoes
+    - Chave marcada como exclude=True e repr=False em app/config.py:131 (nao sai no JSON nem no repr).
+    - saveApiKey devolve so `configured` (bool) e o caminho do .env; a chave nao volta para a UI
+      (UI/main.py:232-238).
+    - .env no .gitignore (.gitignore:12-14); nenhum .env versionado (git ls-files).
+    - Busca por padroes de chave (sk-, AIza, ghp_, blocos PEM) no historico do HEAD: sem resultado.
+  Riscos e lacunas
+    - Permissoes do arquivo .env nao sao ajustadas: Nao encontrado no repositorio (chmod em
+      app/local_env.py: zero ocorrencias).
+    - Testes: test_local_env.py (2 funcoes), test_config.py.
+    - Sem verificacao de vazamento em logs (nao foi feita a leitura de todos os logs).
+
+4.4 Resumo dos fluxos
+---------------------
++------+----------------------------------+------------------------+-----------------------------+
+| Flux | Operacao                         | Pior falha             | Protecao principal          |
++------+----------------------------------+------------------------+-----------------------------+
+| A    | Ingestao + indexacao (SQLite +   | Indice divergente      | get_corpus_status; filtro   |
+|      | ChromaDB)                        | (inconsistent)         | de hits; rebuild           |
+| B    | Pergunta RAG com citacao e       | Resposta errada com    | Citacao por span; validador |
+|      | abstencao                        | citacao; abstencao     | de resposta; negativas      |
+|      |                                  | falsa                  |                             |
+| C    | Transcricao e chave de API       | Falha de GPU; chave em | Fallback CPU; .env no       |
+|      |                                  | arquivo local          | .gitignore; chave nao volta |
++------+----------------------------------+------------------------+-----------------------------+
+
+Fim do arquivo 01.

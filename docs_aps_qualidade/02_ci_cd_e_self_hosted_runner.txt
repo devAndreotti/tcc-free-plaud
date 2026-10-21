@@ -1,0 +1,370 @@
+AUDITORIA APS QUALIDADE - 02 - CI/CD E SELF-HOSTED RUNNER
+==========================================================
+
+Projeto: Escólio (antes free-plaud / Evil Plaud)
+Repositório: devAndreotti/tcc-free-plaud (GitHub, privado)
+Commit analisado: dbb82fe (main, 2026-10-14)
+Repositório lido: main dbb82fe (worktree docs/aps-qualidade)
+Coleta: 2026-10-14. Somente leitura. Nenhum serviço, runner ou workflow foi alterado.
+
+Legenda das fontes
+------------------
+  [fatos]    docs_aps_qualidade/_fontes/fatos_verificados.md (verificado em 2026-10-14)
+  [sonar]    docs_aps_qualidade/_fontes/sonar_raw.txt (API SonarCloud, coleta 2026-10-14T19:39:34Z)
+  [gh]       comando gh citado no texto
+  [cmd]      comando de shell citado no texto
+  [inferido] conclusão minha a partir do código ou dos dados; o repositório não afirma isso
+  Caminhos de arquivo são relativos à raiz do repositório. Linhas no formato arquivo:linha.
+
+
+1. ESTRUTURA DA PIPELINE
+========================
+
+1.1 Workflows em .github/workflows/
+-----------------------------------
+
+  Arquivo              Nome               Gatilhos
+  -------------------  -----------------  -----------------------------------------------
+  quality-gate.yml     Quality Gate       pull_request (opened, synchronize, reopened)
+                                          e push na branch main (linhas 3-7)
+  desktop-release.yml  Desktop Release    push de tag que casa com v* (linhas 3-6)
+
+- Não há job de deploy para servidor em nenhum dos dois workflows (leitura completa
+  dos dois arquivos).
+- O único artefato de entrega é um executável desktop Windows (ver 1.3).
+
+
+1.2 quality-gate.yml
+--------------------
+
+Configurações gerais
+- Concorrência: group "quality-gate-${{ github.ref }}" com cancel-in-progress: true
+  (quality-gate.yml:9-11). Um push novo cancela a execução anterior da mesma ref.
+- Permissões do workflow: contents: read (linhas 13-14). O job report acrescenta
+  pull-requests: write (linhas 227-229).
+- Env: UV_NO_SYNC "1" (linhas 18-19). O comentário das linhas 16-17 explica que sem isso
+  o uv ressincroniza e troca o torch de CPU pelo do PyPI.
+
+Jobs (todos com runs-on [self-hosted, linux, ostg02, tcc])
+
+  Job id   Nome no check       needs          timeout-minutes  Linhas
+  -------  ------------------  -------------  ---------------  -----------
+  security Security audit      -              não definido     22-52
+  lint     Lint                -              não definido     54-93
+  test     Tests & ratchet     -              não definido     95-144
+  build    Build & smoke       -              não definido     146-179
+  sonar    SonarCloud          test           não definido     181-201
+  docker   Docker image gate   -              não definido     203-220
+  report   PR report           6 jobs         não definido     222-251
+                               (linha 225)
+  O job report tem if: always() && github.event_name == 'pull_request' (linha 226).
+
+- timeout-minutes não aparece em nenhum workflow (cmd: grep -rn timeout-minutes .github
+  retorna 0 ocorrências). Sem valor explícito, vale o padrão do GitHub Actions
+  [inferido, documentação do GitHub, não reexecutada aqui].
+
+Passos principais (trechos com linha)
+- security (22-52)
+    linha 43: uv sync --locked --dev --extra audio --extra cpu     (em pipeline/)
+    linha 46: uvx pip-audit --path .venv
+    linha 49: npm ci                                               (em UI/)
+    linha 52: npm audit --audit-level=high
+- lint (54-93)
+    linha 80: uv run ruff check src tests --output-format=json > ../coverage/ruff.json
+    linha 86: npm run lint                                         (eslint .)
+- test (95-144)
+    linhas 119-122: apt-get install libportaudio2 (biblioteca de microfone)
+    linha 127: uv run pytest --basetemp .pytest-tmp-qg --cov=src
+               --cov-report=json:../coverage/coverage.json --cov-report=xml:...
+               --cov-report=lcov:... --cov-report=term-missing
+    linha 133: npm run test:coverage                               (vitest run --coverage)
+    linha 135: node --test scripts/*.test.cjs
+    linha 137: node scripts/quality-gate.js check                  (ratchet, ver arquivo 03)
+- build (146-179)
+    linha 170: uv build
+    linha 173: uv run escolio --help                               (smoke test da CLI)
+    linha 179: npm run build                                       (tsc -b && vite build)
+- sonar (181-201)
+    linha 184: needs: test
+    linhas 189-192: download-artifact coverage-report -> coverage/
+    linha 194: SonarSource/sonarqube-scan-action@v8
+    linhas 196-198: -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300
+    linha 200: SONAR_TOKEN (secret)
+- docker (203-220)
+    linha 212: node scripts/docker-gate.cjs --project . --json
+- report (222-251)
+    linha 241: node scripts/pr-comment.js
+    linhas 242-251: env com SECURITY_RESULT, LINT_RESULT, TEST_RESULT, SONAR_RESULT,
+                    DOCKER_RESULT e REQUIRED_CHECKS
+
+Caches
+- setup-node com cache: npm e cache-dependency-path UI/package-lock.json nos jobs
+  security (39-40), lint (71-72), test (114-115) e build (163-164).
+  Os jobs docker (208-210) e report (232-234) usam setup-node sem cache.
+- setup-uv@v7 com cache-local-path ${{ runner.workspace }}/.uv-cache e enable-cache: false
+  (linhas 34-35, 66-67, 109-110, 158-159). Com enable-cache false o action não restaura
+  nem salva cache [inferido, documentação do setup-uv]. O comentário das linhas 32-33
+  diz: "Cache no mesmo volume do workspace: o /home do runner encheu e deixou entradas
+  incompletas no cache".
+- UV_CACHE_DIR não é definido em nenhum arquivo de .github, scripts ou pyproject
+  (cmd: grep, 0 ocorrências).
+- No runner, as ferramentas ficam em _work/_tool e persistem entre execuções (ver 2.3).
+
+Artefatos (actions/upload-artifact@v7)
+- ruff-report: coverage/ruff.json. Job lint, if: always(), retenção 7 dias (linhas 87-93).
+- coverage-report: pasta coverage/. Job test, if: always(), retenção 7 dias (linhas
+  138-144). É baixado pelo job sonar (189-192) e pelo job report (235-239).
+- docker-gate-report: .quality-gate/reports/docker-image-doctor.json. Job docker, retenção
+  7 dias, if-no-files-found: ignore (linhas 213-220). Não existe quando o gate pula.
+- O job security não publica relatório de auditoria (nenhum upload no job).
+
+Merge bloqueado (branch protection da main)
+- Fonte: [gh] gh api repos/devAndreotti/tcc-free-plaud/branches/main/protection
+  - required_status_checks.strict: true (a branch precisa estar atualizada com a main)
+  - Checks obrigatórios (6): Security audit, Lint, Tests & ratchet, Docker image gate,
+    Build & smoke, SonarCloud
+  - required_approving_review_count: 0 (nenhuma aprovação obrigatória)
+  - dismiss_stale_reviews: true
+  - required_conversation_resolution: true (conversas precisam ser resolvidas)
+  - enforce_admins: false (administrador pode contornar a regra)
+  - allow_force_pushes: false; allow_deletions: false
+  - required_signatures: false; required_linear_history: false
+- O mesmo conjunto de checks aparece em .quality-gate/policy.json:5-12 e em
+  quality-gate.yml:250 [fatos].
+- O check "Docker image gate" é obrigatório, mas hoje termina com status skipped e exit 0
+  (ver "Docker image gate" nesta seção). Ele não bloqueia nenhum merge.
+
+Relatório do PR (scripts/pr-comment.js)
+- Comentário único e atualizado (sticky), identificado pelo marcador
+  "<!-- quality-gate-sticky-v2 -->" (linha 14).
+- Tabela com 5 linhas: Segurança, Lint, Testes + Ratchet, SonarCloud, Docker image gate
+  (linhas 24-30). O status de cada job vem das variáveis de ambiente do job report.
+- Seção de cobertura: lê coverage/coverage-summary.json (linha 76) e, se não existir,
+  coverage/coverage.json (linhas 98-99 e 128). Na CI só existe o segundo. Ou seja, o comentário
+  mostra a cobertura Python (ver 03, item 1.2).
+- Sem GITHUB_TOKEN, sem PR_NUMBER ou sem GITHUB_REPOSITORY: pula sem erro.
+- Erro de API: imprime a mensagem e sai com código 0 (main, linha final). Falha no
+  comentário não quebra o check.
+- O texto fixo do comentário diz "Aguardando Copilot Review" quando tudo passa.
+- Não encontrado no repositório: configuração do Copilot Review em si. Há só a flag
+  copilotReview em .quality-gate/policy.json:34 e o arquivo .github/copilot-instructions.md
+  (instruções de revisão em texto).
+
+Docker image gate (scripts/docker-gate.cjs)
+- A detecção está em scripts/lib/docker-detect.cjs. Procura Dockerfile, Dockerfile.*,
+  *.Dockerfile, docker-compose.yml, compose.yml e .dockerignore.
+- O repositório não tem nenhum Dockerfile, compose ou .dockerignore
+  (cmd: git ls-files | grep -i docker. Os 5 arquivos encontrados são dados e amostras,
+  como data/datasets/manual_validation/05_estudo_docker_fragmentado.json).
+- Execução local em dbb82fe (cmd: node scripts/docker-gate.cjs --project . --json):
+  status "skipped", reason "no docker files detected", exit 0.
+- Se houvesse Docker: .quality-gate/policy.json:41 aponta para
+  D:\Dev\Scripts\seguranca\18-Docker-Image-Doctor.ps1, um caminho Windows. No runner Linux
+  esse arquivo não existe, então o script cai no "static advisory"
+  (scripts/docker-gate.cjs, função handleUnavailableDoctor; policy.json:58).
+- No static advisory os achados têm severidade High (sem .dockerignore; segredos em
+  ARG/ENV/RUN) ou Medium (tag latest; sem USER). Mas blockOn é só "Critical"
+  (policy.json:51-53) e warnOn é High e Medium (linhas 54-56). Logo o advisory nunca
+  falha o gate, só gera warning. O exit code 1 só sai com status "failed"
+  (docker-gate.cjs, função main).
+- Conclusão [inferido do código]: hoje o gate não verifica nada, e mesmo com um Dockerfile
+  no runner Linux ele não reprovaria um build.
+
+.quality-gate/policy.json (59 linhas) e schema
+- schemaVersion: 1; profile: "python-uv" (linhas 2-3).
+- ci.requiredChecks: os 6 nomes dos checks obrigatórios (linhas 5-12).
+- ci.coverageRatchet: true (linha 13). ci.maxFileLines: 300 (linha 14), lido por
+  scripts/quality-gate.js:37.
+- bootstrap: licença MIT, funding, dependabot e readme no estilo "devandreotti"
+  (linhas 16-32). Usado por scripts/bootstrap-repo.cjs (não auditado em detalhe).
+- github: copilotReview true (linha 34), branchProtection true (linha 35),
+  requireConversationResolution true (linha 36).
+- dockerImageDoctor (linhas 38-59): ver o item anterior.
+- Schema: .quality-gate/policy.schema.json (JSON Schema draft 2020-12). Campos obrigatórios:
+  schemaVersion, profile, ci, bootstrap, github, dockerImageDoctor.
+- Observação: policy.json:41 é um caminho Windows; a política não é portável para o
+  runner Linux sem o fallback.
+
+Dependabot (.github/dependabot.yml, 18 linhas)
+- github-actions, directory "/", interval weekly (linhas 3-6).
+- pip, directory "/pipeline", weekly, open-pull-requests-limit 10 (linhas 8-12).
+- npm, directory "/UI", weekly, open-pull-requests-limit 10 (linhas 14-18).
+- PRs do Dependabot não recebem secrets, então o job SonarCloud falha neles porque
+  SONAR_TOKEN não é entregue [fatos]. Prática adotada: consolidar as atualizações em um PR
+  do dono. Precedentes no git log: 7da8203 "consolida as atualizações do Dependabot
+  (#114-#117) (#118)" e b0e02a9 "consolida ... (#113)".
+
+
+1.3 desktop-release.yml
+-----------------------
+
+- Gatilho: push de tag v* (linhas 3-6).
+- Permissões: contents: write (linhas 8-9), necessário para criar a release.
+- runs-on: windows-latest (linha 19). É hospedado pelo GitHub, não usa o runner próprio.
+- Node 20 (linhas 32-35). Versões de actions diferentes do quality gate: checkout@v4,
+  setup-python@v5, setup-uv@v5, setup-node@v4 (linhas 22, 25, 30, 33). O quality gate usa @v7
+  e @v8.
+- Cache: setup-node com cache npm e cache-dependency-path UI/package-lock.json (linhas 36-37).
+- Passos:
+    linha 41: npm ci (em UI/)
+    linha 45: uv sync --locked --extra desktop --extra audio --extra cpu (em pipeline/)
+    linha 48: uv run --project pipeline python scripts/build_desktop.py
+    linha 53: Compress-Archive UI/dist/AssistenteIA -> AssistenteIA-windows-x64.zip
+    linhas 55-62: softprops/action-gh-release@v3, generate_release_notes: true
+- scripts/build_desktop.py:
+    etapa 1 (linha 22): npm run build
+    etapa 2 (linhas 31-42): PyInstaller com UI/assistente_ia.spec
+    etapa 3 (linha 52): confere se UI/dist/AssistenteIA/AssistenteIA.exe existe
+- O que produz: um zip Windows x64 (AssistenteIA-windows-x64.zip) com a pasta
+  UI/dist/AssistenteIA, que é a saída onedir do PyInstaller (EXE na linha 38 e COLLECT na
+  linha 57 de UI/assistente_ia.spec). O zip é anexado a uma GitHub Release com notas
+  geradas automaticamente.
+- Não há testes, lint nem SonarCloud antes do build. Uma tag v* pode gerar release sem
+  passar pelo quality gate (leitura completa do arquivo).
+- Histórico:
+  - [gh] gh run list --workflow 'Desktop Release' retornou lista vazia em 2026-10-14.
+  - [gh] gh release list não retornou nenhuma release.
+  - [cmd] git tag -l 'v*' retorna 2 tags: v0.9.0-autorag-rrf e v0.9.1-desktop-audio.
+  - VERSION (raiz) contém 1.0.0, mas não existe tag v1.0.0.
+- Playwright não roda em nenhum workflow (cmd: grep -rni playwright .github, 0
+  ocorrências). Os testes E2E foram rodados manualmente na VPS (7/7 specs em 36,7 s,
+  Chromium headless) [fatos].
+
+
+2. SELF-HOSTED RUNNER
+=====================
+
+2.1 Onde está configurado
+-------------------------
+
+- Labels em runs-on de quality-gate.yml: [self-hosted, linux, ostg02, tcc] nas linhas
+  24, 56, 97, 148, 183, 205 e 224. Um job só é atendido por um runner que tenha esses
+  labels. A lista de labels cadastrados no GitHub não está no repositório.
+- desktop-release.yml usa windows-latest (linha 19), sem runner próprio.
+- Documentação de setup: cmd grep -rn -i 'self-hosted\|runner' docs/ scripts/ README.md
+  AGENTS.md. Não encontrado no repositório: guia de instalação ou manutenção do runner.
+  As ocorrências são de "runners" de benchmark (código Python) e de diagnóstico de CI
+  (scripts/ci-diagnose.cjs:95 e 100).
+- Host observado (2026-10-14):
+  - Serviço systemd: actions.runner.devAndreotti-tcc-free-plaud.hermes-ostg02-tcc-runner
+    .service, enabled, active desde 2026-09-22 20:37:05 UTC (cmd: systemctl status).
+  - Arquivo .runner (JSON, lido sem credenciais): agentName "hermes-ostg02-tcc-runner",
+    agentId 21, poolName "Default", gitHubUrl https://github.com/devAndreotti/tcc-free-plaud,
+    workFolder "_work".
+  - Diretório: /mnt/volume-50gb/ci-runners/tcc-free-plaud-runner. O serviço usa
+    /home/ubuntu/projects/ci-runners, que é um link para /mnt/volume-50gb/ci-runners.
+  - Hostname: hermes-agent-01 (VM Oracle Cloud, shape VM.Standard.A1.Flex, região
+    eu-amsterdam-1) [fatos].
+
+
+2.2 Justificativa (PR #93)
+--------------------------
+
+- PR #93, título no GitHub: "feat(ci): usar self-hosted runner na OSTG 0.2". Branch
+  ci-self-hosted. Mergeado em 2026-09-21T20:53:21Z, merge commit 76483d9a.
+  Os fatos citam o título "ci: self-hosted runner OSTG 0.2". O título do GitHub é o que
+  está no repositório.
+- Corpo do PR (cmd: gh pr view 93 --json title,body), citado integralmente:
+    "Usar runner self-hosted da OSTG 0.2 para evitar dependência de minutos do GitHub Actions"
+- Commits (corpo vazio nos três):
+    c101488  feat(ci): usar self-hosted runner na OSTG 0.2
+    05687d1  ci: complete migration of all quality-gate jobs to self-hosted runner
+    97b1ece  ci: bump node-version to 22 to fix undici markAsUncloneable regression in node 20.20
+- Razão declarada: evitar dependência de minutos do GitHub Actions.
+- Razões não declaradas no repositório: hardware dedicado, custo, cache persistente e
+  arquitetura ARM. Para cada uma: "não declarado no repositório".
+- Razão declarada para o cache (não para o runner): quality-gate.yml:32-33 e 64-65 (ver 1.2).
+- Razões inferidas (não declaradas):
+  - Minutos do GitHub Actions: o quality gate roda 6 jobs por push e por PR, então o consumo
+    de minutos seria o motivo principal [inferido].
+  - Hardware dedicado: VM ARM com 2 vCPU e 11 GiB de RAM (2.3).
+  - VM ARM no OCI Always Free: shape VM.Standard.A1.Flex, com a tenancy no limite de 200 GB
+    de block storage [fatos].
+  - Cache persistente: _work/_tool guarda node, uv, Python e sonar-scanner entre
+    execuções (2.3).
+- Consequências observadas:
+  - Os testes rodam em aarch64, não em x86_64. Pacotes com binário nativo (torch, sherpa-onnx,
+    onnxruntime) precisam de wheels ARM [inferido]. O PR #103 (2026-10-01) passou a instalar
+    torch de CPU no CI e no release [fatos].
+  - Dos últimos 12 runs do quality-gate em main (cmd: gh run list --branch main --workflow
+    quality-gate.yml --limit 12), 10 terminaram com failure, 1 cancelled e 1 ainda
+    em andamento no momento da coleta [gh].
+  - Causas verificadas: os runs 37855744558 (2026-10-08) e 37867326230 (2026-10-09)
+    falharam no job SonarCloud com "CE Task finished abnormally with status: FAILED"
+    (log do run, passo SonarCloud) [gh]. As causas dos demais não foram investigadas.
+
+
+2.3 Ambiente do runner (observado em 2026-10-14, salvo quando indicado)
+-----------------------------------------------------------------------
+
+  Item              Valor observado                                       Fonte
+  ----------------  ----------------------------------------------------  ----------------------
+  SO e kernel       Ubuntu, Linux 6.17.0-1020-oracle, aarch64             cmd: uname -a
+  CPU               Neoverse-N1, arquitetura aarch64, 2 vCPU             cmd: nproc, lscpu
+  RAM               11 GiB total; 5,4 GiB usados; 6,3 GiB disponíveis     cmd: free -h
+  Swap              8,0 GiB total; 5,0 GiB em uso                         cmd: free -h. Os
+                                                                          fatos citam "swap
+                                                                          extra de 4 GB"
+                                                                          (divergência)
+  Disco /           96 GB; 91 GB usados; 5,2 GB livres; 95%               cmd: df -h /
+                                                                          (fatos: 94%)
+  Disco /mnt/...    49 GB; 39 GB usados; 8,2 GB livres; 83%               cmd: df -h
+  Pasta do runner   3,9 GB no total; _work com 3,5 GB                     fatos (não medido)
+  Versão do agente  2.337.0 (bin.2.337.0 e .runner)                       cmd: ls; fatos
+  Docker            29.9.0, storage driver overlayfs                      cmd: docker info.
+                                                                          Nenhum job usa
+                                                                          Docker
+  Node              v22.23.3 no host. Jobs: setup-node 22                 cmd: node -v;
+                    (quality-gate.yml:38, 70, 113, 162, 210, 233).        quality-gate.yml
+                    O agente roda com node20 e node24 internos            (ps)
+  uv                0.12.13 no host. Workflows usam setup-uv@v7 sem       cmd: uv --version;
+                    versão fixa (quality-gate.yml:30)                     quality-gate.yml:30
+  Python            3.12.15 arm64 no cache de ferramentas do runner:      cmd: ls
+                    _work/_tool/Python/3.12.15/arm64 (com bin, lib,
+                    include, share). setup-python@v7 com '3.12'
+                    (quality-gate.yml:27-29)
+  Playwright        /mnt/volume-50gb/cache/ms-playwright contém           cmd: ls.
+                    chromium-1243, chromium-1248, chromium_headless_      ~/.cache/ms-playwright
+                    shell-1243 e -1248, ffmpeg-1011 e -1013. Não existe   não existe.
+                    ~/.cache/ms-playwright. Nenhum workflow executa       UI/package.json:20
+                    Playwright. A versão é @playwright/test ^1.64.0
+  Java (Sonar)      sonar-scanner-cli 8.1.0 build 6389 (linux-aarch64)    cmd: ls; ps
+                    em _work/_tool. JRE 21.0.12.1 em ~/.sonar/cache
+  Caches            setup-node com cache npm por job; setup-uv com        quality-gate.yml
+                    enable-cache: false; _work/_tool persistente           (ver 1.2)
+
+- _work/_tool e os caches são reaproveitados entre execuções. O runner está registrado
+  só para este repositório (gitHubUrl no .runner).
+
+Fila de execução (um slot)
+- Há um único agente registrado e um único processo Runner.Listener, com um Runner.Worker
+  por vez (cmd: ps).
+- Na prática os jobs rodam em série, mesmo quando não têm dependência entre si:
+    PR #118, run 38563746866 (branch chore/deps-2026-10-14) [gh]:
+      Docker image gate  12:26:10 -> 12:26:35
+      Lint               12:26:38 -> 12:31:24
+      Security audit     12:31:27 -> 12:48:05   (16m38s)
+      Tests & ratchet    13:20:31 -> 13:35:18   (reexecução, 14m47s)
+    Run 38621534848 (push em main, 2026-10-14) [gh]:
+      Docker image gate  19:11:19 -> 19:11:39
+      Build & smoke      19:12:42 -> 19:16:13
+      Lint               19:17:16 -> 19:21:26
+      Tests & ratchet    19:22:28 -> 19:35:48
+      Security audit     19:35:50 -> 19:37:34
+  O job Security audit não tem needs, então sem o slot único ele rodaria em paralelo com Lint.
+- Os fatos atribuem a espera de 16m38s do Security audit ao cache [fatos]. Não verifiquei o
+  log desse passo.
+
+Incidente de disco de 2026-10-13 [fatos]
+- O volume do runner lotou. Os jobs falharam com "No space left on device" ou ficaram cerca
+  de 10 min sem executar passos.
+- Limpeza feita: venv de 6,6 GB movida; versão antiga do runner (2.322.0, 1,25 GB) removida;
+  logs _diag com mais de 3 dias apagados; runner duplicado removido.
+- Resultado: o volume foi de 100% para 65%.
+- Em 2026-10-14 o disco / está em 95% e o volume em 83% (cmd: df -h). O disco do sistema
+  continua sendo o ponto de atenção.
+
+Limitações desta parte
+- Não li os logs de todos os jobs. Os tempos vêm de gh run view, e as causas vêm dos fatos.
+- Não li arquivos .credentials* do runner, por regra.
+- O total de RAM e swap vem de free -h e pode diferir de descrições anteriores.
