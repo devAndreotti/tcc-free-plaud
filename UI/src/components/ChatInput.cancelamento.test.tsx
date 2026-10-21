@@ -1,7 +1,14 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ChatInput from './ChatInput';
+
+// ChatInput é controlado: o estado fica num wrapper, como no teste vizinho.
+const ControlledInput = (props: Omit<ComponentProps<typeof ChatInput>, 'value' | 'onChange'>) => {
+  const [value, setValue] = useState('');
+  return <ChatInput {...props} value={value} onChange={setValue} />;
+};
 
 const bridgeMock = vi.hoisted(() => ({
   startAudioCapture: vi.fn(),
@@ -44,7 +51,7 @@ describe('ChatInput - cancelamento da captura de áudio', () => {
     });
     bridgeMock.cancelAudioCapture.mockRejectedValue(rejection);
 
-    const { unmount } = render(<ChatInput onSendMessage={vi.fn()} />);
+    const { unmount } = render(<ControlledInput onSendMessage={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: 'Gravar áudio' }));
     await screen.findByRole('button', { name: 'Parar gravação' });
 
@@ -69,7 +76,7 @@ describe('ChatInput - cancelamento da captura de áudio', () => {
       }),
     );
 
-    const { unmount } = render(<ChatInput onSendMessage={vi.fn()} />);
+    const { unmount } = render(<ControlledInput onSendMessage={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: 'Gravar áudio' }));
     expect(bridgeMock.startAudioCapture).toHaveBeenCalledTimes(1);
 
@@ -99,7 +106,7 @@ describe('ChatInput - envio com Enter', () => {
   it('Enter com campo vazio ou só com espaços não envia mensagem', async () => {
     const user = userEvent.setup();
     const onSendMessage = vi.fn();
-    render(<ChatInput onSendMessage={onSendMessage} />);
+    render(<ControlledInput onSendMessage={onSendMessage} />);
 
     const textarea = screen.getByRole('textbox', { name: 'Campo de mensagem' });
     await user.click(textarea);
