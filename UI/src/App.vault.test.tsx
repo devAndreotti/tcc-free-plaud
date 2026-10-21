@@ -12,7 +12,7 @@ const waitForVault = (name: RegExp = /Obsidian/) =>
 
 const switchVault = async (user: User, name: RegExp) => {
   await user.click(await screen.findByRole('button', { name: /Vault ativa:/ }));
-  await user.click(screen.getByRole('menuitemradio', { name }));
+  await user.click(within(screen.getByRole('group', { name: 'Vaults' })).getByRole('button', { name }));
   await waitForVault(name);
 };
 
@@ -114,9 +114,9 @@ describe('vault: cada conversa pertence a uma vault', () => {
     expect(screen.getByRole('textbox', { name: 'Campo de mensagem' }).getAttribute('placeholder')).toBe('Pergunte à vault Obsidian…');
 
     await user.click(screen.getByRole('button', { name: 'Vault da pergunta: Obsidian. Trocar vault' }));
-    const menu = await screen.findByRole('menu', { name: 'Vault da pergunta' });
-    expect(screen.queryByRole('menu', { name: 'Vaults' })).toBeNull();
-    await user.click(within(menu).getByRole('menuitemradio', { name: /Culinária/ }));
+    const menu = await screen.findByRole('group', { name: 'Vault da pergunta' });
+    expect(screen.queryByRole('group', { name: 'Vaults' })).toBeNull();
+    await user.click(within(menu).getByRole('button', { name: /Culinária/ }));
     expect(await waitForVault(/Culinária/)).toBeTruthy();
   });
 

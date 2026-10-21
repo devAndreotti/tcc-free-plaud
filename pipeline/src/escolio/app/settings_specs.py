@@ -61,7 +61,7 @@ AUDIO_GROUP = 'Áudio'
 SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='embedding_model',
-        label='Modelo de embedding',
+        label='Modelo de busca semântica',
         description='Modelo que transforma texto em vetores para busca semântica.',
         group='Embeddings',
         value_type='string',
@@ -70,8 +70,8 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     ),
     SettingSpec(
         key='embedding_device',
-        label='Device de embedding',
-        description='Onde roda o modelo de embedding quando ele suporta device (o chroma-default sempre usa o processador).',
+        label='Dispositivo de busca semântica',
+        description='Onde roda o modelo de busca semântica quando ele suporta device (o chroma-default sempre usa o processador).',
         group='Embeddings',
         value_type='enum',
         layer='simple',
@@ -90,15 +90,15 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     ),
     SettingSpec(
         key='retrieval_top_k',
-        label='Chunks por pergunta',
-        description='Quantos chunks o Ask recupera para montar evidências e resposta.',
+        label='Trechos por pergunta',
+        description='Quantos trechos a pergunta recupera para montar evidências e resposta.',
         group='Retrieval',
         value_type='int',
         recommended=4,
     ),
     SettingSpec(
         key='default_chunk_size',
-        label='Tamanho do chunk',
+        label='Tamanho do trecho',
         description='Tamanho alvo de cada pedaço indexado do texto.',
         group='Chunks',
         value_type='int',
@@ -107,7 +107,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='default_chunk_overlap',
         label='Sobreposição',
-        description='Quanto texto um chunk repete do anterior para evitar corte de contexto.',
+        description='Quanto texto um trecho repete do anterior para evitar corte de contexto.',
         group='Chunks',
         value_type='int',
         recommended=120,
@@ -141,8 +141,8 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     ),
     SettingSpec(
         key='corpus_embedding_batch_size',
-        label='Batch de embeddings',
-        description='Quantidade de chunks processados por lote no embedding.',
+        label='Lote de indexação',
+        description='Quantidade de trechos processados por lote no modelo de busca semântica.',
         group='Corpus',
         value_type='int',
         recommended=64,
@@ -150,7 +150,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='corpus_index_workers',
         label='Workers de indexação',
-        description='Paralelismo para carregar e preparar arquivos antes do embedding.',
+        description='Paralelismo para carregar e preparar arquivos antes do modelo de busca semântica.',
         group='Corpus',
         value_type='int',
         recommended=1,

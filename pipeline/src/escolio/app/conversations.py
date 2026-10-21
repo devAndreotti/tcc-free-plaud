@@ -39,17 +39,17 @@ def _check_shape(payload: Any) -> None:
         raise ValueError('Conversas: "tabMessages" precisa ser um objeto.')
 
 
-def load_conversations(settings: Settings | None = None) -> dict | None:
-    """Conversas salvas, ou None sem arquivo. Arquivo ilegível ou de outra forma também vira None: o app começa do zero."""
+def load_conversations(settings: Settings | None = None) -> dict:
+    """Conversas salvas. Sem arquivo, uma lista vazia; arquivo ilegível levanta erro, para a UI não gravar por cima dele."""
     path = _path(settings)
     if not path.exists():
-        return None
+        return {'tabs': [], 'activeTabId': None, 'tabMessages': {}}
     try:
         payload = json.loads(path.read_text(encoding='utf-8'))
         _check_shape(payload)
     except (OSError, ValueError) as exc:
-        logger.warning('Conversas salvas ignoradas (%s): %s', path, exc)
-        return None
+        logger.warning('Conversas salvas ilegíveis (%s): %s', path, exc)
+        raise
     return payload
 
 

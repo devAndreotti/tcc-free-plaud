@@ -94,7 +94,7 @@ describe('MessageBubble com resposta estruturada', () => {
 
   it('resposta escrita pela IA aparece no lugar dos trechos, com o modelo no rodapé', () => {
     const a = cite(1, 'Estudos/Infra/Docker.md');
-    render(
+    const { container } = render(
       <MessageBubble
         message={answer({
           answer: 'Docker compartilha o kernel do host; a VM traz um SO inteiro.',
@@ -112,12 +112,13 @@ describe('MessageBubble com resposta estruturada', () => {
     expect(screen.getByText('Escrita pela IA · qchat:latest')).toBeTruthy();
     expect(screen.queryByText(/ollama/)).toBeNull();
     expect(screen.getByText('Docker')).toBeTruthy(); // a fonte continua listada
+    expect(container.querySelector('.msg__support')).toBeNull();
   });
 
   it('explica a falta de resposta e oferece buscar por palavra-chave', async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();
-    render(
+    const { container } = render(
       <MessageBubble
         message={answer({
           status: 'no_answer',
@@ -131,7 +132,7 @@ describe('MessageBubble com resposta estruturada', () => {
     );
 
     expect(screen.getByText('Não encontrei isso no vault.')).toBeTruthy();
-    expect(screen.getByText('motivo: insufficient_hybrid_specificity')).toBeTruthy();
+    expect(container.querySelector('details')?.textContent).toContain('motivo: insufficient_hybrid_specificity');
     await user.click(screen.getByRole('button', { name: 'Buscar só por palavra-chave' }));
     expect(onRetry).toHaveBeenCalledWith('Como funciona?', 'lexical');
   });
@@ -297,8 +298,8 @@ describe('MessageBubble - rodapé da resposta', () => {
           claims: [{ text: 'Afirmação dos trechos.', citations: [a], support_level: 'direct' }],
           citations: [a],
           limitations: [
-            'A resposta se apoia em um único chunk recuperado.',
-            'unsupported_anchor: resposta generativa ignorada por anchor sem suporte: NAO_ENCONTRADO.',
+            'A resposta se apoia em um único trecho recuperado.',
+            'Resposta generativa ignorada por nome citado sem suporte: NAO_ENCONTRADO.',
           ],
         })}
       />
@@ -310,10 +311,10 @@ describe('MessageBubble - rodapé da resposta', () => {
     expect(screen.getByText('Detalhes técnicos')).toBeTruthy();
     const details = container.querySelector('details')?.textContent ?? '';
     expect(details).toContain('unsupported_anchor');
-    expect(details).toContain('resposta generativa ignorada por anchor');
+    expect(details).toContain('Resposta generativa ignorada por nome citado sem suporte');
     const limits = container.querySelector('.msg__limits')?.textContent ?? '';
-    expect(limits).toContain('A resposta se apoia em um único chunk recuperado.');
-    expect(limits).not.toContain('unsupported_anchor');
+    expect(limits).toContain('A resposta se apoia em um único trecho recuperado.');
+    expect(limits).not.toContain('Resposta generativa ignorada');
     expect(screen.queryByText(/ollama/)).toBeNull();
   });
 
@@ -321,5 +322,11 @@ describe('MessageBubble - rodapé da resposta', () => {
     render(<MessageBubble message={answer({ answer_provider: 'ollama', generated: false, answer_discard_reason: 'motivo_novo' })} />);
 
     expect(screen.getByText('A IA não respondeu com texto a partir dos trechos.')).toBeTruthy();
+  });
+
+  it('IA descartada por falta de [n] no texto: diz isso em português', () => {
+    render(<MessageBubble message={answer({ answer_provider: 'ollama', generated: false, answer_discard_reason: 'no_source_marker' })} />);
+
+    expect(screen.getByText('A IA escreveu sem citar nenhum trecho')).toBeTruthy();
   });
 });

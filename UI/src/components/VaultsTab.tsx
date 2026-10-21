@@ -176,7 +176,7 @@ const VaultDetail = ({ vault, isActive, onlyOne, report, onOpenQueue }: VaultDet
       </div>
 
       <div className="vaults-tab__index">
-        <span>Modelo de embedding</span>
+        <span>Modelo de busca semântica</span>
         <code>{vault.embedding_model ?? 'padrão'}</code>
         <small>fixo nesta vault; trocar exige reindexar</small>
       </div>

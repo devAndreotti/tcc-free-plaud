@@ -33,10 +33,10 @@ def test_settings_catalog_explains_core_numbers_and_groups(tmp_path: Path) -> No
     rows = settings_catalog_payload(_settings(tmp_path))
     by_key = {row['key']: row for row in rows}
 
-    assert by_key['retrieval_top_k']['label'] == 'Chunks por pergunta'
+    assert by_key['retrieval_top_k']['label'] == 'Trechos por pergunta'
     assert by_key['retrieval_top_k']['value'] == 4
-    assert by_key['retrieval_top_k']['description'].startswith('Quantos chunks')
-    assert by_key['default_chunk_size']['label'] == 'Tamanho do chunk'
+    assert by_key['retrieval_top_k']['description'].startswith('Quantos trechos')
+    assert by_key['default_chunk_size']['label'] == 'Tamanho do trecho'
     assert by_key['default_chunk_size']['value'] == 800
     assert by_key['default_chunk_overlap']['label'] == 'Sobreposição'
     assert by_key['default_chunk_overlap']['value'] == 120
@@ -162,7 +162,7 @@ def test_warns_when_default_corpus_path_does_not_exist(tmp_path: Path) -> None:
     row = next(row for row in rows if row['key'] == 'default_corpus_path')
 
     assert row['warning'] is not None
-    assert 'nao-existe' in row['warning'] or 'não encontrada' in row['warning'].lower() or 'nao encontrada' in row['warning'].lower()
+    assert row['warning'].startswith('Pasta não encontrada: ')
 
 
 def test_warns_when_audio_language_incompatible_with_audio_model(tmp_path: Path) -> None:
@@ -260,3 +260,44 @@ def test_opcoes_tecnicas_trazem_explicacao_para_o_usuario(tmp_path: Path) -> Non
     assert 'localhost:11434' in providers['ollama']
     # Opções sem explicação continuam sem a chave (formato antigo).
     assert all('description' not in option for option in rows['audio_language']['options'])
+
+
+def test_save_catalog_settings_rejects_base_url_without_http_scheme(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+
+    with pytest.raises(ValueError, match='answer_base_url'):
+        save_catalog_settings({'answer_base_url': 'exemplo.test/v1'}, settings=settings)
+    assert not (tmp_path / 'data' / 'results' / 'user_settings.json').exists()
+
+    save_catalog_settings({'answer_base_url': 'https://exemplo.test/v1'}, settings=settings)
+    payload = json.loads((tmp_path / 'data' / 'results' / 'user_settings.json').read_text(encoding='utf-8'))
+    assert payload['answer_base_url'] == 'https://exemplo.test/v1'
+
+
+def test_warns_when_global_embedding_model_differs_from_active_vault(tmp_path: Path, monkeypatch) -> None:
+    active = _settings(tmp_path).model_copy(update={'embedding_model': 'chroma-default'})
+    global_settings = active.model_copy(update={'embedding_model': 'sentence-transformer:modelo-global'})
+    monkeypatch.setattr(escolio_settings_catalog, 'base_settings', lambda: global_settings)
+
+    row = next(r for r in settings_catalog_payload(active) if r['key'] == 'embedding_model')
+
+    assert row['warning'] is not None
+    assert 'modelo-global' in row['warning']
+
+    monkeypatch.setattr(escolio_settings_catalog, 'base_settings', lambda: active)
+
+    row = next(r for r in settings_catalog_payload(active) if r['key'] == 'embedding_model')
+
+    assert row['warning'] is None
+
+
+def test_warns_when_cuda_is_selected_but_unavailable(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr('escolio.providers.embed._cuda_available', lambda: False)
+    settings = _settings(tmp_path).model_copy(
+        update={'embedding_model': 'sentence-transformer:modelo-teste', 'embedding_device': 'cuda'}
+    )
+
+    row = next(r for r in settings_catalog_payload(settings) if r['key'] == 'embedding_device')
+
+    assert row['warning'] is not None
+    assert 'CUDA indisponível' in row['warning']

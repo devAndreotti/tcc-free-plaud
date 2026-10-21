@@ -128,3 +128,27 @@ def test_failed_job_keeps_last_file_errors(tmp_path: Path) -> None:
     assert failed.last_errors
     assert failed.last_errors[0].source_path.endswith('nota.md')
     assert failed.last_errors[0].message == 'Falha simulada.'
+
+
+def test_empty_folder_job_names_supported_extensions_only_on_success(tmp_path: Path) -> None:
+    def run_job(status: str) -> str | None:
+        empty = CorpusIndexBatchResult(
+            source_path=str(tmp_path),
+            recursive=False,
+            status=status,  # type: ignore[arg-type]
+            total_found=0,
+            indexed_count=0,
+            failed_count=0,
+            skipped_count=0,
+            results=[],
+        )
+        manager = IndexJobManager(runner=lambda path, **_: empty)
+        snapshot = manager.start(tmp_path)
+        _wait_until(lambda: manager.get(snapshot.job_id).status == status)
+        return manager.get(snapshot.job_id).message
+
+    message = run_job('success')
+    assert message is not None
+    assert message.startswith('Nenhum arquivo suportado nesta pasta. Extensões aceitas: ')
+    assert '.pdf' in message and '.wav' in message
+    assert run_job('failed') == 'Indexação finalizada.'

@@ -72,10 +72,10 @@ describe('NotesPanel', () => {
     // O título do markdown não é repetido: já aparece como título da leitura.
     expect(screen.queryByText('# Nota alpha', { exact: false })).toBeNull();
 
-    await user.click(screen.getByLabelText('Mostrar chunks'));
+    await user.click(screen.getByLabelText('Mostrar trechos'));
 
     expect(screen.getByText('#0 · 4 tok')).toBeTruthy();
-    expect(screen.getByRole('list', { name: 'Chunks indexados' })).toBeTruthy();
+    expect(screen.getByRole('list', { name: 'Trechos indexados' })).toBeTruthy();
   });
 
   it('mostra erro controlado quando listagem falha', async () => {
@@ -84,6 +84,7 @@ describe('NotesPanel', () => {
     render(<NotesPanel />);
 
     expect(await screen.findByText('Falha DB')).toBeTruthy();
+    expect(screen.queryByText(/Nenhuma nota indexada ainda/)).toBeNull();
   });
 
   it('reindexa e apaga com confirmação no popover, sem digitar nada', async () => {
@@ -98,7 +99,7 @@ describe('NotesPanel', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Mais ações' }));
-    await user.click(screen.getByRole('menuitem', { name: /Apagar do corpus/ }));
+    await user.click(screen.getByRole('button', { name: /Apagar do corpus/ }));
 
     const dialog = screen.getByRole('alertdialog', { name: 'Apagar do corpus?' });
     expect(dialog.textContent).toContain('O arquivo no vault não é alterado.');
@@ -117,7 +118,7 @@ describe('NotesPanel', () => {
 
     await screen.findByText('Conteudo estruturado.');
     await user.click(screen.getByRole('button', { name: 'Mais ações' }));
-    await user.click(screen.getByRole('menuitem', { name: /Apagar do corpus/ }));
+    await user.click(screen.getByRole('button', { name: /Apagar do corpus/ }));
     await user.click(screen.getByRole('button', { name: 'Cancelar' }));
 
     expect(screen.queryByRole('alertdialog')).toBeNull();

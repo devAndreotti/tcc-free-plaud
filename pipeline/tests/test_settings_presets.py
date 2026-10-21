@@ -71,6 +71,18 @@ def test_apply_cpu_rapido_persists_one_validated_payload(tmp_path: Path) -> None
     }
 
 
+def test_apply_settings_preset_com_exclude_nao_grava_a_chave(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+
+    result = apply_settings_preset('cpu_rapido', settings=settings, exclude=('embedding_model',))
+    payload = json.loads(user_settings_path_for(settings).read_text(encoding='utf-8'))
+
+    assert 'embedding_model' not in payload
+    assert 'embedding_model' not in result.values
+    assert 'embedding_model' not in result.changes
+    assert payload['retrieval_top_k'] == 4
+
+
 def test_invalid_preset_fails_before_writing(tmp_path: Path, monkeypatch) -> None:
     settings = _settings(tmp_path)
     broken = SettingPreset(

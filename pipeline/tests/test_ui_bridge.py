@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 import tempfile
 import threading
@@ -6,7 +7,7 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from escolio.app.config import Settings
+from escolio.app.config import Settings, user_settings_path_for
 from escolio.app.doctor_models import DoctorCheck, DoctorReport
 from escolio.providers.answer import AnswerProviderTestResult
 from escolio.providers.model_discovery import ModelDiscoveryResult, ModelInfo
@@ -267,6 +268,11 @@ def test_desktop_api_exposes_watcher_methods(monkeypatch, tmp_path: Path) -> Non
 
 def test_desktop_api_exposes_settings_catalog(monkeypatch) -> None:
     module = _load_ui_main(monkeypatch)
+    # getBackendSettings roda o doctor, que consultaria o provider configurado no user_settings real.
+    monkeypatch.setattr(
+        "escolio.app.doctor.list_answer_models",
+        lambda settings, **_: SimpleNamespace(status="not_applicable", models=[], message=None),
+    )
 
     result = module.Api().getBackendSettings()
 
@@ -277,6 +283,19 @@ def test_desktop_api_exposes_settings_catalog(monkeypatch) -> None:
         "default_chunk_overlap",
         "answer_api_key",
     } <= keys
+
+
+def test_desktop_api_get_backend_settings_sem_doctor_nao_roda_o_doctor(monkeypatch, tmp_path: Path) -> None:
+    module = _load_ui_main(monkeypatch)
+    api = module.Api()
+    monkeypatch.setattr(module, "get_settings", lambda: _settings_do_provider(tmp_path, "extractive"))
+    chamadas: list[str] = []
+    monkeypatch.setattr(module, "run_doctor", lambda **_: chamadas.append("doctor"))
+
+    result = api.getBackendSettings(doctor=False)
+
+    assert chamadas == []
+    assert result["doctor"] is None
 
 
 def test_desktop_api_exposes_doctor_report(monkeypatch) -> None:
@@ -341,7 +360,7 @@ def test_desktop_api_applies_settings_preset_and_clears_runtime(monkeypatch) -> 
         values = {"embedding_model": "chroma-default", "embedding_device": "cpu"}
         changes = {}
 
-    def fake_apply_settings_preset(name: str):
+    def fake_apply_settings_preset(name: str, **kwargs):
         calls.append(name)
         return FakeResult()
 
@@ -362,6 +381,22 @@ def test_desktop_api_applies_settings_preset_and_clears_runtime(monkeypatch) -> 
     assert result["ok"] is True
     assert result["preset"]["key"] == "cpu_rapido"
     assert result["values"]["embedding_model"] == "chroma-default"
+
+
+def test_desktop_api_aplicar_preset_nao_grava_embedding_model(monkeypatch, tmp_path: Path) -> None:
+    module = _load_ui_main(monkeypatch)
+    settings = _settings_do_provider(tmp_path, "extractive")
+    aplicar = module.apply_settings_preset
+    monkeypatch.setattr(
+        module, "apply_settings_preset", lambda name, **kwargs: aplicar(name, settings=settings, **kwargs)
+    )
+
+    result = module.Api().applySettingsPreset("cpu_rapido")
+
+    payload = json.loads(user_settings_path_for(settings).read_text(encoding="utf-8"))
+    assert "embedding_model" not in payload
+    assert "embedding_model" not in result["values"]
+    assert payload["retrieval_top_k"] == 4
 
 
 def test_desktop_api_tests_answer_provider(monkeypatch) -> None:
@@ -759,6 +794,29 @@ def test_desktop_api_poll_ask_id_desconhecido_devolve_erro(monkeypatch) -> None:
         "result": None,
         "error": "Pergunta não encontrada.",
     }
+
+
+def test_desktop_api_cancel_ask_descarta_a_pergunta(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+    liberar = threading.Event()
+
+    def fake_ask(question, strategy, runtime, source_root=None, on_answer_delta=None):
+        liberar.wait(5)
+        return _ask_response("Tarde demais.")
+
+    monkeypatch.setattr(module, "ask_corpus", fake_ask)
+    api = module.Api()
+    ask_id = api.startAsk("Pergunta?", "lexical")["ask_id"]
+
+    assert api.cancelAsk(ask_id) == {"ok": True}
+    assert api.pollAsk(ask_id)["error"] == "Pergunta não encontrada."
+    liberar.set()
+
+
+def test_desktop_api_cancel_ask_id_desconhecido_nao_falha(monkeypatch) -> None:
+    module = _load_ui_main(monkeypatch)
+
+    assert module.Api().cancelAsk("nao-existe") == {"ok": True}
 
 
 def test_desktop_api_start_ask_falha_vira_stage_error(monkeypatch) -> None:

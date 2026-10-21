@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from escolio.corpus.cancellation import CancellationToken
 from escolio.corpus.models import CorpusIndexBatchResult, CorpusIndexProgress
 from escolio.corpus.runtime import CorpusRuntime
+from escolio.ingest.validators import SUPPORTED_EXTENSIONS
 
 IndexJobStatus = str
 
@@ -120,7 +121,7 @@ class IndexJobManager:
             if self._active_job_id is not None:
                 active = self._jobs.get(self._active_job_id)
                 if active and active.thread and active.thread.is_alive():
-                    raise IndexJobAlreadyRunningError(f'Ja existe job ativo: {self._active_job_id}')
+                    raise IndexJobAlreadyRunningError(f'Já existe job ativo: {self._active_job_id}')
                 self._active_job_id = None
 
             job_id = f'idx-{uuid4().hex[:12]}'
@@ -143,14 +144,14 @@ class IndexJobManager:
         with self._lock:
             state = self._jobs.get(job_id)
             if state is None:
-                raise KeyError(f'Job nao encontrado: {job_id}')
+                raise KeyError(f'Job não encontrado: {job_id}')
             return state.snapshot.model_copy(deep=True)
 
     def cancel(self, job_id: str) -> IndexJobSnapshot:
         with self._lock:
             state = self._jobs.get(job_id)
             if state is None:
-                raise KeyError(f'Job nao encontrado: {job_id}')
+                raise KeyError(f'Job não encontrado: {job_id}')
             state.cancel_token.cancel()
             state.snapshot.cancel_requested = True
             state.snapshot.message = 'Cancelamento solicitado.'
@@ -180,6 +181,9 @@ class IndexJobManager:
                 )
             status = result.status
             message = 'Indexação finalizada.'
+            if status == 'success' and result.total_found == 0:
+                extensions = ', '.join(sorted(SUPPORTED_EXTENSIONS))
+                message = f'Nenhum arquivo suportado nesta pasta. Extensões aceitas: {extensions}.'
             error_code = None
         except Exception as exc:
             status = 'failed'

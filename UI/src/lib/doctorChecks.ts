@@ -8,10 +8,10 @@ export interface DoctorGroup {
 
 /** Rótulos amigáveis dos códigos do Doctor. Map (e não objeto) para `constructor` não casar. */
 const CHECK_LABELS = new Map<string, string>([
-  ['settings.embedding_model', 'Modelo de embedding'],
-  ['settings.embedding_device', 'Dispositivo do embedding'],
+  ['settings.embedding_model', 'Modelo de busca semântica'],
+  ['settings.embedding_device', 'Dispositivo do modelo de busca semântica'],
   ['sqlite', 'Banco de notas (SQLite)'],
-  ['fts', 'Busca por palavras (FTS5)'],
+  ['fts', 'Busca por palavras'],
   ['chroma', 'Índice vetorial (Chroma)'],
   ['corpus', 'Corpus indexado'],
   ['answer_provider', 'Provedor de respostas'],

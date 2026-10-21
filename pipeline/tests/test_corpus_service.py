@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from escolio.app.config import Settings
 from escolio.corpus.cancellation import CancellationToken
 from escolio.corpus.service import (
@@ -7,6 +9,7 @@ from escolio.corpus.service import (
     index_corpus_file,
     index_corpus_path,
 )
+from escolio.ingest.loaders import load_document
 from escolio.notes.metadata import build_note_id
 from escolio.storage.sqlite import (
     connect_sqlite,
@@ -325,6 +328,23 @@ def test_index_corpus_file_reports_unsupported_extension(tmp_path: Path) -> None
     assert result.chunks_indexed == 0
 
 
+def test_index_corpus_file_reports_os_error_as_failed(tmp_path: Path, monkeypatch) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'trancado.md'
+    source.write_text('# Trancado\n\nConteudo.\n', encoding='utf-8')
+
+    def denied(path):
+        raise PermissionError('Acesso negado')
+
+    monkeypatch.setattr('escolio.corpus.service.load_document', denied)
+
+    result = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
+
+    assert result.status == 'failed'
+    assert result.error_code == 'PermissionError'
+    assert result.note_id is None
+
+
 def test_index_corpus_file_reports_indexing_failure_without_partial_sqlite_write(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     source = tmp_path / 'broken.md'
@@ -380,6 +400,32 @@ def test_index_corpus_path_indexes_directory_without_stopping_on_file_failure(tm
     }
     failed = [item for item in result.results if item.status == 'failed']
     assert failed[0].error_code == 'EMPTY_CONTENT'
+
+
+@pytest.mark.parametrize('workers', [1, 2])
+def test_index_corpus_path_keeps_indexing_when_one_file_is_unreadable(monkeypatch, tmp_path: Path, workers: int) -> None:
+    settings = _settings(tmp_path).model_copy(update={'corpus_index_workers': workers})
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    (root / 'a.md').write_text('# A\n\nRabbitMQ foi adotado como message broker padrao.\n', encoding='utf-8')
+    (root / 'b.md').write_text('# B\n\nO time SRE ficou responsavel pelo runbook.\n', encoding='utf-8')
+    (root / 'bloqueado.md').write_text('# Bloqueado\n\nConteudo que outro programa mantem aberto.\n', encoding='utf-8')
+
+    def load_document_locking_one_file(path: Path):
+        if path.name == 'bloqueado.md':
+            raise PermissionError(13, 'Permission denied', str(path))
+        return load_document(path)
+
+    monkeypatch.setattr('escolio.corpus.service.load_document', load_document_locking_one_file)
+
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+
+    assert result.status == 'partial'
+    assert result.indexed_count == 2
+    assert result.failed_count == 1
+    failed = [item for item in result.results if item.status == 'failed']
+    assert Path(failed[0].source_path).name == 'bloqueado.md'
+    assert failed[0].error_code == 'PermissionError'
 
 
 def test_regressao_index_corpus_file_rejects_markdown_with_only_frontmatter(tmp_path: Path) -> None:

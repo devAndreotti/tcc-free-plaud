@@ -160,7 +160,7 @@ def _unchanged_result(
         embedding_model=embedding_model,
         vector_collection_name=vector_store.collection_name,
         vector_entries_count=vector_store.count(),
-        message='Document unchanged.',
+        message='Documento sem alterações.',
     )
 
 
@@ -185,8 +185,8 @@ def _failure_result(
 
 
 def _error_code_for_exception(exc: Exception) -> str:
-    if isinstance(exc, FileNotFoundError):
-        return 'INPUT_NOT_FOUND'
+    if isinstance(exc, OSError):
+        return 'INPUT_NOT_FOUND' if isinstance(exc, FileNotFoundError) else exc.__class__.__name__
     if isinstance(exc, ValueError):
         text = str(exc)
         if text == 'EMPTY_CONTENT':
@@ -365,7 +365,7 @@ def _resolve_embedder_for_index(
         total_found=total_found,
         commit_mode_requested=commit_mode_requested,
         commit_mode_resolved=commit_mode_resolved,
-        message=f'Aquecendo embeddings: {settings.embedding_model} device={settings.embedding_device}.',
+        message=f'Aquecendo o modelo de busca semântica: {settings.embedding_model} device={settings.embedding_device}.',
     )
     warmup_started_at = perf_counter()
     resolved_embedder = get_embedder(settings.embedding_model, device=settings.embedding_device)
@@ -379,7 +379,7 @@ def _resolve_embedder_for_index(
         warmup_ms=warmup_ms,
         commit_mode_requested=commit_mode_requested,
         commit_mode_resolved=commit_mode_resolved,
-        message=f'Embeddings prontos em {warmup_ms} ms.',
+        message=f'Modelo de busca semântica pronto em {warmup_ms} ms.',
     )
     return resolved_embedder, warmup_ms
 
@@ -461,7 +461,7 @@ def _commit_pending_items(
             commit_mode_resolved=commit_mode_resolved,
             batch_index=batch_index,
             batch_total=batch_total,
-            message=f'Gerando embeddings: lote {batch_index}/{batch_total or 1}, {len(chunk_batch)} chunks.',
+            message=f'Gerando vetores de busca semântica: lote {batch_index}/{batch_total or 1}, {len(chunk_batch)} trechos.',
         )
         chunks = [chunk for _, chunk in chunk_batch]
         embedding_started_at = perf_counter()
@@ -472,7 +472,7 @@ def _commit_pending_items(
                 _failure_result(
                     item.source_path,
                     error_code='INDEXING_FAILED',
-                    message='A quantidade de embeddings precisa bater com a quantidade de chunks.',
+                    message='A quantidade de vetores precisa bater com a quantidade de trechos.',
                     vector_store=vector_store,
                     embedding_model=embedder.model_name,
                 )
@@ -886,7 +886,7 @@ def perf_benchmark_corpus(
     if repeat <= 0:
         raise ValueError('repeat precisa ser maior que zero.')
     if ask_repeat < 0:
-        raise ValueError('ask-repeat nao pode ser negativo.')
+        raise ValueError('ask-repeat não pode ser negativo.')
 
     resolved_settings = settings or get_settings()
     resolved_chunk_size = chunk_size or resolved_settings.default_chunk_size
@@ -1081,7 +1081,7 @@ def rebuild_corpus(
                 status='failed',
                 before_status=before_status,
                 error_code='INPUT_NOT_FOUND',
-                message='Path not found.',
+                message='Caminho não encontrado.',
             )
 
         reset_result = reset_corpus(
@@ -1151,7 +1151,7 @@ def _load_structure_chunk_corpus_file(
             note=note,
             chunks=index_note(note, chunk_size=chunk_size, overlap=overlap),
         )
-    except (FileNotFoundError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         return _PreparationFailure(
             source_path=path,
             error_code=_error_code_for_exception(exc),
@@ -1307,7 +1307,7 @@ def index_corpus_file(
         chunks = index_note(note, chunk_size=resolved_chunk_size, overlap=resolved_overlap)
         embeddings = resolved_embedder.embed([chunk.chunk_text for chunk in chunks])
         if len(embeddings) != len(chunks):
-            raise ValueError('A quantidade de embeddings precisa bater com a quantidade de chunks.')
+            raise ValueError('A quantidade de vetores precisa bater com a quantidade de trechos.')
 
         _delete_superseded_source_notes(resolved_connection, resolved_vector_store, note)
         resolved_vector_store.delete_by_note_id(note.note_id)
@@ -1325,7 +1325,7 @@ def index_corpus_file(
             vector_entries_count=resolved_vector_store.count(),
             message='Nota indexada.',
         )
-    except (FileNotFoundError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         return _failure_result(
             source_path,
             error_code=_error_code_for_exception(exc),
@@ -1394,7 +1394,7 @@ def index_corpus_path(
                     total_found=1,
                     commit_mode_requested=commit_mode_requested,
                     commit_mode_resolved=commit_mode_resolved,
-                    message='Indexacao cancelada.',
+                    message='Indexação cancelada.',
                 )
                 return _cancelled_batch_result(
                     source_path,
@@ -1437,7 +1437,7 @@ def index_corpus_path(
                 warmup_ms=warmup_ms,
                 commit_mode_requested=commit_mode_requested,
                 commit_mode_resolved=commit_mode_resolved,
-                message=f'Estruturando e embedando {source_path.name}',
+                message=f'Estruturando e indexando {source_path.name}',
             )
             result = index_corpus_file(
                 source_path,
@@ -1484,7 +1484,7 @@ def index_corpus_path(
                 commit_mode_resolved=commit_mode_resolved,
                 batch_index=1,
                 batch_total=1,
-                message='Indexacao concluida.',
+                message='Indexação concluída.',
             )
             return CorpusIndexBatchResult(
                 source_path=str(source_path),
@@ -1519,7 +1519,7 @@ def index_corpus_path(
                 skipped_count=len(discovery.skipped),
                 commit_mode_requested=commit_mode_requested,
                 commit_mode_resolved=commit_mode_resolved,
-                message='Pasta nao encontrada.',
+                message='Pasta não encontrada.',
             )
             return CorpusIndexBatchResult(
                 source_path=str(source_path),
@@ -1602,7 +1602,7 @@ def index_corpus_path(
                 commit_mode_requested=commit_mode_requested,
                 commit_mode_resolved=commit_mode_resolved,
                 batch_total=batch_total,
-                message='Indexacao concluida sem arquivos suportados.',
+                message='Indexação concluída sem arquivos suportados.',
             )
             return CorpusIndexBatchResult(
                 source_path=str(source_path),
@@ -1791,7 +1791,7 @@ def index_corpus_path(
                             commit_mode_requested=commit_mode_requested,
                             commit_mode_resolved=commit_mode_resolved,
                             batch_total=batch_total,
-                            message='Indexacao cancelada.',
+                            message='Indexação cancelada.',
                         )
                         return _cancelled_batch_result(
                             source_path,
@@ -1827,7 +1827,7 @@ def index_corpus_path(
                         commit_mode_resolved=commit_mode_resolved,
                         batch_index=batch_index,
                         batch_total=batch_total,
-                        message='Indexacao cancelada.',
+                        message='Indexação cancelada.',
                     )
                     return _cancelled_batch_result(
                         source_path,
@@ -1879,7 +1879,7 @@ def index_corpus_path(
                         commit_mode_resolved=commit_mode_resolved,
                         batch_index=batch_index,
                         batch_total=batch_total,
-                        message='Indexacao cancelada.',
+                        message='Indexação cancelada.',
                     )
                     return _cancelled_batch_result(
                         source_path,
@@ -1940,7 +1940,7 @@ def index_corpus_path(
                         commit_mode_resolved=commit_mode_resolved,
                         batch_index=batch_index,
                         batch_total=batch_total,
-                        message='Indexacao cancelada.',
+                        message='Indexação cancelada.',
                     )
                     return _cancelled_batch_result(
                         source_path,
@@ -1975,7 +1975,7 @@ def index_corpus_path(
                 commit_mode_resolved=commit_mode_resolved,
                 batch_index=batch_index,
                 batch_total=batch_total,
-                message='Indexacao cancelada antes da gravacao.',
+                message='Indexação cancelada antes da gravação.',
             )
             return _cancelled_batch_result(
                 source_path,
@@ -2015,7 +2015,7 @@ def index_corpus_path(
             commit_mode_resolved=commit_mode_resolved,
             batch_index=batch_index,
             batch_total=max(batch_total, batch_index),
-            message='Indexacao concluida.',
+            message='Indexação concluída.',
         )
         return CorpusIndexBatchResult(
             source_path=str(source_path),

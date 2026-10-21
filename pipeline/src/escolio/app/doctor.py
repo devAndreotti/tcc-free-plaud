@@ -8,6 +8,7 @@ from escolio.app.doctor_corpus import safe_corpus_checks
 from escolio.app.doctor_models import DoctorCheck, DoctorReport, DoctorStatus
 from escolio.app.local_env import answer_api_key_is_configured
 from escolio.providers import embed as embed_provider
+from escolio.providers.model_discovery import list_answer_models
 from escolio.storage.sqlite import init_sqlite
 from escolio.storage.vector import LocalVectorStore
 
@@ -66,7 +67,7 @@ def _embedding_model_check(settings: Settings) -> DoctorCheck:
     return DoctorCheck(
         code=EMBEDDING_MODEL_CHECK,
         status="ok",
-        message=f"Modelo de embedding válido: {diagnostics.model_name}.",
+        message=f"Modelo de busca semântica válido: {diagnostics.model_name}.",
         details={"model_name": diagnostics.model_name},
     )
 
@@ -92,7 +93,7 @@ def _embedding_device_check(settings: Settings) -> DoctorCheck:
         return DoctorCheck(
             code=EMBEDDING_DEVICE_CHECK,
             status="warning",
-            message="Device não foi avaliado porque o modelo de embedding não é suportado.",
+            message="Device não foi avaliado porque o modelo de busca semântica não é suportado.",
             action="Corrija embedding_model primeiro.",
             details={"requested_device": settings.embedding_device},
         )
@@ -164,26 +165,55 @@ def _answer_provider_check(settings: Settings) -> DoctorCheck:
         return DoctorCheck(
             code="answer_provider",
             status="ok",
-            message="Provider extractive ativo; não usa LLM externa.",
+            message="Provedor de resposta extractive ativo; não usa LLM externa.",
             details={"answer_provider": settings.answer_provider},
         )
     if not settings.answer_model.strip():
         return DoctorCheck(
             code="answer_provider",
             status="warning",
-            message="Provider generativo sem modelo configurado.",
+            message="Provedor de resposta generativo sem modelo configurado.",
             action="Configure answer_model nas settings.",
             details={"answer_provider": settings.answer_provider},
+        )
+    details = {
+        "answer_provider": settings.answer_provider,
+        "answer_model": settings.answer_model,
+        "answer_base_url": settings.answer_base_url or "default",
+    }
+    discovery = list_answer_models(settings)
+    if discovery.status == "not_applicable":
+        return DoctorCheck(
+            code="answer_provider",
+            status="warning",
+            message="Teste do provedor de resposta generativo não se aplica.",
+            details=details,
+        )
+    if discovery.status != "ok":
+        return DoctorCheck(
+            code="answer_provider",
+            status="error",
+            message=f"Provedor de resposta generativo indisponível: {discovery.message or discovery.status}.",
+            action="Inicie o provedor de resposta ou confira base_url e API key nas settings.",
+            details=details,
+        )
+    model = settings.answer_model.strip()
+    installed = {item.id for item in discovery.models}
+    if model not in installed and f"{model}:latest" not in installed:
+        return DoctorCheck(
+            code="answer_provider",
+            status="warning",
+            message=f"Modelo {model} não aparece na lista do provedor de resposta.",
+            action=f"Baixe o modelo com: ollama pull {model}"
+            if settings.answer_provider == "ollama"
+            else "Confira o nome do modelo ou baixe-o no provedor de resposta.",
+            details=details,
         )
     return DoctorCheck(
         code="answer_provider",
         status="ok",
-        message=f"Provider generativo configurado: {settings.answer_provider}.",
-        details={
-            "answer_provider": settings.answer_provider,
-            "answer_model": settings.answer_model,
-            "answer_base_url": settings.answer_base_url or "default",
-        },
+        message=f"Provedor de resposta generativo respondeu e listou o modelo: {settings.answer_provider}.",
+        details=details,
     )
 
 
@@ -195,20 +225,20 @@ def _api_key_check(settings: Settings) -> DoctorCheck:
         return DoctorCheck(
             code="api_key",
             status="ok",
-            message=f"Provider {settings.answer_provider} não exige API key.",
+            message=f"Provedor de resposta {settings.answer_provider} não exige API key.",
             details={"configured": configured, "required": False},
         )
     if configured:
         return DoctorCheck(
             code="api_key",
             status="ok",
-            message="API key configurada para provider remoto.",
+            message="API key configurada para provedor de resposta remoto.",
             details={"configured": True, "required": True},
         )
     return DoctorCheck(
         code="api_key",
         status="warning",
-        message="Provider remoto sem API key configurada.",
+        message="Provedor de resposta remoto sem API key configurada.",
         action="Configure ESCOLIO_ANSWER_API_KEY no .env local.",
         details={"configured": False, "required": True},
     )

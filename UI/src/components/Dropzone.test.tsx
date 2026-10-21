@@ -58,7 +58,7 @@ describe('Dropzone', () => {
 
     await waitFor(() => expect(screen.getByText('indexado')).toBeTruthy());
     expect(onToast).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'success', message: 'nota.md entrou no corpus (4 chunks).' })
+      expect.objectContaining({ status: 'success', message: 'nota.md entrou no corpus (4 trechos).' })
     );
   });
 
@@ -124,7 +124,7 @@ describe('Dropzone', () => {
 
     await waitFor(() => {
       expect(onToast).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'success', message: 'nota.md entrou no corpus (2 chunks).' })
+        expect.objectContaining({ status: 'success', message: 'nota.md entrou no corpus (2 trechos).' })
       );
     });
   });

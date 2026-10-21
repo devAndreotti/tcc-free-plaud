@@ -20,7 +20,7 @@ const isActiveJob = (snapshot: IndexJobSnapshot | null) => snapshot?.status === 
 const STEPS = [
   { label: 'Descoberta', phases: ['discovering'] },
   { label: 'Leitura', phases: ['loading', 'structuring'] },
-  { label: 'Embedding', phases: ['warmup', 'embedding'] },
+  { label: 'Modelo de busca semântica', phases: ['warmup', 'embedding'] },
   { label: 'Gravação', phases: ['writing'] },
   { label: 'Commit', phases: ['committed'] },
 ];
@@ -76,7 +76,7 @@ const JobCard = ({ job, onCancel, busy, onOpenSettings, onIgnoredChanged }: {
   const timing = progress
     ? [
         { label: 'warmup', ms: progress.warmup_ms, color: 'var(--text-muted)' },
-        { label: 'embedding', ms: progress.embedding_ms, color: 'var(--accent-blue)' },
+        { label: 'modelo de busca semântica', ms: progress.embedding_ms, color: 'var(--accent-blue)' },
         { label: 'gravação', ms: progress.writing_ms, color: 'color-mix(in srgb, var(--accent-blue) 55%, var(--text-muted))' },
       ].filter((t) => t.ms > 0)
     : [];
@@ -108,7 +108,7 @@ const JobCard = ({ job, onCancel, busy, onOpenSettings, onIgnoredChanged }: {
             <li key={step.label} className={`job__step job__step--${state}`} aria-current={state === 'active' ? 'step' : undefined}>
               <span className="job__step-dot" aria-hidden="true" />
               <b>{step.label}</b>
-              {state === 'active' && step.label === 'Embedding' && progress && progress.batch_total > 0 && (
+              {state === 'active' && step.label === 'Modelo de busca semântica' && progress && progress.batch_total > 0 && (
                 <span className="mono">lote {progress.batch_index} de {progress.batch_total}</span>
               )}
               {state === 'done' && i === 0 && total > 0 && <span className="mono">{total} arquivos</span>}
@@ -160,7 +160,7 @@ const JobCard = ({ job, onCancel, busy, onOpenSettings, onIgnoredChanged }: {
           <dd className="mono">{num(job.files_per_second)}</dd>
         </div>
         <div>
-          <dt>Chunks por segundo</dt>
+          <dt>Trechos por segundo</dt>
           <dd className="mono">{num(job.chunks_per_second)}</dd>
         </div>
         <div>
@@ -311,13 +311,20 @@ const CorpusRootsPanel = ({ roots, disabled, onReindex, onRemoved }: CorpusRoots
                 </button>
               </div>
               {removing === root.root && (
-                <div className="queue__root-confirm" role="alertdialog" aria-label={`Remover ${basename(root.root)} do corpus`}>
+                <div
+                  className="queue__root-confirm"
+                  role="alertdialog"
+                  aria-label={`Remover ${basename(root.root)} do corpus`}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape' && !busy) cancelRemove();
+                  }}
+                >
                   <p>
                     Remove as {notesLabel(root.notes_count)} desta pasta do SQLite e do Chroma. Os arquivos no disco não são apagados.
                   </p>
                   <label>
                     <span>Digite REMOVER para confirmar</span>
-                    <input value={typed} onChange={(event) => setTyped(event.target.value)} className="mono" autoComplete="off" disabled={busy} />
+                    <input value={typed} onChange={(event) => setTyped(event.target.value)} className="mono" autoComplete="off" disabled={busy} autoFocus />
                   </label>
                   <div className="nd__confirm-actions">
                     <button type="button" className="btn btn--sm btn--ghost" onClick={cancelRemove} disabled={busy}>

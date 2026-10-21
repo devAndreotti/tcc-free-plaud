@@ -42,7 +42,12 @@ def discover_corpus_files(directory: Path | str, *, recursive: bool = False) -> 
     pending = [root]
     while pending:
         current = pending.pop(0)
-        for child in sorted(current.iterdir(), key=lambda item: str(item).lower()):
+        try:
+            children = sorted(current.iterdir(), key=lambda item: str(item).lower())
+        except OSError:
+            skipped.append(_skip(current, 'unreadable_directory'))
+            continue
+        for child in children:
             if child.is_dir():
                 if _is_ignored_dir(child):
                     skipped.append(_skip(child, 'ignored_directory'))

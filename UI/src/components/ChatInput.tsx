@@ -6,7 +6,7 @@ import {
   type KeyboardEvent,
   type ChangeEvent,
 } from 'react';
-import { PaperclipIcon, MicIcon, SendIcon, FileIcon, XIcon, LoaderIcon, ChevronDownIcon, CheckIcon } from './Icons';
+import { MicIcon, SendIcon, StopIcon, LoaderIcon, ChevronDownIcon, CheckIcon } from './Icons';
 import { bridge, type AudioJobSnapshot, type BackendSettings, type CorpusRoot, type Vault } from '../services/bridge';
 import { VaultGlyph } from './VaultGlyph';
 import { vaultMeta } from '../lib/vaultVisuals';
@@ -15,6 +15,15 @@ import { AnswerPicker } from './AnswerPicker';
 
 const isAudioJobDone = (snapshot: AudioJobSnapshot) =>
   snapshot.status === 'completed' || snapshot.status === 'failed' || snapshot.status === 'cancelled';
+
+// Cancela a captura no backend: a gravação para e o áudio não vai à transcrição.
+const discardCapture = async (jobId: string) => {
+  try {
+    await bridge.cancelAudioCapture(jobId);
+  } catch (error) {
+    console.error('[ChatInput] Não foi possível cancelar a gravação:', error);
+  }
+};
 
 /**
  * Traduz uma falha de transcrição em mensagem acionável. Quando o modelo de
@@ -36,7 +45,12 @@ const HINT_AI = 'A IA escreve a resposta a partir dos trechos e marca as fontes.
 
 // Props do componente de input de chat
 interface ChatInputProps {
-  onSendMessage: (text: string, attachment?: File) => void;
+  /** Texto do campo: a tela guarda o rascunho de cada aba. */
+  value: string;
+  onChange: (text: string) => void;
+  onSendMessage: (text: string) => void;
+  /** Com a resposta em andamento, o botão de envio vira "Parar" e chama onStop. */
+  onStop?: () => void;
   /** Campo de mensagem ganhou foco (a tela aquece o modelo de resposta). */
   onFocus?: () => void;
   isLoading?: boolean;
@@ -76,7 +90,6 @@ const VaultPicker = ({
       <button
         type="button"
         className="strategy__chip composer__vault"
-        aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Vault da pergunta: ${value.name}. Trocar vault`}
         onClick={() => setOpen((prev) => !prev)}
@@ -86,13 +99,12 @@ const VaultPicker = ({
         <ChevronDownIcon size={13} />
       </button>
       {open && (
-        <div className="strategy__menu" role="menu" aria-label="Vault da pergunta">
+        <div className="strategy__menu" role="group" aria-label="Vault da pergunta">
           {vaults.map((vault) => (
             <button
               key={vault.id}
               type="button"
-              role="menuitemradio"
-              aria-checked={vault.id === value.id}
+              aria-pressed={vault.id === value.id}
               className="strategy__item"
               onClick={() => {
                 setOpen(false);
@@ -136,7 +148,6 @@ const SourcePicker = ({
       <button
         type="button"
         className="strategy__chip"
-        aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Pasta de origem: ${currentLabel}`}
         title={current?.root ?? 'Perguntar em todas as pastas indexadas'}
@@ -146,11 +157,10 @@ const SourcePicker = ({
         <ChevronDownIcon size={13} />
       </button>
       {open && (
-        <div className="strategy__menu" role="menu" aria-label="Pasta de origem">
+        <div className="strategy__menu" role="group" aria-label="Pasta de origem">
           <button
             type="button"
-            role="menuitemradio"
-            aria-checked={value === null}
+            aria-pressed={value === null}
             className="strategy__item"
             onClick={() => {
               onChange(null);
@@ -167,8 +177,7 @@ const SourcePicker = ({
             <button
               key={root.root}
               type="button"
-              role="menuitemradio"
-              aria-checked={root.root === value}
+              aria-pressed={root.root === value}
               className="strategy__item"
               title={root.root}
               onClick={() => {
@@ -190,7 +199,10 @@ const SourcePicker = ({
 };
 
 const ChatInput = ({
+  value,
+  onChange,
   onSendMessage,
+  onStop,
   onFocus,
   isLoading = false,
   answerProvider,
@@ -203,17 +215,26 @@ const ChatInput = ({
   vaults = [],
   onVaultChange,
 }: ChatInputProps) => {
-  const [text, setText] = useState('');
-  const [attachment, setAttachment] = useState<File | null>(null);
   const [micStatus, setMicStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
   const [micError, setMicError] = useState('');
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const audioJobIdRef = useRef<string | null>(null);
   const pollIntervalRef = useRef<number | null>(null);
   const recordingIntervalRef = useRef<number | null>(null);
+  // Campo atual: a transcrição chega depois da gravação e soma ao que estiver no campo naquele momento.
+  const fieldRef = useRef({ value, onChange });
+  useEffect(() => {
+    fieldRef.current = { value, onChange };
+  }, [value, onChange]);
+
+  // A resposta desabilita o campo; quando ela termina, o foco volta para ele.
+  const wasLoadingRef = useRef(isLoading);
+  useEffect(() => {
+    if (wasLoadingRef.current && !isLoading) textareaRef.current?.focus();
+    wasLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   // Contador de tempo decorrido, visível ao lado do mic enquanto grava
   useEffect(() => {
@@ -242,15 +263,24 @@ const ChatInput = ({
     }
   }, []);
 
-  // Garante que nenhum polling fica orfao se o componente desmontar em gravacao
-  useEffect(() => stopPolling, [stopPolling]);
+  // Sair do chat no meio de uma gravação: para o polling e cancela a captura em andamento.
+  const unmountedRef = useRef(false);
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      stopPolling();
+      if (audioJobIdRef.current) void discardCapture(audioJobIdRef.current);
+    };
+  }, [stopPolling]);
 
   const finishAudioJob = useCallback((snapshot: AudioJobSnapshot) => {
     stopPolling();
     audioJobIdRef.current = null;
     setMicStatus('idle');
     if (snapshot.status === 'completed' && snapshot.result?.text) {
-      setText((prev) => (prev.trim() ? `${prev.trim()} ${snapshot.result!.text}` : snapshot.result!.text));
+      const field = fieldRef.current;
+      field.onChange(field.value.trim() ? `${field.value.trim()} ${snapshot.result!.text}` : snapshot.result!.text);
       setMicError('');
     } else if (snapshot.status === 'completed') {
       setMicError('Nenhuma fala detectada no áudio. Confira o microfone em Configurações → Voz.');
@@ -269,13 +299,13 @@ const ChatInput = ({
 
   // Atualiza texto e ajusta altura
   const handleTextChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
+    onChange(e.target.value);
     adjustTextareaHeight();
   };
 
-  // Envia mensagem ao pressionar Enter (sem Shift)
+  // Envia mensagem ao pressionar Enter (sem Shift); durante a composição de um acento, o Enter só confirma a letra
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
@@ -283,13 +313,14 @@ const ChatInput = ({
 
   // Lógica de envio da mensagem
   const handleSend = () => {
-    const trimmed = text.trim();
-    if (!trimmed && !attachment) return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
     if (isLoading) return;
+    // Com a gravação em andamento (ou transcrevendo), o envio espera: o texto ainda pode mudar
+    if (micStatus !== 'idle') return;
 
-    onSendMessage(trimmed, attachment ?? undefined);
-    setText('');
-    setAttachment(null);
+    onSendMessage(trimmed);
+    onChange('');
 
     // Reseta altura do textarea
     if (textareaRef.current) {
@@ -297,29 +328,16 @@ const ChatInput = ({
     }
   };
 
-  // Abre diálogo de seleção de arquivo
-  const handleAttachClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  // Armazena arquivo selecionado
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) setAttachment(file);
-    // Limpa o input para permitir selecionar o mesmo arquivo novamente
-    e.target.value = '';
-  };
-
-  // Remove o arquivo anexado
-  const handleRemoveAttachment = () => {
-    setAttachment(null);
-  };
-
   // Inicia gravação do microfone padrão do sistema via backend Python
   const handleStartRecording = async () => {
     setMicError('');
     try {
       const job = await bridge.startAudioCapture();
+      // Saiu do chat enquanto a captura abria: cancela, para o microfone não ficar ligado sem tela.
+      if (unmountedRef.current) {
+        void discardCapture(job.job_id);
+        return;
+      }
       audioJobIdRef.current = job.job_id;
       setRecordingSeconds(0);
       setMicStatus('recording');
@@ -376,7 +394,8 @@ const ChatInput = ({
   const formatRecordingTime = (totalSeconds: number) =>
     `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
 
-  const canSend = (text.trim().length > 0 || attachment !== null) && !isLoading;
+  const canSend = value.trim().length > 0 && !isLoading && micStatus === 'idle';
+  const showStop = isLoading && Boolean(onStop);
 
   return (
     <section className="input-area" aria-label="Área de entrada de mensagem">
@@ -385,65 +404,23 @@ const ChatInput = ({
         role="form"
         aria-label="Formulário de chat"
       >
-        {/* Input oculto para seleção de arquivo */}
-        <input
-          ref={fileInputRef}
-          id="file-input"
-          type="file"
-          aria-label="Selecionar arquivo para anexar"
-          style={{ display: 'none' }}
-          onChange={handleFileChange}
-          accept="*/*"
-        />
-
-        {/* Preview do arquivo anexado */}
-        {attachment && (
-          <div className="attachment-preview" aria-label={`Arquivo anexado: ${attachment.name}`}>
-            <div className="attachment-preview__icon" aria-hidden="true">
-              <FileIcon size={14} />
-            </div>
-            <span className="attachment-preview__name" title={attachment.name}>
-              {attachment.name}
-            </span>
-            <button
-              type="button"
-              className="attachment-preview__remove"
-              aria-label="Remover arquivo anexado"
-              onClick={handleRemoveAttachment}
-            >
-              <XIcon size={12} />
-            </button>
-          </div>
-        )}
-
         <textarea
           ref={textareaRef}
           id="chat-textarea"
           className="chat-input"
           placeholder={vault ? `Pergunte à vault ${vault.name}…` : 'Pergunte ao seu vault…'}
-          value={text}
+          value={value}
           onChange={handleTextChange}
           onKeyDown={handleKeyDown}
           onFocus={onFocus}
           rows={2}
+          autoComplete="off"
           aria-label="Campo de mensagem"
           aria-multiline="true"
           disabled={isLoading}
         />
 
         <div className="composer__row">
-          <button
-            id="btn-attach"
-            type="button"
-            className="composer__icon"
-            aria-label="Anexar arquivo"
-            title="Anexar arquivo"
-            onClick={handleAttachClick}
-            disabled={isLoading}
-          >
-            <PaperclipIcon size={17} />
-          </button>
-
           {vault && onVaultChange && <VaultPicker vaults={vaults.length ? vaults : [vault]} value={vault} onChange={onVaultChange} />}
           {answerProvider && onAnswerSaved && <AnswerPicker provider={answerProvider} model={answerModel} onSaved={onAnswerSaved} />}
           {onSourceRootChange && corpusRoots.length >= 2 && (
@@ -476,12 +453,12 @@ const ChatInput = ({
             id="btn-send"
             type="button"
             className="btn-send"
-            aria-label="Enviar mensagem"
-            title="Enviar (Enter)"
-            onClick={handleSend}
-            disabled={!canSend}
+            aria-label={showStop ? 'Parar resposta' : 'Enviar mensagem'}
+            title={showStop ? 'Parar resposta' : 'Enviar (Enter)'}
+            onClick={showStop ? onStop : handleSend}
+            disabled={!showStop && !canSend}
           >
-            <SendIcon size={15} />
+            {showStop ? <StopIcon size={15} /> : <SendIcon size={15} />}
           </button>
         </div>
       </div>
