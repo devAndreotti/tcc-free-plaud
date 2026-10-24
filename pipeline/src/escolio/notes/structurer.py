@@ -9,6 +9,7 @@ from escolio.notes.metadata import build_note_id
 from escolio.notes.normalizer import normalize_text, repair_ocr_summary_text
 from escolio.notes.readable import strip_frontmatter
 from escolio.notes.schemas import Note
+from escolio.retrieval.chunking import build_segment_text
 
 GENERIC_TITLE_TERMS = {
     "todo",
@@ -506,11 +507,15 @@ def structure_document(
     Este comportamento é determinístico e serve como placeholder para a futura
     etapa de estruturação assistida por LLM.
     """
-    normalized_text = normalize_text(
-        document.cleaned_text
-        if document.cleaned_text is not None
-        else document.raw_text
-    )
+    # Áudio com segmentos usa o texto canônico dos segmentos, para os offsets do chunking por fala baterem.
+    if document.segments:
+        normalized_text = build_segment_text(document.segments)
+    else:
+        normalized_text = normalize_text(
+            document.cleaned_text
+            if document.cleaned_text is not None
+            else document.raw_text
+        )
     body_text, has_frontmatter = strip_frontmatter(normalized_text)
     lines = body_text.splitlines()
     fallback_title = _humanize_fallback_title(document.source_path.stem)
@@ -530,6 +535,7 @@ def structure_document(
         normalized_text=normalized_text,
         structured_markdown="",
         content_hash=sha256(normalized_text.encode("utf-8")).hexdigest(),
+        segments=list(document.segments) if document.segments else None,
     )
     note.structured_markdown = render_note_markdown(note)
     return note

@@ -22,6 +22,7 @@ USER_SETTINGS_FILENAME = "user_settings.json"
 USER_SETTING_FIELDS = {
     "embedding_device",
     "embedding_model",
+    "rerank_model",
     "retrieval_top_k",
     "default_ask_strategy",
     "default_chunk_size",
@@ -37,6 +38,7 @@ USER_SETTING_FIELDS = {
     "answer_temperature",
     "answer_timeout_seconds",
     "answer_max_tokens",
+    "extract_structure",
     "audio_model",
     "audio_language",
     "audio_device",
@@ -125,6 +127,8 @@ class Settings(BaseSettings):
     vector_collection_name: str = Field(default=DEFAULT_CHROMA_COLLECTION)
     embedding_model: str = Field(default="chroma-default")
     embedding_device: Literal["cpu", "cuda", "auto"] = Field(default="cpu")
+    # Vazio desliga o reranking por cross-encoder (default: sem reranker).
+    rerank_model: str = Field(default="")
     answer_provider: Literal[
         "extractive", "openai-compatible", "ollama", "lmstudio"
     ] = Field(default="extractive")
@@ -134,6 +138,8 @@ class Settings(BaseSettings):
     answer_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     answer_timeout_seconds: int = Field(default=60, ge=1, le=300)
     answer_max_tokens: int | None = Field(default=None, ge=1, le=131072)
+    # Extração estruturada (decisões, ações, tópicos) via LLM; desligada por padrão.
+    extract_structure: bool = Field(default=False)
     default_ask_strategy: Literal["lexical", "vector", "hybrid"] = Field(
         default="hybrid"
     )

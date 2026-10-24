@@ -4,22 +4,20 @@ from collections.abc import Callable
 from time import perf_counter
 from typing import Literal
 
-from pydantic import BaseModel, Field
-
 from escolio.corpus.answer_context import (
     build_answer_context_items,
     citation_snippet,
     normalize_answer_markers,
+)
+from escolio.corpus.ask_validation import (  # noqa: F401 (GeneratedAnswerValidation reexportado)
+    GeneratedAnswerValidation,
+    validate_generated_answer,
 )
 from escolio.notes.schemas import Note
 from escolio.providers.answer import AnswerProvider, AnswerProviderError
 from escolio.providers.answer_quality import (
     ANSWER_MARKER_PATTERN,
     contains_token_sequence,
-    has_source_marker,
-    is_echoed_question,
-    is_echoed_title,
-    is_no_answer_sentinel,
 )
 from escolio.providers.embed import Embedder
 from escolio.retrieval.debug import build_ask_debug
@@ -43,6 +41,7 @@ from escolio.retrieval.rag import (
     _support_level,
     _trim_claim_span,
 )
+from escolio.retrieval.rerank import Reranker, rerank_hits
 from escolio.retrieval.search import (
     STOPWORDS,
     TOKEN_PATTERN,
@@ -97,39 +96,10 @@ def corpus_vocabulary_stems(connection: sqlite3.Connection) -> frozenset[str] | 
         _VOCABULARY_STEMS[key] = stems
     return stems
 TEAM_ANSWER_PATTERN = re.compile(r'\bequipe\s+(?:de|da|do|dos|das)\s+[0-9A-Za-zÀ-ÖØ-öø-ÿ_-]+')
-CONTEXT_METADATA_KEYS = ('source_path:', 'note_id:', 'chunk_id:', 'claim_extrativo:')
-# Unidade só conta quando é conhecida ("2.1 foi" é 2.1 e uma palavra). ponytail: R$ fica de fora; incluir aqui se a comparação precisar.
-GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*(?:%|(?:kb|mb|gb|tb|dias?|m[êe]s(?:es)?|anos?|horas?|minutos?|semanas?)\b))?', re.IGNORECASE)
-GENERATED_ANCHOR_PATTERN = re.compile(r'\b[A-ZÀ-Ö][A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{2,}\b')
-GENERIC_NO_ANSWER_MARKERS = (
-    'nao consegui recuperar',
-    'não consegui recuperar',
-    'nao encontrei',
-    'não encontrei',
-    'nao foi possivel encontrar',
-    'não foi possível encontrar',
-)
-GENERIC_SUGGESTION_MARKERS = ('documentacao', 'documentação', 'verificar', 'consulte', 'pesquise', 'tente')
-IGNORED_GENERATED_ANCHORS = {
-    'Nao',
-    'Não',
-    'Voce',
-    'Você',
-    'Resposta',
-    'Pergunta',
-    'Contextos',
-    'Contexto',
-}
 SHORT_ANCHOR_MAX_LENGTH = 3
 SHORT_ANCHOR_EXACT_BOOST = 1.0
 SHORT_ANCHOR_TAIL_BOOST = 0.6
 SHORT_ANCHOR_CONFLICT_PENALTY = 0.8
-
-
-class GeneratedAnswerValidation(BaseModel):
-    action: Literal['accept', 'no_answer', 'fallback_extractive']
-    reason: str | None = None
-    limitations: list[str] = Field(default_factory=list)
 
 
 def _provider_failure_limitation(exc: Exception) -> str:
@@ -148,6 +118,8 @@ def _citation_from_corpus_hit(hit: SearchHit, note_lookup: dict[str, Note], clai
         source_path=str(note.source_path) if note else None,
         char_start=chunk.char_start,
         char_end=chunk.char_end,
+        t_start=chunk.t_start,
+        t_end=chunk.t_end,
     )
 
 
@@ -218,142 +190,12 @@ def _with_source_limitations(
     return kept
 
 
-
-def _without_answer_markers(text: str) -> str:
-    return ANSWER_MARKER_PATTERN.sub('', text)
-
-
 def _drop_unknown_answer_markers(text: str, context_count: int) -> str:
     """Mantém [n] só para contextos que existem; marcador inventado some sem derrubar a resposta."""
     return ANSWER_MARKER_PATTERN.sub(
         lambda match: match.group() if 1 <= int(match.group(1)) <= context_count else '',
         text,
     )
-
-
-def _normalized_support_text(contexts: list[str], claims: list[AnswerClaim]) -> str:
-    return '\n'.join([*(context.split('trecho:\n', 1)[-1] for context in contexts), *(claim.text for claim in claims)]).casefold()
-
-
-def _unsupported_generated_numbers(answer: str, support_text: str) -> list[str]:
-    unsupported: list[str] = []
-    for raw_number in GENERATED_NUMBER_PATTERN.findall(answer):
-        normalized = ' '.join(raw_number.split()).casefold()
-        if normalized and normalized not in support_text and normalized not in unsupported:
-            unsupported.append(normalized)
-    return unsupported
-
-
-def _starts_sentence(text: str, start: int) -> bool:
-    before = text[:start].rstrip(' \t*->"“(')
-    return not before or before[-1] in '.!?:\n'
-
-
-def _unsupported_generated_anchors(answer: str, support_text: str) -> list[str]:
-    unsupported: list[str] = []
-    for match in GENERATED_ANCHOR_PATTERN.finditer(answer):
-        anchor = match.group()
-        if anchor in IGNORED_GENERATED_ANCHORS:
-            continue
-        # Maiúscula no início da frase não indica nome ("Inicialmente,"); sigla em caixa alta, sim.
-        if not anchor.isupper() and _starts_sentence(answer, match.start()):
-            continue
-        normalized = anchor.casefold()
-        if normalized and normalized not in support_text and normalized not in unsupported:
-            unsupported.append(normalized)
-    return unsupported
-
-
-def _is_generic_generated_no_answer(answer: str) -> bool:
-    lowered = answer.casefold()
-    return (len(lowered.split()) <= 12 and lowered.startswith(GENERIC_NO_ANSWER_MARKERS)) or (
-        any(marker in lowered for marker in GENERIC_NO_ANSWER_MARKERS) and any(marker in lowered for marker in GENERIC_SUGGESTION_MARKERS)
-    )
-
-
-def validate_generated_answer(
-    question: str,
-    answer: str,
-    contexts: list[str],
-    claims: list[AnswerClaim],
-) -> GeneratedAnswerValidation:
-    """Valida se resposta gerativa pode substituir a resposta extrativa."""
-    # Os [n] são só ponteiros para o contexto: número, anchor e sobreposição são checados sem eles.
-    cleaned_answer = _without_answer_markers(answer).strip()
-    # O qchat às vezes devolve só "[1]": sem os marcadores não sobra texto, e nada abaixo recusaria.
-    if not any(char.isalnum() for char in cleaned_answer):
-        return GeneratedAnswerValidation(
-            action='fallback_extractive',
-            reason='empty_generated_answer',
-            limitations=['Resposta generativa ignorada: o modelo devolveu só marcações de fonte, sem texto.'],
-        )
-    if is_no_answer_sentinel(cleaned_answer, contexts):
-        return GeneratedAnswerValidation(
-            action='no_answer',
-            reason='generated_no_answer_sentinel',
-            limitations=['A IA declarou que os contextos não sustentam resposta.'],
-        )
-    if _is_generic_generated_no_answer(cleaned_answer):
-        return GeneratedAnswerValidation(
-            action='no_answer',
-            reason='generated_generic_no_answer',
-            limitations=['A IA respondeu com uma negativa genérica em vez de uma resposta sustentada.'],
-        )
-    # Trecho vazio (nota só com frontmatter) faz modelo pequeno copiar o cabeçalho do contexto.
-    if any(key in cleaned_answer for key in CONTEXT_METADATA_KEYS):
-        return GeneratedAnswerValidation(
-            action='fallback_extractive',
-            reason='echoed_context_metadata',
-            limitations=['Resposta generativa ignorada: o modelo repetiu os metadados do contexto em vez de responder.'],
-        )
-    if is_echoed_title(cleaned_answer, contexts):
-        return GeneratedAnswerValidation(
-            action='fallback_extractive',
-            reason='echoed_title',
-            limitations=['Resposta generativa ignorada: o modelo copiou um título do contexto em vez de responder.'],
-        )
-    if is_echoed_question(question, cleaned_answer):
-        return GeneratedAnswerValidation(
-            action='fallback_extractive',
-            reason='echoed_question',
-            limitations=['Resposta generativa ignorada: o modelo repetiu a pergunta em vez de responder.'],
-        )
-
-    support_text = _normalized_support_text(contexts, claims)
-    unsupported_numbers = _unsupported_generated_numbers(cleaned_answer, support_text)
-    if unsupported_numbers:
-        return GeneratedAnswerValidation(
-            action='fallback_extractive',
-            reason='unsupported_number',
-            limitations=[f'Resposta generativa ignorada por número sem suporte: {", ".join(unsupported_numbers)}.'],
-        )
-
-    unsupported_anchors = _unsupported_generated_anchors(cleaned_answer, support_text)
-    if unsupported_anchors:
-        return GeneratedAnswerValidation(
-            action='fallback_extractive',
-            reason='unsupported_anchor',
-            limitations=[f'Resposta generativa ignorada por nome citado sem suporte: {", ".join(unsupported_anchors)}.'],
-        )
-
-    # Sobreposição com os trechos entregues ao modelo, não só com o claim extraído: em nota
-    # Markdown o claim costuma ser o título ("VLAN - [!note]") e derrubava respostas fiéis.
-    answer_terms = normalize_query_terms(cleaned_answer)
-    if len(answer_terms) >= 4:
-        _, claim_coverage = match_terms_in_text(answer_terms, support_text)
-        if claim_coverage < 0.35:
-            return GeneratedAnswerValidation(
-                action='fallback_extractive',
-                reason='low_claim_overlap',
-                limitations=['Resposta generativa ignorada por baixa sobreposição com os trechos e as frases extraídas.'],
-            )
-    if not has_source_marker(answer, len(contexts)):
-        return GeneratedAnswerValidation(
-            action='fallback_extractive', reason='no_source_marker',
-            limitations=['Resposta generativa ignorada: o modelo não citou nenhum trecho com [n].'],
-        )
-
-    return GeneratedAnswerValidation(action='accept')
 
 
 def _normalized_anchor_tokens(text: str) -> list[str]:
@@ -639,37 +481,39 @@ def retrieve_corpus_hits(
     vector_store: LocalVectorStore | None,
     embedder: Embedder | None,
     note_ids: frozenset[str] | None = None,
+    reranker: Reranker | None = None,
 ) -> tuple[list[SearchHit], int]:
     # O escopo entra na consulta (FTS: IN; Chroma: $in), então a pasta nunca fica sem candidatos por pool curto.
+    # Com reranker, o pool é maior que top_k: o cross-encoder escolhe entre mais candidatos antes do corte.
+    candidate_pool_size = max(top_k * 8, 24)
+    pool_size = candidate_pool_size if reranker is not None else top_k
     if strategy == 'lexical':
-        return fts_lexical_search_hits(connection, question, top_k=top_k, note_ids=note_ids), 0
+        lexical_hits = fts_lexical_search_hits(connection, question, top_k=pool_size, note_ids=note_ids)
+        return rerank_hits(question, lexical_hits, reranker, top_k), 0
 
     if vector_store is None or embedder is None:
         raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector e strategy=hybrid.')
 
-    candidate_pool_size = max(top_k * 8, 24)
     if strategy == 'vector':
         vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size, note_ids=note_ids)
         filtered_hits, stale_count = _filter_hits_to_persisted_chunks(vector_hits, valid_chunk_ids)
-        return filtered_hits[:top_k], stale_count
+        return rerank_hits(question, filtered_hits, reranker, top_k), stale_count
 
     if strategy == 'hybrid':
         lexical_hits = fts_lexical_search_hits(
             connection,
             question,
-            top_k=max(top_k * 3, top_k),
+            top_k=max(pool_size * 3, top_k * 3),
             note_ids=note_ids,
         )
         vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size, note_ids=note_ids)
         filtered_vector_hits, stale_count = _filter_hits_to_persisted_chunks(vector_hits, valid_chunk_ids)
-        return (
-            fuse_hits_by_rank(
-                lexical_hits,
-                filtered_vector_hits,
-                top_k=top_k,
-            ),
-            stale_count,
+        fused_hits = fuse_hits_by_rank(
+            lexical_hits,
+            filtered_vector_hits,
+            top_k=pool_size,
         )
+        return rerank_hits(question, fused_hits, reranker, top_k), stale_count
 
     raise ValueError("strategy deve ser 'lexical', 'vector' ou 'hybrid'.")
 
@@ -691,6 +535,7 @@ def answer_corpus_with_citations(
     include_debug: bool = False,
     source_root: str | None = None,
     on_answer_delta: Callable[[str], None] | None = None,
+    reranker: Reranker | None = None,
 ) -> AskResponse:
     """Responde usando todo o corpus persistido (ou só a pasta `source_root`), mantendo citacoes por chunk."""
     started_at = perf_counter()
@@ -784,6 +629,7 @@ def answer_corpus_with_citations(
         vector_store=vector_store,
         embedder=embedder,
         note_ids=note_ids,
+        reranker=reranker,
     )
     hits = _dedupe_hits(raw_hits)
     stale_limitations = (
@@ -796,7 +642,9 @@ def answer_corpus_with_citations(
         return [*limitations, *stale_limitations]
 
     note_lookup = get_notes_by_id(connection, [hit.chunk.note_id for hit in hits])
-    hits = _rerank_hits_by_short_anchor(question, hits, note_lookup)
+    # Com cross-encoder, a ordem já é do reranker: o ajuste lexical por âncora não a sobrescreve.
+    if reranker is None:
+        hits = _rerank_hits_by_short_anchor(question, hits, note_lookup)
     used_sources = _summarize_corpus_sources(hits, note_lookup)
     stage_timings.retrieval_ms = _elapsed_ms(retrieval_started_at)
 

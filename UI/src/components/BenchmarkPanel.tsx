@@ -1,14 +1,10 @@
 import { useMemo, useState } from 'react';
 import { bridge, type BenchmarkCompareResult, type BenchmarkStrategySummary } from '../services/bridge';
 import { CopyIcon, FolderIcon, RefreshIcon } from './Icons';
-
-const STRATEGY_ORDER = ['lexical', 'vector', 'hybrid'];
-
-const STRATEGY_NAME: Record<string, { label: string; lower: string; sub: string }> = {
-  lexical: { label: 'Lexical', lower: 'lexical', sub: 'busca por palavras' },
-  vector: { label: 'Vetorial', lower: 'vetorial', sub: 'modelo de busca semântica' },
-  hybrid: { label: 'Híbrida', lower: 'híbrida', sub: 'RRF' },
-};
+import { STRATEGY_ORDER, fmt2, fmt3, ms, nameOf, pct } from './benchmarkFormat';
+import BenchmarkAblation from './BenchmarkAblation';
+import BenchmarkCoverage from './BenchmarkCoverage';
+import BenchmarkFaithfulness from './BenchmarkFaithfulness';
 
 type Metric = 'mrr' | 'recall_at_3' | 'recall_at_5' | 'recall_at_10' | 'ndcg_at_10';
 const METRICS: { key: Metric; label: string }[] = [
@@ -20,11 +16,6 @@ const METRICS: { key: Metric; label: string }[] = [
 ];
 type Scope = 'corpus' | 'notes';
 
-const nameOf = (strategy: string) => STRATEGY_NAME[strategy] ?? { label: strategy, lower: strategy, sub: '' };
-const fmt3 = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-const pct = (v: number) => (v * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
-const ms = (v: number) => `${v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ms`;
-const fmt2 = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const metric = (s: BenchmarkStrategySummary, key: Metric) => s[key] ?? 0;
 const latencyOf = (s: BenchmarkStrategySummary) => s.p50_query_latency_ms ?? s.avg_query_latency_ms;
 
@@ -340,6 +331,14 @@ const BenchmarkPanel = () => {
               </section>
             </div>
 
+            {result.reranked && (
+              <BenchmarkAblation
+                baseline={corpus?.summaries ?? result.summaries}
+                baselineCi={result.baseline_ci}
+                reranked={result.reranked}
+              />
+            )}
+
             {activeScope === 'corpus' && corpus && summaries.some((s) => s.abstention) && (
               <section className="card" aria-label="Responder ou se abster">
                 <div className="card__head">
@@ -376,6 +375,15 @@ const BenchmarkPanel = () => {
                   de negativas da suite.
                 </p>
               </section>
+            )}
+
+            {(result.coverage || result.faithfulness) && (
+              <div className="bench__pair">
+                {result.coverage && <BenchmarkCoverage coverage={result.coverage} />}
+                {result.faithfulness && (
+                  <BenchmarkFaithfulness faithfulness={result.faithfulness} depth={corpus?.retrieval_depth} />
+                )}
+              </div>
             )}
 
             <section className="card" aria-label="Relatórios">

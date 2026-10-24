@@ -70,7 +70,13 @@ pipeline/
 ├── benchmark/
 │   ├── datasets.py
 │   ├── metrics.py
-│   ├── runners.py
+│   ├── runners.py          # fachada; a execução fica em run_single, run_corpus e compare
+│   ├── runner_models.py
+│   ├── query_scoring.py
+│   ├── summaries.py
+│   ├── run_single.py
+│   ├── run_corpus.py
+│   ├── compare.py
 │   └── reports.py
 ├── storage/
 │   ├── sqlite.py

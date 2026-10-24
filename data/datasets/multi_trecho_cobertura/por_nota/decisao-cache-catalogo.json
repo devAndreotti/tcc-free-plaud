@@ -1,0 +1,132 @@
+{
+  "dataset_name": "multi-trecho-cobertura-decisao-cache-catalogo",
+  "samples": [
+    {
+      "sample_id": "mt-nota-07",
+      "question": "Quanto dura o TTL da listagem do catálogo, e como o publicador deve apagar as chaves ao mudar uma categoria?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "15 minutos",
+        "SCAN"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "15 minutos",
+          "SCAN"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-08",
+      "question": "Quantas requisições podem chegar juntas quando uma chave expira, e qual meta de hit rate o cache precisa atingir?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "300 requisições",
+        "85%"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "300 requisições",
+          "85%"
+        ]
+      },
+      "expected_ref": "Stampede",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-09",
+      "question": "Qual lock evita o stampede quando uma chave expira, e em que data a decisão será revisada?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "lock:catalogo",
+        "30/11/2025"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "lock:catalogo",
+          "30/11/2025"
+        ]
+      },
+      "expected_ref": "Stampede",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-07",
+      "question": "Qual é o TTL da listagem do catálogo, e que correção a candidata fez no resgate do cupom?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "15 minutos",
+        "UPDATE condicional"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "15 minutos"
+        ],
+        "entrevista-backend-julia": [
+          "UPDATE condicional"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-08",
+      "question": "Qual meta de hit rate o cache precisa atingir, e qual garantia de entrega o time decidiu não exigir na migração para o Kafka?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "85%",
+        "exactly-once"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "85%"
+        ],
+        "ata-migracao-kafka": [
+          "exactly-once"
+        ]
+      },
+      "expected_ref": "Revisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-09",
+      "question": "Quantas requisições simultâneas o single-flight precisa conter, e qual é a validade do access token no OIDC?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "300 requisições",
+        "5 minutos"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "300 requisições"
+        ],
+        "decisao-autenticacao-oidc": [
+          "5 minutos"
+        ]
+      },
+      "expected_ref": "Stampede",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-10",
+      "question": "Quanto tempo a tela de preço pode mostrar dados defasados, e qual problema aparece com muitos arquivos pequenos?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "60 segundos",
+        "small files"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "60 segundos"
+        ],
+        "aula-particionamento-parquet": [
+          "small files"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    }
+  ]
+}

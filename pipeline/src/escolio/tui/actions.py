@@ -32,6 +32,7 @@ from escolio.notes.schemas import Note
 from escolio.providers.answer import get_answer_provider
 from escolio.providers.embed import get_embedder, validate_runtime_embedding_model
 from escolio.retrieval.models import AskResponse
+from escolio.retrieval.rerank import reranker_from_settings
 from escolio.storage.sqlite import get_all_notes, init_sqlite, list_corpus_roots
 from escolio.storage.vector import LocalVectorStore
 from escolio.tui.audio_actions import (  # noqa: F401 -- public shared facade
@@ -93,6 +94,7 @@ def ask_corpus(
             strategy=strategy,
             top_k=resolved_settings.retrieval_top_k,
             source_root=source_root, on_answer_delta=on_answer_delta,
+            reranker=reranker_from_settings(resolved_settings),
             answer_provider=get_answer_provider(
                 resolved_settings.answer_provider,
                 model=resolved_settings.answer_model,

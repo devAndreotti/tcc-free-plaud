@@ -295,6 +295,51 @@
   color: var(--text-muted);
 }
 
+/* Aviso do modo Links sem ligações: sobre o painel, sem capturar o mouse do canvas */
+.force-graph__hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 10px 12px;
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.force-graph__hint-title {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.force-graph__hint-tip {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* Texto só para leitor de tela (região aria-live do grafo): fora do fluxo, sem ocupar espaço */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Tooltip com o nome do nó hovered */
 .force-graph__tooltip {
   position: absolute;
@@ -311,6 +356,88 @@
   z-index: 20;
 }
 
+
+.force-graph__tooltip-label {
+  display: block;
+}
+
+.force-graph__tooltip-detail {
+  display: block;
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+/* Legenda das pastas de 1º nível: canto inferior esquerdo, fechada por padrão */
+.force-graph__legend {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: calc(100% - 16px);
+}
+
+.force-graph__legend-toggle {
+  padding: 3px 8px;
+  font-family: var(--font-family);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.force-graph__legend-toggle:hover,
+.force-graph__legend-toggle[aria-expanded='true'] {
+  color: var(--text-primary);
+}
+
+.force-graph__legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 50%;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  list-style: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.force-graph__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.force-graph__swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+}
+
+.force-graph__legend-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.force-graph__legend-more {
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
 
 /* ── Aba individual ──────────────────────────────────────── */
 .tab {
@@ -1469,6 +1596,292 @@
 .bench__copied {
   font-size: 11px;
   color: var(--ok);
+}
+
+/* Seções opcionais: ablação do reranker, cobertura por tipo e faithfulness */
+.bench__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px 16px;
+  padding: 14px 16px 10px;
+}
+
+.bench__head h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.bench__head-sub {
+  margin-top: 4px;
+  max-width: 70ch;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.bench__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.bench__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bench__legend i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.bench__abl-list,
+.bench__cov-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 16px 14px;
+}
+
+.bench__abl-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.bench__abl-name b {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.bench__abl-name span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.bench__abl-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bench__abl-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px;
+  gap: 10px;
+  align-items: center;
+}
+
+.bench__abl-placeholder {
+  height: 20px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px dashed var(--border-color);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.bench__track {
+  position: relative;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+}
+
+.bench__track--thin {
+  height: 14px;
+}
+
+.bench__track--faith {
+  height: 10px;
+  border-radius: 5px;
+  margin: 0 16px;
+}
+
+.bench__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+}
+
+.bench__track--faith .bench__fill {
+  border-radius: 5px;
+}
+
+.bench__fill--base {
+  background: var(--series-2);
+}
+
+.bench__fill--rr {
+  background: var(--series-3);
+}
+
+/* series-1 some no tema claro (quase branco sobre a trilha); series-2 lê nos dois temas */
+.bench__fill--one {
+  background: var(--series-2);
+}
+
+.bench__fill--union {
+  background: var(--series-3);
+}
+
+.bench__fill--ok {
+  background: var(--ok);
+}
+
+/* Traço do intervalo: escuro sobre a barra clara da linha base, e claro sobre a do reranker */
+.bench__whisker {
+  position: absolute;
+  top: 9px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.bench__whisker--base {
+  background: var(--text-primary);
+}
+
+.bench__whisker--rr {
+  background: var(--bg-primary);
+}
+
+.bench__val {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font: 13px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.bench__val--muted {
+  color: var(--text-muted);
+}
+
+.bench__cov-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bench__cov-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 14px;
+}
+
+.bench__cov-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.bench__cov-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.bench__cov-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bench__cov-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 48px;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.bench__faith-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 16px;
+}
+
+.bench__faith-big {
+  font: 600 40px/1 var(--font-family);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.bench__faith-ci {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.bench__faith-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0 16px;
+  font-size: 13px;
+}
+
+.bench__faith-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bench__faith-list dt {
+  color: var(--text-secondary);
+}
+
+.bench__faith-list dd {
+  margin: 0;
+}
+
+.bench__caption--flat {
+  padding: 0 16px;
+  border-top: 0;
+}
+
+.bench__pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.bench__pair > .card {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.bench__pair > .bench__coverage {
+  flex-grow: 3;
+  flex-basis: 480px;
+}
+
+@media (max-width: 640px) {
+  .bench__abl-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
 }
 
 @media (max-width: 1100px) {

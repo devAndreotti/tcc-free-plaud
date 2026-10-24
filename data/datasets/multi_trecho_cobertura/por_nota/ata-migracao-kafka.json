@@ -1,0 +1,113 @@
+{
+  "dataset_name": "multi-trecho-cobertura-ata-migracao-kafka",
+  "samples": [
+    {
+      "sample_id": "mt-nota-01",
+      "question": "Qual é o replication factor do tópico de pedidos e em que dia o atendimento é avisado sobre o cutover?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "replication factor 3",
+        "dia 20"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "replication factor 3",
+          "dia 20"
+        ]
+      },
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-02",
+      "question": "Qual política de acks o producer vai usar, e em que data acontece o cutover?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "acks=all",
+        "22/03/2025"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "acks=all",
+          "22/03/2025"
+        ]
+      },
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-03",
+      "question": "Qual é a chave de partição dos pedidos, e qual feature flag reativa o consumer antigo no rollback?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "pedido_id",
+        "ORDERS_LEGACY_CONSUMER"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "pedido_id",
+          "ORDERS_LEGACY_CONSUMER"
+        ]
+      },
+      "expected_ref": "Discussão sobre ordem",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-01",
+      "question": "Quantas partições terá o tópico de pedidos, e qual técnica o Heitor sugere para lidar com data skew?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "12 partições",
+        "salting"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "12 partições"
+        ],
+        "aula-particionamento-parquet": [
+          "salting"
+        ]
+      },
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-02",
+      "question": "Qual política de acks o producer do Kafka vai usar, e qual mecanismo de retry o plano do incidente de pagamentos propõe?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "acks=all",
+        "backoff exponencial"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "acks=all"
+        ],
+        "ata-incidente-pagamentos": [
+          "backoff exponencial"
+        ]
+      },
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-03",
+      "question": "Qual é a chave de partição escolhida para os pedidos, e como o cache do catálogo evita o stampede?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "pedido_id",
+        "single-flight"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "pedido_id"
+        ],
+        "decisao-cache-catalogo": [
+          "single-flight"
+        ]
+      },
+      "expected_ref": "Discussão sobre ordem",
+      "category": "inferida"
+    }
+  ]
+}

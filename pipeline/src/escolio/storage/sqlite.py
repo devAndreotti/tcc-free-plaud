@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS chunks (
     text_sha256 TEXT NOT NULL,
     pipeline_version TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    t_start REAL,
+    t_end REAL,
     UNIQUE (note_id, note_version, chunk_index)
 );
 
@@ -137,11 +139,25 @@ def connect_sqlite(path: Path) -> sqlite3.Connection:
     return connection
 
 
+# Colunas acrescentadas depois da primeira versão do schema. Bancos antigos não têm; CREATE TABLE IF NOT EXISTS
+# não as adiciona, então a migração as cria com ALTER TABLE quando faltam.
+_CHUNK_ADDED_COLUMNS = ('t_start', 't_end')
+
+
+def _migrate_chunk_columns(connection: sqlite3.Connection) -> None:
+    existing = {str(row[1]) for row in connection.execute('PRAGMA table_info(chunks)').fetchall()}
+    for column in _CHUNK_ADDED_COLUMNS:
+        if column not in existing:
+            connection.execute(f'ALTER TABLE chunks ADD COLUMN {column} REAL')
+    connection.commit()
+
+
 def init_sqlite(path: Path) -> sqlite3.Connection:
-    """Inicializa o schema mínimo da Sprint 4.2."""
+    """Inicializa o schema mínimo da Sprint 4.2 e aplica colunas acrescentadas (bancos antigos continuam abrindo)."""
     connection = connect_sqlite(path)
     connection.executescript(SCHEMA)
     connection.commit()
+    _migrate_chunk_columns(connection)
     return connection
 
 
@@ -194,8 +210,9 @@ def replace_chunks_for_note(connection: sqlite3.Connection, note_id: str, chunks
         """
         INSERT INTO chunks (
             chunk_id, note_id, note_version, chunk_index, char_start, char_end, chunk_size,
-            overlap, chunk_text, token_count, strategy, normalized_text_sha256, text_sha256, pipeline_version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            overlap, chunk_text, token_count, strategy, normalized_text_sha256, text_sha256, pipeline_version,
+            t_start, t_end
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
@@ -213,6 +230,8 @@ def replace_chunks_for_note(connection: sqlite3.Connection, note_id: str, chunks
                 chunk.normalized_text_sha256,
                 chunk.text_sha256,
                 chunk.pipeline_version,
+                chunk.t_start,
+                chunk.t_end,
             )
             for chunk in chunks
         ],
@@ -243,6 +262,8 @@ def _chunk_from_row(row: sqlite3.Row) -> Chunk:
         normalized_text_sha256=row['normalized_text_sha256'],
         text_sha256=row['text_sha256'],
         pipeline_version=row['pipeline_version'],
+        t_start=row['t_start'],
+        t_end=row['t_end'],
     )
 
 
@@ -253,7 +274,7 @@ def list_chunks(connection: sqlite3.Connection) -> list[Chunk]:
         SELECT
             chunk_id, note_id, note_version, chunk_index, char_start, char_end, chunk_size,
             overlap, chunk_text, token_count, strategy, normalized_text_sha256,
-            text_sha256, pipeline_version
+            text_sha256, pipeline_version, t_start, t_end
         FROM chunks
         ORDER BY note_id, note_version, chunk_index
         """
@@ -268,7 +289,7 @@ def list_chunks_for_note(connection: sqlite3.Connection, note_id: str) -> list[C
         SELECT
             chunk_id, note_id, note_version, chunk_index, char_start, char_end, chunk_size,
             overlap, chunk_text, token_count, strategy, normalized_text_sha256,
-            text_sha256, pipeline_version
+            text_sha256, pipeline_version, t_start, t_end
         FROM chunks
         WHERE note_id = ?
         ORDER BY note_version, chunk_index
@@ -353,7 +374,7 @@ def search_chunks_fts(
         SELECT
             c.chunk_id, c.note_id, c.note_version, c.chunk_index, c.char_start, c.char_end,
             c.chunk_size, c.overlap, c.chunk_text, c.token_count, c.strategy,
-            c.normalized_text_sha256, c.text_sha256, c.pipeline_version,
+            c.normalized_text_sha256, c.text_sha256, c.pipeline_version, c.t_start, c.t_end,
             bm25(chunks_fts) AS bm25_score
         FROM chunks_fts
         JOIN chunks AS c ON c.chunk_id = chunks_fts.chunk_id

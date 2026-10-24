@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from escolio.providers.audio_models import TranscriptSegment
+
 
 class IngestedDocument(BaseModel):
     """Representa um artefato bruto aceito pelo pipeline."""
@@ -13,6 +15,8 @@ class IngestedDocument(BaseModel):
     raw_text: str
     cleaned_text: str | None = None
     transcription_path: Path | None = None
+    # Só áudio transcrito preenche: segmentos com start/end usados no chunking por fala.
+    segments: list[TranscriptSegment] | None = None
 
 
 class IngestionResult(BaseModel):

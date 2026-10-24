@@ -12,7 +12,7 @@ from escolio.app.config import Settings, get_settings
 from escolio.providers.answer import (
     INVALID_BASE_URL_ERROR,
     _default_base_url,
-    _is_http_base_url,
+    is_http_base_url,
 )
 from escolio.providers.model_discovery import _strip_v1_path, list_answer_models
 
@@ -190,7 +190,7 @@ def ensure_model(
         return EnsureModelResult(model=model_name, ok=False, final_status='', latency_ms=0, error=ONLY_OLLAMA_ERROR)
 
     base_url = _pull_base_url(resolved)
-    if not _is_http_base_url(base_url):
+    if not is_http_base_url(base_url):
         return EnsureModelResult(model=model_name, ok=False, final_status='', latency_ms=0, error=INVALID_BASE_URL_ERROR)
 
     request = Request(

@@ -33,6 +33,7 @@ from escolio.corpus.models import (
 )
 from escolio.ingest.loaders import PDF_PARSE_FAILED, load_document
 from escolio.ingest.validators import has_indexable_content
+from escolio.notes.extraction import enrich_note
 from escolio.notes.schemas import Note
 from escolio.notes.service import delete_notes_by_source_path
 from escolio.notes.structurer import structure_document
@@ -1145,7 +1146,8 @@ def _load_structure_chunk_corpus_file(
         document = load_document(path)
         if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
-        note = structure_document(document, source_root=source_root, hash_unrooted=True)
+        # Só age com `extract_structure` ligada nas settings (desligada por padrão: custa uma chamada de LLM por nota).
+        note = enrich_note(structure_document(document, source_root=source_root, hash_unrooted=True))
         return _PendingCorpusIndex(
             source_path=document.source_path,
             note=note,
@@ -1280,7 +1282,7 @@ def index_corpus_file(
         # Arquivo de uma pasta já indexada (watcher, área de soltar) mantém o note_id da Fila.
         if source_root is None:
             source_root = corpus_root_for_path(resolved_connection, source_path)
-        note = structure_document(document, source_root=source_root, hash_unrooted=True)
+        note = enrich_note(structure_document(document, source_root=source_root, hash_unrooted=True), resolved_settings)
         existing_hash = get_note_content_hash(resolved_connection, note.note_id)
         existing_title = get_note_title(resolved_connection, note.note_id)
         existing_chunk_ids = list_chunk_ids_for_note(resolved_connection, note.note_id)

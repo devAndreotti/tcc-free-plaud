@@ -1,0 +1,485 @@
+{
+  "dataset_name": "multi-trecho-perguntas",
+  "samples": [
+    {
+      "sample_id": "unica-01",
+      "question": "Qual é o replication factor do tópico de pedidos?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": ["replication factor 3"],
+      "expected_ref": "Decisões",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-02",
+      "question": "Qual política de acks o producer vai usar?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": ["acks=all"],
+      "expected_ref": "Decisões",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-03",
+      "question": "Qual tamanho de arquivo o Heitor recomendou mirar no data lake?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": ["128 MB"],
+      "expected_ref": "Particionamento",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-04",
+      "question": "Qual nota final a candidata recebeu nas rubricas técnicas?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": ["4 de 5"],
+      "expected_ref": "Parecer",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-05",
+      "question": "Qual é o formato das chaves do cache do catálogo?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": ["cat:v3:"],
+      "expected_ref": "Decisão",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-06",
+      "question": "Quantos minutos durou a falha nas cobranças por cartão em setembro?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": ["47 minutos"],
+      "expected_ref": "Resumo",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-07",
+      "question": "Qual algoritmo do Google estima a banda disponível em vez de usar a perda como sinal?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": ["BBR"],
+      "expected_ref": "Alternativas",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-08",
+      "question": "Qual provedor de identidade foi adotado na decisão de autenticação?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": ["Keycloak"],
+      "expected_ref": "Decisão",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-09",
+      "question": "Qual o prazo de expiração do lock do single-flight no cache?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": ["5 segundos"],
+      "expected_ref": "Stampede",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-10",
+      "question": "Qual runbook deve receber o passo de rollback do incidente de pagamentos?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": ["PAY-RB-07"],
+      "expected_ref": "Ações",
+      "category": "direta"
+    },
+    {
+      "sample_id": "mt-nota-01",
+      "question": "Quantas partições terá o tópico de pedidos e qual é a janela do cutover?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": ["12 partições", "22/03/2025"],
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-02",
+      "question": "Qual é o tamanho alvo por arquivo e qual a data de entrega do exercício?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": ["128 MB", "18/04/2025"],
+      "expected_ref": "Particionamento",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-03",
+      "question": "Qual limite de requisições o desafio pedia e qual a data do retorno ao RH?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": ["100 requisições por minuto", "25/06/2025"],
+      "expected_ref": "Desafio técnico (take-home)",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-04",
+      "question": "Qual o TTL da listagem do catálogo e qual a meta de hit rate na revisão?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": ["15 minutos", "85%"],
+      "expected_ref": "Revisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-05",
+      "question": "Quantos minutos durou a falha de cobranças e qual era o timeout do gateway antes da mudança de 08/09?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": ["47 minutos", "reduziu o timeout de 10 para 3 segundos"],
+      "expected_ref": "Resumo",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-06",
+      "question": "Qual o valor inicial da janela de congestionamento e até quando entregar o lab 3?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": ["10 MSS", "09/10/2025"],
+      "expected_ref": "Slow start",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-07",
+      "question": "Qual a validade do access token e com que frequência é feito o backup da base do Keycloak?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": ["5 minutos", "backup diário"],
+      "expected_ref": "Riscos",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-08",
+      "question": "Qual é a chave de partição do pedido e qual feature flag permite o rollback do consumer?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": ["pedido_id", "ORDERS_LEGACY_CONSUMER"],
+      "expected_ref": "Próximos passos",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-09",
+      "question": "Qual a primeira opção de cache considerada e qual a meta de hit rate na revisão?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": ["Memcached", "85%"],
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-10",
+      "question": "A que horas começou a falha de cobranças e onde será feita a próxima simulação de falha de gateway?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": ["14h12", "homologação"],
+      "expected_ref": "Observações",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-01",
+      "question": "Qual retenção o time definiu para o tópico pedidos-v2, e qual tamanho de arquivo a aula de Parquet recomenda?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": ["pedidos-v2", "7 dias"],
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-02",
+      "question": "Que ferramenta a candidata usou para o limite por cliente, e qual formato de chave o cache do catálogo adota?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": ["Redis", "sliding window"],
+      "expected_ref": "Desafio técnico (take-home)",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-03",
+      "question": "Qual timeout do gateway falhou em 09/09/2025, e qual lock o cache do catálogo usa contra stampede?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": ["3 segundos", "09/09/2025"],
+      "expected_ref": "Resumo",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-04",
+      "question": "Qual a validade do access token adotada, e quanto tempo durou o incidente de pagamentos de setembro?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": ["5 minutos", "rotação"],
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-05",
+      "question": "Como o TCP reage a três ACKs duplicados, e qual retry a ata do incidente de pagamentos incluiu?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": ["fast retransmit", "fast recovery"],
+      "expected_ref": "Perda",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-06",
+      "question": "Qual é a garantia de envio do producer Kafka, e como a candidata tratou a race condition no resgate de cupom?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": ["acks=all", "idempotência"],
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-07",
+      "question": "Qual o TTL da listagem de produtos, e qual mecanismo o cache usa para evitar stampede?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": ["15 minutos", "single-flight"],
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-08",
+      "question": "Qual solução de salting o Heitor sugere para data skew, e como o cache do catálogo trata chave quente?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": ["salting", "sufixo aleatório"],
+      "expected_ref": "Data skew",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-09",
+      "question": "Qual provedor de identidade foi escolhido, e como o cluster do Keycloak fica protegido contra falha?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": ["Keycloak", "cluster com duas réplicas"],
+      "expected_ref": "Riscos",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-10",
+      "question": "Qual a causa raiz do incidente de pagamentos, e quanto tempo o cache espera antes de tentar de novo no stampede?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": ["reduziu o timeout de 10 para 3 segundos", "retry com jitter"],
+      "expected_ref": "Causa raiz",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mtneg-01",
+      "question": "Qual foi o custo mensal do cluster Kafka que a Ana Lima Furtado aprovou?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-02",
+      "question": "Qual salário a Júlia Neves recebeu depois de contratada?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-03",
+      "question": "Qual foi a causa do incidente de pagamentos ocorrido em 14/09/2025?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-04",
+      "question": "Qual o TTL do cache de sessões no Redis do projeto de login?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-05",
+      "question": "Quantas partições tem o tópico de faturamento no Kafka?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-06",
+      "question": "Qual runbook descreve o rollback do cache do catálogo?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-07",
+      "question": "Qual versão do Keycloak vai rodar em produção?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-08",
+      "question": "Qual foi a nota da Júlia Neves na rubrica de comunicação?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-09",
+      "question": "Qual é o bônus do exercício de Delta Lake que o Heitor Rocha vai pagar em 2026?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-10",
+      "question": "Qual o número da prova P3 da disciplina de Redes de Computadores?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-11",
+      "question": "Qual foi a multa por cancelamento do contrato firmado pela Larissa Quintela?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-12",
+      "question": "Qual orçamento o comitê de custos aprovou para manter a retenção de 30 dias do Kafka?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-13",
+      "question": "Quem substituiu a Ana Lima Furtado como tech lead depois de março de 2025?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-14",
+      "question": "Quantos chamados foram abertos durante o incidente de 09/09/2025?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-15",
+      "question": "Qual é o limite de requisições por minuto da API de pagamentos?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-16",
+      "question": "Qual o TTL do preço no cache do carrinho de compras?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-17",
+      "question": "Quantos pods rodam a API de cupons em produção?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-18",
+      "question": "Qual foi o hit rate medido na revisão de novembro de 2025 do cache?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-19",
+      "question": "Qual é o tamanho de arquivo recomendado pelo professor para o formato ORC?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-20",
+      "question": "Qual é a faixa salarial oferecida para a vaga de Backend Pleno?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-21",
+      "question": "Em qual data center fica o cluster do Kafka de produção?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-22",
+      "question": "Como configurar um consumer group com rebalance para o time de faturamento?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-23",
+      "question": "Quais são as regras de rate limit do Redis Cluster para o ambiente de produção?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-24",
+      "question": "Qual política de backoff está configurada no SDK do gateway de pagamento?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-25",
+      "question": "Quando o Diego Sampaio entrega o consumer de exemplo para o faturamento?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-26",
+      "question": "Qual é a mensalidade do Datadog que o time de SRE paga?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-27",
+      "question": "Qual foi o percentual de acerto da equipe de Redes na prova P1?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-28",
+      "question": "Quantos minutos durou a degradação do cache do catálogo em 2025?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-29",
+      "question": "Como o protocolo QUIC se compara ao TCP no controle de congestionamento?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-30",
+      "question": "Qual é a política de retenção de logs do data lake?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    }
+  ]
+}

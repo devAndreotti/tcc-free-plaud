@@ -160,3 +160,23 @@ def test_sanitize_ui_sentinels_cleans_enum_strings():
     s = Settings(answer_model="Select.NULL", default_corpus_path="Select.BLANK")
     assert s.answer_model == ""
     assert s.default_corpus_path is None
+
+
+def test_extract_structure_is_off_by_default(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv('ESCOLIO_EXTRACT_STRUCTURE', raising=False)
+
+    assert Settings(results_dir=tmp_path / 'data' / 'results').extract_structure is False
+
+
+def test_extract_structure_round_trips_through_user_settings(tmp_path: Path) -> None:
+    settings = Settings(
+        workspace_dir=tmp_path,
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+    )
+
+    updated = save_user_settings({'extract_structure': True}, settings=settings)
+
+    assert updated.extract_structure is True
+    assert json.loads(user_settings_path_for(settings).read_text(encoding='utf-8')) == {'extract_structure': True}

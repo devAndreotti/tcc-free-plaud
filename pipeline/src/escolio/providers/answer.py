@@ -55,7 +55,7 @@ class AnswerProvider(Protocol):
         """Gera resposta a partir de contextos citaveis ja recuperados."""
 
 
-def _is_http_base_url(value: str) -> bool:
+def is_http_base_url(value: str) -> bool:
     try:
         parsed = urlparse(value)
     except ValueError:
@@ -90,7 +90,7 @@ def _reasoning_text(message: dict[str, object]) -> str:
     return ''
 
 
-def _extract_answer_text(decoded: object) -> tuple[str, dict[str, object], object]:
+def extract_answer_text(decoded: object) -> tuple[str, dict[str, object], object]:
     """Extrai (content normalizado, message, finish_reason) de um payload chat/completions.
 
     Levanta KeyError/IndexError/TypeError quando o payload nao tem o formato esperado,
@@ -119,7 +119,7 @@ def _empty_answer_error_message(message: dict[str, object], finish_reason: objec
     return EMPTY_ANSWER_ERROR
 
 
-def _transport_error(exc: Exception) -> AnswerProviderError:
+def transport_error(exc: Exception) -> AnswerProviderError:
     if isinstance(exc, HTTPError):
         return AnswerProviderError(f'Provider respondeu HTTP {exc.code}.')
     if isinstance(exc, URLError):
@@ -127,6 +127,12 @@ def _transport_error(exc: Exception) -> AnswerProviderError:
     if isinstance(exc, TimeoutError):
         return AnswerProviderError('Provider excedeu timeout.')
     return AnswerProviderError(INVALID_BASE_URL_ERROR)
+
+
+# Nomes privados anteriores, mantidos como alias para quem ainda importa com underscore.
+_is_http_base_url = is_http_base_url
+_extract_answer_text = extract_answer_text
+_transport_error = transport_error
 
 
 @dataclass
@@ -142,13 +148,22 @@ class OpenAICompatibleAnswerProvider:
     def _chat_request(self, question: str, contexts: list[str], *, stream: bool = False) -> Request:
         if not contexts:
             raise ValueError('Provider de resposta exige pelo menos um contexto citavel.')
-        if not _is_http_base_url(self.base_url):
+        return self._messages_request(build_grounded_chat_messages(question, contexts), stream=stream)
+
+    def _messages_request(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        stream: bool = False,
+        temperature: float | None = None,
+    ) -> Request:
+        if not is_http_base_url(self.base_url):
             raise AnswerProviderError(INVALID_BASE_URL_ERROR)
 
         payload: dict[str, object] = {
             'model': self.model,
-            'messages': build_grounded_chat_messages(question, contexts),
-            'temperature': self.temperature,
+            'messages': messages,
+            'temperature': self.temperature if temperature is None else temperature,
         }
         if stream:
             payload['stream'] = True
@@ -160,23 +175,38 @@ class OpenAICompatibleAnswerProvider:
         endpoint = f'{self.base_url.rstrip("/")}/chat/completions'
         return Request(endpoint, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
 
-    def answer(self, question: str, contexts: list[str]) -> str:
-        request = self._chat_request(question, contexts)
+    def complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float | None = None,
+    ) -> str:
+        """Chamada chat/completions genérica (sem prompt de resposta fundamentada).
+
+        Usada por tarefas auxiliares, como a extração estruturada de notas, para
+        reaproveitar o mesmo endpoint, chave e timeout do provider de resposta.
+        """
+        request = self._messages_request(messages, temperature=temperature)
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 body = response.read()
         except (URLError, TimeoutError, ValueError) as exc:
-            raise _transport_error(exc) from exc
+            raise transport_error(exc) from exc
 
         try:
             decoded = json.loads(body.decode('utf-8'))
-            answer, message, finish_reason = _extract_answer_text(decoded)
+            answer, message, finish_reason = extract_answer_text(decoded)
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise AnswerProviderError('Provider retornou payload invalido.') from exc
 
         if not answer:
             raise AnswerProviderError(_empty_answer_error_message(message, finish_reason))
         return answer
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        if not contexts:
+            raise ValueError('Provider de resposta exige pelo menos um contexto citavel.')
+        return self.complete(build_grounded_chat_messages(question, contexts))
 
     def answer_stream(self, question: str, contexts: list[str], on_delta: Callable[[str], None]) -> str:
         from escolio.providers.answer_stream import read_sse_answer  # evita ciclo
@@ -186,7 +216,7 @@ class OpenAICompatibleAnswerProvider:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 return read_sse_answer(response, on_delta)
         except (URLError, TimeoutError) as exc:
-            raise _transport_error(exc) from exc
+            raise transport_error(exc) from exc
 
 
 def _default_base_url(provider_name: AnswerProviderName, base_url: str | None) -> str:
@@ -236,7 +266,7 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
         )
 
     base_url = _default_base_url(resolved.answer_provider, resolved.answer_base_url)
-    if not _is_http_base_url(base_url):
+    if not is_http_base_url(base_url):
         return AnswerProviderTestResult(
             provider=resolved.answer_provider,
             model=resolved.answer_model,
@@ -289,7 +319,7 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
 
     try:
         decoded = json.loads(body.decode('utf-8'))
-        content, message, finish_reason = _extract_answer_text(decoded)
+        content, message, finish_reason = extract_answer_text(decoded)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError):
         return result('error', 'Provider retornou payload invalido.')
 

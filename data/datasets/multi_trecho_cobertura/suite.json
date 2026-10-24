@@ -1,0 +1,40 @@
+{
+  "suite_name": "multi-trecho-cobertura-suite",
+  "cases": [
+    {
+      "case_id": "case-01-ata-kafka",
+      "document_path": "data/datasets/multi_trecho/notas/ata-migracao-kafka.md",
+      "dataset_path": "data/datasets/multi_trecho_cobertura/por_nota/ata-migracao-kafka.json"
+    },
+    {
+      "case_id": "case-02-parquet",
+      "document_path": "data/datasets/multi_trecho/notas/aula-particionamento-parquet.md",
+      "dataset_path": "data/datasets/multi_trecho_cobertura/por_nota/aula-particionamento-parquet.json"
+    },
+    {
+      "case_id": "case-03-entrevista",
+      "document_path": "data/datasets/multi_trecho/notas/entrevista-backend-julia.md",
+      "dataset_path": "data/datasets/multi_trecho_cobertura/por_nota/entrevista-backend-julia.json"
+    },
+    {
+      "case_id": "case-04-cache",
+      "document_path": "data/datasets/multi_trecho/notas/decisao-cache-catalogo.md",
+      "dataset_path": "data/datasets/multi_trecho_cobertura/por_nota/decisao-cache-catalogo.json"
+    },
+    {
+      "case_id": "case-05-incidente",
+      "document_path": "data/datasets/multi_trecho/notas/ata-incidente-pagamentos.md",
+      "dataset_path": "data/datasets/multi_trecho_cobertura/por_nota/ata-incidente-pagamentos.json"
+    },
+    {
+      "case_id": "case-06-tcp",
+      "document_path": "data/datasets/multi_trecho/notas/aula-tcp-congestionamento.md",
+      "dataset_path": "data/datasets/multi_trecho_cobertura/por_nota/aula-tcp-congestionamento.json"
+    },
+    {
+      "case_id": "case-07-oidc",
+      "document_path": "data/datasets/multi_trecho/notas/decisao-autenticacao-oidc.md",
+      "dataset_path": "data/datasets/multi_trecho_cobertura/por_nota/decisao-autenticacao-oidc.json"
+    }
+  ]
+}
