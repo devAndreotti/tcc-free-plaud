@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { SimEdge, SimNode } from '../lib/vaultGraph';
 import { DIM_ALPHA, selectionSet } from '../lib/graphSelection';
-import { drawEdges, drawLabels, drawNodes, type Highlight, type Palette } from './graphDraw';
+import { drawEdges, drawLabels, drawNodes, tooltipDetail, type Highlight, type Palette } from './graphDraw';
 
 // Contexto que anota o globalAlpha no momento de cada desenho (arc, stroke, fillText)
 function recorder() {
-  const arcs: { x: number; y: number; r: number; alpha: number }[] = [];
+  const arcs: { x: number; y: number; r: number; alpha: number; fill?: string }[] = [];
   const strokes: { alpha: number; segments: number }[] = [];
   const texts: { text: string; alpha: number }[] = [];
   let segments = 0;
@@ -16,7 +16,7 @@ function recorder() {
     lineTo() {},
     stroke() { strokes.push({ alpha: ctx.globalAlpha, segments }); },
     arc(x: number, y: number, r: number) { arcs.push({ x, y, r, alpha: ctx.globalAlpha }); },
-    fill() {},
+    fill() { const last = arcs.at(-1); if (last) last.fill = ctx.fillStyle; },
     fillText(text: string) { texts.push({ text, alpha: ctx.globalAlpha }); },
   };
   return { ctx, arcs, strokes, texts };
@@ -25,11 +25,13 @@ function recorder() {
 const pal: Palette = {
   edge: '#333', node: '#888', folder: '#66f', label: '#aaa', text: '#fff', hover: '#f0f', link: '#0ff',
   focus: '#0ff', bg: '#000', tipBg: '#111', tipFg: '#eee',
+  groups: ['#g1', '#g2', '#g3', '#g4', '#g5', '#g6', '#g7', '#g8'],
 };
 const cam = { x: 0, y: 0, scale: 1 };
 
 const node = (id: string, x: number, y: number, kind: SimNode['kind'] = 'note', depth = 1): SimNode => ({
-  id, label: id.replace('dir:', ''), kind, depth, x, y, vx: 0, vy: 0, degree: 0,
+  id, label: id.replace('dir:', ''), kind, depth, group: '', folder: '', colorSlot: null,
+  x, y, vx: 0, vy: 0, degree: 0,
 });
 
 // Raiz (0,0) → A (10,0) → A/x (20,0); raiz → B (-10,0) → B/y (-20,0); ligação A/x ↔ B/y
@@ -83,6 +85,51 @@ describe('drawNodes: seleção apaga o que está fora da vizinhança', () => {
     expect(ring.x).toBe(20);
     expect(ring.r).toBeGreaterThan(2.6);
     expect(ring.alpha).toBe(1);
+  });
+});
+
+describe('drawNodes: cor automática por pasta de 1º nível', () => {
+  const colored: SimNode[] = [
+    { ...node('dir:', 0, 0, 'folder', 0) },
+    { ...node('dir:A', 10, 0, 'folder', 1), group: 'A', folder: 'A', colorSlot: 2 },
+    { ...node('A/x', 20, 0), group: 'A', folder: 'A', colorSlot: 2 },
+    node('solta', 30, 0),
+  ];
+
+  it('pasta de 1º nível usa a cor do grupo; a raiz segue a cor de pasta do tema', () => {
+    const rec = recorder();
+    drawNodes(rec.ctx as never, colored, pal, hl(null));
+    expect(rec.arcs[0].fill).toBe(pal.folder); // raiz
+    expect(rec.arcs[1].fill).toBe('#g3'); // dir:A, slot 2 → groups[2]
+    expect(rec.arcs[1].alpha).toBe(1);
+  });
+
+  it('nota herda a cor da pasta com menos opacidade; nota sem grupo fica no cinza do tema', () => {
+    const rec = recorder();
+    drawNodes(rec.ctx as never, colored, pal, hl(null));
+    expect(rec.arcs[2].fill).toBe('#g3');
+    expect(rec.arcs[2].alpha).toBeCloseTo(0.75);
+    expect(rec.arcs[3].fill).toBe(pal.node);
+    expect(rec.arcs[3].alpha).toBe(1);
+  });
+
+  it('hover volta a nota para cor cheia (o destaque do hover vence a cor da pasta)', () => {
+    const rec = recorder();
+    drawNodes(rec.ctx as never, colored, pal, { ...hl(null), hoveredId: 'A/x' });
+    expect(rec.arcs[2].fill).toBe(pal.hover);
+    expect(rec.arcs[2].alpha).toBe(1);
+  });
+});
+
+describe('tooltipDetail: a pasta aparece em texto, não só na cor', () => {
+  it('pasta mostra o próprio caminho; a raiz diz que é a raiz', () => {
+    expect(tooltipDetail({ ...node('dir:A/B', 0, 0, 'folder', 2), folder: 'A/B' })).toBe('Pasta: A/B');
+    expect(tooltipDetail(node('dir:', 0, 0, 'folder', 0))).toBe('Raiz do vault');
+  });
+
+  it('nota mostra a pasta que a contém; na raiz diz isso', () => {
+    expect(tooltipDetail({ ...node('n', 0, 0), folder: 'Estudos/Cisco' })).toBe('Pasta: Estudos/Cisco');
+    expect(tooltipDetail(node('n', 0, 0))).toBe('Na raiz do vault');
   });
 });
 

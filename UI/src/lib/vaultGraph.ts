@@ -6,6 +6,8 @@
  * [[...]] entre notas como arestas próprias.
  */
 
+import { folderPaletteIndex, topFolderOf } from './graphColors';
+
 /** Metadados de uma nota indexada, no formato que o grafo usa. */
 export interface MarkdownNode {
   id: string;
@@ -22,6 +24,9 @@ export interface SimNode {
   label: string;
   kind: 'note' | 'folder';
   depth: number; // profundidade da pasta (0 = raiz do vault); notas usam a da pasta + 1
+  group: string;     // pasta de 1º nível ('' na raiz): dá a cor do nó e da legenda
+  folder: string;    // caminho da pasta (a própria, para pasta; a que contém, para nota); '' na raiz
+  colorSlot: number | null; // índice (0…7) na paleta de cores de graphColors.ts; null sem grupo
   x: number;     // pixels lógicos (CSS px)
   y: number;
   vx: number;
@@ -50,6 +55,11 @@ const FIT_PADDING   = 24;
 const GOLDEN_ANGLE  = 2.399963; // radianos (~137,5°): espalha nós novos sem alinhá-los
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Campos de cor de um nó: pasta de 1º nível do caminho (ou '' na raiz) e o índice da paleta. */
+function colorFields(group: string): Pick<SimNode, 'group' | 'colorSlot'> {
+  return { group, colorSlot: group ? folderPaletteIndex(group) : null };
+}
 
 function folderOf(path: string): string {
   const parts = path.replaceAll('\\', '/').split('/');
@@ -110,7 +120,10 @@ export function buildGraph(
     if (folders.has(dir)) return id;
     folders.add(dir);
     const parts = dir ? dir.split('/') : [];
-    nodes.push({ id, label: parts.at(-1) ?? 'vault', kind: 'folder', depth: parts.length, degree: 0, ...place(id, nodes.length) });
+    nodes.push({
+      id, label: parts.at(-1) ?? 'vault', kind: 'folder', depth: parts.length, folder: dir,
+      ...colorFields(parts[0] ?? ''), degree: 0, ...place(id, nodes.length),
+    });
     if (dir) edges.push({ source: ensureFolder(parts.slice(0, -1).join('/')), target: id });
     return id;
   };
@@ -121,7 +134,10 @@ export function buildGraph(
     const dir = folderOf(n.path);
     const folderId = withTree ? ensureFolder(dir) : null;
     const depth = dir ? dir.split('/').length + 1 : 1;
-    nodes.push({ id: n.id, label: n.name, kind: 'note', depth, degree: 0, ...place(n.id, nodes.length) });
+    nodes.push({
+      id: n.id, label: n.name, kind: 'note', depth, folder: dir, ...colorFields(topFolderOf(n.path)),
+      degree: 0, ...place(n.id, nodes.length),
+    });
     if (folderId) edges.push({ source: folderId, target: n.id });
   }
 

@@ -26,11 +26,13 @@ import {
   selectionAnnouncement,
   selectionSet,
 } from '../lib/graphSelection';
-import { drawEdges, drawFocus, drawLabels, drawNodes, readPalette, type Palette } from './graphDraw';
+import { legendEntries, topFolderOf } from '../lib/graphColors';
+import { drawEdges, drawFocus, drawLabels, drawNodes, readPalette, tooltipDetail, type Palette } from './graphDraw';
 import { GraphIcon } from './Icons';
 import GraphNoLinksHint from './GraphNoLinksHint';
+import GraphLegend from './GraphLegend';
 
-interface Tooltip  { label: string; x: number; y: number }
+interface Tooltip  { label: string; detail: string; x: number; y: number }
 
 const MAX_ITER = 300;
 // Quadros de uma transição de câmera (enquadrar uma pasta): ~240 ms a 60 Hz
@@ -268,7 +270,12 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     if (found) {
       if (hovered.current !== found.id) {
         hovered.current = found.id;
-        setTooltip({ label: found.label, x: found.x * cam.scale + cam.x, y: found.y * cam.scale + cam.y });
+        setTooltip({
+          label: found.label,
+          detail: tooltipDetail(found),
+          x: found.x * cam.scale + cam.x,
+          y: found.y * cam.scale + cam.y,
+        });
         draw();
       }
     } else if (hovered.current !== null) {
@@ -345,6 +352,8 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
   const empty = vaultNodes.length === 0;
   // Modo Links sem nenhuma ligação desenhável: aviso sobre o painel (as notas seguem soltas por baixo)
   const linkCount = useMemo(() => visibleLinks(vaultNodes, links).length, [vaultNodes, links]);
+  // Legenda: pastas de 1º nível presentes no vault (a mesma cor que o desenho usa)
+  const legend = useMemo(() => legendEntries(vaultNodes.map((n) => topFolderOf(n.path))), [vaultNodes]);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
@@ -376,6 +385,9 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
         aria-label="Visualização de grafo — clique num nó para selecionar (nota abre, pasta enquadra), arraste para mover, scroll para zoom, duplo clique para enquadrar, Esc limpa a seleção"
       />
       {mode === 'links' && linkCount === 0 && <GraphNoLinksHint noteCount={vaultNodes.length} />}
+      {mode !== 'links' && legend.total > 0 && (
+        <GraphLegend entries={legend.shown} overflow={legend.overflow} total={legend.total} />
+      )}
       <div className="sr-only" aria-live="polite">{announcement}</div>
       {tooltip && (
         <div
@@ -383,7 +395,8 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
           style={{ left: tooltip.x, top: tooltip.y }}
           aria-hidden="true"
         >
-          {tooltip.label}
+          <span className="force-graph__tooltip-label">{tooltip.label}</span>
+          <span className="force-graph__tooltip-detail">{tooltip.detail}</span>
         </div>
       )}
     </div>

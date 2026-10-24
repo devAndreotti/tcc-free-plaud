@@ -8,6 +8,7 @@
 import type { Camera, SimEdge, SimNode } from '../lib/vaultGraph';
 import { nodeRadius } from '../lib/vaultGraph';
 import { DIM_ALPHA, edgeInSelection } from '../lib/graphSelection';
+import { GRAPH_COLOR_TOKENS } from '../lib/graphColors';
 
 export type Ctx = CanvasRenderingContext2D;
 
@@ -26,6 +27,8 @@ export function readPalette(el: Element) {
     bg: v('--bg-primary'),
     tipBg: v('--tip-bg'),
     tipFg: v('--tip-fg'),
+    /** cores das pastas de 1º nível, na ordem de GRAPH_COLOR_TOKENS */
+    groups: GRAPH_COLOR_TOKENS.map(v),
   };
 }
 
@@ -39,10 +42,26 @@ export interface Highlight {
   scale: number;
 }
 
+/** Linha do tooltip com a pasta: a própria (pasta) ou a que contém a nota; também em texto, não só cor. */
+export function tooltipDetail(n: SimNode): string {
+  if (n.kind === 'folder') return n.depth === 0 ? 'Raiz do vault' : `Pasta: ${n.folder}`;
+  return n.folder ? `Pasta: ${n.folder}` : 'Na raiz do vault';
+}
+
+// Pasta de 1º nível: cor da paleta; a raiz e o que está sem grupo mantêm o cinza/azul do tema
 function nodeColor(n: SimNode, pal: Palette, hoveredId: string | null): string {
   if (n.id === hoveredId) return pal.hover;
-  if (n.kind === 'folder') return pal.folder;
-  return pal.node;
+  const group = n.colorSlot === null ? undefined : pal.groups[n.colorSlot];
+  if (n.kind === 'folder') return n.depth === 0 ? pal.folder : group ?? pal.folder;
+  return group ?? pal.node;
+}
+
+// Notas herdam a cor da pasta, mais apagadas que a pasta; hover e seleção voltam a ser cheias
+const NOTE_FILL_ALPHA = 0.75;
+
+function fillStrength(n: SimNode, hl: Highlight): number {
+  if (n.kind !== 'note' || n.colorSlot === null) return 1;
+  return n.id === hl.hoveredId || n.id === hl.selectedId ? 1 : NOTE_FILL_ALPHA;
 }
 
 /** Arestas da árvore em cinza; ligações [[...]] por cima, mais grossas e em azul claro transparente. */
@@ -76,7 +95,7 @@ export function drawEdges(ctx: Ctx, nodes: SimNode[], edges: SimEdge[], pal: Pal
 export function drawNodes(ctx: Ctx, nodes: SimNode[], pal: Palette, hl: Highlight) {
   const base = ctx.globalAlpha;
   for (const n of nodes) {
-    ctx.globalAlpha = base * (!hl.sel || hl.sel.has(n.id) ? 1 : DIM_ALPHA);
+    ctx.globalAlpha = base * fillStrength(n, hl) * (!hl.sel || hl.sel.has(n.id) ? 1 : DIM_ALPHA);
     ctx.beginPath();
     ctx.arc(n.x, n.y, nodeRadius(n), 0, Math.PI * 2);
     ctx.fillStyle = nodeColor(n, pal, hl.hoveredId);

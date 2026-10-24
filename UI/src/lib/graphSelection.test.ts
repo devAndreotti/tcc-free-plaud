@@ -14,7 +14,7 @@ import {
 } from './graphSelection';
 
 const node = (id: string, x: number, y: number, kind: SimNode['kind'] = 'note', depth = 1): SimNode => ({
-  id, label: id, kind, depth, x, y, vx: 0, vy: 0, degree: 0,
+  id, label: id, kind, depth, group: '', folder: '', colorSlot: null, x, y, vx: 0, vy: 0, degree: 0,
 });
 
 // Árvore: raiz → A → (A/x, A/sub → A/sub/y); B → B/z. Ligação A/x ↔ B/z.
