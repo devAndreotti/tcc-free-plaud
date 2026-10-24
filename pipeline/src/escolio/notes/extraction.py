@@ -13,10 +13,10 @@ from typing import Any
 from pydantic import ValidationError
 
 from escolio.app.config import Settings, get_settings
-from escolio.benchmark.metrics import _content_tokens, lexical_groundedness
 from escolio.notes.markdown import render_note_markdown
 from escolio.notes.schemas import ActionItem, Decision, Note, NoteExtraction
 from escolio.providers.answer import OpenAICompatibleAnswerProvider, get_answer_provider
+from escolio.text_tokens import content_tokens, lexical_groundedness
 
 LLMCallable = Callable[[str], str]
 
@@ -99,7 +99,7 @@ def _clean_optional(value: object) -> str | None:
 
 def _is_grounded(text: str, note_text: str, min_overlap: float) -> bool:
     """Texto sem termo de conteúdo não pode ser verificado: fica de fora."""
-    if not _content_tokens(text):
+    if not content_tokens(text):
         return False
     return lexical_groundedness(text, [note_text]) >= min_overlap
 
