@@ -152,3 +152,27 @@ describe('paleta do grafo em index.css', () => {
     });
   }
 });
+
+describe('assignPaletteSlots', () => {
+  it('não repete cor entre pastas enquanto couberem na paleta', async () => {
+    const { assignPaletteSlots } = await import('./graphColors');
+    const names = ['docs', 'Sprints', 'notas', 'UI', 'data', 'pipeline', 'src', 'tests'];
+    const slots = assignPaletteSlots(names);
+    expect(new Set(slots.values()).size).toBe(8);
+  });
+
+  it('não depende da ordem de entrada e ignora a raiz', async () => {
+    const { assignPaletteSlots } = await import('./graphColors');
+    const a = assignPaletteSlots(['docs', 'Sprints', '', 'notas']);
+    const b = assignPaletteSlots(['notas', 'docs', 'Sprints', 'docs']);
+    expect([...a.entries()].sort()).toEqual([...b.entries()].sort());
+    expect(a.has('')).toBe(false);
+  });
+
+  it('com mais de 8 pastas repete cores sem falhar', async () => {
+    const { assignPaletteSlots } = await import('./graphColors');
+    const slots = assignPaletteSlots(Array.from({ length: 11 }, (_, i) => `pasta-${i}`));
+    expect(slots.size).toBe(11);
+    for (const v of slots.values()) expect(v).toBeGreaterThanOrEqual(0);
+  });
+});

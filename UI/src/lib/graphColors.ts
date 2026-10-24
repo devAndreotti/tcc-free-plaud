@@ -30,6 +30,26 @@ export function folderPaletteIndex(name: string): number {
   return stableHash(name) % GRAPH_PALETTE_SIZE;
 }
 
+/**
+ * Cor de cada pasta de 1º nível NESTE vault: parte do hash do nome e, se a cor já é de outra pasta,
+ * segue para a próxima livre. Nenhuma pasta divide cor enquanto houver até 8; com mais, repete pelo
+ * hash. Os nomes entram em ordem alfabética, então o resultado não depende da ordem de carga.
+ */
+export function assignPaletteSlots(groups: string[]): Map<string, number> {
+  const names = [...new Set(groups.filter((g) => g !== ''))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const slots = new Map<string, number>();
+  const taken = new Set<number>();
+  for (const name of names) {
+    let slot = folderPaletteIndex(name);
+    if (taken.size < GRAPH_PALETTE_SIZE) {
+      while (taken.has(slot)) slot = (slot + 1) % GRAPH_PALETTE_SIZE;
+      taken.add(slot);
+    }
+    slots.set(name, slot);
+  }
+  return slots;
+}
+
 /** Nome da pasta de 1º nível de um caminho relativo ("Estudos/Cisco/x.md" → "Estudos"); '' na raiz. */
 export function topFolderOf(path: string): string {
   const parts = path.replaceAll('\\', '/').split('/');
@@ -44,6 +64,7 @@ export interface LegendEntry { name: string; token: string }
  */
 export function legendEntries(groups: string[], max = GRAPH_LEGEND_MAX): { shown: LegendEntry[]; overflow: number; total: number } {
   const names = [...new Set(groups.filter((g) => g !== ''))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  const shown = names.slice(0, max).map((name) => ({ name, token: GRAPH_COLOR_TOKENS[folderPaletteIndex(name)] }));
+  const slots = assignPaletteSlots(names);
+  const shown = names.slice(0, max).map((name) => ({ name, token: GRAPH_COLOR_TOKENS[slots.get(name) ?? folderPaletteIndex(name)] }));
   return { shown, overflow: names.length - shown.length, total: names.length };
 }

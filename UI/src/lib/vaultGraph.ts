@@ -6,7 +6,7 @@
  * [[...]] entre notas como arestas próprias.
  */
 
-import { folderPaletteIndex, topFolderOf } from './graphColors';
+import { assignPaletteSlots, folderPaletteIndex, topFolderOf } from './graphColors';
 
 /** Metadados de uma nota indexada, no formato que o grafo usa. */
 export interface MarkdownNode {
@@ -57,8 +57,8 @@ const GOLDEN_ANGLE  = 2.399963; // radianos (~137,5°): espalha nós novos sem a
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Campos de cor de um nó: pasta de 1º nível do caminho (ou '' na raiz) e o índice da paleta. */
-function colorFields(group: string): Pick<SimNode, 'group' | 'colorSlot'> {
-  return { group, colorSlot: group ? folderPaletteIndex(group) : null };
+function colorFields(group: string, slots: Map<string, number>): Pick<SimNode, 'group' | 'colorSlot'> {
+  return { group, colorSlot: group ? (slots.get(group) ?? folderPaletteIndex(group)) : null };
 }
 
 function folderOf(path: string): string {
@@ -101,6 +101,7 @@ export function buildGraph(
   const cx = logW / 2;
   const cy = logH / 2;
   const kept = new Map(previous.map((n) => [n.id, n]));
+  const slots = assignPaletteSlots(vaultNodes.map((n) => topFolderOf(n.path)));
   // Posição nova: espiral de ângulo áureo pelo índice do nó (determinística, sem Math.random)
   const place = (id: string, i: number): Pick<SimNode, 'x' | 'y' | 'vx' | 'vy'> => {
     const old = kept.get(id); // rescan do mesmo vault não embaralha o desenho
@@ -122,7 +123,7 @@ export function buildGraph(
     const parts = dir ? dir.split('/') : [];
     nodes.push({
       id, label: parts.at(-1) ?? 'vault', kind: 'folder', depth: parts.length, folder: dir,
-      ...colorFields(parts[0] ?? ''), degree: 0, ...place(id, nodes.length),
+      ...colorFields(parts[0] ?? '', slots), degree: 0, ...place(id, nodes.length),
     });
     if (dir) edges.push({ source: ensureFolder(parts.slice(0, -1).join('/')), target: id });
     return id;
@@ -135,7 +136,7 @@ export function buildGraph(
     const folderId = withTree ? ensureFolder(dir) : null;
     const depth = dir ? dir.split('/').length + 1 : 1;
     nodes.push({
-      id: n.id, label: n.name, kind: 'note', depth, folder: dir, ...colorFields(topFolderOf(n.path)),
+      id: n.id, label: n.name, kind: 'note', depth, folder: dir, ...colorFields(topFolderOf(n.path), slots),
       degree: 0, ...place(n.id, nodes.length),
     });
     if (folderId) edges.push({ source: folderId, target: n.id });

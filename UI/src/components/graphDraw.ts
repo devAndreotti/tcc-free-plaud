@@ -125,10 +125,11 @@ export function drawLabels(ctx: Ctx, nodes: SimNode[], pal: Palette, cam: Camera
   ctx.textAlign = 'center';
   for (const n of nodes) {
     const inSel = sel?.has(n.id) ?? false;
+    if (sel && !inSel) continue; // com seleção, só o nó e os vizinhos têm nome: o resto fica como fundo
     if (n.kind === 'folder' && n.depth === 0 && !inSel) continue;
     const minScale = n.kind === 'note' ? NOTE_LABEL_SCALE : n.depth === 1 ? 0.45 : 1.2;
     if (!inSel && cam.scale < minScale) continue;
-    ctx.globalAlpha = base * (sel && !inSel ? DIM_ALPHA : 1);
+    ctx.globalAlpha = base;
     ctx.fillText(n.label, n.x, n.y - (nodeRadius(n) + 4) / cam.scale);
   }
   ctx.globalAlpha = base;

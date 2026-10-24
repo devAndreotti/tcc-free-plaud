@@ -62,3 +62,26 @@ reranker moveria a decisão de abstenção sem ninguém perceber. O logit agora 
 
 `uv run pytest` e `uv run ruff check src tests` rodam tudo com provedores falsos (9 testes de
 `test_audio_capture.py` precisam de `libportaudio2`, que o CI instala).
+
+## Atualização: segunda rodada
+
+Entraram depois da primeira versão deste documento (tudo ainda `NÃO MEDIDO` com modelo real):
+
+- **Pendência 1 (métrica entre chunks):** `benchmark/coverage.py` e `benchmark coverage`, com o lote novo
+  `data/datasets/multi_trecho_cobertura/` (doc 20). A métrica antiga não foi alterada.
+- **Pendência 7 (camadas):** `text_tokens.py` compartilhado e helpers públicos em `providers/answer.py`.
+- **Pendência 10 (tamanho):** `benchmark/runners.py` caiu de 737 para 74 linhas (fachada). `corpus/ask.py`
+  ainda tem ~820 linhas e `corpus/service.py` ~2.000: continuam acima de 300.
+- **Chunking por segmento de fala** (doc 21): `t_start`/`t_end` no chunk e na citação. O `content_hash` de notas de
+  áudio com segmentos muda, então elas são reindexadas uma vez.
+- **Painel de Benchmark (UI):** seções opcionais de ablação, cobertura e faithfulness. O backend ainda **não grava**
+  `reranked`, `coverage` e `faithfulness` no JSON do `compare`; sem isso as seções não aparecem.
+- **Grafo (UI):** seleção por clique com vizinhança em destaque, aviso quando o modo Links não tem ligações, rótulos do
+  nó selecionado e dos vizinhos, cor automática por pasta de 1º nível (sem colisão entre até 8 pastas), legenda e
+  abertura animada (respeita `prefers-reduced-motion`). Falta navegação por teclado entre nós.
+
+### Ainda aberto
+- Medir tudo (itens 2 a 5 acima).
+- Emitir `reranked`/`coverage`/`faithfulness` no JSON do `compare`.
+- `ask.py` e `service.py` acima de 300 linhas.
+- Validação visual do grafo só com dados reais sem `[[links]]` (103 notas do repo); falta um vault com ligações.

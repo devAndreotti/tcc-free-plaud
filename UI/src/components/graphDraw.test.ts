@@ -154,14 +154,14 @@ describe('drawEdges: arestas com as duas pontas na seleção ficam em cor plena'
   });
 });
 
-describe('drawLabels: rótulos fora da seleção saem apagados', () => {
-  it('com seleção, rótulos fora dela saem em alpha reduzido', () => {
+describe('drawLabels: com seleção, só o selecionado e os vizinhos têm nome', () => {
+  it('rótulos fora da seleção não são desenhados', () => {
     const rec = recorder();
     drawLabels(rec.ctx as never, nodes, pal, { x: 0, y: 0, scale: 2 }, selectionSet('A/x', edges));
-    const alphaOf = (text: string) => rec.texts.find((t) => t.text === text)!.alpha;
+    const alphaOf = (text: string) => rec.texts.find((t) => t.text === text)?.alpha;
     expect(alphaOf('A/x')).toBe(1);
     expect(alphaOf('B/y')).toBe(1);
-    expect(alphaOf('B')).toBe(DIM_ALPHA); // dir:B
+    expect(alphaOf('B')).toBeUndefined(); // dir:B fica como fundo, sem nome
   });
 
   it('com seleção, o selecionado e os vizinhos ganham nome mesmo com zoom baixo (os demais continuam ocultos)', () => {
