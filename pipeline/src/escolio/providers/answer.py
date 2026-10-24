@@ -142,13 +142,22 @@ class OpenAICompatibleAnswerProvider:
     def _chat_request(self, question: str, contexts: list[str], *, stream: bool = False) -> Request:
         if not contexts:
             raise ValueError('Provider de resposta exige pelo menos um contexto citavel.')
+        return self._messages_request(build_grounded_chat_messages(question, contexts), stream=stream)
+
+    def _messages_request(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        stream: bool = False,
+        temperature: float | None = None,
+    ) -> Request:
         if not _is_http_base_url(self.base_url):
             raise AnswerProviderError(INVALID_BASE_URL_ERROR)
 
         payload: dict[str, object] = {
             'model': self.model,
-            'messages': build_grounded_chat_messages(question, contexts),
-            'temperature': self.temperature,
+            'messages': messages,
+            'temperature': self.temperature if temperature is None else temperature,
         }
         if stream:
             payload['stream'] = True
@@ -160,8 +169,18 @@ class OpenAICompatibleAnswerProvider:
         endpoint = f'{self.base_url.rstrip("/")}/chat/completions'
         return Request(endpoint, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
 
-    def answer(self, question: str, contexts: list[str]) -> str:
-        request = self._chat_request(question, contexts)
+    def complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float | None = None,
+    ) -> str:
+        """Chamada chat/completions genérica (sem prompt de resposta fundamentada).
+
+        Usada por tarefas auxiliares, como a extração estruturada de notas, para
+        reaproveitar o mesmo endpoint, chave e timeout do provider de resposta.
+        """
+        request = self._messages_request(messages, temperature=temperature)
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 body = response.read()
@@ -177,6 +196,11 @@ class OpenAICompatibleAnswerProvider:
         if not answer:
             raise AnswerProviderError(_empty_answer_error_message(message, finish_reason))
         return answer
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        if not contexts:
+            raise ValueError('Provider de resposta exige pelo menos um contexto citavel.')
+        return self.complete(build_grounded_chat_messages(question, contexts))
 
     def answer_stream(self, question: str, contexts: list[str], on_delta: Callable[[str], None]) -> str:
         from escolio.providers.answer_stream import read_sse_answer  # evita ciclo

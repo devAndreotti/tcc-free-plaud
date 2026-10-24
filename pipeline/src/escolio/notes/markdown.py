@@ -1,6 +1,16 @@
 from escolio.notes.schemas import Note
 
 
+def _extraction_sections(note: Note) -> list[str]:
+    """Seções '## Decisões' e '## Ações'; vazio quando não há extração."""
+    extraction = note.extraction
+    if extraction.is_empty():
+        return []
+    decisions = [f'- {item.text}' for item in extraction.decisions] or ['Nenhuma decisão identificada.']
+    actions = [f'- {item.label()}' for item in extraction.action_items] or ['Nenhuma ação identificada.']
+    return ['', '## Decisões', *decisions, '', '## Ações', *actions]
+
+
 def render_note_markdown(note: Note) -> str:
     """Serializa a nota em Markdown com frontmatter simples."""
     topics = note.topics or []
@@ -36,5 +46,6 @@ def render_note_markdown(note: Note) -> str:
         '## Raw Text',
         note.raw_text or 'Sem conteúdo bruto.',
         '',
+        *_extraction_sections(note),
     ]
     return '\n'.join(lines).strip() + '\n'
