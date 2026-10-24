@@ -1,0 +1,69 @@
+{
+  "dataset_name": "multi-trecho-ata-incidente-pagamentos",
+  "samples": [
+    {
+      "sample_id": "unica-06",
+      "question": "Quantos minutos durou a falha nas cobranças por cartão em setembro?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "47 minutos"
+      ],
+      "expected_ref": "Resumo",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-10",
+      "question": "Qual runbook deve receber o passo de rollback do incidente de pagamentos?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "PAY-RB-07"
+      ],
+      "expected_ref": "Ações",
+      "category": "direta"
+    },
+    {
+      "sample_id": "mt-nota-05",
+      "question": "Quantos minutos durou a falha de cobranças e qual era o timeout do gateway antes da mudança de 08/09?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "47 minutos",
+        "reduziu o timeout de 10 para 3 segundos"
+      ],
+      "expected_ref": "Resumo",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-10",
+      "question": "A que horas começou a falha de cobranças e onde será feita a próxima simulação de falha de gateway?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "14h12",
+        "homologação"
+      ],
+      "expected_ref": "Observações",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-03",
+      "question": "Qual timeout do gateway falhou em 09/09/2025, e qual lock o cache do catálogo usa contra stampede?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "3 segundos",
+        "09/09/2025"
+      ],
+      "expected_ref": "Resumo",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-10",
+      "question": "Qual a causa raiz do incidente de pagamentos, e quanto tempo o cache espera antes de tentar de novo no stampede?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "reduziu o timeout de 10 para 3 segundos",
+        "retry com jitter"
+      ],
+      "expected_ref": "Causa raiz",
+      "category": "inferida"
+    }
+  ]
+}

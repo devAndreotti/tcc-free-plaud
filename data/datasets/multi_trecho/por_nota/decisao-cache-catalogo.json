@@ -1,0 +1,58 @@
+{
+  "dataset_name": "multi-trecho-decisao-cache-catalogo",
+  "samples": [
+    {
+      "sample_id": "unica-05",
+      "question": "Qual é o formato das chaves do cache do catálogo?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "cat:v3:"
+      ],
+      "expected_ref": "Decisão",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-09",
+      "question": "Qual o prazo de expiração do lock do single-flight no cache?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "5 segundos"
+      ],
+      "expected_ref": "Stampede",
+      "category": "direta"
+    },
+    {
+      "sample_id": "mt-nota-04",
+      "question": "Qual o TTL da listagem do catálogo e qual a meta de hit rate na revisão?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "15 minutos",
+        "85%"
+      ],
+      "expected_ref": "Revisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-09",
+      "question": "Qual a primeira opção de cache considerada e qual a meta de hit rate na revisão?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "Memcached",
+        "85%"
+      ],
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-07",
+      "question": "Qual o TTL da listagem de produtos, e qual mecanismo o cache usa para evitar stampede?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "15 minutos",
+        "single-flight"
+      ],
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    }
+  ]
+}
