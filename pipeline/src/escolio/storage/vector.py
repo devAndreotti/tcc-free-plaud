@@ -35,6 +35,10 @@ def _resolve_collection_name(client: chromadb.ClientAPI, requested: str) -> str:
     return requested
 
 
+def _optional_float(value: object) -> float | None:
+    return None if value is None else float(str(value))
+
+
 def _chunk_from_record(chunk_id: str, document: str, metadata: dict[str, object]) -> Chunk:
     return Chunk(
         chunk_id=chunk_id,
@@ -51,6 +55,9 @@ def _chunk_from_record(chunk_id: str, document: str, metadata: dict[str, object]
         normalized_text_sha256=str(metadata['normalized_text_sha256']),
         text_sha256=str(metadata['text_sha256']),
         pipeline_version=str(metadata['pipeline_version']),
+        # Metadados antigos não têm tempos: ausência vira None.
+        t_start=_optional_float(metadata.get('t_start')),
+        t_end=_optional_float(metadata.get('t_end')),
     )
 
 
@@ -121,30 +128,37 @@ class LocalVectorStore:
         except NotFoundError:
             pass
 
+    @staticmethod
+    def _chunk_metadata(chunk: Chunk, embedding_model: str) -> dict[str, object]:
+        metadata: dict[str, object] = {
+            'note_id': chunk.note_id,
+            'note_version': chunk.note_version,
+            'chunk_index': chunk.chunk_index,
+            'char_start': chunk.char_start,
+            'char_end': chunk.char_end,
+            'chunk_size': chunk.chunk_size,
+            'overlap': chunk.overlap,
+            'token_count': chunk.token_count,
+            'strategy': chunk.strategy,
+            'normalized_text_sha256': chunk.normalized_text_sha256,
+            'text_sha256': chunk.text_sha256,
+            'pipeline_version': chunk.pipeline_version,
+            'embedding_model': embedding_model,
+        }
+        # Chroma não aceita None em metadado: tempos entram só quando existem.
+        if chunk.t_start is not None:
+            metadata['t_start'] = chunk.t_start
+        if chunk.t_end is not None:
+            metadata['t_end'] = chunk.t_end
+        return metadata
+
     def upsert_chunks(self, chunks: list[Chunk], embeddings: list[list[float]], *, embedding_model: str) -> None:
         if len(chunks) != len(embeddings):
             raise ValueError('A quantidade de embeddings precisa bater com a quantidade de chunks.')
         if not chunks:
             return
 
-        metadatas = [
-            {
-                'note_id': chunk.note_id,
-                'note_version': chunk.note_version,
-                'chunk_index': chunk.chunk_index,
-                'char_start': chunk.char_start,
-                'char_end': chunk.char_end,
-                'chunk_size': chunk.chunk_size,
-                'overlap': chunk.overlap,
-                'token_count': chunk.token_count,
-                'strategy': chunk.strategy,
-                'normalized_text_sha256': chunk.normalized_text_sha256,
-                'text_sha256': chunk.text_sha256,
-                'pipeline_version': chunk.pipeline_version,
-                'embedding_model': embedding_model,
-            }
-            for chunk in chunks
-        ]
+        metadatas = [self._chunk_metadata(chunk, embedding_model) for chunk in chunks]
         self._collection().upsert(
             ids=[chunk.chunk_id for chunk in chunks],
             documents=[chunk.chunk_text for chunk in chunks],
