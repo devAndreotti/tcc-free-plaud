@@ -398,6 +398,47 @@ export interface BenchmarkCorpusResult {
   summaries: Record<string, BenchmarkStrategySummary>;
 }
 
+/** Intervalo bootstrap de 95% do MRR de uma estratégia. */
+export interface BenchmarkMrrInterval {
+  mrr_lower: number;
+  mrr_upper: number;
+}
+
+/** Ablação: mesmo ranking com cross-encoder (reranker) por cima do RRF/vetorial/lexical. */
+export interface BenchmarkReranked {
+  model: string;
+  summaries: Record<string, BenchmarkStrategySummary>;
+  ci?: Record<string, BenchmarkMrrInterval>;
+}
+
+/** Cobertura por tipo de pergunta: termos esperados presentes nos k primeiros trechos. */
+export interface BenchmarkCoverageGroup {
+  id: string;
+  label: string;
+  hint?: string;
+  /** Perguntas do grupo. */
+  n: number;
+  /** Perguntas com todos os termos num trecho só (régua antiga). */
+  single_chunk: number;
+  /** Perguntas com os termos somados entre trechos. */
+  across_chunks: number;
+}
+
+export interface BenchmarkCoverage {
+  k: number;
+  groups: BenchmarkCoverageGroup[];
+}
+
+/** Faithfulness: afirmações da resposta sustentadas pelo trecho citado, julgadas por um modelo offline. */
+export interface BenchmarkFaithfulness {
+  score: number;
+  ci_lower: number;
+  ci_upper: number;
+  claims: number;
+  unparsed: number;
+  judge_model: string;
+}
+
 export interface BenchmarkCompareResult {
   ok: boolean;
   comparison_id: string;
@@ -407,6 +448,11 @@ export interface BenchmarkCompareResult {
   json_report_path: string;
   csv_report_path: string;
   settings_snapshot: BenchmarkSettingsSnapshot | null;
+  /** Opcionais: a UI só mostra cada seção quando o campo vem preenchido. */
+  reranked?: BenchmarkReranked;
+  baseline_ci?: Record<string, BenchmarkMrrInterval>;
+  coverage?: BenchmarkCoverage;
+  faithfulness?: BenchmarkFaithfulness;
 }
 
 export type AskStrategy = 'hybrid' | 'vector' | 'lexical';
@@ -1099,6 +1145,52 @@ const MOCK_BENCHMARK_RESULT: BenchmarkCompareResult = {
     default_chunk_overlap: 120,
     answer_provider: 'extractive',
     created_at: new Date().toISOString(),
+  },
+};
+
+const MOCK_CORPUS_SUMMARIES: Record<string, BenchmarkStrategySummary> = MOCK_BENCHMARK_RESULT.corpus?.summaries ?? {};
+
+/**
+ * Mock COM os campos novos (ablação, IC da linha base, cobertura e faithfulness).
+ * ILUSTRATIVO: os números abaixo são de exemplo, não medidos. Só os testes usam este mock;
+ * o mock de desenvolvimento acima continua sem esses campos.
+ */
+export const MOCK_BENCHMARK_RESULT_FULL: BenchmarkCompareResult = {
+  ...MOCK_BENCHMARK_RESULT,
+  comparison_id: 'cmp-mock-full',
+  reranked: {
+    model: 'BAAI/bge-reranker-v2-m3',
+    summaries: {
+      lexical: { ...MOCK_CORPUS_SUMMARIES.lexical, mrr: 0.931 },
+      vector: { ...MOCK_CORPUS_SUMMARIES.vector, mrr: 0.952 },
+      hybrid: { ...MOCK_CORPUS_SUMMARIES.hybrid, mrr: 0.968 },
+    },
+    ci: {
+      lexical: { mrr_lower: 0.88, mrr_upper: 0.97 },
+      vector: { mrr_lower: 0.91, mrr_upper: 0.985 },
+      hybrid: { mrr_lower: 0.93, mrr_upper: 0.995 },
+    },
+  },
+  baseline_ci: {
+    lexical: { mrr_lower: 0.86, mrr_upper: 0.96 },
+    vector: { mrr_lower: 0.89, mrr_upper: 0.975 },
+    hybrid: { mrr_lower: 0.9, mrr_upper: 0.98 },
+  },
+  coverage: {
+    k: 5,
+    groups: [
+      { id: 'unica', label: 'Um trecho', n: 10, single_chunk: 9, across_chunks: 9 },
+      { id: 'mt-nota', label: 'Dois trechos, mesma nota', n: 10, single_chunk: 0, across_chunks: 8 },
+      { id: 'mt-notas', label: 'Duas notas', n: 10, single_chunk: 4, across_chunks: 7 },
+    ],
+  },
+  faithfulness: {
+    score: 0.874,
+    ci_lower: 0.81,
+    ci_upper: 0.93,
+    claims: 112,
+    unparsed: 3,
+    judge_model: 'modelo-juiz-ilustrativo',
   },
 };
 
