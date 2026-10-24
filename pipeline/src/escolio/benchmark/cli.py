@@ -13,6 +13,10 @@ from escolio.benchmark.datasets import (
     load_benchmark_dataset,
     load_benchmark_suite,
 )
+from escolio.benchmark.faithfulness import (
+    build_faithfulness_report,
+    make_openai_compatible_judge,
+)
 from escolio.benchmark.grounded import evaluate_grounded_answers
 from escolio.benchmark.ia_report import build_ia_report
 from escolio.benchmark.reports import (
@@ -30,7 +34,11 @@ from escolio.benchmark.runners import (
 from escolio.benchmark.service import build_settings_snapshot
 from escolio.ingest.loaders import load_document
 from escolio.notes.structurer import structure_document
-from escolio.providers.answer import AnswerProviderName, get_answer_provider
+from escolio.providers.answer import (
+    AnswerProviderError,
+    AnswerProviderName,
+    get_answer_provider,
+)
 from escolio.providers.embed import (
     EmbeddingConfigurationError,
     get_embedder,
@@ -263,4 +271,26 @@ def report_ia(
         raise typer.Exit(code=1) from None
     saida.parent.mkdir(parents=True, exist_ok=True)
     saida.write_text(markdown, encoding='utf-8', newline='\n')
+    typer.echo(json.dumps({'ok': True, 'saida': str(saida)}, ensure_ascii=True, indent=2))
+
+
+@app.command("faithfulness")
+def faithfulness(
+    results_path: Path = typer.Option(..., '--results', help="JSON do compare com --registrar-respostas."),
+    judge_model: str = typer.Option(..., '--judge-model', help="Modelo juiz; use um modelo forte e rode offline."),
+    judge_base_url: str = typer.Option(..., '--judge-base-url', help="Base URL OpenAI-compatible do juiz."),
+    saida: Path = typer.Option(..., '--saida', help="Arquivo JSON de saída."),
+    judge_api_key: str | None = typer.Option(None, '--judge-api-key', help="Chave do juiz, se o endpoint exigir."),
+    timeout: int = typer.Option(120, '--timeout', min=1, help="Timeout por chamada ao juiz, em segundos."),
+) -> None:
+    """Faithfulness semântica com juiz LLM (offline; fora do gate do CI)."""
+    comparison = BenchmarkComparisonResult.model_validate_json(results_path.read_text(encoding='utf-8'))
+    try:
+        judge = make_openai_compatible_judge(judge_base_url, judge_model, api_key=judge_api_key, timeout=timeout)
+        report = build_faithfulness_report(comparison, judge, judge_model=judge_model, judge_base_url=judge_base_url)
+    except (ValueError, AnswerProviderError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from None
+    saida.parent.mkdir(parents=True, exist_ok=True)
+    saida.write_text(report.model_dump_json(indent=2) + '\n', encoding='utf-8', newline='\n')
     typer.echo(json.dumps({'ok': True, 'saida': str(saida)}, ensure_ascii=True, indent=2))
