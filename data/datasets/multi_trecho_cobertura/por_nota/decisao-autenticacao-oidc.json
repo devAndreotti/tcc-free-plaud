@@ -1,0 +1,113 @@
+{
+  "dataset_name": "multi-trecho-cobertura-decisao-autenticacao-oidc",
+  "samples": [
+    {
+      "sample_id": "mt-nota-10",
+      "question": "Qual é a validade do access token, e até que data quem integra com a API antiga deve migrar?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "5 minutos",
+        "31/12/2025"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "5 minutos",
+          "31/12/2025"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-11",
+      "question": "Qual é o nome do cookie de sessão, e como o Keycloak é rodado para não virar ponto único de falha?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "sid_escolio",
+        "duas réplicas"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "sid_escolio",
+          "duas réplicas"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-12",
+      "question": "O que acontece se um refresh token antigo for reusado, e qual teste de restauração ainda não tem dono?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "derruba a sessão inteira",
+        "teste de restauração mensal"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "derruba a sessão inteira",
+          "teste de restauração mensal"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-11",
+      "question": "Até quando quem integra com a API antiga deve migrar, e qual algoritmo que estima a banda disponível é citado na aula de TCP?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "31/12/2025",
+        "BBR"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "31/12/2025"
+        ],
+        "aula-tcp-congestionamento": [
+          "BBR"
+        ]
+      },
+      "expected_ref": "Aprovação",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-12",
+      "question": "Quantas réplicas o Keycloak roda em cluster, e em que horário disparou o alerta de latência do gateway?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "duas réplicas",
+        "14h12"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "duas réplicas"
+        ],
+        "ata-incidente-pagamentos": [
+          "14h12"
+        ]
+      },
+      "expected_ref": "Riscos",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-13",
+      "question": "O que acontece se um refresh token antigo for reusado, e qual é o nome do tópico principal da migração para o Kafka?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "derruba a sessão inteira",
+        "pedidos-v2"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "derruba a sessão inteira"
+        ],
+        "ata-migracao-kafka": [
+          "pedidos-v2"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    }
+  ]
+}

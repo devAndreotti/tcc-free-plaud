@@ -1,0 +1,77 @@
+{
+  "dataset_name": "multi-trecho-cobertura-entrevista-backend-julia",
+  "samples": [
+    {
+      "sample_id": "mt-nota-19",
+      "question": "Como a candidata corrigiu a race condition no resgate do cupom, e até quando o RH retorna?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": [
+        "UPDATE condicional",
+        "25/06/2025"
+      ],
+      "expected_terms_por_nota": {
+        "entrevista-backend-julia": [
+          "UPDATE condicional",
+          "25/06/2025"
+        ]
+      },
+      "expected_ref": "Avaliação técnica",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-20",
+      "question": "Que política a candidata escolheu se o Redis cair, e qual nota final ela recebeu nas rubricas técnicas?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": [
+        "fail-open com alerta",
+        "4 de 5"
+      ],
+      "expected_terms_por_nota": {
+        "entrevista-backend-julia": [
+          "fail-open com alerta",
+          "4 de 5"
+        ]
+      },
+      "expected_ref": "Desafio técnico (take-home)",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-18",
+      "question": "Que política a candidata escolheu se o Redis cair, e qual é o cwnd inicial do TCP em MSS?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": [
+        "fail-open com alerta",
+        "10 MSS"
+      ],
+      "expected_terms_por_nota": {
+        "entrevista-backend-julia": [
+          "fail-open com alerta"
+        ],
+        "aula-tcp-congestionamento": [
+          "10 MSS"
+        ]
+      },
+      "expected_ref": "Desafio técnico (take-home)",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-19",
+      "question": "Que algoritmo de limite a candidata usou no desafio, e que complemento o retry do incidente de pagamentos recebe?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": [
+        "sliding window",
+        "jitter"
+      ],
+      "expected_terms_por_nota": {
+        "entrevista-backend-julia": [
+          "sliding window"
+        ],
+        "ata-incidente-pagamentos": [
+          "jitter"
+        ]
+      },
+      "expected_ref": "Desafio técnico (take-home)",
+      "category": "inferida"
+    }
+  ]
+}

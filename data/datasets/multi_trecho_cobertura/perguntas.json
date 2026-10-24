@@ -1,0 +1,725 @@
+{
+  "dataset_name": "multi-trecho-cobertura-perguntas",
+  "samples": [
+    {
+      "sample_id": "mt-nota-01",
+      "question": "Qual é o replication factor do tópico de pedidos e em que dia o atendimento é avisado sobre o cutover?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "replication factor 3",
+        "dia 20"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "replication factor 3",
+          "dia 20"
+        ]
+      },
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-02",
+      "question": "Qual política de acks o producer vai usar, e em que data acontece o cutover?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "acks=all",
+        "22/03/2025"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "acks=all",
+          "22/03/2025"
+        ]
+      },
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-03",
+      "question": "Qual é a chave de partição dos pedidos, e qual feature flag reativa o consumer antigo no rollback?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "pedido_id",
+        "ORDERS_LEGACY_CONSUMER"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "pedido_id",
+          "ORDERS_LEGACY_CONSUMER"
+        ]
+      },
+      "expected_ref": "Discussão sobre ordem",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-04",
+      "question": "Quanto tempo durou a falha de cobrança por cartão, e para qual valor a ação de correção manda restaurar o timeout do gateway?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "47 minutos",
+        "8 segundos"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "47 minutos",
+          "8 segundos"
+        ]
+      },
+      "expected_ref": "Ações",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-05",
+      "question": "Quanto tempo durou a falha de cobrança por cartão, e a partir de qual p99 o novo alerta deve disparar?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "47 minutos",
+        "2 segundos"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "47 minutos",
+          "2 segundos"
+        ]
+      },
+      "expected_ref": "Resumo",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-06",
+      "question": "Em que horário disparou o alerta de latência do gateway, e qual runbook recebe o passo de rollback?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "14h12",
+        "PAY-RB-07"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "14h12",
+          "PAY-RB-07"
+        ]
+      },
+      "expected_ref": "Linha do tempo",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-07",
+      "question": "Quanto dura o TTL da listagem do catálogo, e como o publicador deve apagar as chaves ao mudar uma categoria?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "15 minutos",
+        "SCAN"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "15 minutos",
+          "SCAN"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-08",
+      "question": "Quantas requisições podem chegar juntas quando uma chave expira, e qual meta de hit rate o cache precisa atingir?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "300 requisições",
+        "85%"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "300 requisições",
+          "85%"
+        ]
+      },
+      "expected_ref": "Stampede",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-09",
+      "question": "Qual lock evita o stampede quando uma chave expira, e em que data a decisão será revisada?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "lock:catalogo",
+        "30/11/2025"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "lock:catalogo",
+          "30/11/2025"
+        ]
+      },
+      "expected_ref": "Stampede",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-10",
+      "question": "Qual é a validade do access token, e até que data quem integra com a API antiga deve migrar?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "5 minutos",
+        "31/12/2025"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "5 minutos",
+          "31/12/2025"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-11",
+      "question": "Qual é o nome do cookie de sessão, e como o Keycloak é rodado para não virar ponto único de falha?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "sid_escolio",
+        "duas réplicas"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "sid_escolio",
+          "duas réplicas"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-12",
+      "question": "O que acontece se um refresh token antigo for reusado, e qual teste de restauração ainda não tem dono?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "derruba a sessão inteira",
+        "teste de restauração mensal"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "derruba a sessão inteira",
+          "teste de restauração mensal"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-13",
+      "question": "Qual faixa de tamanho de arquivo o Heitor recomenda, e até quando é a entrega do exercício?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "128 MB",
+        "18/04/2025"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "128 MB",
+          "18/04/2025"
+        ]
+      },
+      "expected_ref": "Particionamento",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-14",
+      "question": "Como o Parquet guarda os dados, e qual técnica o Heitor sugere para data skew?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "guarda os dados por coluna",
+        "salting"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "guarda os dados por coluna",
+          "salting"
+        ]
+      },
+      "expected_ref": "Formatos colunares",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-15",
+      "question": "Qual problema aparece ao particionar por cliente_id com milhões de clientes, e qual formato rende o ponto extra?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "small files",
+        "Delta Lake"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "small files",
+          "Delta Lake"
+        ]
+      },
+      "expected_ref": "Particionamento",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-16",
+      "question": "Qual é o cwnd inicial do TCP, e até quando é a entrega do Lab 3?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "10 MSS",
+        "09/10/2025"
+      ],
+      "expected_terms_por_nota": {
+        "aula-tcp-congestionamento": [
+          "10 MSS",
+          "09/10/2025"
+        ]
+      },
+      "expected_ref": "Slow start",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-17",
+      "question": "O que dispara o fast retransmit, e qual é a data da prova P2?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "três ACKs duplicados",
+        "16/10/2025"
+      ],
+      "expected_terms_por_nota": {
+        "aula-tcp-congestionamento": [
+          "três ACKs duplicados",
+          "16/10/2025"
+        ]
+      },
+      "expected_ref": "Perda",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-18",
+      "question": "Qual RFC define o cwnd inicial, e qual algoritmo é o padrão em muitos sistemas Linux?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "RFC 6928",
+        "Cubic"
+      ],
+      "expected_terms_por_nota": {
+        "aula-tcp-congestionamento": [
+          "RFC 6928",
+          "Cubic"
+        ]
+      },
+      "expected_ref": "Slow start",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-19",
+      "question": "Como a candidata corrigiu a race condition no resgate do cupom, e até quando o RH retorna?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": [
+        "UPDATE condicional",
+        "25/06/2025"
+      ],
+      "expected_terms_por_nota": {
+        "entrevista-backend-julia": [
+          "UPDATE condicional",
+          "25/06/2025"
+        ]
+      },
+      "expected_ref": "Avaliação técnica",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-20",
+      "question": "Que política a candidata escolheu se o Redis cair, e qual nota final ela recebeu nas rubricas técnicas?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": [
+        "fail-open com alerta",
+        "4 de 5"
+      ],
+      "expected_terms_por_nota": {
+        "entrevista-backend-julia": [
+          "fail-open com alerta",
+          "4 de 5"
+        ]
+      },
+      "expected_ref": "Desafio técnico (take-home)",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-01",
+      "question": "Quantas partições terá o tópico de pedidos, e qual técnica o Heitor sugere para lidar com data skew?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "12 partições",
+        "salting"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "12 partições"
+        ],
+        "aula-particionamento-parquet": [
+          "salting"
+        ]
+      },
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-02",
+      "question": "Qual política de acks o producer do Kafka vai usar, e qual mecanismo de retry o plano do incidente de pagamentos propõe?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "acks=all",
+        "backoff exponencial"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "acks=all"
+        ],
+        "ata-incidente-pagamentos": [
+          "backoff exponencial"
+        ]
+      },
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-03",
+      "question": "Qual é a chave de partição escolhida para os pedidos, e como o cache do catálogo evita o stampede?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "pedido_id",
+        "single-flight"
+      ],
+      "expected_terms_por_nota": {
+        "ata-migracao-kafka": [
+          "pedido_id"
+        ],
+        "decisao-cache-catalogo": [
+          "single-flight"
+        ]
+      },
+      "expected_ref": "Discussão sobre ordem",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-04",
+      "question": "Qual runbook de pagamentos recebe o passo de rollback, e qual é o nome do cookie de sessão na decisão de OIDC?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "PAY-RB-07",
+        "sid_escolio"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "PAY-RB-07"
+        ],
+        "decisao-autenticacao-oidc": [
+          "sid_escolio"
+        ]
+      },
+      "expected_ref": "Ações",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-05",
+      "question": "Para qual valor o timeout do gateway deve voltar, e qual arquivo do exercício de Parquet precisa ser convertido?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "8 segundos",
+        "vendas_2024.csv"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "8 segundos"
+        ],
+        "aula-particionamento-parquet": [
+          "vendas_2024.csv"
+        ]
+      },
+      "expected_ref": "Ações",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-06",
+      "question": "Quanto tempo durou a falha nas cobranças por cartão, e qual laboratório de redes precisa ser entregue?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "47 minutos",
+        "Lab 3"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "47 minutos"
+        ],
+        "aula-tcp-congestionamento": [
+          "Lab 3"
+        ]
+      },
+      "expected_ref": "Resumo",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-07",
+      "question": "Qual é o TTL da listagem do catálogo, e que correção a candidata fez no resgate do cupom?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "15 minutos",
+        "UPDATE condicional"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "15 minutos"
+        ],
+        "entrevista-backend-julia": [
+          "UPDATE condicional"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-08",
+      "question": "Qual meta de hit rate o cache precisa atingir, e qual garantia de entrega o time decidiu não exigir na migração para o Kafka?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "85%",
+        "exactly-once"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "85%"
+        ],
+        "ata-migracao-kafka": [
+          "exactly-once"
+        ]
+      },
+      "expected_ref": "Revisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-09",
+      "question": "Quantas requisições simultâneas o single-flight precisa conter, e qual é a validade do access token no OIDC?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "300 requisições",
+        "5 minutos"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "300 requisições"
+        ],
+        "decisao-autenticacao-oidc": [
+          "5 minutos"
+        ]
+      },
+      "expected_ref": "Stampede",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-10",
+      "question": "Quanto tempo a tela de preço pode mostrar dados defasados, e qual problema aparece com muitos arquivos pequenos?",
+      "expected_note_id": "decisao-cache-catalogo",
+      "expected_terms": [
+        "60 segundos",
+        "small files"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-cache-catalogo": [
+          "60 segundos"
+        ],
+        "aula-particionamento-parquet": [
+          "small files"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-11",
+      "question": "Até quando quem integra com a API antiga deve migrar, e qual algoritmo que estima a banda disponível é citado na aula de TCP?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "31/12/2025",
+        "BBR"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "31/12/2025"
+        ],
+        "aula-tcp-congestionamento": [
+          "BBR"
+        ]
+      },
+      "expected_ref": "Aprovação",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-12",
+      "question": "Quantas réplicas o Keycloak roda em cluster, e em que horário disparou o alerta de latência do gateway?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "duas réplicas",
+        "14h12"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "duas réplicas"
+        ],
+        "ata-incidente-pagamentos": [
+          "14h12"
+        ]
+      },
+      "expected_ref": "Riscos",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-13",
+      "question": "O que acontece se um refresh token antigo for reusado, e qual é o nome do tópico principal da migração para o Kafka?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "derruba a sessão inteira",
+        "pedidos-v2"
+      ],
+      "expected_terms_por_nota": {
+        "decisao-autenticacao-oidc": [
+          "derruba a sessão inteira"
+        ],
+        "ata-migracao-kafka": [
+          "pedidos-v2"
+        ]
+      },
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-14",
+      "question": "Qual formato o ponto extra do exercício de Parquet aceita, e qual comando o publicador do catálogo usa para apagar chaves?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "Delta Lake",
+        "SCAN"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "Delta Lake"
+        ],
+        "decisao-cache-catalogo": [
+          "SCAN"
+        ]
+      },
+      "expected_ref": "Exercício",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-15",
+      "question": "Por qual coluna o exercício de Parquet particiona o arquivo, e qual evento dispara o fast retransmit no TCP?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "ano_mes",
+        "três ACKs duplicados"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "ano_mes"
+        ],
+        "aula-tcp-congestionamento": [
+          "três ACKs duplicados"
+        ]
+      },
+      "expected_ref": "Exercício",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-16",
+      "question": "Qual é a data da prova P2 de redes, e qual nota final a candidata recebeu nas rubricas técnicas?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "16/10/2025",
+        "4 de 5"
+      ],
+      "expected_terms_por_nota": {
+        "aula-tcp-congestionamento": [
+          "16/10/2025"
+        ],
+        "entrevista-backend-julia": [
+          "4 de 5"
+        ]
+      },
+      "expected_ref": "Avaliação",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-17",
+      "question": "Qual RFC define o cwnd inicial do TCP, e em que data foi o incidente de pagamentos?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "RFC 6928",
+        "09/09/2025"
+      ],
+      "expected_terms_por_nota": {
+        "aula-tcp-congestionamento": [
+          "RFC 6928"
+        ],
+        "ata-incidente-pagamentos": [
+          "09/09/2025"
+        ]
+      },
+      "expected_ref": "Slow start",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-18",
+      "question": "Que política a candidata escolheu se o Redis cair, e qual é o cwnd inicial do TCP em MSS?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": [
+        "fail-open com alerta",
+        "10 MSS"
+      ],
+      "expected_terms_por_nota": {
+        "entrevista-backend-julia": [
+          "fail-open com alerta"
+        ],
+        "aula-tcp-congestionamento": [
+          "10 MSS"
+        ]
+      },
+      "expected_ref": "Desafio técnico (take-home)",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-19",
+      "question": "Que algoritmo de limite a candidata usou no desafio, e que complemento o retry do incidente de pagamentos recebe?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": [
+        "sliding window",
+        "jitter"
+      ],
+      "expected_terms_por_nota": {
+        "entrevista-backend-julia": [
+          "sliding window"
+        ],
+        "ata-incidente-pagamentos": [
+          "jitter"
+        ]
+      },
+      "expected_ref": "Desafio técnico (take-home)",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-20",
+      "question": "Como se chama o ganho de pular pastas em filtro de data, e qual provedor de identidade foi adotado no OIDC?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "partition pruning",
+        "Keycloak"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "partition pruning"
+        ],
+        "decisao-autenticacao-oidc": [
+          "Keycloak"
+        ]
+      },
+      "expected_ref": "Particionamento",
+      "category": "inferida"
+    }
+  ]
+}

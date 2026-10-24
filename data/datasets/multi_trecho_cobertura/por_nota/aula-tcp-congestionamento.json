@@ -1,0 +1,94 @@
+{
+  "dataset_name": "multi-trecho-cobertura-aula-tcp-congestionamento",
+  "samples": [
+    {
+      "sample_id": "mt-nota-16",
+      "question": "Qual é o cwnd inicial do TCP, e até quando é a entrega do Lab 3?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "10 MSS",
+        "09/10/2025"
+      ],
+      "expected_terms_por_nota": {
+        "aula-tcp-congestionamento": [
+          "10 MSS",
+          "09/10/2025"
+        ]
+      },
+      "expected_ref": "Slow start",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-17",
+      "question": "O que dispara o fast retransmit, e qual é a data da prova P2?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "três ACKs duplicados",
+        "16/10/2025"
+      ],
+      "expected_terms_por_nota": {
+        "aula-tcp-congestionamento": [
+          "três ACKs duplicados",
+          "16/10/2025"
+        ]
+      },
+      "expected_ref": "Perda",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-18",
+      "question": "Qual RFC define o cwnd inicial, e qual algoritmo é o padrão em muitos sistemas Linux?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "RFC 6928",
+        "Cubic"
+      ],
+      "expected_terms_por_nota": {
+        "aula-tcp-congestionamento": [
+          "RFC 6928",
+          "Cubic"
+        ]
+      },
+      "expected_ref": "Slow start",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-16",
+      "question": "Qual é a data da prova P2 de redes, e qual nota final a candidata recebeu nas rubricas técnicas?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "16/10/2025",
+        "4 de 5"
+      ],
+      "expected_terms_por_nota": {
+        "aula-tcp-congestionamento": [
+          "16/10/2025"
+        ],
+        "entrevista-backend-julia": [
+          "4 de 5"
+        ]
+      },
+      "expected_ref": "Avaliação",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-17",
+      "question": "Qual RFC define o cwnd inicial do TCP, e em que data foi o incidente de pagamentos?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "RFC 6928",
+        "09/09/2025"
+      ],
+      "expected_terms_por_nota": {
+        "aula-tcp-congestionamento": [
+          "RFC 6928"
+        ],
+        "ata-incidente-pagamentos": [
+          "09/09/2025"
+        ]
+      },
+      "expected_ref": "Slow start",
+      "category": "inferida"
+    }
+  ]
+}
