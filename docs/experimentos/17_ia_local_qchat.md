@@ -202,3 +202,15 @@ Sonda de voz (12 casos com notas em primeira pessoa, um trecho): 12 de 12 em seg
 
 - Repetir a medição três vezes para medir a variação.
 - Ver as 2 negativas com texto na híbrida e as 6 positivas sem texto (lista acima).
+
+## Como comparar com um modelo maior
+
+A partir de `pipeline/`, com o Ollama acessível (a rodada de 2026-10-20 foi no Emerald):
+
+```bash
+python -m escolio benchmark compare-models --suite ../data/datasets/manual_validation/suite.json --models qchat:latest,qwen2.5:7b --answer-provider ollama --saida-dir ../data/results/modelos/
+```
+
+O comando roda o `compare` uma vez por modelo, na mesma suíte. Grava um JSON por modelo (`qchat_latest.json`, `qwen2.5_7b.json`) e um relatório único, `relatorio_modelos.md`. Cada JSON e o relatório trazem nome e tag do modelo, provider, temperatura, versão do pipeline, hash SHA-256 da suíte (manifesto, documentos e datasets) e data. Um modelo que falha aparece com o erro no relatório, e os outros continuam.
+
+Resultado: **NÃO MEDIDO**. A máquina de desenvolvimento não tem Ollama. A ferramenta foi testada só com providers falsos (`pipeline/tests/test_model_compare.py`). Os números de qwen2.5:7b da seção de 2026-10-20 vêm de rodadas anteriores e não foram gerados por este comando.
