@@ -184,6 +184,7 @@ def compare(
     hybrid_vector_weight: float = typer.Option(DEFAULT_HYBRID_VECTOR_WEIGHT, '--hybrid-vector-weight', min=0.0, help='Peso do ranking vetorial para strategy=hybrid.'),
     hybrid_lexical_pool: int | None = typer.Option(None, '--hybrid-lexical-pool', min=1, help='Pool lexical candidato para strategy=hybrid.'),
     hybrid_vector_pool: int | None = typer.Option(None, '--hybrid-vector-pool', min=1, help='Pool vetorial candidato para strategy=hybrid.'),
+    registrar_respostas: bool = typer.Option(False, '--registrar-respostas', help="Grava no JSON a resposta do chat e os trechos citados (entrada do benchmark faithfulness)."),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
 ) -> None:
     """Compara lexical, vector e hybrid em uma suíte de documentos e datasets."""
@@ -232,6 +233,7 @@ def compare(
             hybrid_vector_pool=hybrid_vector_pool,
             settings_snapshot=build_settings_snapshot(settings),
             answer_provider=answer_llm,
+            keep_answers=registrar_respostas,
         )
         payload = result.model_dump(mode='json')
         if export:

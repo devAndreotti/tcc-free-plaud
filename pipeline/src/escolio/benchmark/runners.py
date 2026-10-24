@@ -86,6 +86,9 @@ class BenchmarkQueryResult(BaseModel):
     discard_reason: str | None = None
     # Pergunta inteira no chat (recuperação e resposta), não só a busca.
     question_latency_ms: int | None = None
+    # Só com `keep_answers` (compare --registrar-respostas): texto da resposta do chat e os trechos citados por ela.
+    answer: str | None = None
+    contexts: list[str] | None = None
 
 
 class BenchmarkRunResult(BaseModel):
@@ -429,6 +432,7 @@ def run_corpus_benchmark(
     embedder: Embedder,
     top_k: int,
     answer_provider: AnswerProvider | None = None,
+    keep_answers: bool = False,
 ) -> BenchmarkCorpusResult:
     """Mede o cenário do chat: todas as notas num corpus só, sem filtro por nota.
 
@@ -494,6 +498,10 @@ def run_corpus_benchmark(
             row.generated = response.generated
             row.discard_reason = generation_discard_reason(response, has_provider=answer_provider is not None)
             row.question_latency_ms = response.latency_ms
+            if keep_answers and response.answer:
+                cited_chunk_ids = {citation.chunk_id for citation in response.citations}
+                row.answer = response.answer
+                row.contexts = [hit.chunk.chunk_text for hit in hits if hit.chunk.chunk_id in cited_chunk_ids]
             rows.append(row)
             predicted_abstain.append(not answered)
             gold_abstain.append(is_negative)
@@ -549,6 +557,7 @@ def compare_benchmark_suite(
     hybrid_vector_pool: int | None = None,
     settings_snapshot: BenchmarkSettingsSnapshot | None = None,
     answer_provider: AnswerProvider | None = None,
+    keep_answers: bool = False,
 ) -> BenchmarkComparisonResult:
     """Compara lexical, vector e hybrid em múltiplos documentos de forma reproduzível."""
     started_at = datetime.now(UTC)
@@ -643,6 +652,7 @@ def compare_benchmark_suite(
             embedder=embedder,
             top_k=top_k,
             answer_provider=answer_provider,
+            keep_answers=keep_answers,
         )
 
     finished_at = datetime.now(UTC)
