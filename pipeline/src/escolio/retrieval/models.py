@@ -20,6 +20,9 @@ class Chunk(BaseModel):
     normalized_text_sha256: str
     text_sha256: str
     pipeline_version: str
+    # Tempo na fala (segundos) do trecho; só preenchido para chunks de áudio por segmento.
+    t_start: float | None = None
+    t_end: float | None = None
 
 
 class SearchHit(BaseModel):
@@ -86,6 +89,9 @@ class Citation(BaseModel):
     source_path: str | None = None
     char_start: int
     char_end: int
+    # Tempo na fala (segundos), quando o chunk citado veio de áudio com timestamps.
+    t_start: float | None = None
+    t_end: float | None = None
 
 
 class AnswerClaim(BaseModel):

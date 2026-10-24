@@ -118,6 +118,8 @@ def _citation_from_corpus_hit(hit: SearchHit, note_lookup: dict[str, Note], clai
         source_path=str(note.source_path) if note else None,
         char_start=chunk.char_start,
         char_end=chunk.char_end,
+        t_start=chunk.t_start,
+        t_end=chunk.t_end,
     )
 
 

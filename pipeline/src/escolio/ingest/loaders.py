@@ -48,6 +48,7 @@ def load_document(path: Path) -> IngestedDocument:
             raw_text=result.raw_text,
             cleaned_text=result.text,
             transcription_path=result.artifact_path,
+            segments=list(result.segments) or None,
         )
     elif suffix in {".txt", ".md"}:
         raw_text = validated.read_text(encoding="utf-8")

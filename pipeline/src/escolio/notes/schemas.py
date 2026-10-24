@@ -3,6 +3,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from escolio.providers.audio_models import TranscriptSegment
+
 
 class ActionItem(BaseModel):
     """Tarefa extraída da nota; owner e due só existem quando a nota os informa."""
@@ -73,3 +75,6 @@ class Note(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     provider: str = "local"
     model: str = "rule-based"
+    # Segmentos de fala (áudio) só vivem na memória durante a indexação: não são persistidos nem serializados.
+    # Quando presentes, normalized_text é exatamente o texto concatenado dos segmentos (ver chunking.py).
+    segments: list[TranscriptSegment] | None = Field(default=None, exclude=True)
