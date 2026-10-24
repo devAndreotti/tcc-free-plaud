@@ -36,6 +36,8 @@ import GraphLegend from './GraphLegend';
 interface Tooltip  { label: string; detail: string; x: number; y: number }
 
 const MAX_ITER = 300;
+// Com movimento reduzido: ticks por quadro antes de devolver o controle à página (~30 ms com 740 nós)
+const REDUCED_BATCH_TICKS = 12;
 // Quadros de uma transição de câmera (enquadrar uma pasta): ~240 ms a 60 Hz
 const GLIDE_FRAMES = 14;
 
@@ -176,11 +178,19 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     const cx = logW.current / 2;
     const cy = logH.current / 2;
 
-    // Com movimento reduzido a simulação roda inteira de uma vez e o grafo aparece já posicionado
+    // Com movimento reduzido não há quadros intermediários: a simulação roda em lotes (sem travar a
+    // página) e o grafo aparece já posicionado, uma única vez
     if (prefersReducedMotion()) {
-      for (let i = 0; i < iters; i++) tick(nodes, edges, cx, cy);
       entryStartRef.current = null;
-      draw();
+      let left = iters;
+      const batch = () => {
+        const n = Math.min(left, REDUCED_BATCH_TICKS);
+        for (let i = 0; i < n; i++) tick(nodes, edges, cx, cy);
+        left -= n;
+        if (left > 0) animRef.current = requestAnimationFrame(batch);
+        else draw();
+      };
+      batch();
       return;
     }
 
