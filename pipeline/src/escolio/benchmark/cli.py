@@ -8,6 +8,7 @@ from rich.console import Console
 from escolio.app.cli_paths import compose_path
 from escolio.app.config import get_settings
 from escolio.app.paths import ensure_runtime_dirs
+from escolio.benchmark.coverage_cli import coverage as coverage_command
 from escolio.benchmark.datasets import (
     demo_dataset,
     load_benchmark_dataset,
@@ -65,6 +66,7 @@ from escolio.storage.vector import LocalVectorStore
 app = typer.Typer(help="Comandos de benchmark experimental.", no_args_is_help=True)
 console = Console()
 ANSWER_PROVIDER_NAMES = get_args(AnswerProviderName)
+app.command("coverage")(coverage_command)
 
 
 @app.command("run-demo")
