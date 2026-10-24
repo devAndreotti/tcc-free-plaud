@@ -47,7 +47,9 @@ def test_rerank_hits_reorders_by_reranker_score() -> None:
     result = rerank_hits('pergunta', hits, reranker, top_k=3)
 
     assert [hit.chunk.chunk_text for hit in result] == ['b', 'c', 'a']
-    assert [hit.score for hit in result] == [0.9, 0.5, 0.1]
+    assert [hit.rerank_score for hit in result] == [0.9, 0.5, 0.1]
+    # `score` (escala RRF/vetor) não muda: os limiares de abstenção do ask dependem dele.
+    assert [hit.score for hit in result] == [0.5, 0.7, 0.9]
     assert all(hit.strategy == 'lexical' for hit in result)
     assert reranker.calls == [('pergunta', ['a', 'b', 'c'])]
 
@@ -117,3 +119,11 @@ def test_retrieve_corpus_hits_widens_pool_and_reranks_before_cut(monkeypatch) ->
     assert requested == [24]
     assert stale == 0
     assert [hit.chunk.chunk_text for hit in hits] == ['b', 'c']
+
+
+def test_reranker_from_settings_empty_model_disables() -> None:
+    from escolio.app.config import Settings
+    from escolio.retrieval.rerank import reranker_from_settings
+
+    assert reranker_from_settings(Settings(rerank_model='')) is None
+    assert reranker_from_settings(Settings(rerank_model='   ')) is None

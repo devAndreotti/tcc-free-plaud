@@ -30,6 +30,7 @@ from escolio.providers.answer import AnswerProvider
 from escolio.providers.embed import Embedder
 from escolio.retrieval.indexer import index_note, index_note_in_vector_store
 from escolio.retrieval.models import Chunk, SearchHit
+from escolio.retrieval.rerank import Reranker
 from escolio.retrieval.search import (
     DEFAULT_HYBRID_LEXICAL_WEIGHT,
     DEFAULT_HYBRID_RANK_CONSTANT,
@@ -433,6 +434,7 @@ def run_corpus_benchmark(
     top_k: int,
     answer_provider: AnswerProvider | None = None,
     keep_answers: bool = False,
+    reranker: Reranker | None = None,
 ) -> BenchmarkCorpusResult:
     """Mede o cenário do chat: todas as notas num corpus só, sem filtro por nota.
 
@@ -469,6 +471,7 @@ def run_corpus_benchmark(
                 strategy=strategy,
                 vector_store=vector_store,
                 embedder=embedder,
+                reranker=reranker,
             )
             latency_ms = int((perf_counter() - query_started) * 1000)
             response = answer_corpus_with_citations(
@@ -479,6 +482,7 @@ def run_corpus_benchmark(
                 strategy=strategy,
                 top_k=top_k,
                 answer_provider=answer_provider,
+                reranker=reranker,
             )
             answered = not response.no_answer
             if is_negative:
@@ -558,6 +562,7 @@ def compare_benchmark_suite(
     settings_snapshot: BenchmarkSettingsSnapshot | None = None,
     answer_provider: AnswerProvider | None = None,
     keep_answers: bool = False,
+    reranker: Reranker | None = None,
 ) -> BenchmarkComparisonResult:
     """Compara lexical, vector e hybrid em múltiplos documentos de forma reproduzível."""
     started_at = datetime.now(UTC)
@@ -653,6 +658,7 @@ def compare_benchmark_suite(
             top_k=top_k,
             answer_provider=answer_provider,
             keep_answers=keep_answers,
+            reranker=reranker,
         )
 
     finished_at = datetime.now(UTC)

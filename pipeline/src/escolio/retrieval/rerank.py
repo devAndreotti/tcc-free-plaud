@@ -1,5 +1,6 @@
 from typing import Protocol
 
+from escolio.app.config import Settings
 from escolio.providers.embed import (
     EmbeddingDevice,
     _resolve_sentence_transformer_device,
@@ -49,6 +50,9 @@ def rerank_hits(
 ) -> list[SearchHit]:
     """Reordena hits pelo score do reranker; sem reranker, só corta em top_k e mantém a ordem.
 
+    O score do reranker vai em `rerank_score`: `score` não muda, porque os limiares de abstenção
+    do ask foram calibrados na escala RRF/vetor e logits do cross-encoder os distorceriam.
+
     O desempate é estável: hits com o mesmo score mantêm a ordem original.
     """
     if reranker is None or not hits:
@@ -59,4 +63,18 @@ def rerank_hits(
         raise ValueError(f'Reranker devolveu {len(scores)} scores para {len(hits)} hits.')
 
     order = sorted(range(len(hits)), key=lambda index: (-scores[index], index))
-    return [hits[index].model_copy(update={'score': scores[index]}) for index in order[:top_k]]
+    return [hits[index].model_copy(update={'rerank_score': scores[index]}) for index in order[:top_k]]
+
+
+_RERANKER_CACHE: dict[tuple[str, str], Reranker] = {}
+
+
+def reranker_from_settings(settings: Settings) -> Reranker | None:
+    """Reranker configurado (cacheado: carregar o cross-encoder custa segundos); vazio desliga."""
+    model_name = settings.rerank_model.strip()
+    if not model_name:
+        return None
+    key = (model_name, settings.embedding_device)
+    if key not in _RERANKER_CACHE:
+        _RERANKER_CACHE[key] = CrossEncoderReranker(model_name, device=settings.embedding_device)
+    return _RERANKER_CACHE[key]

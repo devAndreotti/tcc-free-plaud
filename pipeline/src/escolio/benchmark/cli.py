@@ -53,6 +53,7 @@ from escolio.providers.embed import (
     get_embedder,
     validate_runtime_embedding_model,
 )
+from escolio.retrieval.rerank import reranker_from_settings
 from escolio.retrieval.search import (
     DEFAULT_HYBRID_LEXICAL_WEIGHT,
     DEFAULT_HYBRID_RANK_CONSTANT,
@@ -201,6 +202,7 @@ def compare(
     hybrid_vector_weight: float = typer.Option(DEFAULT_HYBRID_VECTOR_WEIGHT, '--hybrid-vector-weight', min=0.0, help='Peso do ranking vetorial para strategy=hybrid.'),
     hybrid_lexical_pool: int | None = typer.Option(None, '--hybrid-lexical-pool', min=1, help='Pool lexical candidato para strategy=hybrid.'),
     hybrid_vector_pool: int | None = typer.Option(None, '--hybrid-vector-pool', min=1, help='Pool vetorial candidato para strategy=hybrid.'),
+    rerank_model: str | None = typer.Option(None, '--rerank-model', help="Cross-encoder para reordenar os candidatos (ex.: BAAI/bge-reranker-v2-m3); vazio mantém o ranking atual."),
     registrar_respostas: bool = typer.Option(False, '--registrar-respostas', help="Grava no JSON a resposta do chat e os trechos citados (entrada do benchmark faithfulness)."),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
 ) -> None:
@@ -232,6 +234,7 @@ def compare(
     connection = init_sqlite(compare_dir / 'benchmark.sqlite3')
     vector_store = LocalVectorStore(compare_dir, collection_name=f'{suite.suite_name}_compare')
     embedder = get_embedder(resolved_embedding_model, device=settings.embedding_device)
+    reranker = reranker_from_settings(settings.model_copy(update={'rerank_model': rerank_model or settings.rerank_model}))
 
     try:
         result = compare_benchmark_suite(
@@ -251,6 +254,7 @@ def compare(
             settings_snapshot=build_settings_snapshot(settings),
             answer_provider=answer_llm,
             keep_answers=registrar_respostas,
+            reranker=reranker,
         )
         payload = result.model_dump(mode='json')
         if export:

@@ -31,6 +31,8 @@ class SearchHit(BaseModel):
     term_coverage: float = 0.0
     strategy: str = 'lexical'
     distance: float | None = None
+    # Score do cross-encoder; `score` segue na escala RRF/vetor, que os limiares de abstenção usam.
+    rerank_score: float | None = None
 
 
 class AskDebugHit(BaseModel):
