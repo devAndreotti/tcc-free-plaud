@@ -1,0 +1,245 @@
+{
+  "dataset_name": "multi-trecho-negativas",
+  "samples": [
+    {
+      "sample_id": "mtneg-01",
+      "question": "Qual foi o custo mensal do cluster Kafka que a Ana Lima Furtado aprovou?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-02",
+      "question": "Qual salário a Júlia Neves recebeu depois de contratada?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-03",
+      "question": "Qual foi a causa do incidente de pagamentos ocorrido em 14/09/2025?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-04",
+      "question": "Qual o TTL do cache de sessões no Redis do projeto de login?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-05",
+      "question": "Quantas partições tem o tópico de faturamento no Kafka?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-06",
+      "question": "Qual runbook descreve o rollback do cache do catálogo?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-07",
+      "question": "Qual versão do Keycloak vai rodar em produção?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-08",
+      "question": "Qual foi a nota da Júlia Neves na rubrica de comunicação?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-09",
+      "question": "Qual é o bônus do exercício de Delta Lake que o Heitor Rocha vai pagar em 2026?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-10",
+      "question": "Qual o número da prova P3 da disciplina de Redes de Computadores?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-11",
+      "question": "Qual foi a multa por cancelamento do contrato firmado pela Larissa Quintela?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-12",
+      "question": "Qual orçamento o comitê de custos aprovou para manter a retenção de 30 dias do Kafka?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-13",
+      "question": "Quem substituiu a Ana Lima Furtado como tech lead depois de março de 2025?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-14",
+      "question": "Quantos chamados foram abertos durante o incidente de 09/09/2025?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-15",
+      "question": "Qual é o limite de requisições por minuto da API de pagamentos?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-16",
+      "question": "Qual o TTL do preço no cache do carrinho de compras?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-17",
+      "question": "Quantos pods rodam a API de cupons em produção?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-18",
+      "question": "Qual foi o hit rate medido na revisão de novembro de 2025 do cache?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-19",
+      "question": "Qual é o tamanho de arquivo recomendado pelo professor para o formato ORC?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-20",
+      "question": "Qual é a faixa salarial oferecida para a vaga de Backend Pleno?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-21",
+      "question": "Em qual data center fica o cluster do Kafka de produção?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-22",
+      "question": "Como configurar um consumer group com rebalance para o time de faturamento?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-23",
+      "question": "Quais são as regras de rate limit do Redis Cluster para o ambiente de produção?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-24",
+      "question": "Qual política de backoff está configurada no SDK do gateway de pagamento?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-25",
+      "question": "Quando o Diego Sampaio entrega o consumer de exemplo para o faturamento?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-26",
+      "question": "Qual é a mensalidade do Datadog que o time de SRE paga?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-27",
+      "question": "Qual foi o percentual de acerto da equipe de Redes na prova P1?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-28",
+      "question": "Quantos minutos durou a degradação do cache do catálogo em 2025?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-29",
+      "question": "Como o protocolo QUIC se compara ao TCP no controle de congestionamento?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    },
+    {
+      "sample_id": "mtneg-30",
+      "question": "Qual é a política de retenção de logs do data lake?",
+      "expected_note_id": null,
+      "expected_terms": [],
+      "expected_ref": null,
+      "category": "negativa"
+    }
+  ]
+}

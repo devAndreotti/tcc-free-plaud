@@ -1,0 +1,37 @@
+{
+  "dataset_name": "multi-trecho-aula-tcp-congestionamento",
+  "samples": [
+    {
+      "sample_id": "unica-07",
+      "question": "Qual algoritmo do Google estima a banda disponível em vez de usar a perda como sinal?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "BBR"
+      ],
+      "expected_ref": "Alternativas",
+      "category": "direta"
+    },
+    {
+      "sample_id": "mt-nota-06",
+      "question": "Qual o valor inicial da janela de congestionamento e até quando entregar o lab 3?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "10 MSS",
+        "09/10/2025"
+      ],
+      "expected_ref": "Slow start",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-05",
+      "question": "Como o TCP reage a três ACKs duplicados, e qual retry a ata do incidente de pagamentos incluiu?",
+      "expected_note_id": "aula-tcp-congestionamento",
+      "expected_terms": [
+        "fast retransmit",
+        "fast recovery"
+      ],
+      "expected_ref": "Perda",
+      "category": "inferida"
+    }
+  ]
+}

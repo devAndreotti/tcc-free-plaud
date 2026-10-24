@@ -1,0 +1,37 @@
+{
+  "dataset_name": "multi-trecho-entrevista-backend-julia",
+  "samples": [
+    {
+      "sample_id": "unica-04",
+      "question": "Qual nota final a candidata recebeu nas rubricas técnicas?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": [
+        "4 de 5"
+      ],
+      "expected_ref": "Parecer",
+      "category": "direta"
+    },
+    {
+      "sample_id": "mt-nota-03",
+      "question": "Qual limite de requisições o desafio pedia e qual a data do retorno ao RH?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": [
+        "100 requisições por minuto",
+        "25/06/2025"
+      ],
+      "expected_ref": "Desafio técnico (take-home)",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-02",
+      "question": "Que ferramenta a candidata usou para o limite por cliente, e qual formato de chave o cache do catálogo adota?",
+      "expected_note_id": "entrevista-backend-julia",
+      "expected_terms": [
+        "Redis",
+        "sliding window"
+      ],
+      "expected_ref": "Desafio técnico (take-home)",
+      "category": "inferida"
+    }
+  ]
+}
