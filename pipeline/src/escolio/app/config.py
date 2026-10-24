@@ -22,6 +22,7 @@ USER_SETTINGS_FILENAME = "user_settings.json"
 USER_SETTING_FIELDS = {
     "embedding_device",
     "embedding_model",
+    "rerank_model",
     "retrieval_top_k",
     "default_ask_strategy",
     "default_chunk_size",
@@ -125,6 +126,8 @@ class Settings(BaseSettings):
     vector_collection_name: str = Field(default=DEFAULT_CHROMA_COLLECTION)
     embedding_model: str = Field(default="chroma-default")
     embedding_device: Literal["cpu", "cuda", "auto"] = Field(default="cpu")
+    # Vazio desliga o reranking por cross-encoder (default: sem reranker).
+    rerank_model: str = Field(default="")
     answer_provider: Literal[
         "extractive", "openai-compatible", "ollama", "lmstudio"
     ] = Field(default="extractive")

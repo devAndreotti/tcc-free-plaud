@@ -43,6 +43,7 @@ from escolio.retrieval.rag import (
     _support_level,
     _trim_claim_span,
 )
+from escolio.retrieval.rerank import Reranker, rerank_hits
 from escolio.retrieval.search import (
     STOPWORDS,
     TOKEN_PATTERN,
@@ -639,37 +640,39 @@ def retrieve_corpus_hits(
     vector_store: LocalVectorStore | None,
     embedder: Embedder | None,
     note_ids: frozenset[str] | None = None,
+    reranker: Reranker | None = None,
 ) -> tuple[list[SearchHit], int]:
     # O escopo entra na consulta (FTS: IN; Chroma: $in), então a pasta nunca fica sem candidatos por pool curto.
+    # Com reranker, o pool é maior que top_k: o cross-encoder escolhe entre mais candidatos antes do corte.
+    candidate_pool_size = max(top_k * 8, 24)
+    pool_size = candidate_pool_size if reranker is not None else top_k
     if strategy == 'lexical':
-        return fts_lexical_search_hits(connection, question, top_k=top_k, note_ids=note_ids), 0
+        lexical_hits = fts_lexical_search_hits(connection, question, top_k=pool_size, note_ids=note_ids)
+        return rerank_hits(question, lexical_hits, reranker, top_k), 0
 
     if vector_store is None or embedder is None:
         raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector e strategy=hybrid.')
 
-    candidate_pool_size = max(top_k * 8, 24)
     if strategy == 'vector':
         vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size, note_ids=note_ids)
         filtered_hits, stale_count = _filter_hits_to_persisted_chunks(vector_hits, valid_chunk_ids)
-        return filtered_hits[:top_k], stale_count
+        return rerank_hits(question, filtered_hits, reranker, top_k), stale_count
 
     if strategy == 'hybrid':
         lexical_hits = fts_lexical_search_hits(
             connection,
             question,
-            top_k=max(top_k * 3, top_k),
+            top_k=max(pool_size * 3, top_k * 3),
             note_ids=note_ids,
         )
         vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size, note_ids=note_ids)
         filtered_vector_hits, stale_count = _filter_hits_to_persisted_chunks(vector_hits, valid_chunk_ids)
-        return (
-            fuse_hits_by_rank(
-                lexical_hits,
-                filtered_vector_hits,
-                top_k=top_k,
-            ),
-            stale_count,
+        fused_hits = fuse_hits_by_rank(
+            lexical_hits,
+            filtered_vector_hits,
+            top_k=pool_size,
         )
+        return rerank_hits(question, fused_hits, reranker, top_k), stale_count
 
     raise ValueError("strategy deve ser 'lexical', 'vector' ou 'hybrid'.")
 
@@ -691,6 +694,7 @@ def answer_corpus_with_citations(
     include_debug: bool = False,
     source_root: str | None = None,
     on_answer_delta: Callable[[str], None] | None = None,
+    reranker: Reranker | None = None,
 ) -> AskResponse:
     """Responde usando todo o corpus persistido (ou só a pasta `source_root`), mantendo citacoes por chunk."""
     started_at = perf_counter()
@@ -784,6 +788,7 @@ def answer_corpus_with_citations(
         vector_store=vector_store,
         embedder=embedder,
         note_ids=note_ids,
+        reranker=reranker,
     )
     hits = _dedupe_hits(raw_hits)
     stale_limitations = (
@@ -796,7 +801,9 @@ def answer_corpus_with_citations(
         return [*limitations, *stale_limitations]
 
     note_lookup = get_notes_by_id(connection, [hit.chunk.note_id for hit in hits])
-    hits = _rerank_hits_by_short_anchor(question, hits, note_lookup)
+    # Com cross-encoder, a ordem já é do reranker: o ajuste lexical por âncora não a sobrescreve.
+    if reranker is None:
+        hits = _rerank_hits_by_short_anchor(question, hits, note_lookup)
     used_sources = _summarize_corpus_sources(hits, note_lookup)
     stage_timings.retrieval_ms = _elapsed_ms(retrieval_started_at)
 
