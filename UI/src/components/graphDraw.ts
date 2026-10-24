@@ -98,16 +98,18 @@ export function drawNodes(ctx: Ctx, nodes: SimNode[], pal: Palette, hl: Highligh
 // as notas ganham nome com mais zoom ainda, como no grafo do Obsidian (no modo Links só há notas).
 const NOTE_LABEL_SCALE = 1.6;
 
+// Com seleção, o selecionado e os vizinhos diretos sempre levam nome, em qualquer zoom
 export function drawLabels(ctx: Ctx, nodes: SimNode[], pal: Palette, cam: Camera, sel: Set<string> | null) {
   const base = ctx.globalAlpha;
   ctx.fillStyle = pal.label;
   ctx.font = `${11 / cam.scale}px sans-serif`;
   ctx.textAlign = 'center';
   for (const n of nodes) {
-    if (n.kind === 'folder' && n.depth === 0) continue;
+    const inSel = sel?.has(n.id) ?? false;
+    if (n.kind === 'folder' && n.depth === 0 && !inSel) continue;
     const minScale = n.kind === 'note' ? NOTE_LABEL_SCALE : n.depth === 1 ? 0.45 : 1.2;
-    if (cam.scale < minScale) continue;
-    ctx.globalAlpha = base * (sel && !sel.has(n.id) ? DIM_ALPHA : 1);
+    if (!inSel && cam.scale < minScale) continue;
+    ctx.globalAlpha = base * (sel && !inSel ? DIM_ALPHA : 1);
     ctx.fillText(n.label, n.x, n.y - (nodeRadius(n) + 4) / cam.scale);
   }
   ctx.globalAlpha = base;

@@ -117,6 +117,19 @@ describe('drawLabels: rótulos fora da seleção saem apagados', () => {
     expect(alphaOf('B')).toBe(DIM_ALPHA); // dir:B
   });
 
+  it('com seleção, o selecionado e os vizinhos ganham nome mesmo com zoom baixo (os demais continuam ocultos)', () => {
+    const rec = recorder();
+    drawLabels(rec.ctx as never, nodes, pal, { x: 0, y: 0, scale: 0.3 }, selectionSet('A/x', edges));
+    // Vizinhos de A/x: pasta A (pai) e B/y (ligação). Raiz e dir:B ficam ocultas neste zoom.
+    expect(rec.texts.map((t) => t.text).sort()).toEqual(['A', 'A/x', 'B/y']);
+  });
+
+  it('sem seleção, zoom baixo não mostra nenhum rótulo de nota ou pasta', () => {
+    const rec = recorder();
+    drawLabels(rec.ctx as never, nodes, pal, { x: 0, y: 0, scale: 0.3 }, null);
+    expect(rec.texts).toHaveLength(0);
+  });
+
   it('sem seleção todos os rótulos visíveis saem em alpha cheio', () => {
     const rec = recorder();
     drawLabels(rec.ctx as never, nodes, pal, { x: 0, y: 0, scale: 2 }, null);
