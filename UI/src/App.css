@@ -295,6 +295,38 @@
   color: var(--text-muted);
 }
 
+/* Aviso do modo Links sem ligações: sobre o painel, sem capturar o mouse do canvas */
+.force-graph__hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 10px 12px;
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.force-graph__hint-title {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.force-graph__hint-tip {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 /* Texto só para leitor de tela (região aria-live do grafo): fora do fluxo, sem ocupar espaço */
 .sr-only {
   position: absolute;

@@ -60,6 +60,24 @@ export function nodeRadius(n: SimNode): number {
   return n.kind === 'folder' ? Math.min(9, 3.5 + Math.sqrt(n.degree)) : 2.6;
 }
 
+/**
+ * Ligações que o grafo desenha: só entre notas do vault, sem laço e sem repetição
+ * (A → B e B → A viram uma linha só: o desenho e a mola não dependem do sentido).
+ */
+export function visibleLinks(vaultNodes: MarkdownNode[], links: VaultLink[]): VaultLink[] {
+  const noteIds = new Set(vaultNodes.map((n) => n.id));
+  const seen = new Set<string>();
+  const out: VaultLink[] = [];
+  for (const l of links) {
+    if (l.source === l.target || !noteIds.has(l.source) || !noteIds.has(l.target)) continue;
+    const key = JSON.stringify(l.source < l.target ? [l.source, l.target] : [l.target, l.source]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(l);
+  }
+  return out;
+}
+
 // ─── Constrói grafo a partir dos nós do vault ────────────────────────────────
 
 export function buildGraph(
@@ -108,16 +126,7 @@ export function buildGraph(
   }
 
   if (mode !== 'pastas') {
-    const noteIds = new Set(vaultNodes.map((n) => n.id));
-    const seen = new Set<string>();
-    for (const l of links) {
-      if (l.source === l.target || !noteIds.has(l.source) || !noteIds.has(l.target)) continue;
-      // A → B e B → A viram uma linha só: o desenho e a mola não dependem do sentido
-      const key = JSON.stringify(l.source < l.target ? [l.source, l.target] : [l.target, l.source]);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      edges.push({ source: l.source, target: l.target, kind: 'link' });
-    }
+    for (const l of visibleLinks(vaultNodes, links)) edges.push({ source: l.source, target: l.target, kind: 'link' });
   }
 
   const deg = new Map<string, number>();

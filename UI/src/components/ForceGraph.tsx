@@ -6,7 +6,7 @@
  * Desenho em components/graphDraw.ts; seleção por clique em lib/graphSelection.ts.
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import type { GraphMode, MarkdownNode, VaultLink, Camera, SimEdge, SimNode } from '../lib/vaultGraph';
 import {
   GRAPH_FOCUS_EVENT,
@@ -14,6 +14,7 @@ import {
   fitCamera,
   pathToRoot,
   tick,
+  visibleLinks,
 } from '../lib/vaultGraph';
 import {
   folderSubtreeIds,
@@ -27,6 +28,7 @@ import {
 } from '../lib/graphSelection';
 import { drawEdges, drawFocus, drawLabels, drawNodes, readPalette, type Palette } from './graphDraw';
 import { GraphIcon } from './Icons';
+import GraphNoLinksHint from './GraphNoLinksHint';
 
 interface Tooltip  { label: string; x: number; y: number }
 
@@ -341,6 +343,8 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
   // Listener nativo e não passivo: o preventDefault do React é ignorado (ele registra wheel como passivo).
   // Com `empty`, o listener é religado quando o canvas aparece (ele não existe no estado vazio).
   const empty = vaultNodes.length === 0;
+  // Modo Links sem nenhuma ligação desenhável: aviso sobre o painel (as notas seguem soltas por baixo)
+  const linkCount = useMemo(() => visibleLinks(vaultNodes, links).length, [vaultNodes, links]);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
@@ -371,6 +375,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
         onDoubleClick={handleDoubleClick}
         aria-label="Visualização de grafo — clique num nó para selecionar (nota abre, pasta enquadra), arraste para mover, scroll para zoom, duplo clique para enquadrar, Esc limpa a seleção"
       />
+      {mode === 'links' && linkCount === 0 && <GraphNoLinksHint noteCount={vaultNodes.length} />}
       <div className="sr-only" aria-live="polite">{announcement}</div>
       {tooltip && (
         <div

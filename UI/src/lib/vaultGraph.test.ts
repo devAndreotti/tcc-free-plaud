@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MarkdownNode } from './vaultGraph';
-import { buildGraph, fitCamera, pathToRoot, tick } from './vaultGraph';
+import { buildGraph, fitCamera, pathToRoot, tick, visibleLinks } from './vaultGraph';
 
 const note = (path: string): MarkdownNode => ({
   id: path,
@@ -153,5 +153,27 @@ describe('vaultGraph: ligações entre notas', () => {
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
     expect(dist).toBeGreaterThan(50);
     expect(dist).toBeLessThan(80);
+  });
+
+  it('visibleLinks descarta laço, nota fora do vault e repetição nos dois sentidos', () => {
+    const vault = [note('A/x.md'), note('B/y.md')];
+    const links = [
+      { source: 'A/x.md', target: 'B/y.md' },
+      { source: 'B/y.md', target: 'A/x.md' },
+      { source: 'A/x.md', target: 'A/x.md' },
+      { source: 'A/x.md', target: 'apagada.md' },
+    ];
+    expect(visibleLinks(vault, links)).toEqual([{ source: 'A/x.md', target: 'B/y.md' }]);
+    expect(visibleLinks(vault, [])).toEqual([]);
+  });
+
+  it('buildGraph só cria arestas de link para as ligações visíveis', () => {
+    const vault = [note('A/x.md'), note('B/y.md')];
+    const { edges } = buildGraph(vault, 400, 400, [], [
+      { source: 'A/x.md', target: 'B/y.md' },
+      { source: 'B/y.md', target: 'A/x.md' },
+    ], 'links');
+    expect(edges.filter((e) => e.kind === 'link')).toHaveLength(1);
+    expect(edges.some((e) => e.kind !== 'link')).toBe(false); // modo links não tem árvore
   });
 });
