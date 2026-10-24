@@ -27,6 +27,7 @@ import {
   selectionSet,
 } from '../lib/graphSelection';
 import { legendEntries, topFolderOf } from '../lib/graphColors';
+import { entryAt, prefersReducedMotion, projectNodes, shouldAnimateEntry } from '../lib/graphMotion';
 import { drawEdges, drawFocus, drawLabels, drawNodes, readPalette, tooltipDetail, type Palette } from './graphDraw';
 import { GraphIcon } from './Icons';
 import GraphNoLinksHint from './GraphNoLinksHint';
@@ -68,6 +69,8 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
   const focused    = useRef<string | null>(null); // nota da fonte sob o mouse no chat
   const selectedRef = useRef<string | null>(null); // nó selecionado por clique
   const panRef     = useRef<number>(0);
+  const entryStartRef = useRef<number | null>(null); // início da abertura (null = grafo já aberto)
+  const modeRef    = useRef<GraphMode>(mode);        // modo do último build (troca de modo reabre)
 
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
   // Texto da região aria-live: "Selecionado: <nome>, N ligações" (vazio sem seleção)
@@ -95,13 +98,15 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     // Com uma fonte em foco, o resto do grafo recua para o caminho dela aparecer
     const chain = focused.current ? pathToRoot(focused.current, nodes, edges) : [];
     const sel = selectionSet(selectedRef.current, edges);
+    // Posições exibidas: a abertura radial do centro até a simulação (ver graphMotion.ts)
+    const shown = projectNodes(nodes, logW.current / 2, logH.current / 2, entryAt(entryStartRef.current, performance.now()));
     ctx.globalAlpha = chain.length > 0 ? 0.3 : 1;
     const hl = { hoveredId: hovered.current, selectedId: selectedRef.current, sel, scale: cam.scale };
-    drawEdges(ctx, nodes, edges, pal, cam, sel);
-    drawNodes(ctx, nodes, pal, hl);
-    drawLabels(ctx, nodes, pal, cam, sel);
+    drawEdges(ctx, shown, edges, pal, cam, sel);
+    drawNodes(ctx, shown, pal, hl);
+    drawLabels(ctx, shown, pal, cam, sel);
     ctx.globalAlpha = 1;
-    if (chain.length > 0) drawFocus(ctx, chain, nodes, pal, cam, logW.current);
+    if (chain.length > 0) drawFocus(ctx, chain, shown, pal, cam, logW.current);
 
     ctx.restore();
   }, []);
@@ -111,7 +116,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     autoFitRef.current = false;
     cancelAnimationFrame(panRef.current);
     const from = { ...camRef.current };
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const reduce = prefersReducedMotion();
     let frame = 0;
     const step = () => {
       frame += 1;
@@ -171,12 +176,22 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     const cx = logW.current / 2;
     const cy = logH.current / 2;
 
+    // Com movimento reduzido a simulação roda inteira de uma vez e o grafo aparece já posicionado
+    if (prefersReducedMotion()) {
+      for (let i = 0; i < iters; i++) tick(nodes, edges, cx, cy);
+      entryStartRef.current = null;
+      draw();
+      return;
+    }
+
     const loop = (i: number) => {
       if (i > 0) {
         tick(nodes, edges, cx, cy);
         draw();
         animRef.current = requestAnimationFrame(() => loop(i - 1));
       } else {
+        // Simulação terminada: a abertura de 600 ms já acabou (são centenas de quadros)
+        entryStartRef.current = null;
         draw();
       }
     };
@@ -186,8 +201,13 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
   // ── Reconstrói o grafo quando os nós do vault mudam ────────────────────
   const rebuild = useCallback(() => {
     if (logW.current === 0 || logH.current === 0) return;
+    const prevIds = new Set(graphRef.current.nodes.map((n) => n.id));
+    const modeChanged = modeRef.current !== mode;
+    modeRef.current = mode;
     graphRef.current = buildGraph(vaultNodes, logW.current, logH.current, graphRef.current.nodes, links, mode);
     autoFitRef.current = true;
+    const animate = shouldAnimateEntry(prevIds, graphRef.current.nodes.map((n) => n.id), modeChanged);
+    entryStartRef.current = animate ? performance.now() : null;
     // Seleção que sumiu com o grafo (nota apagada, outro modo sem ela) não fica anunciada
     if (selectedRef.current !== null && !graphRef.current.nodes.some((n) => n.id === selectedRef.current)) {
       selectedRef.current = null;
@@ -243,7 +263,9 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    return hitTest(graphRef.current.nodes, toWorld(clientX - rect.left, clientY - rect.top), camRef.current.scale);
+    // Acerta onde o nó está desenhado agora (durante a abertura ele ainda está perto do centro)
+    const shown = projectNodes(graphRef.current.nodes, logW.current / 2, logH.current / 2, entryAt(entryStartRef.current, performance.now()));
+    return hitTest(shown, toWorld(clientX - rect.left, clientY - rect.top), camRef.current.scale);
   }, [toWorld]);
 
   // ── Seleção: nó (ou null para limpar) e o anúncio para leitores de tela ──
