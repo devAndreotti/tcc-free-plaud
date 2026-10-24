@@ -13,6 +13,10 @@ from escolio.benchmark.datasets import (
     load_benchmark_dataset,
     load_benchmark_suite,
 )
+from escolio.benchmark.faithfulness import (
+    build_faithfulness_report,
+    make_openai_compatible_judge,
+)
 from escolio.benchmark.grounded import evaluate_grounded_answers
 from escolio.benchmark.ia_report import build_ia_report
 from escolio.benchmark.model_compare import (
@@ -39,7 +43,11 @@ from escolio.benchmark.runners import (
 from escolio.benchmark.service import build_settings_snapshot
 from escolio.ingest.loaders import load_document
 from escolio.notes.structurer import structure_document
-from escolio.providers.answer import AnswerProviderName, get_answer_provider
+from escolio.providers.answer import (
+    AnswerProviderError,
+    AnswerProviderName,
+    get_answer_provider,
+)
 from escolio.providers.embed import (
     EmbeddingConfigurationError,
     get_embedder,
@@ -193,6 +201,7 @@ def compare(
     hybrid_vector_weight: float = typer.Option(DEFAULT_HYBRID_VECTOR_WEIGHT, '--hybrid-vector-weight', min=0.0, help='Peso do ranking vetorial para strategy=hybrid.'),
     hybrid_lexical_pool: int | None = typer.Option(None, '--hybrid-lexical-pool', min=1, help='Pool lexical candidato para strategy=hybrid.'),
     hybrid_vector_pool: int | None = typer.Option(None, '--hybrid-vector-pool', min=1, help='Pool vetorial candidato para strategy=hybrid.'),
+    registrar_respostas: bool = typer.Option(False, '--registrar-respostas', help="Grava no JSON a resposta do chat e os trechos citados (entrada do benchmark faithfulness)."),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
 ) -> None:
     """Compara lexical, vector e hybrid em uma suíte de documentos e datasets."""
@@ -241,6 +250,7 @@ def compare(
             hybrid_vector_pool=hybrid_vector_pool,
             settings_snapshot=build_settings_snapshot(settings),
             answer_provider=answer_llm,
+            keep_answers=registrar_respostas,
         )
         payload = result.model_dump(mode='json')
         if export:
@@ -346,4 +356,26 @@ def report_ia(
         raise typer.Exit(code=1) from None
     saida.parent.mkdir(parents=True, exist_ok=True)
     saida.write_text(markdown, encoding='utf-8', newline='\n')
+    typer.echo(json.dumps({'ok': True, 'saida': str(saida)}, ensure_ascii=True, indent=2))
+
+
+@app.command("faithfulness")
+def faithfulness(
+    results_path: Path = typer.Option(..., '--results', help="JSON do compare com --registrar-respostas."),
+    judge_model: str = typer.Option(..., '--judge-model', help="Modelo juiz; use um modelo forte e rode offline."),
+    judge_base_url: str = typer.Option(..., '--judge-base-url', help="Base URL OpenAI-compatible do juiz."),
+    saida: Path = typer.Option(..., '--saida', help="Arquivo JSON de saída."),
+    judge_api_key: str | None = typer.Option(None, '--judge-api-key', help="Chave do juiz, se o endpoint exigir."),
+    timeout: int = typer.Option(120, '--timeout', min=1, help="Timeout por chamada ao juiz, em segundos."),
+) -> None:
+    """Faithfulness semântica com juiz LLM (offline; fora do gate do CI)."""
+    comparison = BenchmarkComparisonResult.model_validate_json(results_path.read_text(encoding='utf-8'))
+    try:
+        judge = make_openai_compatible_judge(judge_base_url, judge_model, api_key=judge_api_key, timeout=timeout)
+        report = build_faithfulness_report(comparison, judge, judge_model=judge_model, judge_base_url=judge_base_url)
+    except (ValueError, AnswerProviderError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from None
+    saida.parent.mkdir(parents=True, exist_ok=True)
+    saida.write_text(report.model_dump_json(indent=2) + '\n', encoding='utf-8', newline='\n')
     typer.echo(json.dumps({'ok': True, 'saida': str(saida)}, ensure_ascii=True, indent=2))
