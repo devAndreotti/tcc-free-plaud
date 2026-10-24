@@ -1,0 +1,113 @@
+{
+  "dataset_name": "multi-trecho-cobertura-aula-particionamento-parquet",
+  "samples": [
+    {
+      "sample_id": "mt-nota-13",
+      "question": "Qual faixa de tamanho de arquivo o Heitor recomenda, e até quando é a entrega do exercício?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "128 MB",
+        "18/04/2025"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "128 MB",
+          "18/04/2025"
+        ]
+      },
+      "expected_ref": "Particionamento",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-14",
+      "question": "Como o Parquet guarda os dados, e qual técnica o Heitor sugere para data skew?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "guarda os dados por coluna",
+        "salting"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "guarda os dados por coluna",
+          "salting"
+        ]
+      },
+      "expected_ref": "Formatos colunares",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-15",
+      "question": "Qual problema aparece ao particionar por cliente_id com milhões de clientes, e qual formato rende o ponto extra?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "small files",
+        "Delta Lake"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "small files",
+          "Delta Lake"
+        ]
+      },
+      "expected_ref": "Particionamento",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-14",
+      "question": "Qual formato o ponto extra do exercício de Parquet aceita, e qual comando o publicador do catálogo usa para apagar chaves?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "Delta Lake",
+        "SCAN"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "Delta Lake"
+        ],
+        "decisao-cache-catalogo": [
+          "SCAN"
+        ]
+      },
+      "expected_ref": "Exercício",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-15",
+      "question": "Por qual coluna o exercício de Parquet particiona o arquivo, e qual evento dispara o fast retransmit no TCP?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "ano_mes",
+        "três ACKs duplicados"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "ano_mes"
+        ],
+        "aula-tcp-congestionamento": [
+          "três ACKs duplicados"
+        ]
+      },
+      "expected_ref": "Exercício",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-20",
+      "question": "Como se chama o ganho de pular pastas em filtro de data, e qual provedor de identidade foi adotado no OIDC?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "partition pruning",
+        "Keycloak"
+      ],
+      "expected_terms_por_nota": {
+        "aula-particionamento-parquet": [
+          "partition pruning"
+        ],
+        "decisao-autenticacao-oidc": [
+          "Keycloak"
+        ]
+      },
+      "expected_ref": "Particionamento",
+      "category": "inferida"
+    }
+  ]
+}
