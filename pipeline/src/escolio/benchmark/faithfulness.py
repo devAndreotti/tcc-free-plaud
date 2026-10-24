@@ -22,9 +22,9 @@ from escolio.benchmark.runners import BenchmarkComparisonResult
 from escolio.providers.answer import (
     INVALID_BASE_URL_ERROR,
     AnswerProviderError,
-    _extract_answer_text,
-    _is_http_base_url,
-    _transport_error,
+    extract_answer_text,
+    is_http_base_url,
+    transport_error,
 )
 
 PROMPT_VERSION = 'faithfulness-pt-v1'
@@ -145,7 +145,7 @@ def make_openai_compatible_judge(
     timeout: int = 120,
 ) -> JudgeFn:
     """Juiz via /chat/completions com temperatura 0, no mesmo padrão HTTP do provider de resposta."""
-    if not _is_http_base_url(base_url):
+    if not is_http_base_url(base_url):
         raise AnswerProviderError(INVALID_BASE_URL_ERROR)
     endpoint = f'{base_url.rstrip("/")}/chat/completions'
     headers = {'Content-Type': 'application/json'}
@@ -159,9 +159,9 @@ def make_openai_compatible_judge(
             with urlopen(request, timeout=timeout) as response:
                 body = response.read()
         except (HTTPError, URLError, TimeoutError, ValueError) as exc:
-            raise _transport_error(exc) from exc
+            raise transport_error(exc) from exc
         try:
-            text, _, _ = _extract_answer_text(json.loads(body.decode('utf-8')))
+            text, _, _ = extract_answer_text(json.loads(body.decode('utf-8')))
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise AnswerProviderError('Provider retornou payload invalido.') from exc
         return text

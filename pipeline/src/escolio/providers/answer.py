@@ -55,7 +55,7 @@ class AnswerProvider(Protocol):
         """Gera resposta a partir de contextos citaveis ja recuperados."""
 
 
-def _is_http_base_url(value: str) -> bool:
+def is_http_base_url(value: str) -> bool:
     try:
         parsed = urlparse(value)
     except ValueError:
@@ -90,7 +90,7 @@ def _reasoning_text(message: dict[str, object]) -> str:
     return ''
 
 
-def _extract_answer_text(decoded: object) -> tuple[str, dict[str, object], object]:
+def extract_answer_text(decoded: object) -> tuple[str, dict[str, object], object]:
     """Extrai (content normalizado, message, finish_reason) de um payload chat/completions.
 
     Levanta KeyError/IndexError/TypeError quando o payload nao tem o formato esperado,
@@ -119,7 +119,7 @@ def _empty_answer_error_message(message: dict[str, object], finish_reason: objec
     return EMPTY_ANSWER_ERROR
 
 
-def _transport_error(exc: Exception) -> AnswerProviderError:
+def transport_error(exc: Exception) -> AnswerProviderError:
     if isinstance(exc, HTTPError):
         return AnswerProviderError(f'Provider respondeu HTTP {exc.code}.')
     if isinstance(exc, URLError):
@@ -127,6 +127,12 @@ def _transport_error(exc: Exception) -> AnswerProviderError:
     if isinstance(exc, TimeoutError):
         return AnswerProviderError('Provider excedeu timeout.')
     return AnswerProviderError(INVALID_BASE_URL_ERROR)
+
+
+# Nomes privados anteriores, mantidos como alias para quem ainda importa com underscore.
+_is_http_base_url = is_http_base_url
+_extract_answer_text = extract_answer_text
+_transport_error = transport_error
 
 
 @dataclass
@@ -151,7 +157,7 @@ class OpenAICompatibleAnswerProvider:
         stream: bool = False,
         temperature: float | None = None,
     ) -> Request:
-        if not _is_http_base_url(self.base_url):
+        if not is_http_base_url(self.base_url):
             raise AnswerProviderError(INVALID_BASE_URL_ERROR)
 
         payload: dict[str, object] = {
@@ -185,11 +191,11 @@ class OpenAICompatibleAnswerProvider:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 body = response.read()
         except (URLError, TimeoutError, ValueError) as exc:
-            raise _transport_error(exc) from exc
+            raise transport_error(exc) from exc
 
         try:
             decoded = json.loads(body.decode('utf-8'))
-            answer, message, finish_reason = _extract_answer_text(decoded)
+            answer, message, finish_reason = extract_answer_text(decoded)
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise AnswerProviderError('Provider retornou payload invalido.') from exc
 
@@ -210,7 +216,7 @@ class OpenAICompatibleAnswerProvider:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 return read_sse_answer(response, on_delta)
         except (URLError, TimeoutError) as exc:
-            raise _transport_error(exc) from exc
+            raise transport_error(exc) from exc
 
 
 def _default_base_url(provider_name: AnswerProviderName, base_url: str | None) -> str:
@@ -260,7 +266,7 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
         )
 
     base_url = _default_base_url(resolved.answer_provider, resolved.answer_base_url)
-    if not _is_http_base_url(base_url):
+    if not is_http_base_url(base_url):
         return AnswerProviderTestResult(
             provider=resolved.answer_provider,
             model=resolved.answer_model,
@@ -313,7 +319,7 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
 
     try:
         decoded = json.loads(body.decode('utf-8'))
-        content, message, finish_reason = _extract_answer_text(decoded)
+        content, message, finish_reason = extract_answer_text(decoded)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError):
         return result('error', 'Provider retornou payload invalido.')
 
