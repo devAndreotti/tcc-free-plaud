@@ -295,6 +295,19 @@
   color: var(--text-muted);
 }
 
+/* Texto só para leitor de tela (região aria-live do grafo): fora do fluxo, sem ocupar espaço */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Tooltip com o nome do nó hovered */
 .force-graph__tooltip {
   position: absolute;
