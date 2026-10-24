@@ -301,3 +301,21 @@ def test_warns_when_cuda_is_selected_but_unavailable(tmp_path: Path, monkeypatch
 
     assert row['warning'] is not None
     assert 'CUDA indisponível' in row['warning']
+
+
+def test_extract_structure_setting_is_exposed_off_by_default(tmp_path: Path) -> None:
+    rows = settings_catalog_payload(_settings(tmp_path))
+    row = next(row for row in rows if row['key'] == 'extract_structure')
+
+    assert row['value_type'] == 'bool'
+    assert row['value'] is False
+    assert row['layer'] == 'advanced'
+
+
+def test_save_catalog_setting_accepts_extract_structure(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+
+    save_catalog_setting('extract_structure', 'sim', settings=settings)
+
+    payload = json.loads((tmp_path / 'data' / 'results' / 'user_settings.json').read_text(encoding='utf-8'))
+    assert payload['extract_structure'] is True
