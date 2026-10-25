@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MarkdownNode } from '../lib/vaultGraph';
 import { buildGraph, fitCamera } from '../lib/vaultGraph';
+import { nearestInDirection, nearestToPoint, neighborIds, selectionAnnouncement } from '../lib/graphSelection';
 import ForceGraph from './ForceGraph';
 
 // Sem a simulação, as posições são só a espiral determinística de buildGraph:
@@ -183,5 +184,121 @@ describe('ForceGraph', () => {
     const wheel = new WheelEvent('wheel', { deltaY: -100, clientX: 50, clientY: 50, cancelable: true });
     canvas.dispatchEvent(wheel);
     expect(wheel.defaultPrevented).toBe(true);
+  });
+});
+
+// Teclado do canvas: setas, Enter, Home, Esc e o texto de ajuda (sr-only)
+describe('ForceGraph: teclado', () => {
+  const vault = [note('A/x.md'), note('B/y.md')];
+  // Mesmo cálculo do componente com o painel 320×600 (a câmera enquadra o grafo inteiro)
+  const scene = () => {
+    const { nodes, edges } = buildGraph(vault, 320, 600);
+    const cam = fitCamera(nodes, 320, 600);
+    return { nodes, edges, cam };
+  };
+  const live = (container: HTMLElement) => container.querySelector('[aria-live="polite"]')!.textContent;
+  const screenPos = (id: string) => {
+    const { nodes, cam } = scene();
+    const target = nodes.find((n) => n.id === id)!;
+    return { x: target.x * cam.scale + cam.x, y: target.y * cam.scale + cam.y };
+  };
+
+  it('o canvas liga a ajuda de teclas (sr-only) por aria-describedby, com setas, Enter, Home, Esc e Tab', () => {
+    const { container } = render(<ForceGraph vaultNodes={vault} />);
+    const canvas = container.querySelector('canvas')!;
+    const help = document.getElementById(canvas.getAttribute('aria-describedby')!);
+    expect(help?.classList.contains('sr-only')).toBe(true);
+    for (const word of ['setas', 'Enter', 'Home', 'Esc', 'Tab']) expect(help?.textContent).toContain(word);
+  });
+
+  it('Tab não é interceptado: o navegador leva o foco para fora do canvas', () => {
+    const { container } = render(<ForceGraph vaultNodes={vault} />);
+    const canvas = container.querySelector('canvas')!;
+    expect(fireEvent.keyDown(canvas, { key: 'Tab' })).toBe(true); // true = não foi cancelado
+  });
+
+  it('a primeira seta escolhe o nó mais perto do centro; a seguinte anda para o vizinho na direção', () => {
+    const { container } = render(<ForceGraph vaultNodes={vault} />);
+    const canvas = container.querySelector('canvas')!;
+    const { nodes, edges, cam } = scene();
+
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    const center = { x: (160 - cam.x) / cam.scale, y: (300 - cam.y) / cam.scale };
+    const first = nearestToPoint(nodes, center)!;
+    expect(live(container)).toBe(selectionAnnouncement(first.label, neighborIds(first.id, edges).size));
+
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    const next = nearestInDirection(nodes, first.id, 'right');
+    expect(next).not.toBeNull(); // o cenário tem vizinho à direita
+    expect(live(container)).toBe(selectionAnnouncement(next!.label, neighborIds(next!.id, edges).size));
+  });
+
+  it('seta sem nó na direção mantém a seleção e anuncia que não há nada ali', () => {
+    // Com dois nós (a raiz e a nota), só a direção da outra ponta tem vizinho; nas demais não há nada
+    const solo = [note('solo.md')];
+    const { container } = render(<ForceGraph vaultNodes={solo} />);
+    const canvas = container.querySelector('canvas')!;
+    const { nodes, edges, cam } = (() => {
+      const g = buildGraph(solo, 320, 600);
+      return { ...g, cam: fitCamera(g.nodes, 320, 600) };
+    })();
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    const first = nearestToPoint(nodes, { x: (160 - cam.x) / cam.scale, y: (300 - cam.y) / cam.scale })!;
+    expect(live(container)).toBe(selectionAnnouncement(first.label, neighborIds(first.id, edges).size));
+
+    const KEY = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' } as const;
+    const dir = (Object.keys(KEY) as (keyof typeof KEY)[]).find((d) => nearestInDirection(nodes, first.id, d) === null);
+    expect(dir).toBeDefined();
+    fireEvent.keyDown(canvas, { key: KEY[dir!] });
+    expect(live(container)).toBe('Nenhum nó nessa direção');
+  });
+
+  it('Enter sem seleção só anuncia; Enter numa nota selecionada a abre de novo', () => {
+    const onOpenNote = vi.fn();
+    const { container } = render(<ForceGraph vaultNodes={vault} onOpenNote={onOpenNote} />);
+    const canvas = container.querySelector('canvas')!;
+
+    fireEvent.keyDown(canvas, { key: 'Enter' });
+    expect(onOpenNote).not.toHaveBeenCalled();
+    expect(live(container)).toBe('Nenhum nó selecionado: use as setas para escolher um');
+
+    // Clique numa nota já a seleciona e abre (1ª chamada); Enter abre a mesma nota de novo
+    const p = screenPos('A/x.md');
+    fireEvent.mouseMove(canvas, { clientX: p.x, clientY: p.y });
+    fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
+    fireEvent.mouseUp(canvas, { clientX: p.x, clientY: p.y });
+    expect(onOpenNote).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(canvas, { key: 'Enter' });
+    expect(onOpenNote).toHaveBeenCalledTimes(2);
+    expect(onOpenNote).toHaveBeenLastCalledWith('A/x.md');
+  });
+
+  it('Enter numa pasta selecionada enquadra a pasta e não abre nota', () => {
+    const onOpenNote = vi.fn();
+    const { container } = render(<ForceGraph vaultNodes={vault} onOpenNote={onOpenNote} />);
+    const canvas = container.querySelector('canvas')!;
+    const p = screenPos('dir:A');
+    fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
+    fireEvent.mouseUp(canvas, { clientX: p.x, clientY: p.y });
+    expect(onOpenNote).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(canvas, { key: 'Enter' });
+    expect(onOpenNote).not.toHaveBeenCalled();
+    expect(live(container)).toBe('Pasta enquadrada: A');
+  });
+
+  it('Esc limpa a seleção feita pelo teclado; Home enquadra o grafo inteiro depois de um zoom', () => {
+    const { container } = render(<ForceGraph vaultNodes={vault} />);
+    const canvas = container.querySelector('canvas')!;
+
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    expect(live(container)).toMatch(/^Selecionado: /);
+    fireEvent.keyDown(canvas, { key: 'Escape' });
+    expect(live(container)).toBe('');
+
+    fireEvent.wheel(canvas, { deltaY: -100, clientX: 50, clientY: 50 });
+    fireEvent.keyDown(canvas, { key: 'Home' });
+    expect(live(container)).toBe('Grafo inteiro enquadrado');
   });
 });
