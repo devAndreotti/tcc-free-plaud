@@ -39,3 +39,7 @@ Cada arquivo deve registrar, no minimo:
 ## Regra pratica
 
 Se um teste gerou uma decisao tecnica, uma comparacao importante ou um numero que pode aparecer no TCC, ele deve entrar aqui.
+
+## Pendencias
+
+- **Experimento 15 (`15_calibracao_rrf_tcc.md`): proveniencia nao verificada.** Os numeros (MRR 0.884 / Recall@3 0.915 / Recall@5 0.950 para RRF k=60) nao foram reproduzidos em 2026-10-25 (commit `4e18932`): nem na suite atual (MRR hibrido 0.942 na passada no corpus, o mesmo do exp. 17), nem na suite de 4 casos de `88e4fc8`, nem com o codigo de `88e4fc8`. Nao ha script, config, saida ou teste que os gere, e os Recall@k so podem ser fracoes de N=200 consultas, nao de 39 nem de 16. Acao: achar a origem ou refazer a medicao com suite, profundidade, pesos e IC declarados. Detalhes no proprio doc 15.
