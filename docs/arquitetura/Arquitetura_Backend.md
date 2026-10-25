@@ -489,6 +489,17 @@ partir de contextos citáveis. O mesmo adaptador cobre Ollama, LM Studio e APIs 
 com `/chat/completions`. A API key fica apenas em `.env` ou variável `ESCOLIO_ANSWER_API_KEY`;
 `user_settings.json` guarda somente provider, modelo, base URL, temperatura e timeout.
 
+Na organização interna do `corpus ask`, `escolio.corpus.ask` fica como fachada: mantém a API pública
+e os nomes que src e testes importam, e concentra `answer_corpus_with_citations` (orquestração das
+etapas). A implementação se divide em `ask_retrieval` (vocabulário do corpus, busca FTS e recuperação
+por estratégia), `ask_anchors` (rerank por âncora curta), `ask_claims` (claims, citações e
+limitações), `ask_grounding` (portões de evidência que recusam antes da IA), `ask_generation`
+(chamada ao provider e aceite pela validação) e `ask_validation` (checagem da resposta gerada).
+A dependência que os testes substituem por nome (`search_chunks_fts`, `validate_generated_answer`)
+continua sendo lida em `ask.py` no momento da chamada: os módulos recebem o callable por parâmetro
+(`search_rows`, `validate`), então o monkeypatch em `escolio.corpus.ask` segue efetivo. A divisão não
+muda comportamento: a suíte e uma comparação de respostas completas antes e depois passaram.
+
 Na evolução atual, `hybrid` combina:
 
 - ranking lexical
