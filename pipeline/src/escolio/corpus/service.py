@@ -1,7 +1,5 @@
 import sqlite3
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
@@ -10,12 +8,30 @@ from escolio.app.paths import ensure_runtime_dirs
 from escolio.corpus import index_benchmark, perf_benchmark
 from escolio.corpus.cancellation import CancellationToken
 from escolio.corpus.discovery import discover_corpus_files
+from escolio.corpus.index_commit import (
+    PendingCorpusIndex,
+    PreparationFailure,
+    commit_pending_items,
+    delete_superseded_source_notes,
+    resolve_initial_commit_mode,
+    should_flush_microbatch,
+    should_switch_auto_to_microbatch,
+)
+from escolio.corpus.index_results import (
+    ProgressCallback,
+    batch_status,
+    cancelled_batch_result,
+    emit_progress,
+    error_code_for_exception,
+    failure_result,
+    is_cancelled,
+    unchanged_result,
+)
 from escolio.corpus.maintenance import remove_corpus_root, reset_corpus
 from escolio.corpus.models import (
     CorpusCommitMode,
     CorpusIndexBatchResult,
     CorpusIndexBenchmarkResult,
-    CorpusIndexProgress,
     CorpusIndexResult,
     CorpusPerfBenchmarkResult,
     CorpusRebuildResult,
@@ -23,22 +39,18 @@ from escolio.corpus.models import (
     ResolvedCorpusCommitMode,
 )
 from escolio.corpus.status import get_corpus_status
-from escolio.ingest.loaders import PDF_PARSE_FAILED, load_document
+from escolio.ingest.loaders import load_document
 from escolio.ingest.validators import has_indexable_content
-from escolio.notes.schemas import Note
 from escolio.notes.service import delete_notes_by_source_path
 from escolio.notes.structurer import structure_document
 from escolio.providers.embed import Embedder, get_embedder
 from escolio.retrieval.indexer import index_note
-from escolio.retrieval.models import Chunk
 from escolio.storage.sqlite import (
     corpus_root_for_path,
-    delete_note_and_chunks,
     get_note_content_hash,
     get_note_title,
     init_sqlite,
     list_chunk_ids_for_note,
-    list_note_ids_by_source_path,
     note_chunks_match_config,
     record_corpus_root,
     replace_chunks_for_note,
@@ -59,224 +71,6 @@ __all__ = [
     'reset_corpus',
 ]
 
-ProgressCallback = Callable[[CorpusIndexProgress], None]
-
-
-def _emit_progress(
-    progress: ProgressCallback | None,
-    *,
-    phase: str,
-    started_at: float,
-    current_path: Path | str | None = None,
-    total_found: int = 0,
-    processed_count: int = 0,
-    indexed_count: int = 0,
-    unchanged_count: int = 0,
-    failed_count: int = 0,
-    skipped_count: int = 0,
-    warmup_ms: int = 0,
-    embedding_ms: int = 0,
-    writing_ms: int = 0,
-    committed_count: int = 0,
-    commit_mode_requested: CorpusCommitMode = 'auto',
-    commit_mode_resolved: ResolvedCorpusCommitMode = 'atomic',
-    batch_index: int = 0,
-    batch_total: int = 0,
-    message: str | None = None,
-) -> None:
-    if progress is None:
-        return
-    progress(
-        CorpusIndexProgress(
-            phase=phase,  # type: ignore[arg-type]
-            current_path=str(current_path) if current_path else None,
-            total_found=total_found,
-            processed_count=processed_count,
-            indexed_count=indexed_count,
-            unchanged_count=unchanged_count,
-            failed_count=failed_count,
-            skipped_count=skipped_count,
-            elapsed_ms=int((perf_counter() - started_at) * 1000),
-            warmup_ms=warmup_ms,
-            embedding_ms=embedding_ms,
-            writing_ms=writing_ms,
-            committed_count=committed_count,
-            commit_mode_requested=commit_mode_requested,
-            commit_mode_resolved=commit_mode_resolved,
-            batch_index=batch_index,
-            batch_total=batch_total,
-            message=message,
-        )
-    )
-
-
-def _is_cancelled(cancel_token: CancellationToken | None) -> bool:
-    return bool(cancel_token and cancel_token.is_cancelled())
-
-
-def _cancelled_batch_result(
-    source_path: Path,
-    *,
-    recursive: bool,
-    total_found: int,
-    indexed_count: int,
-    failed_count: int,
-    skipped_count: int,
-    results: list[CorpusIndexResult],
-    unchanged_count: int = 0,
-    commit_mode_requested: CorpusCommitMode = 'auto',
-    commit_mode_resolved: ResolvedCorpusCommitMode = 'atomic',
-) -> CorpusIndexBatchResult:
-    return CorpusIndexBatchResult(
-        source_path=str(source_path),
-        recursive=recursive,
-        status='cancelled',
-        total_found=total_found,
-        indexed_count=indexed_count,
-        failed_count=failed_count,
-        skipped_count=skipped_count,
-        unchanged_count=unchanged_count,
-        commit_mode_requested=commit_mode_requested,
-        commit_mode_resolved=commit_mode_resolved,
-        results=results,
-    )
-
-
-def _unchanged_result(
-    note,
-    *,
-    source_path: Path,
-    chunk_ids: list[str],
-    vector_store: LocalVectorStore,
-    embedding_model: str,
-) -> CorpusIndexResult:
-    return CorpusIndexResult(
-        source_path=str(source_path),
-        status='unchanged',
-        note_id=note.note_id,
-        chunks_indexed=len(chunk_ids),
-        embedding_model=embedding_model,
-        vector_collection_name=vector_store.collection_name,
-        vector_entries_count=vector_store.count(),
-        message='Documento sem alterações.',
-    )
-
-
-def _failure_result(
-    source_path: Path,
-    *,
-    error_code: str,
-    message: str,
-    vector_store: LocalVectorStore,
-    embedding_model: str | None,
-) -> CorpusIndexResult:
-    return CorpusIndexResult(
-        source_path=str(source_path),
-        status='failed',
-        chunks_indexed=0,
-        embedding_model=embedding_model,
-        vector_collection_name=vector_store.collection_name,
-        vector_entries_count=vector_store.count(),
-        error_code=error_code,
-        message=message,
-    )
-
-
-def _error_code_for_exception(exc: Exception) -> str:
-    if isinstance(exc, OSError):
-        return 'INPUT_NOT_FOUND' if isinstance(exc, FileNotFoundError) else exc.__class__.__name__
-    if isinstance(exc, ValueError):
-        text = str(exc)
-        if text == 'EMPTY_CONTENT':
-            return 'EMPTY_CONTENT'
-        if text == PDF_PARSE_FAILED:
-            return PDF_PARSE_FAILED
-        if 'Extensão não suportada' in text:
-            return 'UNSUPPORTED_MEDIA_TYPE'
-    return 'INDEXING_FAILED'
-
-
-@dataclass(frozen=True)
-class _PendingCorpusIndex:
-    source_path: Path
-    note: Note
-    chunks: list[Chunk]
-
-
-@dataclass(frozen=True)
-class _PreparationFailure:
-    source_path: Path
-    error_code: str
-    message: str
-
-
-def _batched(items: list, batch_size: int):
-    for start in range(0, len(items), batch_size):
-        yield items[start : start + batch_size]
-
-
-def _count_pending_chunks(items: list[_PendingCorpusIndex]) -> int:
-    return sum(len(item.chunks) for item in items)
-
-
-def _duplicate_note_ids(items: list[_PendingCorpusIndex]) -> set[str]:
-    seen: set[str] = set()
-    duplicates: set[str] = set()
-    for item in items:
-        if item.note.note_id in seen:
-            duplicates.add(item.note.note_id)
-        seen.add(item.note.note_id)
-    return duplicates
-
-
-def _delete_superseded_source_notes(
-    connection: sqlite3.Connection,
-    vector_store: LocalVectorStore,
-    note: Note,
-) -> None:
-    for existing_note_id in list_note_ids_by_source_path(connection, note.source_path):
-        if existing_note_id == note.note_id:
-            continue
-        vector_store.delete_by_note_id(existing_note_id)
-        delete_note_and_chunks(connection, existing_note_id)
-
-
-def _resolve_initial_commit_mode(
-    requested: CorpusCommitMode,
-    *,
-    total_files: int,
-    settings: Settings,
-    source_is_file: bool = False,
-) -> ResolvedCorpusCommitMode:
-    if requested == 'atomic' or source_is_file:
-        return 'atomic'
-    if requested == 'microbatch':
-        return 'microbatch'
-    return 'microbatch' if total_files > settings.corpus_atomic_max_files else 'atomic'
-
-
-def _should_switch_auto_to_microbatch(
-    requested: CorpusCommitMode,
-    resolved: ResolvedCorpusCommitMode,
-    *,
-    pending_items: list[_PendingCorpusIndex],
-    settings: Settings,
-) -> bool:
-    return (
-        requested == 'auto'
-        and resolved == 'atomic'
-        and _count_pending_chunks(pending_items) > settings.corpus_atomic_max_chunks
-    )
-
-
-def _should_flush_microbatch(pending_items: list[_PendingCorpusIndex], *, settings: Settings) -> bool:
-    if not pending_items:
-        return False
-    return (
-        len(pending_items) >= settings.corpus_micro_batch_files
-        or _count_pending_chunks(pending_items) >= settings.corpus_micro_batch_chunks
-    )
-
 
 def _resolve_embedder_for_index(
     embedder: Embedder | None,
@@ -291,7 +85,7 @@ def _resolve_embedder_for_index(
 ) -> tuple[Embedder, int]:
     if embedder is not None:
         return embedder, 0
-    _emit_progress(
+    emit_progress(
         progress,
         phase='warmup',
         started_at=started_at,
@@ -304,7 +98,7 @@ def _resolve_embedder_for_index(
     warmup_started_at = perf_counter()
     resolved_embedder = get_embedder(settings.embedding_model, device=settings.embedding_device)
     warmup_ms = int((perf_counter() - warmup_started_at) * 1000)
-    _emit_progress(
+    emit_progress(
         progress,
         phase='warmup',
         started_at=started_at,
@@ -316,157 +110,6 @@ def _resolve_embedder_for_index(
         message=f'Modelo de busca semântica pronto em {warmup_ms} ms.',
     )
     return resolved_embedder, warmup_ms
-
-
-@dataclass
-class _CommitOutcome:
-    results: list[CorpusIndexResult]
-    indexed_count: int
-    failed_count: int
-    embedding_ms: int
-    writing_ms: int
-
-
-def _commit_pending_items(
-    pending_items: list[_PendingCorpusIndex],
-    *,
-    settings: Settings,
-    vector_store: LocalVectorStore,
-    connection: sqlite3.Connection,
-    embedder: Embedder,
-    progress: ProgressCallback | None,
-    started_at: float,
-    source_path: Path,
-    total_found: int,
-    skipped_count: int,
-    unchanged_count: int,
-    indexed_count: int,
-    failed_count: int,
-    commit_mode_requested: CorpusCommitMode,
-    commit_mode_resolved: ResolvedCorpusCommitMode,
-    batch_index: int,
-    batch_total: int,
-    cancel_token: CancellationToken | None,
-) -> _CommitOutcome:
-    """Embeda e grava um grupo de notas ja estruturadas.
-
-    O helper deixa SQLite/Chroma writes no thread principal. Isso evita
-    compartilhar conexao SQLite entre workers e limita estado parcial ao lote.
-    """
-    if not pending_items:
-        return _CommitOutcome([], 0, 0, 0, 0)
-
-    duplicates = _duplicate_note_ids(pending_items)
-    if duplicates:
-        duplicate_list = ', '.join(sorted(duplicates))
-        failures = [
-            _failure_result(
-                item.source_path,
-                error_code='DUPLICATE_NOTE_ID',
-                message=f'Note_id duplicado no lote: {duplicate_list}. Nada foi gravado.',
-                vector_store=vector_store,
-                embedding_model=embedder.model_name,
-            )
-            for item in pending_items
-        ]
-        return _CommitOutcome(failures, 0, len(failures), 0, 0)
-
-    chunk_pairs = [(item, chunk) for item in pending_items for chunk in item.chunks]
-    embeddings_by_chunk_id: dict[str, list[float]] = {}
-    embedding_ms = 0
-    writing_ms = 0
-
-    for chunk_batch in _batched(chunk_pairs, settings.corpus_embedding_batch_size):
-        if _is_cancelled(cancel_token):
-            break
-        _emit_progress(
-            progress,
-            phase='embedding',
-            started_at=started_at,
-            current_path=chunk_batch[0][0].source_path if chunk_batch else source_path,
-            total_found=total_found,
-            processed_count=indexed_count + unchanged_count + failed_count,
-            indexed_count=indexed_count,
-            unchanged_count=unchanged_count,
-            failed_count=failed_count,
-            skipped_count=skipped_count,
-            committed_count=indexed_count,
-            commit_mode_requested=commit_mode_requested,
-            commit_mode_resolved=commit_mode_resolved,
-            batch_index=batch_index,
-            batch_total=batch_total,
-            message=f'Gerando vetores de busca semântica: lote {batch_index}/{batch_total or 1}, {len(chunk_batch)} trechos.',
-        )
-        chunks = [chunk for _, chunk in chunk_batch]
-        embedding_started_at = perf_counter()
-        embeddings = embedder.embed([chunk.chunk_text for chunk in chunks])
-        embedding_ms += int((perf_counter() - embedding_started_at) * 1000)
-        if len(embeddings) != len(chunks):
-            failures = [
-                _failure_result(
-                    item.source_path,
-                    error_code='INDEXING_FAILED',
-                    message='A quantidade de vetores precisa bater com a quantidade de trechos.',
-                    vector_store=vector_store,
-                    embedding_model=embedder.model_name,
-                )
-                for item in pending_items
-            ]
-            return _CommitOutcome(failures, 0, len(failures), embedding_ms, writing_ms)
-        for chunk, embedding in zip(chunks, embeddings, strict=True):
-            embeddings_by_chunk_id[chunk.chunk_id] = embedding
-
-    if _is_cancelled(cancel_token):
-        return _CommitOutcome([], 0, 0, embedding_ms, writing_ms)
-
-    _emit_progress(
-        progress,
-        phase='writing',
-        started_at=started_at,
-        current_path=source_path,
-        total_found=total_found,
-        processed_count=indexed_count + unchanged_count + failed_count,
-        indexed_count=indexed_count,
-        unchanged_count=unchanged_count,
-        failed_count=failed_count,
-        skipped_count=skipped_count,
-        embedding_ms=embedding_ms,
-        committed_count=indexed_count,
-        commit_mode_requested=commit_mode_requested,
-        commit_mode_resolved=commit_mode_resolved,
-        batch_index=batch_index,
-        batch_total=batch_total,
-        message=f'Gravando lote {batch_index}/{batch_total or 1}: {len(pending_items)} arquivos.',
-    )
-    writing_started_at = perf_counter()
-    for item in pending_items:
-        _delete_superseded_source_notes(connection, vector_store, item.note)
-        vector_store.delete_by_note_id(item.note.note_id)
-    all_chunks = [chunk for item in pending_items for chunk in item.chunks]
-    for chunk_batch in _batched(all_chunks, settings.corpus_upsert_batch_size):
-        vector_store.upsert_chunks(
-            chunk_batch,
-            [embeddings_by_chunk_id[chunk.chunk_id] for chunk in chunk_batch],
-            embedding_model=embedder.model_name,
-        )
-    committed_results: list[CorpusIndexResult] = []
-    for item in pending_items:
-        upsert_note(connection, item.note)
-        replace_chunks_for_note(connection, item.note.note_id, item.chunks)
-        committed_results.append(
-            CorpusIndexResult(
-                source_path=str(item.source_path),
-                status='success',
-                note_id=item.note.note_id,
-                chunks_indexed=len(item.chunks),
-                embedding_model=embedder.model_name,
-                vector_collection_name=vector_store.collection_name,
-                vector_entries_count=0,
-                message='Nota indexada.',
-            )
-        )
-    writing_ms = int((perf_counter() - writing_started_at) * 1000)
-    return _CommitOutcome(committed_results, len(committed_results), 0, embedding_ms, writing_ms)
 
 
 def rebuild_corpus(
@@ -621,36 +264,36 @@ def _load_structure_chunk_corpus_file(
     chunk_size: int,
     overlap: int,
     source_root: Path | None = None,
-) -> _PendingCorpusIndex | _PreparationFailure:
+) -> PendingCorpusIndex | PreparationFailure:
     try:
         document = load_document(path)
         if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
         note = structure_document(document, source_root=source_root, hash_unrooted=True)
-        return _PendingCorpusIndex(
+        return PendingCorpusIndex(
             source_path=document.source_path,
             note=note,
             chunks=index_note(note, chunk_size=chunk_size, overlap=overlap),
         )
     except (OSError, ValueError) as exc:
-        return _PreparationFailure(
+        return PreparationFailure(
             source_path=path,
-            error_code=_error_code_for_exception(exc),
+            error_code=error_code_for_exception(exc),
             message=str(exc),
         )
 
 
 def _resolve_prepared_corpus_file(
-    prepared: _PendingCorpusIndex | _PreparationFailure,
+    prepared: PendingCorpusIndex | PreparationFailure,
     *,
     connection: sqlite3.Connection,
     vector_store: LocalVectorStore,
     embedder: Embedder,
     chunk_size: int,
     overlap: int,
-) -> _PendingCorpusIndex | CorpusIndexResult:
-    if isinstance(prepared, _PreparationFailure):
-        return _failure_result(
+) -> PendingCorpusIndex | CorpusIndexResult:
+    if isinstance(prepared, PreparationFailure):
+        return failure_result(
             prepared.source_path,
             error_code=prepared.error_code,
             message=prepared.message,
@@ -674,7 +317,7 @@ def _resolve_prepared_corpus_file(
         and chunks_match_config
         and vector_store.has_chunk_ids(existing_chunk_ids)
     ):
-        return _unchanged_result(
+        return unchanged_result(
             prepared.note,
             source_path=prepared.source_path,
             chunk_ids=existing_chunk_ids,
@@ -693,7 +336,7 @@ def _prepare_corpus_file(
     chunk_size: int,
     overlap: int,
     source_root: Path | None = None,
-) -> _PendingCorpusIndex | CorpusIndexResult:
+) -> PendingCorpusIndex | CorpusIndexResult:
     prepared = _load_structure_chunk_corpus_file(
         path,
         chunk_size=chunk_size,
@@ -777,7 +420,7 @@ def index_corpus_file(
             and chunks_match_config
             and resolved_vector_store.has_chunk_ids(existing_chunk_ids)
         ):
-            return _unchanged_result(
+            return unchanged_result(
                 note,
                 source_path=document.source_path,
                 chunk_ids=existing_chunk_ids,
@@ -790,7 +433,7 @@ def index_corpus_file(
         if len(embeddings) != len(chunks):
             raise ValueError('A quantidade de vetores precisa bater com a quantidade de trechos.')
 
-        _delete_superseded_source_notes(resolved_connection, resolved_vector_store, note)
+        delete_superseded_source_notes(resolved_connection, resolved_vector_store, note)
         resolved_vector_store.delete_by_note_id(note.note_id)
         resolved_vector_store.upsert_chunks(chunks, embeddings, embedding_model=resolved_embedder.model_name)
         upsert_note(resolved_connection, note)
@@ -807,9 +450,9 @@ def index_corpus_file(
             message='Nota indexada.',
         )
     except (OSError, ValueError) as exc:
-        return _failure_result(
+        return failure_result(
             source_path,
-            error_code=_error_code_for_exception(exc),
+            error_code=error_code_for_exception(exc),
             message=str(exc),
             vector_store=resolved_vector_store,
             embedding_model=resolved_embedder.model_name,
@@ -817,14 +460,6 @@ def index_corpus_file(
     finally:
         if owns_connection:
             resolved_connection.close()
-
-
-def _batch_status(indexed_count: int, failed_count: int, unchanged_count: int = 0) -> str:
-    if (indexed_count > 0 or unchanged_count > 0) and failed_count == 0:
-        return 'success'
-    if indexed_count > 0 or unchanged_count > 0:
-        return 'partial'
-    return 'failed'
 
 
 def index_corpus_path(
@@ -860,14 +495,14 @@ def index_corpus_path(
 
     try:
         if source_path.is_file():
-            commit_mode_resolved = _resolve_initial_commit_mode(
+            commit_mode_resolved = resolve_initial_commit_mode(
                 commit_mode_requested,
                 total_files=1,
                 settings=resolved_settings,
                 source_is_file=True,
             )
-            if _is_cancelled(cancel_token):
-                _emit_progress(
+            if is_cancelled(cancel_token):
+                emit_progress(
                     progress,
                     phase='cancelled',
                     started_at=started_at,
@@ -877,7 +512,7 @@ def index_corpus_path(
                     commit_mode_resolved=commit_mode_resolved,
                     message='Indexação cancelada.',
                 )
-                return _cancelled_batch_result(
+                return cancelled_batch_result(
                     source_path,
                     recursive=recursive,
                     total_found=1,
@@ -898,7 +533,7 @@ def index_corpus_path(
                 commit_mode_requested=commit_mode_requested,
                 commit_mode_resolved=commit_mode_resolved,
             )
-            _emit_progress(
+            emit_progress(
                 progress,
                 phase='loading',
                 started_at=started_at,
@@ -909,7 +544,7 @@ def index_corpus_path(
                 commit_mode_resolved=commit_mode_resolved,
                 message=f'Carregando {source_path.name}',
             )
-            _emit_progress(
+            emit_progress(
                 progress,
                 phase='embedding',
                 started_at=started_at,
@@ -932,7 +567,7 @@ def index_corpus_path(
             indexed_count = 1 if result.status == 'success' else 0
             failed_count = 1 if result.status == 'failed' else 0
             unchanged_count = 1 if result.status == 'unchanged' else 0
-            _emit_progress(
+            emit_progress(
                 progress,
                 phase='writing',
                 started_at=started_at,
@@ -950,7 +585,7 @@ def index_corpus_path(
                 batch_total=1,
                 message=f'Finalizado {source_path.name}',
             )
-            _emit_progress(
+            emit_progress(
                 progress,
                 phase='finished',
                 started_at=started_at,
@@ -970,7 +605,7 @@ def index_corpus_path(
             return CorpusIndexBatchResult(
                 source_path=str(source_path),
                 recursive=recursive,
-                status=_batch_status(indexed_count, failed_count, unchanged_count),  # type: ignore[arg-type]
+                status=batch_status(indexed_count, failed_count, unchanged_count),  # type: ignore[arg-type]
                 total_found=1,
                 indexed_count=indexed_count,
                 failed_count=failed_count,
@@ -981,7 +616,7 @@ def index_corpus_path(
                 results=[result],
             )
 
-        _emit_progress(
+        emit_progress(
             progress,
             phase='discovering',
             started_at=started_at,
@@ -992,7 +627,7 @@ def index_corpus_path(
         )
         discovery = discover_corpus_files(source_path, recursive=recursive)
         if not source_path.exists() or not source_path.is_dir():
-            _emit_progress(
+            emit_progress(
                 progress,
                 phase='failed',
                 started_at=started_at,
@@ -1031,7 +666,7 @@ def index_corpus_path(
 
         # Notas de arquivos apagados da pasta saem do índice; só após confirmar a raiz e sem cancelamento.
         removed_count = 0
-        if not _is_cancelled(cancel_token):
+        if not is_cancelled(cancel_token):
             removed_count = delete_notes_by_source_path(
                 source_path,
                 folder=True,
@@ -1042,14 +677,14 @@ def index_corpus_path(
                 vector_store=resolved_vector_store,
             )
 
-        pending_items: list[_PendingCorpusIndex] = []
+        pending_items: list[PendingCorpusIndex] = []
         results: list[CorpusIndexResult] = []
         indexed_count = 0
         unchanged_count = 0
         failed_count = 0
         skipped_count = len(discovery.skipped)
         total_found = len(discovery.files)
-        commit_mode_resolved = _resolve_initial_commit_mode(
+        commit_mode_resolved = resolve_initial_commit_mode(
             commit_mode_requested,
             total_files=total_found,
             settings=resolved_settings,
@@ -1061,7 +696,7 @@ def index_corpus_path(
         embedding_ms_total = 0
         writing_ms_total = 0
 
-        _emit_progress(
+        emit_progress(
             progress,
             phase='discovering',
             started_at=started_at,
@@ -1074,7 +709,7 @@ def index_corpus_path(
             message=f'{total_found} arquivos suportados encontrados.',
         )
         if not discovery.files:
-            _emit_progress(
+            emit_progress(
                 progress,
                 phase='finished',
                 started_at=started_at,
@@ -1118,7 +753,7 @@ def index_corpus_path(
                 return
             batch_index += 1
             effective_batch_total = max(batch_total, batch_index)
-            outcome = _commit_pending_items(
+            outcome = commit_pending_items(
                 pending_items,
                 settings=resolved_settings,
                 vector_store=resolved_vector_store,
@@ -1147,7 +782,7 @@ def index_corpus_path(
             indexed_count += outcome.indexed_count
             failed_count += outcome.failed_count
             if outcome.results:
-                _emit_progress(
+                emit_progress(
                     progress,
                     phase='committed',
                     started_at=started_at,
@@ -1169,11 +804,11 @@ def index_corpus_path(
                     message=f'Lote {batch_index}/{effective_batch_total} commitado: {outcome.indexed_count} arquivos.',
                 )
 
-        def accept_prepared(prepared: _PendingCorpusIndex | CorpusIndexResult, file_path: Path) -> None:
+        def accept_prepared(prepared: PendingCorpusIndex | CorpusIndexResult, file_path: Path) -> None:
             nonlocal commit_mode_resolved, batch_total, unchanged_count, failed_count
-            if isinstance(prepared, _PendingCorpusIndex):
+            if isinstance(prepared, PendingCorpusIndex):
                 pending_items.append(prepared)
-                if _should_switch_auto_to_microbatch(
+                if should_switch_auto_to_microbatch(
                     commit_mode_requested,
                     commit_mode_resolved,
                     pending_items=pending_items,
@@ -1185,7 +820,7 @@ def index_corpus_path(
                         (max(total_found, 1) + resolved_settings.corpus_micro_batch_files - 1)
                         // resolved_settings.corpus_micro_batch_files,
                     )
-                if commit_mode_resolved == 'microbatch' and _should_flush_microbatch(pending_items, settings=resolved_settings):
+                if commit_mode_resolved == 'microbatch' and should_flush_microbatch(pending_items, settings=resolved_settings):
                     flush_pending(force=True, current_path=file_path)
                 return
             results.append(prepared)
@@ -1201,7 +836,7 @@ def index_corpus_path(
             and commit_mode_requested != 'microbatch'
         )
         if use_parallel_prepare:
-            _emit_progress(
+            emit_progress(
                 progress,
                 phase='loading',
                 started_at=started_at,
@@ -1214,7 +849,7 @@ def index_corpus_path(
                 batch_total=batch_total,
                 message=f'Preparando arquivos com {resolved_settings.corpus_index_workers} workers.',
             )
-            prepared_slots: list[_PendingCorpusIndex | CorpusIndexResult | None] = [None] * len(discovery.files)
+            prepared_slots: list[PendingCorpusIndex | CorpusIndexResult | None] = [None] * len(discovery.files)
             with ThreadPoolExecutor(max_workers=resolved_settings.corpus_index_workers) as executor:
                 futures = {
                     executor.submit(
@@ -1237,7 +872,7 @@ def index_corpus_path(
                         overlap=resolved_overlap,
                     )
                     prepared_slots[index] = prepared
-                    _emit_progress(
+                    emit_progress(
                         progress,
                         phase='structuring',
                         started_at=started_at,
@@ -1254,10 +889,10 @@ def index_corpus_path(
                         batch_total=batch_total,
                         message=f'Preparado {file_path.name}',
                     )
-                    if _is_cancelled(cancel_token):
+                    if is_cancelled(cancel_token):
                         for pending_future in futures:
                             pending_future.cancel()
-                        _emit_progress(
+                        emit_progress(
                             progress,
                             phase='cancelled',
                             started_at=started_at,
@@ -1274,7 +909,7 @@ def index_corpus_path(
                             batch_total=batch_total,
                             message='Indexação cancelada.',
                         )
-                        return _cancelled_batch_result(
+                        return cancelled_batch_result(
                             source_path,
                             recursive=recursive,
                             total_found=total_found,
@@ -1289,11 +924,11 @@ def index_corpus_path(
             for prepared in prepared_slots:
                 if prepared is None:
                     continue
-                accept_prepared(prepared, prepared.source_path if isinstance(prepared, _PendingCorpusIndex) else Path(prepared.source_path))
+                accept_prepared(prepared, prepared.source_path if isinstance(prepared, PendingCorpusIndex) else Path(prepared.source_path))
         else:
             for file_path in discovery.files:
-                if _is_cancelled(cancel_token):
-                    _emit_progress(
+                if is_cancelled(cancel_token):
+                    emit_progress(
                         progress,
                         phase='cancelled',
                         started_at=started_at,
@@ -1310,7 +945,7 @@ def index_corpus_path(
                         batch_total=batch_total,
                         message='Indexação cancelada.',
                     )
-                    return _cancelled_batch_result(
+                    return cancelled_batch_result(
                         source_path,
                         recursive=recursive,
                         total_found=total_found,
@@ -1323,7 +958,7 @@ def index_corpus_path(
                         commit_mode_resolved=commit_mode_resolved,
                     )
                 processed_count = len(results) + len(pending_items)
-                _emit_progress(
+                emit_progress(
                     progress,
                     phase='loading',
                     started_at=started_at,
@@ -1342,8 +977,8 @@ def index_corpus_path(
                     batch_total=batch_total,
                     message=f'Processando {file_path.name}',
                 )
-                if _is_cancelled(cancel_token):
-                    _emit_progress(
+                if is_cancelled(cancel_token):
+                    emit_progress(
                         progress,
                         phase='cancelled',
                         started_at=started_at,
@@ -1362,7 +997,7 @@ def index_corpus_path(
                         batch_total=batch_total,
                         message='Indexação cancelada.',
                     )
-                    return _cancelled_batch_result(
+                    return cancelled_batch_result(
                         source_path,
                         recursive=recursive,
                         total_found=total_found,
@@ -1374,7 +1009,7 @@ def index_corpus_path(
                         commit_mode_requested=commit_mode_requested,
                         commit_mode_resolved=commit_mode_resolved,
                     )
-                _emit_progress(
+                emit_progress(
                     progress,
                     phase='structuring',
                     started_at=started_at,
@@ -1403,8 +1038,8 @@ def index_corpus_path(
                     source_root=source_path,
                 )
                 accept_prepared(prepared, file_path)
-                if _is_cancelled(cancel_token):
-                    _emit_progress(
+                if is_cancelled(cancel_token):
+                    emit_progress(
                         progress,
                         phase='cancelled',
                         started_at=started_at,
@@ -1423,7 +1058,7 @@ def index_corpus_path(
                         batch_total=batch_total,
                         message='Indexação cancelada.',
                     )
-                    return _cancelled_batch_result(
+                    return cancelled_batch_result(
                         source_path,
                         recursive=recursive,
                         total_found=total_found,
@@ -1436,8 +1071,8 @@ def index_corpus_path(
                         commit_mode_resolved=commit_mode_resolved,
                     )
 
-        if pending_items and _is_cancelled(cancel_token):
-            _emit_progress(
+        if pending_items and is_cancelled(cancel_token):
+            emit_progress(
                 progress,
                 phase='cancelled',
                 started_at=started_at,
@@ -1458,7 +1093,7 @@ def index_corpus_path(
                 batch_total=batch_total,
                 message='Indexação cancelada antes da gravação.',
             )
-            return _cancelled_batch_result(
+            return cancelled_batch_result(
                 source_path,
                 recursive=recursive,
                 total_found=total_found,
@@ -1478,7 +1113,7 @@ def index_corpus_path(
         for item in results:
             item.vector_entries_count = vector_entries_count
 
-        _emit_progress(
+        emit_progress(
             progress,
             phase='finished',
             started_at=started_at,
@@ -1501,7 +1136,7 @@ def index_corpus_path(
         return CorpusIndexBatchResult(
             source_path=str(source_path),
             recursive=recursive,
-            status=_batch_status(indexed_count, failed_count, unchanged_count),  # type: ignore[arg-type]
+            status=batch_status(indexed_count, failed_count, unchanged_count),  # type: ignore[arg-type]
             total_found=len(discovery.files),
             indexed_count=indexed_count,
             failed_count=failed_count,
