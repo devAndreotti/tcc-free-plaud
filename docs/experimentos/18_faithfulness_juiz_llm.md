@@ -40,6 +40,8 @@ python -m escolio benchmark faithfulness --results ../data/results/bench_qchat_r
 
 Use um modelo juiz mais forte que o gerador e registre o modelo escolhido no commit. Os JSONs de `compare` e `faithfulness` vão para `data/results/`. Os JSONs antigos de `bench_qchat.json` não têm resposta gravada e precisam ser gerados de novo com `--registrar-respostas`.
 
+Para a UI mostrar o bloco de faithfulness no painel de Benchmark, o mesmo comando aceita `--mesclar-em <compare.json>`. Ele grava a chave `faithfulness` (score, IC 95%, afirmações, ilegíveis e juiz) no JSON do compare, por escrita atômica, e não mexe no resto. O bloco usa a estratégia do chat (`default_ask_strategy` gravada no compare; `hybrid` sem ela), a mesma que o painel usa; `--estrategia` escolhe outra. O `--saida` continua com as três estratégias. A mesclagem recusa um JSON de outra comparação (mesmo `comparison_id`) e não grava nada se a estratégia não tiver respostas.
+
 ## Resultados
 
 | Estratégia | Respostas | Afirmações | Suportadas | Ilegíveis | Faithfulness média | IC 95% |

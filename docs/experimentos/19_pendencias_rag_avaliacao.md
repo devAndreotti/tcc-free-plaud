@@ -35,9 +35,10 @@ reranker moveria a decisão de abstenção sem ninguém perceber. O logit agora 
 2. **Ablação com modelo real (na máquina com GPU):**
    ```bash
    python -m escolio benchmark compare --suite ../data/datasets/manual_validation/suite.json --export
-   python -m escolio benchmark compare --suite ../data/datasets/manual_validation/suite.json --rerank-model BAAI/bge-reranker-v2-m3 --export
+   python -m escolio benchmark compare --suite ../data/datasets/manual_validation/suite.json --rerank-model BAAI/bge-reranker-v2-m3 --com-baseline --export
    ```
-   Reportar MRR, Recall@k e F1 de abstenção com IC bootstrap. `NÃO MEDIDO`.
+   A segunda linha roda a suíte sem e com o reranker (o principal é o sem) e grava `reranked` e `baseline_ci` no
+   mesmo JSON. Reportar MRR, Recall@k e F1 de abstenção com IC bootstrap. `NÃO MEDIDO`.
 3. **Faithfulness real.** Gerar os JSONs com `--registrar-respostas` (os antigos, como `bench_qchat.json`, não têm
    resposta nem trechos) e rodar `benchmark faithfulness` com um juiz forte. Commitar os JSONs com `git add -f`
    (`data/results/` está no `.gitignore`). `NÃO MEDIDO`.
@@ -74,15 +75,18 @@ Entraram depois da primeira versão deste documento (tudo ainda `NÃO MEDIDO` co
   ainda tem ~820 linhas e `corpus/service.py` ~2.000: continuam acima de 300.
 - **Chunking por segmento de fala** (doc 21): `t_start`/`t_end` no chunk e na citação. O `content_hash` de notas de
   áudio com segmentos muda, então elas são reindexadas uma vez.
-- **Painel de Benchmark (UI):** seções opcionais de ablação, cobertura e faithfulness. O backend ainda **não grava**
-  `reranked`, `coverage` e `faithfulness` no JSON do `compare`; sem isso as seções não aparecem.
+- **Painel de Benchmark (UI):** seções opcionais de ablação, cobertura e faithfulness. O JSON do `compare` passa a
+  gravar esses blocos, opt-in: `--com-baseline` (`reranked` e `baseline_ci`), `--cobertura` (`coverage`) e
+  `benchmark faithfulness --mesclar-em` (`faithfulness`). Sem as flags o JSON não muda (teste de regressão com
+  golden). Limite: o `runBenchmarkCompare` da UI passa por `benchmark/service.py`, que ainda não recebe essas flags,
+  então o painel não mostra as seções nessa rota. Só o JSON do CLI as traz. Veja `docs/experimentos/20` e `18`.
 - **Grafo (UI):** seleção por clique com vizinhança em destaque, aviso quando o modo Links não tem ligações, rótulos do
   nó selecionado e dos vizinhos, cor automática por pasta de 1º nível (sem colisão entre até 8 pastas), legenda e
   abertura animada (respeita `prefers-reduced-motion`). Falta navegação por teclado entre nós.
 
 ### Ainda aberto
 - Medir tudo (itens 2 a 5 acima).
-- Emitir `reranked`/`coverage`/`faithfulness` no JSON do `compare`.
+- Ligar `--com-baseline`, `--cobertura` e `--mesclar-em` também em `benchmark/service.py` (rota da UI).
 - `ask.py` e `service.py` acima de 300 linhas.
 - Validação visual do grafo só com dados reais sem `[[links]]` (103 notas do repo); falta um vault com ligações.
 
