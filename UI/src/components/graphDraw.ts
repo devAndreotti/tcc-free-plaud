@@ -30,7 +30,17 @@ export function readPalette(el: Element) {
     tipFg: v('--tip-fg'),
     /** cores das pastas de 1º nível, na ordem de GRAPH_COLOR_TOKENS */
     groups: GRAPH_COLOR_TOKENS.map(v),
+    /** opacidade da cor de pasta nas notas (--graph-note-alpha, por tema) */
+    noteAlpha: parseNoteAlpha(v('--graph-note-alpha')),
   };
+}
+
+// Opacidade padrão das notas quando o token não existe ou não é número
+const NOTE_FILL_ALPHA = 0.75;
+
+function parseNoteAlpha(raw: string): number {
+  const n = Number(raw);
+  return raw !== '' && Number.isFinite(n) && n >= 0 && n <= 1 ? n : NOTE_FILL_ALPHA;
 }
 
 export type Palette = ReturnType<typeof readPalette>;
@@ -57,12 +67,10 @@ function nodeColor(n: SimNode, pal: Palette, hoveredId: string | null): string {
   return group ?? pal.node;
 }
 
-// Notas herdam a cor da pasta, mais apagadas que a pasta; hover e seleção voltam a ser cheias
-const NOTE_FILL_ALPHA = 0.75;
-
-function fillStrength(n: SimNode, hl: Highlight): number {
+// Notas herdam a cor da pasta, mais apagadas que a pasta (pal.noteAlpha); hover e seleção voltam a ser cheias
+function fillStrength(n: SimNode, hl: Highlight, noteAlpha: number): number {
   if (n.kind !== 'note' || n.colorSlot === null) return 1;
-  return n.id === hl.hoveredId || n.id === hl.selectedId ? 1 : NOTE_FILL_ALPHA;
+  return n.id === hl.hoveredId || n.id === hl.selectedId ? 1 : noteAlpha;
 }
 
 /** Arestas da árvore em cinza; ligações [[...]] por cima, mais grossas e em azul claro transparente. */
@@ -96,7 +104,7 @@ export function drawEdges(ctx: Ctx, nodes: SimNode[], edges: SimEdge[], pal: Pal
 export function drawNodes(ctx: Ctx, nodes: SimNode[], pal: Palette, hl: Highlight) {
   const base = ctx.globalAlpha;
   for (const n of nodes) {
-    ctx.globalAlpha = base * fillStrength(n, hl) * (!hl.sel || hl.sel.has(n.id) ? 1 : DIM_ALPHA);
+    ctx.globalAlpha = base * fillStrength(n, hl, pal.noteAlpha) * (!hl.sel || hl.sel.has(n.id) ? 1 : DIM_ALPHA);
     ctx.beginPath();
     ctx.arc(n.x, n.y, nodeRadius(n), 0, Math.PI * 2);
     ctx.fillStyle = nodeColor(n, pal, hl.hoveredId);

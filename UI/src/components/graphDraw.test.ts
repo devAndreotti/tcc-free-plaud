@@ -29,7 +29,7 @@ function recorder() {
 
 const pal: Palette = {
   edge: '#333', node: '#888', folder: '#66f', label: '#aaa', text: '#fff', hover: '#f0f', link: '#0ff',
-  focus: '#0ff', bg: '#000', tipBg: '#111', tipFg: '#eee',
+  focus: '#0ff', bg: '#000', tipBg: '#111', tipFg: '#eee', noteAlpha: 0.75,
   groups: ['#g1', '#g2', '#g3', '#g4', '#g5', '#g6', '#g7', '#g8'],
 };
 const cam = { x: 0, y: 0, scale: 1 };
@@ -90,6 +90,26 @@ describe('drawNodes: seleção apaga o que está fora da vizinhança', () => {
     expect(ring.x).toBe(20);
     expect(ring.r).toBeGreaterThan(2.6);
     expect(ring.alpha).toBe(1);
+  });
+});
+
+describe('drawNodes: opacidade das notas vem do tema (--graph-note-alpha)', () => {
+  const colored: SimNode[] = [
+    { ...node('dir:A', 10, 0, 'folder', 1), group: 'A', folder: 'A', colorSlot: 2 },
+    { ...node('A/x', 20, 0), group: 'A', folder: 'A', colorSlot: 2 },
+  ];
+
+  it('nota usa a opacidade da paleta do tema; o tema claro põe 1 (cor inteira)', () => {
+    const rec = recorder();
+    drawNodes(rec.ctx as never, colored, { ...pal, noteAlpha: 1 }, hl(null));
+    expect(rec.arcs[1].alpha).toBe(1);
+  });
+
+  it('com a opacidade do tema escuro (0,75) a nota fica apagada em relação à pasta', () => {
+    const rec = recorder();
+    drawNodes(rec.ctx as never, colored, { ...pal, noteAlpha: 0.75 }, hl(null));
+    expect(rec.arcs[1].alpha).toBeCloseTo(0.75);
+    expect(rec.arcs[0].alpha).toBe(1);
   });
 });
 
