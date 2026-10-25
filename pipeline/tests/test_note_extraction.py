@@ -2,11 +2,15 @@ import json
 from pathlib import Path
 from typing import Self
 
+import pytest
+
 from escolio.app.config import Settings
 from escolio.ingest.loaders import load_document
 from escolio.notes.extraction import (
+    ENTITY_WARNING,
     EXTRACTION_UNAVAILABLE_WARNING,
     NO_JSON_WARNING,
+    TOPIC_WARNING,
     apply_extraction,
     build_extraction_prompt,
     enrich_note,
@@ -110,7 +114,7 @@ def test_llm_exception_is_reported_as_warning_not_raised() -> None:
 
 def test_hallucinated_items_are_discarded_and_counted() -> None:
     payload = {
-        'topics': ['tema'],
+        'topics': ['planejamento'],
         'decisions': [
             {'text': 'Decidimos usar ChromaDB para o índice vetorial.'},
             {'text': 'Contratar consultor externo para auditoria de segurança'},
@@ -273,3 +277,143 @@ def test_make_provider_llm_reuses_answer_provider_http(monkeypatch, tmp_path: Pa
     assert body['temperature'] == 0.0
     assert body['messages'] == [{'role': 'user', 'content': build_extraction_prompt(NOTE_TEXT)}]
     assert len(extraction.decisions) == 1
+
+
+GUARD_NOTE = (
+    'Reunião de orçamento do TCC.\n\n'
+    'João pediu prazo de 5 dias para entregar o relatório até sexta-feira.\n\n'
+    'A compra do equipamento custa R$ 1500 e vence em 09/09/2025.\n\n'
+    'Equipe de Comunicação aprova o tema.\n'
+)
+
+
+def _payload(decisions=(), actions=(), topics=()) -> str:
+    return json.dumps(
+        {
+            'topics': list(topics),
+            'decisions': [{'text': text} for text in decisions],
+            'action_items': list(actions),
+        }
+    )
+
+
+def test_reorganized_fact_is_discarded_by_entity_guard() -> None:
+    # Caso do enunciado: a nota diz que João pediu 5 dias; os itens trocam nome ou número.
+    decisions = [
+        'Maria aprova o prazo de 3 dias',
+        'Maria aprova o prazo de 5 dias',
+        'João aprova o prazo de 3 dias',
+        'João pediu prazo de 5 dias para entregar o relatório',
+    ]
+
+    extraction = extract_structure(GUARD_NOTE, FakeLLM(_payload(decisions=decisions)))
+
+    assert [item.text for item in extraction.decisions] == [
+        'João pediu prazo de 5 dias para entregar o relatório'
+    ]
+    assert extraction.discarded == 3
+    assert extraction.warnings == [ENTITY_WARNING.format(count=3)]
+    # O aviso é agregado: não repete nome nem número do item descartado.
+    assert all('Maria' not in warning and '3 dias' not in warning for warning in extraction.warnings)
+
+
+def test_lexical_only_mode_keeps_reorganized_fact() -> None:
+    # Com strict_entities=False vale só o limiar lexical: 'Maria aprova o prazo de 3 dias'
+    # passa (3 de 4 termos aparecem na nota). É o comportamento que a guarda corrige.
+    extraction = extract_structure(
+        GUARD_NOTE,
+        FakeLLM(_payload(decisions=['Maria aprova o prazo de 3 dias'])),
+        strict_entities=False,
+    )
+
+    assert [item.text for item in extraction.decisions] == ['Maria aprova o prazo de 3 dias']
+    assert extraction.discarded == 0
+
+
+def test_present_entities_are_accepted() -> None:
+    extraction = extract_structure(GUARD_NOTE, FakeLLM(_payload(decisions=['João pede prazo de 5 dias'])))
+
+    assert [item.text for item in extraction.decisions] == ['João pede prazo de 5 dias']
+    assert extraction.discarded == 0
+
+
+def test_accent_and_case_do_not_block_matching() -> None:
+    decisions = [
+        'JOAO pediu PRAZO de 5 DIAS para entregar o RELATORIO até SEXTA-FEIRA',
+        'Equipe de COMUNICACAO aprova o tema',
+    ]
+
+    extraction = extract_structure(GUARD_NOTE, FakeLLM(_payload(decisions=decisions)))
+
+    assert [item.text for item in extraction.decisions] == decisions
+    assert extraction.discarded == 0
+
+
+@pytest.mark.parametrize(
+    ('note', 'item', 'kept'),
+    [
+        ('A compra do equipamento custa R$ 1500.', 'Compra do equipamento por R$ 1.500', True),
+        ('A compra do equipamento custa 1500.', 'Compra do equipamento por R$ 1.500', True),
+        ('A compra do equipamento custa R$ 1500.', 'Compra do equipamento por R$ 1.600', False),
+        ('A compra do equipamento custa R$ 1500.', 'Compra do equipamento por 1.500 dias', False),
+    ],
+)
+def test_currency_matches_plain_number_when_note_has_same_value(note: str, item: str, kept: bool) -> None:
+    extraction = extract_structure(note, FakeLLM(_payload(decisions=[item])))
+
+    assert (len(extraction.decisions) == 1) is kept
+    assert extraction.discarded == (0 if kept else 1)
+
+
+def test_numeric_date_must_match_literally() -> None:
+    decisions = ['Relatório entregue até 09/09/2025', 'Relatório entregue até 10/09/2025']
+
+    extraction = extract_structure(GUARD_NOTE, FakeLLM(_payload(decisions=decisions)))
+
+    assert [item.text for item in extraction.decisions] == ['Relatório entregue até 09/09/2025']
+    assert extraction.discarded == 1
+
+
+def test_textual_date_is_only_matched_literally_documented_limit() -> None:
+    # Limite conhecido: '09/09/2025' não é reconhecido como 'nove de setembro' na nota.
+    note = 'O relatório deve ser entregue até nove de setembro.'
+    decisions = ['Relatório entregue até 09/09/2025', 'Relatório entregue até nove de setembro']
+
+    extraction = extract_structure(note, FakeLLM(_payload(decisions=decisions)))
+
+    assert [item.text for item in extraction.decisions] == ['Relatório entregue até nove de setembro']
+    assert extraction.discarded == 1
+
+
+def test_textual_date_matches_when_written_the_same_way() -> None:
+    note = 'O relatório deve ser entregue até 9 de setembro de 2025.'
+
+    extraction = extract_structure(note, FakeLLM(_payload(decisions=['Relatório entregue até 9 de setembro'])))
+
+    assert len(extraction.decisions) == 1
+
+
+def test_invented_topics_are_discarded_and_counted() -> None:
+    topics = ['Orçamento', 'de do', 'Marketing digital', 'Relatório']
+
+    extraction = extract_structure(GUARD_NOTE, FakeLLM(_payload(topics=topics)))
+
+    assert extraction.topics == ['Orçamento', 'Relatório']
+    assert extraction.discarded == 2
+    assert extraction.warnings == [TOPIC_WARNING.format(count=2)]
+
+
+def test_owner_and_due_are_scrubbed_when_not_in_note() -> None:
+    actions = [
+        {'text': 'Relatório para entregar', 'owner': 'Carlos Silva', 'due': '12 de dezembro'},
+        {'text': 'Relatório entregue até sexta-feira', 'owner': 'João', 'due': 'amanhã'},
+        {'text': 'Relatório entregue até sexta-feira', 'owner': None, 'due': 'sexta-feira'},
+    ]
+
+    extraction = extract_structure(GUARD_NOTE, FakeLLM(_payload(actions=actions)))
+
+    first, second, third = extraction.action_items
+    assert first.owner is None and first.due is None
+    assert second.owner == 'João' and second.due is None
+    assert third.due == 'sexta-feira'
+    assert extraction.discarded == 0
