@@ -127,3 +127,34 @@ Limites conhecidos (verificados com sondagens, não estimados):
   aceita item `3 dias`.
 - **Números saem do cálculo lexical quando são checados.** Isso deixa o limiar lexical mais rígido em itens com
   número, porque o denominador diminui.
+
+## Atualização: terceira rodada
+
+Fechado nesta rodada (nada disso mede qualidade; tudo continua `NÃO MEDIDO` com modelo real):
+
+- **Backend emite os blocos do painel.** `benchmark compare --rerank-model X --com-baseline --cobertura 3,5,10` grava
+  `reranked`, `baseline_ci` e `coverage` no JSON; `benchmark faithfulness --mesclar-em` grava `faithfulness`.
+  O botão do painel (`run_benchmark_compare`) também os emite quando `rerank_model` está configurado; sem ele o
+  resultado é idêntico ao anterior.
+- **Estruturador:** guarda por entidades (nomes, números com unidade, datas) e por tópicos (`extraction_guard.py`).
+  Limites conhecidos: não checa a relação ("Maria pediu 5 dias" passa se Maria e 5 dias existirem na nota), não
+  detecta verbo trocado, e a primeira palavra do item também é checada (descarta alguns itens corretos que abrem
+  com verbo).
+- **Tamanho de arquivo:** `corpus/ask.py` caiu de 976 para ~300 linhas e `corpus/service.py` de 2.037 para ~905.
+  `index_corpus_path` (~690 linhas) segue em `service.py`: cortar mais exige um objeto de execução, em região sensível
+  (paralelismo, microbatch, cancelamento).
+- **Grafo:** teclado (setas, Enter, Home, Esc), sem sobreposição de rótulos e contraste das notas ≥ 3:1 nos dois temas.
+- **E2E:** os 8 specs do Playwright passam. O `03-notes-corpus` falhava por um seletor do próprio teste que casava
+  com o botão da vault ("42 notas") em vez do menu Notas.
+
+### Achado sobre o experimento 15
+Os números do exp. 15 não têm artefato de origem e não reproduzem (ver o aviso no próprio doc 15). Foram copiados
+para `docs/tcc/texto/TCC.md`. **Decisão pendente do autor:** substituir pelos números medidos (híbrida no corpus,
+MRR 0,9423, conforme exp. 17) ou remover a afirmação.
+
+### Ainda aberto
+- Medir tudo com modelo real (itens 2 a 5 acima).
+- `ask.py` (~300 linhas) no limite; `service.py` ainda ~905.
+- Grafo: com mais de 8 pastas de 1º nível as cores se repetem; o contexto fora da seleção quase some no tema escuro;
+  desempenho com muitos nós e leitor de tela não verificados; nunca validado com `[[links]]` de um vault real.
+- CI do PR #149 sem resultado no último commit consultado (o runner é self-hosted).

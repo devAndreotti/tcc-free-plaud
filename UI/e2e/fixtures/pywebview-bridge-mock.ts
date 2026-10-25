@@ -33,8 +33,8 @@ export function createPyWebViewMockScript(options: MockBridgeOptions = {}) {
           },
           listNotes: async function() {
             return [
-              { id: "note-01", title: "Arquitetura do Escólio", filename: "Arquitetura.md", path: "/mock/vault/Arquitetura.md", size: 1024, modified: "2026-09-08", tags: ["tcc", "rag"] },
-              { id: "note-02", title: "Decisões de RRF", filename: "RRF.md", path: "/mock/vault/RRF.md", size: 2048, modified: "2026-09-08", tags: ["benchmark"] }
+              { note_id: "note-01", title: "Arquitetura do Escólio", source_type: "md", source_path: "/mock/vault/Arquitetura.md", created_at: "2026-09-08T00:00:00Z", tags: ["tcc", "rag"], chunk_count: 3 },
+              { note_id: "note-02", title: "Decisões de RRF", source_type: "md", source_path: "/mock/vault/RRF.md", created_at: "2026-09-08T00:00:00Z", tags: ["benchmark"], chunk_count: 2 }
             ];
           },
           getNoteDetail: async function(noteId) {
