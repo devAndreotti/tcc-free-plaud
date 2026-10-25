@@ -22,7 +22,7 @@ function makeCtx() {
   return {
     clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), scale: vi.fn(), translate: vi.fn(),
     beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), arc: vi.fn(),
-    fill: vi.fn(), fillText: vi.fn(),
+    fill: vi.fn(), fillText: vi.fn(), measureText: () => ({ width: 10 }),
     strokeStyle: '', lineWidth: 0, fillStyle: '', font: '', textAlign: '', globalAlpha: 1,
   };
 }

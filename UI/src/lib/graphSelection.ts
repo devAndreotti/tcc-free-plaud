@@ -98,3 +98,71 @@ export function selectionAnnouncement(label: string, linkCount: number): string 
   const ligacoes = linkCount === 1 ? '1 ligação' : `${linkCount} ligações`;
   return `Selecionado: ${label}, ${ligacoes}`;
 }
+
+// ─── Teclado ─────────────────────────────────────────────────────────────────
+
+export type ArrowDirection = 'up' | 'down' | 'left' | 'right';
+
+/** Direção da tecla de seta (KeyboardEvent.key), ou null para as demais teclas */
+export function arrowDirection(key: string): ArrowDirection | null {
+  switch (key) {
+    case 'ArrowUp': return 'up';
+    case 'ArrowDown': return 'down';
+    case 'ArrowLeft': return 'left';
+    case 'ArrowRight': return 'right';
+    default: return null;
+  }
+}
+
+const DIRECTION_VECTORS: Record<ArrowDirection, { x: number; y: number }> = {
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
+};
+
+/** Meio-ângulo do cone da seta: candidatos até 60° do eixo (cos 60° = 0,5) */
+const CONE_COS = 0.5;
+
+interface Point { id: string; x: number; y: number }
+
+/**
+ * Vizinho mais próximo na direção da seta, a partir do nó `fromId`. Só entram nós num cone de 60°
+ * em torno da seta (à frente, não ao lado); entre eles vence o mais perto. Null se não há nenhum.
+ * Os vizinhos de grafo não importam aqui: é a proximidade na tela (posições de mundo).
+ */
+export function nearestInDirection<T extends Point>(nodes: T[], fromId: string, dir: ArrowDirection): T | null {
+  const from = nodes.find((n) => n.id === fromId);
+  if (!from) return null;
+  const v = DIRECTION_VECTORS[dir];
+  let best: T | null = null;
+  let bestD2 = Infinity;
+  for (const n of nodes) {
+    if (n.id === fromId) continue;
+    const dx = n.x - from.x;
+    const dy = n.y - from.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 === 0) continue; // nós sobrepostos não formam direção
+    const along = dx * v.x + dy * v.y;
+    if (along <= 0 || along * along < CONE_COS * CONE_COS * d2) continue; // fora do cone
+    if (d2 < bestD2) {
+      best = n;
+      bestD2 = d2;
+    }
+  }
+  return best;
+}
+
+/** Nó mais próximo de um ponto (coordenadas de mundo): ponto de partida quando nada está selecionado. */
+export function nearestToPoint<T extends Point>(nodes: T[], point: { x: number; y: number }): T | null {
+  let best: T | null = null;
+  let bestD2 = Infinity;
+  for (const n of nodes) {
+    const d2 = (n.x - point.x) ** 2 + (n.y - point.y) ** 2;
+    if (d2 < bestD2) {
+      best = n;
+      bestD2 = d2;
+    }
+  }
+  return best;
+}

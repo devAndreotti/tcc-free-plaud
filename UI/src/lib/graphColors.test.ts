@@ -151,6 +151,31 @@ describe('paleta do grafo em index.css', () => {
       }
     });
   }
+
+  // A nota é a cor da pasta com a opacidade do tema (--graph-note-alpha) sobre o fundo: é o que aparece
+  const blend = (fg: string, bg: string, alpha: number) => {
+    const mixed = [1, 3, 5].map((i) => {
+      const f = parseInt(fg.slice(i, i + 2), 16);
+      const b = parseInt(bg.slice(i, i + 2), 16);
+      return Math.round(f * alpha + b * (1 - alpha)).toString(16).padStart(2, '0');
+    });
+    return `#${mixed.join('')}`;
+  };
+
+  for (const [theme, text] of Object.entries(themes)) {
+    it(`tema ${theme}: a nota (cor da pasta com a opacidade do tema) chega a 3:1 no fundo do painel e da página`, () => {
+      const alpha = Number(/--graph-note-alpha:\s*([\d.]+)/.exec(text)?.[1]);
+      expect(alpha).toBeGreaterThan(0);
+      expect(alpha).toBeLessThanOrEqual(1);
+      const bg = tokenIn(text, '--bg-primary');
+      const panel = tokenIn(text, '--bg-panel');
+      for (const t of GRAPH_COLOR_TOKENS) {
+        const shown = blend(tokenIn(text, t), bg, alpha);
+        expect(contrast(shown, bg)).toBeGreaterThanOrEqual(3);
+        expect(contrast(blend(tokenIn(text, t), panel, alpha), panel)).toBeGreaterThanOrEqual(3);
+      }
+    });
+  }
 });
 
 describe('assignPaletteSlots', () => {

@@ -6,7 +6,7 @@
  * Desenho em components/graphDraw.ts; seleção por clique em lib/graphSelection.ts.
  */
 
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo, useId } from 'react';
 import type { GraphMode, MarkdownNode, VaultLink, Camera, SimEdge, SimNode } from '../lib/vaultGraph';
 import {
   GRAPH_FOCUS_EVENT,
@@ -17,14 +17,18 @@ import {
   visibleLinks,
 } from '../lib/vaultGraph';
 import {
+  arrowDirection,
   folderSubtreeIds,
   frameCamera,
   hitTest,
   isClick,
   lerpCamera,
+  nearestInDirection,
+  nearestToPoint,
   neighborIds,
   selectionAnnouncement,
   selectionSet,
+  type ArrowDirection,
 } from '../lib/graphSelection';
 import { legendEntries, topFolderOf } from '../lib/graphColors';
 import { entryAt, prefersReducedMotion, projectNodes, shouldAnimateEntry } from '../lib/graphMotion';
@@ -43,6 +47,12 @@ const GLIDE_FRAMES = 14;
 
 // Lista fixa: um array novo a cada render reconstruiria o grafo a cada render
 const NO_LINKS: VaultLink[] = [];
+
+// Texto de ajuda do canvas para leitores de tela (aria-describedby); as teclas valem com o foco no canvas
+const GRAPH_HELP =
+  'Teclado: setas movem a seleção para o nó vizinho na direção da seta; Enter abre a nota selecionada ou enquadra a pasta; ' +
+  'Home enquadra o grafo inteiro; Esc limpa a seleção; Tab sai do grafo. ' +
+  'Mouse: clique seleciona (nota abre, pasta enquadra), arraste move, scroll dá zoom, duplo clique enquadra.';
 
 interface ForceGraphProps {
   vaultNodes: MarkdownNode[];
@@ -77,6 +87,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
   // Texto da região aria-live: "Selecionado: <nome>, N ligações" (vazio sem seleção)
   const [announcement, setAnnouncement] = useState('');
+  const helpId = useId();
 
   // ── Desenha um frame ────────────────────────────────────────────────────
   const draw = useCallback(() => {
@@ -106,7 +117,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     const hl = { hoveredId: hovered.current, selectedId: selectedRef.current, sel, scale: cam.scale };
     drawEdges(ctx, shown, edges, pal, cam, sel);
     drawNodes(ctx, shown, pal, hl);
-    drawLabels(ctx, shown, pal, cam, sel);
+    drawLabels(ctx, shown, pal, cam, sel, hl.selectedId);
     ctx.globalAlpha = 1;
     if (chain.length > 0) drawFocus(ctx, chain, shown, pal, cam, logW.current);
 
@@ -350,16 +361,66 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     if (hovered.current !== null) { hovered.current = null; setTooltip(null); draw(); }
   }, [draw]);
 
-  // Esc limpa a seleção (o canvas tem foco de teclado)
+  // Volta a enquadrar o grafo inteiro (duplo clique e Home); cancela um deslize de câmera em curso
+  const fitAll = useCallback(() => {
+    cancelAnimationFrame(panRef.current);
+    autoFitRef.current = true;
+    draw();
+  }, [draw]);
+
+  // Seta: sem seleção, parte do nó mais perto do centro da tela; com seleção, vai ao vizinho na direção
+  const moveSelection = useCallback((dir: ArrowDirection) => {
+    const { nodes } = graphRef.current;
+    const cur = selectedRef.current;
+    const next = cur === null
+      ? nearestToPoint(nodes, toWorld(logW.current / 2, logH.current / 2))
+      : nearestInDirection(nodes, cur, dir);
+    if (!next) {
+      setAnnouncement('Nenhum nó nessa direção');
+      return;
+    }
+    selectNode(next);
+    // Com o grafo inteiro enquadrado o nó já está na tela; com zoom ou arrasto a câmera o acompanha
+    if (!autoFitRef.current) panIntoView(next);
+  }, [toWorld, selectNode, panIntoView]);
+
+  // Enter: nota abre; pasta é enquadrada (a mesma ação do clique)
+  const activateSelection = useCallback(() => {
+    const cur = graphRef.current.nodes.find((n) => n.id === selectedRef.current);
+    if (!cur) {
+      setAnnouncement('Nenhum nó selecionado: use as setas para escolher um');
+      return;
+    }
+    if (cur.kind === 'note') {
+      setAnnouncement(`Abrindo nota: ${cur.label}`);
+      onOpenNote?.(cur.id);
+    } else {
+      setAnnouncement(`Pasta enquadrada: ${cur.label}`);
+      frameFolder(cur);
+    }
+  }, [frameFolder, onOpenNote]);
+
+  // Teclado do canvas. Tab não é tratado: o navegador leva o foco para fora do grafo.
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
-    if (e.key === 'Escape' && selectedRef.current !== null) {
+    const dir = arrowDirection(e.key);
+    if (dir) {
+      e.preventDefault();
+      moveSelection(dir);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      activateSelection();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      fitAll();
+      setAnnouncement('Grafo inteiro enquadrado');
+    } else if (e.key === 'Escape' && selectedRef.current !== null) {
       e.preventDefault();
       selectNode(null);
     }
-  }, [selectNode]);
+  }, [moveSelection, activateSelection, fitAll, selectNode]);
 
   // Duplo clique volta a enquadrar o grafo inteiro
-  const handleDoubleClick = useCallback(() => { autoFitRef.current = true; draw(); }, [draw]);
+  const handleDoubleClick = useCallback(() => fitAll(), [fitAll]);
 
   // ── Zoom com scroll ─────────────────────────────────────────────────────
   const handleWheel = useCallback((e: WheelEvent) => {
@@ -414,8 +475,10 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
         onMouseLeave={handleMouseLeave}
         onKeyDown={handleKeyDown}
         onDoubleClick={handleDoubleClick}
-        aria-label="Visualização de grafo — clique num nó para selecionar (nota abre, pasta enquadra), arraste para mover, scroll para zoom, duplo clique para enquadrar, Esc limpa a seleção"
+        aria-label="Visualização de grafo"
+        aria-describedby={helpId}
       />
+      <p id={helpId} className="sr-only">{GRAPH_HELP}</p>
       {mode === 'links' && linkCount === 0 && <GraphNoLinksHint noteCount={vaultNodes.length} />}
       {mode !== 'links' && legend.total > 0 && (
         <GraphLegend entries={legend.shown} overflow={legend.overflow} total={legend.total} />

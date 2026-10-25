@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { SimEdge, SimNode } from './vaultGraph';
 import {
   CLICK_SLOP,
+  arrowDirection,
   edgeInSelection,
   folderSubtreeIds,
   frameCamera,
   hitTest,
   isClick,
   lerpCamera,
+  nearestInDirection,
+  nearestToPoint,
   neighborIds,
   selectionAnnouncement,
   selectionSet,
@@ -137,5 +140,76 @@ describe('selectionAnnouncement', () => {
     expect(selectionAnnouncement('Arquitetura', 3)).toBe('Selecionado: Arquitetura, 3 ligações');
     expect(selectionAnnouncement('Solta', 1)).toBe('Selecionado: Solta, 1 ligação');
     expect(selectionAnnouncement('Vazia', 0)).toBe('Selecionado: Vazia, 0 ligações');
+  });
+});
+
+describe('arrowDirection', () => {
+  it('mapeia as quatro setas e ignora as demais teclas', () => {
+    expect(arrowDirection('ArrowUp')).toBe('up');
+    expect(arrowDirection('ArrowDown')).toBe('down');
+    expect(arrowDirection('ArrowLeft')).toBe('left');
+    expect(arrowDirection('ArrowRight')).toBe('right');
+    expect(arrowDirection('Enter')).toBeNull();
+    expect(arrowDirection('constructor')).toBeNull();
+  });
+});
+
+describe('nearestInDirection: a seta vai ao vizinho mais próximo à frente', () => {
+  // Y cresce para baixo (tela). Origem no centro, vizinhos em volta
+  const pt = (id: string, x: number, y: number) => ({ id, x, y });
+  const grid = [
+    pt('c', 0, 0),
+    pt('dir', 100, 0),      // à direita, em linha
+    pt('far', 300, 0),      // à direita, mais longe
+    pt('diag', 60, 60),     // 45° para baixo-direita: ainda no cone de 60°
+    pt('side', 10, 200),    // quase abaixo: fora do cone para a direita
+    pt('left', -50, 0),
+    pt('up', 0, -80),
+  ];
+
+  it('direita escolhe o mais perto dentro do cone (não o "far" nem o "side")', () => {
+    // dir (100) < diag (~85 de distância)? diag está a 84,8 e dir a 100: diag é mais perto e está no cone
+    expect(nearestInDirection(grid, 'c', 'right')?.id).toBe('diag');
+  });
+
+  it('esquerda, cima e baixo acham o nó da própria direção', () => {
+    expect(nearestInDirection(grid, 'c', 'left')?.id).toBe('left');
+    expect(nearestInDirection(grid, 'c', 'up')?.id).toBe('up');
+    // Para baixo: 'diag' (a 45°, a ~85 px) vence 'side' (quase vertical, a 200 px)
+    expect(nearestInDirection(grid, 'c', 'down')?.id).toBe('diag');
+  });
+
+  it('não volta para o próprio nó e devolve null quando não há nada naquela direção', () => {
+    const lone = [pt('a', 0, 0), pt('b', -10, 0)];
+    expect(nearestInDirection(lone, 'a', 'right')).toBeNull();
+    expect(nearestInDirection(lone, 'a', 'up')).toBeNull();
+  });
+
+  it('nó ao lado (fora do cone de 60°) não conta como "à direita"', () => {
+    const onlySide = [pt('a', 0, 0), pt('s', 10, 100)];
+    expect(nearestInDirection(onlySide, 'a', 'right')).toBeNull();
+    expect(nearestInDirection(onlySide, 'a', 'down')?.id).toBe('s');
+  });
+
+  it('nós sobrepostos ao de partida não formam direção; id inexistente devolve null', () => {
+    const stacked = [pt('a', 5, 5), pt('twin', 5, 5), pt('b', 50, 5)];
+    expect(nearestInDirection(stacked, 'a', 'right')?.id).toBe('b');
+    expect(nearestInDirection(stacked, 'nao-existe', 'right')).toBeNull();
+  });
+
+  it('a partir de um nó, andar para a direita e voltar pela esquerda reencontra o mesmo caminho', () => {
+    const row = [pt('p', 0, 0), pt('q', 40, 0), pt('r', 90, 0)];
+    expect(nearestInDirection(row, 'p', 'right')?.id).toBe('q');
+    expect(nearestInDirection(row, 'q', 'right')?.id).toBe('r');
+    expect(nearestInDirection(row, 'r', 'left')?.id).toBe('q');
+  });
+});
+
+describe('nearestToPoint', () => {
+  it('devolve o nó mais perto do ponto (ponto de partida sem seleção)', () => {
+    const pt2 = (id: string, x: number, y: number) => ({ id, x, y });
+    const nodes = [pt2('a', 0, 0), pt2('b', 30, 30), pt2('c', 200, 200)];
+    expect(nearestToPoint(nodes, { x: 25, y: 25 })?.id).toBe('b');
+    expect(nearestToPoint([], { x: 0, y: 0 })).toBeNull();
   });
 });

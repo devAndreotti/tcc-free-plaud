@@ -60,6 +60,8 @@
   --graph-6: #4fc3c7;
   --graph-7: #b5d46a;
   --graph-8: #f59fc0;
+  /* Opacidade das notas (cor da pasta apagada); no claro ela é 1, senão a nota cai abaixo de 3:1 */
+  --graph-note-alpha: 0.75;
 
   --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 10px 24px -8px rgba(0, 0, 0, 0.55);
@@ -146,6 +148,7 @@
   --graph-6: #0f8a8f;
   --graph-7: #6d8a10;
   --graph-8: #c2437a;
+  --graph-note-alpha: 1;
 
   --shadow-sm: 0 1px 3px rgba(20, 18, 30, 0.10);
   --shadow-md: 0 8px 20px -8px rgba(20, 18, 30, 0.16);
