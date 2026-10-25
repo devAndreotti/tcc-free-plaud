@@ -1,19 +1,13 @@
-import json
 import sqlite3
-import subprocess
-import sys
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
-from statistics import mean, median
-from tempfile import TemporaryDirectory
 from time import perf_counter
 
 from escolio.app.config import Settings, get_settings
 from escolio.app.paths import ensure_runtime_dirs
-from escolio.corpus.ask import answer_corpus_with_citations
+from escolio.corpus import index_benchmark, perf_benchmark
 from escolio.corpus.cancellation import CancellationToken
 from escolio.corpus.discovery import discover_corpus_files
 from escolio.corpus.maintenance import remove_corpus_root, reset_corpus
@@ -21,7 +15,6 @@ from escolio.corpus.models import (
     CorpusCommitMode,
     CorpusIndexBatchResult,
     CorpusIndexBenchmarkResult,
-    CorpusIndexBenchmarkRunResult,
     CorpusIndexProgress,
     CorpusIndexResult,
     CorpusPerfBenchmarkResult,
@@ -203,17 +196,6 @@ def _error_code_for_exception(exc: Exception) -> str:
     return 'INDEXING_FAILED'
 
 
-class _CountingEmbedder:
-    def __init__(self, embedder: Embedder) -> None:
-        self._embedder = embedder
-        self.model_name = embedder.model_name
-        self.calls = 0
-
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        self.calls += 1
-        return self._embedder.embed(texts)
-
-
 @dataclass(frozen=True)
 class _PendingCorpusIndex:
     source_path: Path
@@ -226,59 +208,6 @@ class _PreparationFailure:
     source_path: Path
     error_code: str
     message: str
-
-
-def _benchmark_settings(base: Settings, workspace_dir: Path) -> Settings:
-    data_dir = workspace_dir / 'data'
-    return Settings(
-        environment=base.environment,
-        workspace_dir=workspace_dir,
-        data_dir=data_dir,
-        notes_dir=data_dir / 'corpus' / 'notes',
-        datasets_dir=data_dir / 'datasets',
-        results_dir=data_dir / 'results',
-        sqlite_path=data_dir / 'results' / 'escolio.sqlite3',
-        vector_store_dir=data_dir / 'results' / 'vector_store',
-        vector_collection_name=base.vector_collection_name,
-        embedding_model=base.embedding_model,
-        embedding_device=base.embedding_device,
-        default_chunk_size=base.default_chunk_size,
-        default_chunk_overlap=base.default_chunk_overlap,
-        retrieval_top_k=base.retrieval_top_k,
-        corpus_commit_mode=base.corpus_commit_mode,
-        corpus_micro_batch_chunks=base.corpus_micro_batch_chunks,
-        corpus_micro_batch_files=base.corpus_micro_batch_files,
-        corpus_atomic_max_files=base.corpus_atomic_max_files,
-        corpus_atomic_max_chunks=base.corpus_atomic_max_chunks,
-        corpus_embedding_batch_size=base.corpus_embedding_batch_size,
-        corpus_upsert_batch_size=base.corpus_upsert_batch_size,
-        corpus_index_workers=base.corpus_index_workers,
-    )
-
-
-def _write_index_benchmark_fixture(root: Path, files: int) -> int:
-    root.mkdir(parents=True, exist_ok=True)
-    for index in range(files):
-        suffix = '.txt' if index % 5 == 0 else '.md'
-        path = root / f'documento-{index:03d}{suffix}'
-        repeated = 12 if index % 4 == 0 else 3
-        body = (
-            f'# Documento {index:03d}\n\n'
-            f'Arquivo sintetico {index:03d} para benchmark de indexacao local-first. '
-            'RabbitMQ, runbook SRE e pipeline Bronze Silver Gold aparecem como termos controlados. '
-        )
-        path.write_text(body * repeated, encoding='utf-8')
-
-    (root / 'ignorado.png').write_text('fora do corpus', encoding='utf-8')
-    (root / 'ignorado.docx').write_text('fora do corpus', encoding='utf-8')
-    (root / 'ignorado.canvas').write_text('fora do corpus', encoding='utf-8')
-    return 3
-
-
-def _rate(amount: int, elapsed_ms: int) -> float:
-    if amount <= 0 or elapsed_ms <= 0:
-        return 0.0
-    return round(amount / (elapsed_ms / 1000), 3)
 
 
 def _batched(items: list, batch_size: int):
@@ -540,345 +469,6 @@ def _commit_pending_items(
     return _CommitOutcome(committed_results, len(committed_results), 0, embedding_ms, writing_ms)
 
 
-def benchmark_corpus_indexing(
-    *,
-    files: int = 100,
-    repeat: int = 2,
-    settings: Settings | None = None,
-    embedder: Embedder | None = None,
-    chunk_size: int | None = None,
-    overlap: int | None = None,
-    commit_mode: CorpusCommitMode | None = None,
-) -> CorpusIndexBenchmarkResult:
-    """Mede indexacao em corpus sintetico dentro de workspace temporario."""
-    if files <= 0:
-        raise ValueError('files precisa ser maior que zero.')
-    if repeat <= 0:
-        raise ValueError('repeat precisa ser maior que zero.')
-
-    resolved_settings = settings or get_settings()
-    resolved_embedder = embedder or get_embedder(
-        resolved_settings.embedding_model,
-        device=resolved_settings.embedding_device,
-    )
-    counting_embedder = _CountingEmbedder(resolved_embedder)
-    resolved_chunk_size = chunk_size or resolved_settings.default_chunk_size
-    resolved_overlap = resolved_settings.default_chunk_overlap if overlap is None else overlap
-    commit_mode_requested = commit_mode or resolved_settings.corpus_commit_mode
-
-    with TemporaryDirectory(prefix='escolio-corpus-benchmark-', ignore_cleanup_errors=True) as temporary_dir:
-        workspace_dir = Path(temporary_dir)
-        benchmark_settings = _benchmark_settings(resolved_settings, workspace_dir)
-        source_dir = workspace_dir / 'fixture'
-        ignored_files = _write_index_benchmark_fixture(source_dir, files)
-        total_started_at = perf_counter()
-        runs: list[CorpusIndexBenchmarkRunResult] = []
-
-        for repeat_index in range(1, repeat + 1):
-            calls_before = counting_embedder.calls
-            started_at = perf_counter()
-            batch_result = index_corpus_path(
-                source_dir,
-                settings=benchmark_settings,
-                embedder=counting_embedder,
-                chunk_size=resolved_chunk_size,
-                overlap=resolved_overlap,
-                recursive=True,
-                commit_mode=commit_mode_requested,
-            )
-            elapsed_ms = int((perf_counter() - started_at) * 1000)
-            chunks_indexed = sum(item.chunks_indexed for item in batch_result.results if item.status == 'success')
-            chunks_seen = sum(item.chunks_indexed for item in batch_result.results)
-            processed_files = batch_result.indexed_count + batch_result.unchanged_count + batch_result.failed_count
-            runs.append(
-                CorpusIndexBenchmarkRunResult(
-                    repeat_index=repeat_index,
-                    status=batch_result.status,
-                    elapsed_ms=elapsed_ms,
-                    files_per_second=_rate(processed_files, elapsed_ms),
-                    chunks_per_second=_rate(chunks_seen, elapsed_ms),
-                    total_found=batch_result.total_found,
-                    indexed_count=batch_result.indexed_count,
-                    unchanged_count=batch_result.unchanged_count,
-                    failed_count=batch_result.failed_count,
-                    skipped_count=batch_result.skipped_count,
-                    chunks_indexed=chunks_indexed,
-                    embedding_calls=counting_embedder.calls - calls_before,
-                    commit_mode_resolved=batch_result.commit_mode_resolved,
-                )
-            )
-
-        total_elapsed_ms = int((perf_counter() - total_started_at) * 1000)
-
-    indexed_count = sum(run.indexed_count for run in runs)
-    unchanged_count = sum(run.unchanged_count for run in runs)
-    failed_count = sum(run.failed_count for run in runs)
-    skipped_count = runs[-1].skipped_count if runs else ignored_files
-    chunks_indexed = sum(run.chunks_indexed for run in runs)
-    processed_files = indexed_count + unchanged_count + failed_count
-
-    if failed_count and (indexed_count or unchanged_count):
-        status = 'partial'
-    elif failed_count:
-        status = 'failed'
-    else:
-        status = 'success'
-
-    return CorpusIndexBenchmarkResult(
-        status=status,  # type: ignore[arg-type]
-        files_requested=files,
-        supported_files=files,
-        ignored_files=ignored_files,
-        repeat=repeat,
-        embedding_model=counting_embedder.model_name,
-        commit_mode_requested=commit_mode_requested,
-        commit_mode_resolved=runs[-1].commit_mode_resolved if runs else 'atomic',
-        chunk_size=resolved_chunk_size,
-        overlap=resolved_overlap,
-        total_elapsed_ms=total_elapsed_ms,
-        files_per_second=_rate(processed_files, total_elapsed_ms),
-        chunks_per_second=_rate(chunks_indexed, total_elapsed_ms),
-        indexed_count=indexed_count,
-        unchanged_count=unchanged_count,
-        failed_count=failed_count,
-        skipped_count=skipped_count,
-        chunks_indexed=chunks_indexed,
-        embedding_calls=counting_embedder.calls,
-        runs=runs,
-    )
-
-
-def _git_commit_for_path(path: Path) -> str | None:
-    try:
-        completed = subprocess.run(
-            ['git', 'rev-parse', 'HEAD'],
-            cwd=path,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except Exception:
-        return None
-    commit = completed.stdout.strip()
-    return commit or None
-
-
-def _torch_environment() -> dict[str, object]:
-    payload: dict[str, object] = {
-        'python': sys.version.split()[0],
-        'executable': sys.executable,
-    }
-    try:
-        import torch
-    except Exception as exc:
-        payload.update(
-            {
-                'torch_version': None,
-                'cuda_available': False,
-                'gpu_name': None,
-                'torch_error': f'{type(exc).__name__}: {exc}',
-            }
-        )
-        return payload
-
-    cuda_available = bool(torch.cuda.is_available())
-    payload.update(
-        {
-            'torch_version': getattr(torch, '__version__', None),
-            'torch_cuda_version': getattr(torch.version, 'cuda', None),
-            'cuda_available': cuda_available,
-            'gpu_name': torch.cuda.get_device_name(0) if cuda_available else None,
-        }
-    )
-    if cuda_available:
-        try:
-            payload['peak_vram_mb'] = int(torch.cuda.max_memory_allocated(0) / (1024 * 1024))
-        except Exception:
-            payload['peak_vram_mb'] = None
-    return payload
-
-
-def _percentile(values: list[int], percentile: float) -> float:
-    if not values:
-        return 0.0
-    ordered = sorted(values)
-    index = round((len(ordered) - 1) * percentile)
-    return float(ordered[index])
-
-
-def perf_benchmark_corpus(
-    *,
-    files: int = 100,
-    repeat: int = 1,
-    ask_repeat: int = 10,
-    include_cold_start: bool = False,
-    settings: Settings | None = None,
-    embedder: Embedder | None = None,
-    chunk_size: int | None = None,
-    overlap: int | None = None,
-    commit_mode: CorpusCommitMode | None = None,
-) -> CorpusPerfBenchmarkResult:
-    """Roda benchmark pequeno, pergunta no corpus e salva JSON comparavel."""
-    if files <= 0:
-        raise ValueError('files precisa ser maior que zero.')
-    if repeat <= 0:
-        raise ValueError('repeat precisa ser maior que zero.')
-    if ask_repeat < 0:
-        raise ValueError('ask-repeat não pode ser negativo.')
-
-    resolved_settings = settings or get_settings()
-    resolved_chunk_size = chunk_size or resolved_settings.default_chunk_size
-    resolved_overlap = resolved_settings.default_chunk_overlap if overlap is None else overlap
-    commit_mode_requested = commit_mode or resolved_settings.corpus_commit_mode
-    cold_start_ms = 0
-    embedder_init_ms = 0
-    first_embed_ms = 0
-    warm_embed_ms = 0
-    base_embedder = embedder
-
-    if base_embedder is None:
-        init_started_at = perf_counter()
-        base_embedder = get_embedder(resolved_settings.embedding_model, device=resolved_settings.embedding_device)
-        embedder_init_ms = int((perf_counter() - init_started_at) * 1000)
-        if include_cold_start:
-            first_started_at = perf_counter()
-            base_embedder.embed(['escolio cold start benchmark'])
-            first_embed_ms = int((perf_counter() - first_started_at) * 1000)
-            warm_started_at = perf_counter()
-            base_embedder.embed(['escolio warm benchmark'])
-            warm_embed_ms = int((perf_counter() - warm_started_at) * 1000)
-    cold_start_ms = embedder_init_ms + first_embed_ms
-    counting_embedder = _CountingEmbedder(base_embedder)
-
-    with TemporaryDirectory(prefix='escolio-corpus-perf-', ignore_cleanup_errors=True) as temporary_dir:
-        workspace_dir = Path(temporary_dir)
-        benchmark_settings = _benchmark_settings(resolved_settings, workspace_dir)
-        source_dir = workspace_dir / 'fixture'
-        ignored_files = _write_index_benchmark_fixture(source_dir, files)
-        progress_events: list[CorpusIndexProgress] = []
-        batch_results: list[CorpusIndexBatchResult] = []
-        total_index_ms = 0
-        for _ in range(repeat):
-            run_events: list[CorpusIndexProgress] = []
-            index_started_at = perf_counter()
-            batch_result = index_corpus_path(
-                source_dir,
-                settings=benchmark_settings,
-                embedder=counting_embedder,
-                chunk_size=resolved_chunk_size,
-                overlap=resolved_overlap,
-                recursive=True,
-                commit_mode=commit_mode_requested,
-                progress=run_events.append,
-            )
-            total_index_ms += int((perf_counter() - index_started_at) * 1000)
-            batch_results.append(batch_result)
-            if not progress_events:
-                progress_events = run_events
-        connection = init_sqlite(benchmark_settings.sqlite_path)
-        vector_store = LocalVectorStore(
-            benchmark_settings.vector_store_dir,
-            collection_name=benchmark_settings.vector_collection_name,
-        )
-        ask_latencies: list[int] = []
-        try:
-            for _ in range(ask_repeat):
-                ask_started_at = perf_counter()
-                answer_corpus_with_citations(
-                    'RabbitMQ runbook SRE pipeline',
-                    connection=connection,
-                    vector_store=vector_store,
-                    embedder=counting_embedder,
-                    strategy='hybrid',
-                    top_k=benchmark_settings.retrieval_top_k,
-                )
-                ask_latencies.append(int((perf_counter() - ask_started_at) * 1000))
-        finally:
-            connection.close()
-
-    first_progress_ms = progress_events[0].elapsed_ms if progress_events else 0
-    first_committed_ms = next(
-        (event.elapsed_ms for event in progress_events if event.phase == 'committed' or event.indexed_count > 0),
-        0,
-    )
-    chunks_indexed = sum(
-        item.chunks_indexed
-        for batch_result in batch_results
-        for item in batch_result.results
-        if item.status == 'success'
-    )
-    processed_files = sum(
-        batch_result.indexed_count + batch_result.unchanged_count + batch_result.failed_count
-        for batch_result in batch_results
-    )
-    failed_count = sum(batch_result.failed_count for batch_result in batch_results)
-    indexed_count = sum(batch_result.indexed_count for batch_result in batch_results)
-    unchanged_count = sum(batch_result.unchanged_count for batch_result in batch_results)
-    if failed_count and (indexed_count or unchanged_count):
-        status = 'partial'
-    elif failed_count:
-        status = 'failed'
-    elif batch_results and any(batch_result.status == 'cancelled' for batch_result in batch_results):
-        status = 'cancelled'
-    else:
-        status = 'success'
-    environment = _torch_environment()
-    timestamp = datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')
-    output_dir = resolved_settings.results_dir / 'corpus_perf'
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f'perf-{timestamp}.json'
-    result = CorpusPerfBenchmarkResult(
-        status=status,  # type: ignore[arg-type]
-        output_path=str(output_path),
-        timestamp=timestamp,
-        git_commit=_git_commit_for_path(resolved_settings.workspace_dir),
-        cold_start_ms=cold_start_ms,
-        python_import_ms=0,
-        embedder_init_ms=embedder_init_ms,
-        first_embed_ms=first_embed_ms,
-        warm_embed_ms=warm_embed_ms,
-        first_progress_ms=first_progress_ms,
-        first_committed_ms=first_committed_ms,
-        first_askable_ms=first_committed_ms,
-        total_index_ms=total_index_ms,
-        files_per_second=_rate(processed_files, total_index_ms),
-        chunks_per_second=_rate(chunks_indexed, total_index_ms),
-        embedding_calls=counting_embedder.calls,
-        ask_avg_ms=round(mean(ask_latencies), 3) if ask_latencies else 0.0,
-        ask_p50_ms=float(median(ask_latencies)) if ask_latencies else 0.0,
-        ask_p95_ms=_percentile(ask_latencies, 0.95),
-        commit_mode_requested=commit_mode_requested,
-        commit_mode_resolved=batch_results[0].commit_mode_resolved if batch_results else 'atomic',
-        device=resolved_settings.embedding_device,
-        embedding_model=counting_embedder.model_name,
-        torch_version=environment.get('torch_version') if isinstance(environment.get('torch_version'), str) else None,
-        cuda_available=bool(environment.get('cuda_available')),
-        gpu_name=environment.get('gpu_name') if isinstance(environment.get('gpu_name'), str) else None,
-        peak_vram_mb=environment.get('peak_vram_mb') if isinstance(environment.get('peak_vram_mb'), int) else None,
-        dataset_shape={
-            'files_requested': files,
-            'supported_files': files,
-            'ignored_files': ignored_files,
-            'chunks_indexed': chunks_indexed,
-            'ask_repeat': ask_repeat,
-            'repeat': repeat,
-        },
-        settings={
-            'chunk_size': resolved_chunk_size,
-            'overlap': resolved_overlap,
-            'corpus_embedding_batch_size': resolved_settings.corpus_embedding_batch_size,
-            'corpus_upsert_batch_size': resolved_settings.corpus_upsert_batch_size,
-            'corpus_micro_batch_chunks': resolved_settings.corpus_micro_batch_chunks,
-            'corpus_micro_batch_files': resolved_settings.corpus_micro_batch_files,
-            'corpus_index_workers': resolved_settings.corpus_index_workers,
-        },
-        environment=environment,
-    )
-    output_path.write_text(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2), encoding='utf-8')
-    return result
-
-
 def rebuild_corpus(
     path: Path | str,
     *,
@@ -971,6 +561,58 @@ def rebuild_corpus(
     finally:
         if owns_connection:
             resolved_connection.close()
+
+
+def benchmark_corpus_indexing(
+    *,
+    files: int = 100,
+    repeat: int = 2,
+    settings: Settings | None = None,
+    embedder: Embedder | None = None,
+    chunk_size: int | None = None,
+    overlap: int | None = None,
+    commit_mode: CorpusCommitMode | None = None,
+) -> CorpusIndexBenchmarkResult:
+    """Mede indexacao em corpus sintetico dentro de workspace temporario."""
+    return index_benchmark.benchmark_corpus_indexing(
+        files=files,
+        repeat=repeat,
+        settings=settings,
+        embedder=embedder,
+        chunk_size=chunk_size,
+        overlap=overlap,
+        commit_mode=commit_mode,
+        index_fn=index_corpus_path,
+        get_embedder_fn=get_embedder,
+    )
+
+
+def perf_benchmark_corpus(
+    *,
+    files: int = 100,
+    repeat: int = 1,
+    ask_repeat: int = 10,
+    include_cold_start: bool = False,
+    settings: Settings | None = None,
+    embedder: Embedder | None = None,
+    chunk_size: int | None = None,
+    overlap: int | None = None,
+    commit_mode: CorpusCommitMode | None = None,
+) -> CorpusPerfBenchmarkResult:
+    """Roda benchmark pequeno, pergunta no corpus e salva JSON comparavel."""
+    return perf_benchmark.perf_benchmark_corpus(
+        files=files,
+        repeat=repeat,
+        ask_repeat=ask_repeat,
+        include_cold_start=include_cold_start,
+        settings=settings,
+        embedder=embedder,
+        chunk_size=chunk_size,
+        overlap=overlap,
+        commit_mode=commit_mode,
+        index_fn=index_corpus_path,
+        get_embedder_fn=get_embedder,
+    )
 
 
 def _load_structure_chunk_corpus_file(
