@@ -117,7 +117,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     const hl = { hoveredId: hovered.current, selectedId: selectedRef.current, sel, scale: cam.scale };
     drawEdges(ctx, shown, edges, pal, cam, sel);
     drawNodes(ctx, shown, pal, hl);
-    drawLabels(ctx, shown, pal, cam, sel);
+    drawLabels(ctx, shown, pal, cam, sel, hl.selectedId);
     ctx.globalAlpha = 1;
     if (chain.length > 0) drawFocus(ctx, chain, shown, pal, cam, logW.current);
 

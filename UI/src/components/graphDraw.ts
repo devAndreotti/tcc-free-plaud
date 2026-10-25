@@ -9,6 +9,7 @@ import type { Camera, SimEdge, SimNode } from '../lib/vaultGraph';
 import { nodeRadius } from '../lib/vaultGraph';
 import { DIM_ALPHA, edgeInSelection } from '../lib/graphSelection';
 import { GRAPH_COLOR_TOKENS } from '../lib/graphColors';
+import { LABEL_PADDING, labelPriority, pickLabels, type LabelBox } from '../lib/graphLabels';
 
 export type Ctx = CanvasRenderingContext2D;
 
@@ -117,18 +118,55 @@ export function drawNodes(ctx: Ctx, nodes: SimNode[], pal: Palette, hl: Highligh
 // as notas ganham nome com mais zoom ainda, como no grafo do Obsidian (no modo Links só há notas).
 const NOTE_LABEL_SCALE = 1.6;
 
-// Com seleção, o selecionado e os vizinhos diretos sempre levam nome, em qualquer zoom
-export function drawLabels(ctx: Ctx, nodes: SimNode[], pal: Palette, cam: Camera, sel: Set<string> | null) {
+const LABEL_FONT_PX = 11;
+
+// Com seleção, o selecionado e os vizinhos diretos sempre levam nome, em qualquer zoom (se não colidirem).
+// Rótulos que sobrepõem um já escolhido são pulados: prioridade em lib/graphLabels.ts.
+export function drawLabels(
+  ctx: Ctx,
+  nodes: SimNode[],
+  pal: Palette,
+  cam: Camera,
+  sel: Set<string> | null,
+  selectedId: string | null = null,
+) {
   const base = ctx.globalAlpha;
   ctx.fillStyle = pal.label;
-  ctx.font = `${11 / cam.scale}px sans-serif`;
+  ctx.font = `${LABEL_FONT_PX / cam.scale}px sans-serif`;
   ctx.textAlign = 'center';
+
+  // Candidatos: quem passa pelas regras de zoom e seleção, com a caixa medida em tela
+  const candidates: { n: SimNode; boxes: LabelBox }[] = [];
   for (const n of nodes) {
     const inSel = sel?.has(n.id) ?? false;
     if (sel && !inSel) continue; // com seleção, só o nó e os vizinhos têm nome: o resto fica como fundo
     if (n.kind === 'folder' && n.depth === 0 && !inSel) continue;
     const minScale = n.kind === 'note' ? NOTE_LABEL_SCALE : n.depth === 1 ? 0.45 : 1.2;
     if (!inSel && cam.scale < minScale) continue;
+
+    // A fonte está em unidades de mundo (tamanho 11 ÷ scale): medir × scale dá px de tela
+    const m = ctx.measureText(n.label);
+    const width = m.width * cam.scale;
+    const ascent = (m.actualBoundingBoxAscent ?? LABEL_FONT_PX * 0.8 / cam.scale) * cam.scale;
+    const descent = (m.actualBoundingBoxDescent ?? LABEL_FONT_PX * 0.2 / cam.scale) * cam.scale;
+    const sx = n.x * cam.scale + cam.x;
+    const baseline = n.y * cam.scale + cam.y - (nodeRadius(n) + 4); // mesma posição do desenho, em tela
+    candidates.push({
+      n,
+      boxes: {
+        id: n.id,
+        priority: labelPriority(n, selectedId, inSel),
+        left: sx - width / 2 - LABEL_PADDING,
+        right: sx + width / 2 + LABEL_PADDING,
+        top: baseline - ascent - LABEL_PADDING,
+        bottom: baseline + descent + LABEL_PADDING,
+      },
+    });
+  }
+
+  const shown = pickLabels(candidates.map((c) => c.boxes));
+  for (const { n } of candidates) {
+    if (!shown.has(n.id)) continue;
     ctx.globalAlpha = base;
     ctx.fillText(n.label, n.x, n.y - (nodeRadius(n) + 4) / cam.scale);
   }

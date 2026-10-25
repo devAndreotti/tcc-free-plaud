@@ -18,6 +18,11 @@ function recorder() {
     arc(x: number, y: number, r: number) { arcs.push({ x, y, r, alpha: ctx.globalAlpha }); },
     fill() { const last = arcs.at(-1); if (last) last.fill = ctx.fillStyle; },
     fillText(text: string) { texts.push({ text, alpha: ctx.globalAlpha }); },
+    // Largura proporcional ao tamanho da fonte (em unidades de mundo, como o navegador mede): 0,6 em por caractere
+    measureText(text: string) {
+      const px = parseFloat(/([\d.]+)px/.exec(ctx.font)?.[1] ?? '10');
+      return { width: text.length * 0.6 * px, actualBoundingBoxAscent: 0.8 * px, actualBoundingBoxDescent: 0.2 * px };
+    },
   };
   return { ctx, arcs, strokes, texts };
 }
@@ -164,11 +169,57 @@ describe('drawLabels: com seleção, só o selecionado e os vizinhos têm nome',
     expect(alphaOf('B')).toBeUndefined(); // dir:B fica como fundo, sem nome
   });
 
-  it('com seleção, o selecionado e os vizinhos ganham nome mesmo com zoom baixo (os demais continuam ocultos)', () => {
+  it('com seleção, o selecionado tem nome em qualquer zoom; vizinhos só se couberem sem colidir', () => {
     const rec = recorder();
-    drawLabels(rec.ctx as never, nodes, pal, { x: 0, y: 0, scale: 0.3 }, selectionSet('A/x', edges));
-    // Vizinhos de A/x: pasta A (pai) e B/y (ligação). Raiz e dir:B ficam ocultas neste zoom.
-    expect(rec.texts.map((t) => t.text).sort()).toEqual(['A', 'A/x', 'B/y']);
+    drawLabels(rec.ctx as never, nodes, pal, { x: 0, y: 0, scale: 0.3 }, selectionSet('A/x', edges), 'A/x');
+    // Com zoom baixo, 'A' (pai), 'A/x' e 'B/y' ficam a poucos px uns dos outros: o selecionado é desenhado
+    // primeiro e os vizinhos que sobrepõem seu rótulo são pulados. Raiz e dir:B ficam ocultas.
+    expect(rec.texts.map((t) => t.text)).toEqual(['A/x']);
+  });
+
+  it('o selecionado ganha nome mesmo quando um vizinho está logo ao lado (regressão: a pasta selecionada sob o vizinho)', () => {
+    const rec = recorder();
+    // Pasta selecionada e uma nota vizinha no mesmo ponto; a nota vem primeiro na lista
+    const scene: SimNode[] = [node('Nota', 100, 100, 'note', 1), node('dir:A', 100.5, 100, 'folder', 1)];
+    const sceneEdges: SimEdge[] = [{ source: 'dir:A', target: 'Nota' }];
+    drawLabels(rec.ctx as never, scene, pal, cam, selectionSet('dir:A', sceneEdges), 'dir:A');
+    expect(rec.texts.map((t) => t.text)).toEqual(['A']);
+  });
+
+  it('sem seleção, a pasta vence a nota quando os rótulos colidem (pasta antes de nota)', () => {
+    const rec = recorder();
+    // Nota e pasta a 1 px uma da outra; com zoom 2 as duas são visíveis, então só a prioridade decide
+    const scene: SimNode[] = [node('solo', 100, 100, 'note', 1), node('dir:A', 100.5, 100, 'folder', 1)];
+    drawLabels(rec.ctx as never, scene, pal, { x: 0, y: 0, scale: 2 }, null, null);
+    expect(rec.texts.map((t) => t.text)).toEqual(['A']);
+  });
+
+  it('pasta mais rasa vence a mais funda quando colidem (sem seleção)', () => {
+    const rec = recorder();
+    const scene: SimNode[] = [node('dir:X/Y', 100.5, 100, 'folder', 2), node('dir:X', 100, 100, 'folder', 1)];
+    drawLabels(rec.ctx as never, scene, pal, { x: 0, y: 0, scale: 1 }, null, null);
+    expect(rec.texts.map((t) => t.text)).toEqual(['X']);
+  });
+
+  it('a colisão é medida em tela: a mesma distância no mundo colide com zoom baixo e não com zoom alto', () => {
+    // Duas pastas de 1º nível a 6 unidades de mundo. Largura de 1 letra: 6,6 px em qualquer zoom.
+    const pair: SimNode[] = [node('dir:A', 0, 0, 'folder', 1), node('dir:B', 6, 0, 'folder', 1)];
+    const low = recorder();
+    drawLabels(low.ctx as never, pair, pal, { x: 0, y: 0, scale: 1 }, null, null); // 6 px entre centros: colide
+    expect(low.texts.map((t) => t.text)).toEqual(['A']);
+    const high = recorder();
+    drawLabels(high.ctx as never, pair, pal, { x: 0, y: 0, scale: 2 }, null, null); // 12 px entre centros: cabe
+    expect(high.texts.map((t) => t.text)).toEqual(['A', 'B']);
+  });
+
+  it('mede o rótulo com o ctx (largura em tela = medida × scale)', () => {
+    const rec = recorder();
+    const seen: string[] = [];
+    const ctx = Object.assign(rec.ctx, {
+      measureText(text: string) { seen.push(text); return { width: 10, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 }; },
+    });
+    drawLabels(ctx as never, [node('dir:A', 0, 0, 'folder', 1)], pal, { x: 0, y: 0, scale: 1 }, null, null);
+    expect(seen).toEqual(['A']);
   });
 
   it('sem seleção, zoom baixo não mostra nenhum rótulo de nota ou pasta', () => {

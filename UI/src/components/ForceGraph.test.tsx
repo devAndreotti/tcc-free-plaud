@@ -25,6 +25,8 @@ function makeCtx() {
     clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), scale: vi.fn(), translate: vi.fn(),
     beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), arc: vi.fn(),
     fill: vi.fn(), fillText: vi.fn(),
+    // Medida fixa e plausível (6,6 px por letra a 11 px): rótulos colidem de forma previsível
+    measureText: vi.fn((t: string) => ({ width: t.length * 3.3, actualBoundingBoxAscent: 0.8, actualBoundingBoxDescent: 0.2 })),
     strokeStyle: '', lineWidth: 0, fillStyle: '', font: '', textAlign: '',
   };
 }
