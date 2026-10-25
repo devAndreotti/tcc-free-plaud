@@ -85,3 +85,41 @@ Entraram depois da primeira versão deste documento (tudo ainda `NÃO MEDIDO` co
 - Emitir `reranked`/`coverage`/`faithfulness` no JSON do `compare`.
 - `ask.py` e `service.py` acima de 300 linhas.
 - Validação visual do grafo só com dados reais sem `[[links]]` (103 notas do repo); falta um vault com ligações.
+
+## Status do item 6: guarda do estruturador
+
+Feito em `notes/extraction_guard.py` (chamada por `notes/extraction.py`). Continua desligado por padrão
+(`extract_structure = false`); sem a flag, o Markdown não muda.
+
+O que a guarda faz agora:
+
+- **Decisões e ações:** cada nome próprio ou sigla (palavra capitalizada, inclusive a primeira do item), cada número
+  com unidade (`R$` conta como unidade) e cada data precisa aparecer na nota. Comparação sem acento e sem caixa;
+  números normalizados (`1.500` = `1500`). Só depois entra o limiar lexical (`min_overlap`, 0,5). Item reprovado
+  conta em `discarded` e gera um aviso agregado por motivo, sem texto do item.
+- **Owner e due:** owner com nome que não está na nota vira `None`. Due com data ou dia da semana que não está na
+  nota vira `None`. A tarefa continua.
+- **Tópicos:** precisam ter ao menos um termo de conteúdo na nota; tópico só com stopwords é descartado e contado.
+- **Parâmetros:** `extract_structure(..., min_overlap=0.5, strict_entities=True)`. Com `strict_entities=False`
+  valem só o limiar lexical e a guarda de tópicos.
+
+Testes: `pipeline/tests/test_note_extraction.py`, 28 testes (15 anteriores, um deles com o tópico trocado por um
+que a nota sustenta, e 13 novos). Suíte completa: 810 passando, 9 desmarcados (`test_audio_capture.py`).
+
+**Não medido.** Nenhuma métrica de qualidade foi feita: a guarda foi validada só com os casos dos testes e com
+sondagens diretas. Não há número de falso positivo ou negativo sobre notas reais.
+
+Limites conhecidos (verificados com sondagens, não estimados):
+
+- **Relação entre entidades não é checada.** `Maria pediu 5 dias` passa quando a nota diz que João pediu e Maria
+  aprovou (os dois nomes existem). `Maria rejeitou 5 dias` passa quando a nota diz `Maria pediu 5 dias`
+  (o verbo novo é só um termo lexical). Isto é falso negativo, e é a parte que o juiz de faithfulness (doc 18) deveria cobrir.
+- **Datas são literais.** `09/09/2025` não bate com `nove de setembro`. Data numérica sem ano na nota não bate com
+  item que cita ano.
+- **Verbo ou substantivo no início do item** que não aparece na nota em nenhuma caixa é descartado como se fosse
+  nome (ex.: `Revisão do relatório` contra `revisado`). É falso positivo. A checagem inclui a primeira palavra
+  porque é ela que costuma ser o sujeito (`Maria aprova...`).
+- **Unidades fora da lista** (`_UNIT` em `extraction_guard.py`) não são reconhecidas. Ex.: nota `3 cadeiras`
+  aceita item `3 dias`.
+- **Números saem do cálculo lexical quando são checados.** Isso deixa o limiar lexical mais rígido em itens com
+  número, porque o denominador diminui.

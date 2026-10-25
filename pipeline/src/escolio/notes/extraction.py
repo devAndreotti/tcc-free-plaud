@@ -2,26 +2,38 @@
 
 Passo extra sobre a nota determinística: `structure_document` continua igual.
 Ligado pela flag `extract_structure` (desligada por padrão). Toda decisão ou
-ação devolvida pelo modelo passa pela guarda anti-alucinação: só fica o item
-cujos termos de conteúdo se sustentam no texto da nota.
+ação devolvida pelo modelo passa pela guarda de entidades (nomes, números com
+unidade, datas) e pelo limiar lexical; owner e due sem suporte viram None;
+tópicos sem termo de conteúdo na nota são descartados. Regras em
+`extraction_guard.py`.
 """
 
 import json
+from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
 from pydantic import ValidationError
 
 from escolio.app.config import Settings, get_settings
+from escolio.notes.extraction_guard import (
+    REJECT_ENTITY,
+    REJECT_LEXICAL,
+    ExtractionGuard,
+)
 from escolio.notes.markdown import render_note_markdown
 from escolio.notes.schemas import ActionItem, Decision, Note, NoteExtraction
 from escolio.providers.answer import OpenAICompatibleAnswerProvider, get_answer_provider
-from escolio.text_tokens import content_tokens, lexical_groundedness
 
 LLMCallable = Callable[[str], str]
 
 DEFAULT_MIN_OVERLAP = 0.5
 MAX_TOPICS = 8
+LEXICAL_WARNING = 'Guarda lexical: {count} item(ns) descartado(s) por pouca sobreposição com a nota.'
+ENTITY_WARNING = (
+    'Guarda de entidades: {count} item(ns) descartado(s) porque nome, número ou data não aparece na nota.'
+)
+TOPIC_WARNING = 'Guarda de tópicos: {count} tópico(s) descartado(s) sem termo de conteúdo na nota.'
 EXTRACTION_UNAVAILABLE_WARNING = (
     'Extração indisponível: o provider de resposta não aceita chamadas de extração '
     '(use openai-compatible, ollama ou lmstudio).'
@@ -68,11 +80,12 @@ def _as_items(raw: object) -> list[object]:
 
 
 def _parse_topics(raw: object) -> list[str]:
+    """Tópicos únicos e não vazios; o corte em MAX_TOPICS fica depois da guarda."""
     topics: list[str] = []
     for item in _as_items(raw):
         if isinstance(item, str) and item.strip() and item.strip() not in topics:
             topics.append(item.strip())
-    return topics[:MAX_TOPICS]
+    return topics
 
 
 def _parse_items[ItemT: (Decision, ActionItem)](
@@ -97,22 +110,27 @@ def _clean_optional(value: object) -> str | None:
     return None if cleaned.lower() in NULL_STRINGS else cleaned
 
 
-def _is_grounded(text: str, note_text: str, min_overlap: float) -> bool:
-    """Texto sem termo de conteúdo não pode ser verificado: fica de fora."""
-    if not content_tokens(text):
-        return False
-    return lexical_groundedness(text, [note_text]) >= min_overlap
-
-
-def _scrub_action(item: ActionItem, note_text: str, min_overlap: float) -> ActionItem:
+def _scrub_action(item: ActionItem, guard: ExtractionGuard) -> ActionItem:
     """Owner e due sem suporte na nota viram None; a tarefa em si continua."""
     owner = _clean_optional(item.owner)
     due = _clean_optional(item.due)
-    if owner and lexical_groundedness(owner, [note_text]) < min_overlap:
+    if owner and not guard.owner_supported(owner):
         owner = None
-    if due and lexical_groundedness(due, [note_text]) < min_overlap:
+    if due and not guard.due_supported(due):
         due = None
     return item.model_copy(update={'owner': owner, 'due': due})
+
+
+def _rejection_warnings(rejections: Counter[str], rejected_topics: int) -> list[str]:
+    """Um aviso agregado por motivo; nunca inclui o texto do item."""
+    warnings: list[str] = []
+    if rejections[REJECT_LEXICAL]:
+        warnings.append(LEXICAL_WARNING.format(count=rejections[REJECT_LEXICAL]))
+    if rejections[REJECT_ENTITY]:
+        warnings.append(ENTITY_WARNING.format(count=rejections[REJECT_ENTITY]))
+    if rejected_topics:
+        warnings.append(TOPIC_WARNING.format(count=rejected_topics))
+    return warnings
 
 
 def extract_structure(
@@ -120,8 +138,13 @@ def extract_structure(
     llm: LLMCallable,
     *,
     min_overlap: float = DEFAULT_MIN_OVERLAP,
+    strict_entities: bool = True,
 ) -> NoteExtraction:
     """Extrai decisões, ações e tópicos da nota usando `llm` (prompt -> texto).
+
+    `min_overlap` é o limiar lexical (segundo critério). `strict_entities=False`
+    desliga só a checagem de nomes, números e datas; a checagem de tópicos e o
+    limiar lexical continuam ativos.
 
     Nunca levanta por causa do modelo: falha de transporte ou JSON ilegível
     devolve extração vazia com aviso em `warnings`.
@@ -135,25 +158,38 @@ def extract_structure(
     if payload is None:
         return NoteExtraction(warnings=[NO_JSON_WARNING])
 
+    guard = ExtractionGuard(text, min_overlap=min_overlap, strict_entities=strict_entities)
     decisions, invalid_decisions = _parse_items(payload.get('decisions'), Decision)
     actions, invalid_actions = _parse_items(payload.get('action_items'), ActionItem)
-    kept_decisions = [item for item in decisions if _is_grounded(item.text, text, min_overlap)]
-    kept_actions = [
-        _scrub_action(item, text, min_overlap)
-        for item in actions
-        if _is_grounded(item.text, text, min_overlap)
-    ]
-    discarded = (
-        invalid_decisions
-        + invalid_actions
-        + (len(decisions) - len(kept_decisions))
-        + (len(actions) - len(kept_actions))
-    )
+    rejections: Counter[str] = Counter()
+    kept_decisions: list[Decision] = []
+    for decision in decisions:
+        reason = guard.item_rejection(decision.text)
+        if reason is None:
+            kept_decisions.append(decision)
+        else:
+            rejections[reason] += 1
+    kept_actions: list[ActionItem] = []
+    for action in actions:
+        reason = guard.item_rejection(action.text)
+        if reason is None:
+            kept_actions.append(_scrub_action(action, guard))
+        else:
+            rejections[reason] += 1
+    raw_topics = _parse_topics(payload.get('topics'))
+    topics = [topic for topic in raw_topics if guard.topic_supported(topic)]
+    rejected_topics = len(raw_topics) - len(topics)
     return NoteExtraction(
-        topics=_parse_topics(payload.get('topics')),
+        topics=topics[:MAX_TOPICS],
         decisions=kept_decisions,
         action_items=kept_actions,
-        discarded=discarded,
+        discarded=(
+            invalid_decisions
+            + invalid_actions
+            + sum(rejections.values())
+            + rejected_topics
+        ),
+        warnings=_rejection_warnings(rejections, rejected_topics),
     )
 
 
