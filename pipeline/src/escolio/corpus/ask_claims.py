@@ -6,6 +6,7 @@ from escolio.providers.answer_quality import ANSWER_MARKER_PATTERN
 from escolio.retrieval.models import AnswerClaim, Citation, SearchHit, UsedSource
 from escolio.retrieval.rag import (
     _is_question_like,
+    _question_needs_multiple_claims,
     _rank_claim_candidates,
     _support_level,
     _trim_claim_span,
@@ -206,3 +207,31 @@ def _build_corpus_claims(
             break
 
     return claims
+
+
+def build_claims_for_answer(
+    question: str,
+    hits: list[SearchHit],
+    query_terms: list[str],
+    note_lookup: dict[str, Note],
+    *,
+    top_k: int,
+    max_claims: int,
+) -> list[AnswerClaim]:
+    """Monta os claims da resposta extrativa; a pergunta sem pedido de vários pontos fica com um claim só."""
+    effective_max_claims = max(1, min(max_claims, top_k))
+    if not _question_needs_multiple_claims(question):
+        effective_max_claims = 1
+    return _build_corpus_claims(question, hits, query_terms, note_lookup, max_claims=effective_max_claims)
+
+
+def answer_limitations(claims: list[AnswerClaim], citations: list[Citation], cited_sources: list[UsedSource]) -> list[str]:
+    """Limitações da resposta extrativa, conforme o suporte dos claims e a quantidade de trechos e arquivos citados."""
+    limitations: list[str] = []
+    if any(claim.support_level == 'partial' for claim in claims):
+        limitations.append('Parte da resposta depende de evidência parcial recuperada.')
+    if len(citations) == 1:
+        limitations.append(SINGLE_CHUNK_LIMITATION)
+    if len(cited_sources) > 1:
+        limitations.append(MULTI_FILE_LIMITATION)
+    return limitations
