@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SimEdge, SimNode } from '../lib/vaultGraph';
+import { nodeRadius, type SimEdge, type SimNode } from '../lib/vaultGraph';
 import { DIM_ALPHA, selectionSet } from '../lib/graphSelection';
 import { drawEdges, drawLabels, drawNodes, tooltipDetail, type Highlight, type Palette } from './graphDraw';
 
@@ -63,18 +63,22 @@ const hl = (selectedId: string | null): Highlight => ({
   scale: 1,
 });
 
+// O halo de pasta/hover é um arco maior desenhado logo antes do corpo do nó, na mesma posição.
+const solid = (rec: ReturnType<typeof recorder>) =>
+  rec.arcs.filter((arc, i, all) => !(all[i + 1] && all[i + 1].x === arc.x && all[i + 1].r < arc.r));
+
 describe('drawNodes: seleção apaga o que está fora da vizinhança', () => {
   it('sem seleção todos os nós saem em alpha cheio e sem anel', () => {
     const rec = recorder();
     drawNodes(rec.ctx as never, nodes, pal, hl(null));
-    expect(rec.arcs).toHaveLength(nodes.length);
-    expect(rec.arcs.every((a) => a.alpha === 1)).toBe(true);
+    expect(solid(rec)).toHaveLength(nodes.length);
+    expect(solid(rec).every((a) => a.alpha === 1)).toBe(true);
   });
 
   it('com A/x selecionado: ele e os vizinhos diretos ficam em alpha 1; o resto recua', () => {
     const rec = recorder();
     drawNodes(rec.ctx as never, nodes, pal, hl('A/x'));
-    const alphaOf = (x: number) => rec.arcs.find((a) => a.x === x)!.alpha;
+    const alphaOf = (x: number) => solid(rec).find((a) => a.x === x)!.alpha;
     expect(alphaOf(20)).toBe(1); // A/x (selecionado)
     expect(alphaOf(10)).toBe(1); // dir:A (pai, pela árvore)
     expect(alphaOf(-20)).toBe(1); // B/y (vizinho pela ligação [[...]])
@@ -85,8 +89,8 @@ describe('drawNodes: seleção apaga o que está fora da vizinhança', () => {
   it('o selecionado ganha um anel (um arco a mais, com raio maior que o nó, em alpha cheio)', () => {
     const rec = recorder();
     drawNodes(rec.ctx as never, nodes, pal, hl('A/x'));
-    const ring = rec.arcs.at(-1)!;
-    expect(rec.arcs).toHaveLength(nodes.length + 1);
+    const ring = solid(rec).at(-1)!;
+    expect(solid(rec)).toHaveLength(nodes.length + 1);
     expect(ring.x).toBe(20);
     expect(ring.r).toBeGreaterThan(2.6);
     expect(ring.alpha).toBe(1);
@@ -102,14 +106,14 @@ describe('drawNodes: opacidade das notas vem do tema (--graph-note-alpha)', () =
   it('nota usa a opacidade da paleta do tema; o tema claro põe 1 (cor inteira)', () => {
     const rec = recorder();
     drawNodes(rec.ctx as never, colored, { ...pal, noteAlpha: 1 }, hl(null));
-    expect(rec.arcs[1].alpha).toBe(1);
+    expect(solid(rec)[1].alpha).toBe(1);
   });
 
   it('com a opacidade do tema escuro (0,75) a nota fica apagada em relação à pasta', () => {
     const rec = recorder();
     drawNodes(rec.ctx as never, colored, { ...pal, noteAlpha: 0.75 }, hl(null));
-    expect(rec.arcs[1].alpha).toBeCloseTo(0.75);
-    expect(rec.arcs[0].alpha).toBe(1);
+    expect(solid(rec)[1].alpha).toBeCloseTo(0.75);
+    expect(solid(rec)[0].alpha).toBe(1);
   });
 });
 
@@ -124,25 +128,63 @@ describe('drawNodes: cor automática por pasta de 1º nível', () => {
   it('pasta de 1º nível usa a cor do grupo; a raiz segue a cor de pasta do tema', () => {
     const rec = recorder();
     drawNodes(rec.ctx as never, colored, pal, hl(null));
-    expect(rec.arcs[0].fill).toBe(pal.folder); // raiz
-    expect(rec.arcs[1].fill).toBe('#g3'); // dir:A, slot 2 → groups[2]
-    expect(rec.arcs[1].alpha).toBe(1);
+    expect(solid(rec)[0].fill).toBe(pal.folder); // raiz
+    expect(solid(rec)[1].fill).toBe('#g3'); // dir:A, slot 2 → groups[2]
+    expect(solid(rec)[1].alpha).toBe(1);
   });
 
   it('nota herda a cor da pasta com menos opacidade; nota sem grupo fica no cinza do tema', () => {
     const rec = recorder();
     drawNodes(rec.ctx as never, colored, pal, hl(null));
-    expect(rec.arcs[2].fill).toBe('#g3');
-    expect(rec.arcs[2].alpha).toBeCloseTo(0.75);
-    expect(rec.arcs[3].fill).toBe(pal.node);
-    expect(rec.arcs[3].alpha).toBe(1);
+    expect(solid(rec)[2].fill).toBe('#g3');
+    expect(solid(rec)[2].alpha).toBeCloseTo(0.75);
+    expect(solid(rec)[3].fill).toBe(pal.node);
+    expect(solid(rec)[3].alpha).toBe(1);
   });
 
   it('hover volta a nota para cor cheia (o destaque do hover vence a cor da pasta)', () => {
     const rec = recorder();
     drawNodes(rec.ctx as never, colored, pal, { ...hl(null), hoveredId: 'A/x' });
-    expect(rec.arcs[2].fill).toBe(pal.hover);
-    expect(rec.arcs[2].alpha).toBe(1);
+    expect(solid(rec)[2].fill).toBe(pal.hover);
+    expect(solid(rec)[2].alpha).toBe(1);
+  });
+});
+
+describe('drawNodes: halo translúcido (estilo do PR 147) sobre a cor por pasta', () => {
+  const scene: SimNode[] = [
+    { ...node('dir:A', 10, 0, 'folder', 1), group: 'A', folder: 'A', colorSlot: 2 },
+    { ...node('A/x', 20, 0), group: 'A', folder: 'A', colorSlot: 2 },
+  ];
+
+  it('pasta ganha halo na própria cor, maior que o nó e translúcido; nota comum não', () => {
+    const rec = recorder();
+    drawNodes(rec.ctx as never, scene, pal, hl(null));
+    const halos = rec.arcs.filter((arc, i, all) => all[i + 1] && all[i + 1].x === arc.x && all[i + 1].r < arc.r);
+    expect(halos).toHaveLength(1);
+    expect(halos[0].x).toBe(10);
+    expect(halos[0].fill).toBe('#g3');
+    expect(halos[0].alpha).toBeCloseTo(0.28);
+    expect(halos[0].r).toBeGreaterThan(solid(rec)[0].r);
+  });
+
+  it('o nó sob o mouse ganha halo, mesmo sendo nota', () => {
+    const rec = recorder();
+    drawNodes(rec.ctx as never, scene, pal, { ...hl(null), hoveredId: 'A/x' });
+    const halo = rec.arcs.find((arc, i, all) => all[i + 1] && all[i + 1].x === 20 && arc.x === 20 && all[i + 1].r < arc.r);
+    expect(halo).toBeDefined();
+    expect(halo!.fill).toBe(pal.hover);
+  });
+
+  it('com seleção, o halo de quem está fora da vizinhança recua junto com o nó', () => {
+    const rec = recorder();
+    drawNodes(rec.ctx as never, scene, pal, hl('A/x'));
+    // dir:A é vizinha de A/x: halo em 0,28; sem vizinhança ele seria 0,28 × DIM_ALPHA
+    const halo = rec.arcs.find((arc) => arc.x === 10 && arc.r > solid(rec)[0].r)!;
+    expect(halo.alpha).toBeCloseTo(0.28);
+    const rec2 = recorder();
+    drawNodes(rec2.ctx as never, scene, pal, hl('solta-que-nao-existe'));
+    const halo2 = rec2.arcs.find((arc) => arc.x === 10 && arc.r > nodeRadius(scene[0]))!;
+    expect(halo2.alpha).toBeCloseTo(0.28 * DIM_ALPHA);
   });
 });
 
@@ -159,10 +201,10 @@ describe('tooltipDetail: a pasta aparece em texto, não só na cor', () => {
 });
 
 describe('drawEdges: arestas com as duas pontas na seleção ficam em cor plena', () => {
-  it('sem seleção só há passadas em alpha cheio (árvore) e 35% (ligação)', () => {
+  it('sem seleção só há passadas em alpha cheio (árvore) e 45% (ligação)', () => {
     const rec = recorder();
     drawEdges(rec.ctx as never, nodes, edges, pal, cam, null);
-    expect(rec.strokes.map((s) => s.alpha)).toEqual([1, 0.35]);
+    expect(rec.strokes.map((s) => s.alpha)).toEqual([1, 0.45]);
   });
 
   it('com A/x selecionado: árvore e ligação de fora recuam; dir:A→A/x e A/x↔B/y ficam por cima', () => {
@@ -173,9 +215,9 @@ describe('drawEdges: arestas com as duas pontas na seleção ficam em cor plena'
     // Árvore dentro: dir:A→A/x (1). Ligação dentro: A/x↔B/y (1).
     expect(rec.strokes.map((s) => s.segments)).toEqual([3, 0, 1, 1]);
     expect(rec.strokes[0].alpha).toBeCloseTo(DIM_ALPHA);
-    expect(rec.strokes[1].alpha).toBeCloseTo(0.35 * DIM_ALPHA);
+    expect(rec.strokes[1].alpha).toBeCloseTo(0.45 * DIM_ALPHA);
     expect(rec.strokes[2].alpha).toBe(1);
-    expect(rec.strokes[3].alpha).toBeCloseTo(0.35);
+    expect(rec.strokes[3].alpha).toBeCloseTo(0.45);
   });
 });
 

@@ -93,21 +93,36 @@ export function drawEdges(ctx: Ctx, nodes: SimNode[], edges: SimEdge[], pal: Pal
       ctx.lineTo(b.x, b.y);
     }
     ctx.strokeStyle = isLink ? pal.link : pal.edge;
-    ctx.lineWidth = (isLink ? 1.2 : 0.8) / cam.scale;
-    ctx.globalAlpha = base * (isLink ? 0.35 : 1) * (sel && !inSel ? DIM_ALPHA : 1);
+    ctx.lineWidth = (isLink ? 1 : 0.7) / cam.scale;
+    ctx.globalAlpha = base * (isLink ? 0.45 : 1) * (sel && !inSel ? DIM_ALPHA : 1);
     ctx.stroke();
   }
   ctx.globalAlpha = base;
 }
 
+// Halo das pastas e do nó sob o mouse: raio em múltiplos do nó e opacidade da cor do nó
+const HALO_SCALE = 2.2;
+const HALO_ALPHA = 0.28;
+
 /** Nós, e por cima do selecionado um anel (a seleção não depende só da cor). */
 export function drawNodes(ctx: Ctx, nodes: SimNode[], pal: Palette, hl: Highlight) {
   const base = ctx.globalAlpha;
   for (const n of nodes) {
-    ctx.globalAlpha = base * fillStrength(n, hl, pal.noteAlpha) * (!hl.sel || hl.sel.has(n.id) ? 1 : DIM_ALPHA);
+    const dim = !hl.sel || hl.sel.has(n.id) ? 1 : DIM_ALPHA;
+    const r = nodeRadius(n);
+    const color = nodeColor(n, pal, hl.hoveredId);
+    // Halo translúcido (estilo do PR 147) na cor do próprio nó: pastas e o nó sob o mouse
+    if (n.kind === 'folder' || n.id === hl.hoveredId) {
+      ctx.globalAlpha = base * HALO_ALPHA * dim;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r * HALO_SCALE, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+    ctx.globalAlpha = base * fillStrength(n, hl, pal.noteAlpha) * dim;
     ctx.beginPath();
-    ctx.arc(n.x, n.y, nodeRadius(n), 0, Math.PI * 2);
-    ctx.fillStyle = nodeColor(n, pal, hl.hoveredId);
+    ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = color;
     ctx.fill();
   }
   ctx.globalAlpha = base;
@@ -233,8 +248,11 @@ export function drawFocus(ctx: Ctx, chain: string[], nodes: SimNode[], pal: Pale
   const top = target.y - 18 * px - h;
   ctx.fillStyle = pal.tipBg;
   ctx.beginPath();
-  ctx.roundRect(left, top, w, h, 6 * px);
+  ctx.roundRect(left, top, w, h, 10 * px);
   ctx.fill();
+  ctx.strokeStyle = pal.focus;
+  ctx.lineWidth = 1 * px;
+  ctx.stroke();
   ctx.fillStyle = pal.tipFg;
   ctx.textBaseline = 'middle';
   ctx.fillText(label, left + w / 2, top + h / 2);

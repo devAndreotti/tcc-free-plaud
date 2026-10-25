@@ -344,13 +344,18 @@
 .force-graph__tooltip {
   position: absolute;
   transform: translate(-50%, -200%);
-  background: var(--tip-bg);
-  border: 1px solid var(--border-color-subtle);
-  color: var(--tip-fg);
-  font-size: 11px;
+  /* Vidro fosco (estilo do PR 147), sobre os tokens do tema: segue o claro e o escuro */
+  background: color-mix(in srgb, var(--bg-panel) 85%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
   font-family: var(--font-family);
-  padding: 3px 8px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 10px;
   pointer-events: none;
   white-space: nowrap;
   z-index: 20;
@@ -364,6 +369,7 @@
 .force-graph__tooltip-detail {
   display: block;
   font-size: 10px;
+  font-weight: 400;
   opacity: 0.75;
 }
 
