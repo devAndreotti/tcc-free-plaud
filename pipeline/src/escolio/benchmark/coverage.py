@@ -18,6 +18,17 @@ GRUPOS_CONHECIDOS = ('unica', 'mt-nota', 'mt-notas')
 GRUPO_TODOS = 'todos'
 
 
+def parse_ks(texto: str) -> list[int]:
+    """Lê '3,5,10' como [3, 5, 10]: ordenado, sem repetir, todos de 1 ou mais. Erro de texto vira ValueError."""
+    try:
+        ks = sorted({int(parte) for parte in texto.split(',') if parte.strip()})
+    except ValueError:
+        raise ValueError('deve ser uma lista de inteiros, ex.: 3,5,10.') from None
+    if not ks or ks[0] < 1:
+        raise ValueError('deve ter valores de 1 ou mais.')
+    return ks
+
+
 def grupo_da_pergunta(sample_id: str) -> str:
     """Grupo pelo prefixo do sample_id. `mt-notas` vem antes de `mt-nota` para não casar errado."""
     for grupo in ('mt-notas', 'mt-nota', 'unica'):

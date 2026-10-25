@@ -12,38 +12,25 @@ from pathlib import Path
 import typer
 
 from escolio.app.config import get_settings
+from escolio.benchmark.compare_blocks import termos_e_textos_da_suite
 from escolio.benchmark.coverage import (
     build_coverage_row,
     coverage_summary,
+    parse_ks,
     trechos_do_ranking,
 )
-from escolio.benchmark.datasets import load_benchmark_dataset, load_benchmark_suite
-from escolio.ingest.loaders import load_document
-from escolio.notes.structurer import structure_document
+from escolio.benchmark.datasets import load_benchmark_suite
 
 
 def _parse_ks(texto: str) -> list[int]:
     try:
-        ks = sorted({int(parte) for parte in texto.split(',') if parte.strip()})
-    except ValueError:
-        raise typer.BadParameter('--k deve ser uma lista de inteiros, ex.: 3,5,10.') from None
-    if not ks or ks[0] < 1:
-        raise typer.BadParameter('--k deve ter valores de 1 ou mais.')
-    return ks
+        return parse_ks(texto)
+    except ValueError as exc:
+        raise typer.BadParameter(f'--k {exc}') from None
 
 
 def _termos_e_textos(suite_path: Path, workspace: Path) -> tuple[dict[str, list[str]], dict[str, str]]:
-    suite = load_benchmark_suite(suite_path)
-    textos_por_nota: dict[str, str] = {}
-    termos: dict[str, list[str]] = {}
-    for case in suite.cases:
-        note = structure_document(load_document(workspace / case.document_path))
-        # Mesmo texto que chunk_text fatia: normalized_text com strip().
-        textos_por_nota[note.note_id] = note.normalized_text.strip()
-        for sample in load_benchmark_dataset(workspace / case.dataset_path).samples:
-            if sample.category != 'negativa' and sample.expected_terms:
-                termos[sample.sample_id] = list(sample.expected_terms)
-    return termos, textos_por_nota
+    return termos_e_textos_da_suite(load_benchmark_suite(suite_path), workspace)
 
 
 def coverage(

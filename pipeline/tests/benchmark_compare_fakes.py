@@ -6,6 +6,19 @@ from pathlib import Path
 from escolio.app.config import Settings
 
 SUITE_NAME = 'compare-flags-suite'
+ARGUMENTOS_BASE = ['--top-k', '3', '--chunk-size', '120', '--overlap', '30', '--embedding-model', 'sentence-transformer:fake-hash']
+# Campos que mudam a cada execução: ids, datas, caminhos e latências.
+CHAVES_VOLATEIS = {
+    'comparison_id',
+    'benchmark_run_id',
+    'started_at',
+    'finished_at',
+    'created_at',
+    'settings_created_at',
+    'json_report_path',
+    'csv_report_path',
+    'duration_ms',
+}
 
 DOCUMENTO = (
     '# Benchmark\n\n'
@@ -41,6 +54,19 @@ class FakeReranker:
     def score(self, query: str, passages: list[str]) -> list[float]:
         self.chamadas += 1
         return [float(indice) for indice in range(len(passages))]
+
+
+def mascarar(valor):
+    """Troca os campos voláteis por `<volatil>`, recursivamente. Latências são as chaves com `_ms` ou `latency`."""
+    if isinstance(valor, dict):
+        return {
+            chave: '<volatil>' if chave in CHAVES_VOLATEIS or chave.endswith('_ms') or 'latency' in chave
+            else mascarar(conteudo)
+            for chave, conteudo in valor.items()
+        }
+    if isinstance(valor, list):
+        return [mascarar(item) for item in valor]
+    return valor
 
 
 def settings_para(tmp_path: Path) -> Settings:

@@ -99,6 +99,22 @@ cd pipeline && uv run python ../data/datasets/multi_trecho_cobertura/checar_term
 Testes sem rede e sem modelos: `pipeline/tests/test_coverage.py` (inclui um CLI com JSON fixture montado a partir
 das notas reais) e `pipeline/tests/test_multi_trecho_cobertura_dataset.py`.
 
+### Bloco `coverage` no JSON do compare (para o painel)
+
+`benchmark compare --cobertura 3,5,10 --export` grava o bloco `coverage` no mesmo JSON, para a seção "Cobertura por
+tipo de pergunta" do painel. Escolhas de leitura, para o número bater com a UI:
+
+- **Uma profundidade:** o painel mostra um k só, então o bloco usa o maior da lista (10). A tabela completa, com
+  todos os k, continua no subcomando `benchmark coverage`.
+- **Contagens, não frações:** `single_chunk` e `across_chunks` são perguntas (a UI divide por `n`). `single_chunk`
+  conta as perguntas com todos os termos num trecho só, da nota certa, no top-k (a régua antiga, `relevant_rank <= k`).
+  `across_chunks` conta as perguntas em que a união do top-k cobre todos os termos (junção completa).
+- **Uma estratégia:** a do chat (`default_ask_strategy` gravada no compare; `hybrid` sem ela).
+- O bloco e o subcomando saem da mesma passada no corpus. Um teste confere que o `across_chunks` do bloco é igual
+  ao `juncao_completa` do subcomando sobre o mesmo JSON (`pipeline/tests/test_compare_flags_cli.py`).
+
+`NÃO MEDIDO`: o bloco existe e foi conferido com provedores falsos. Nenhum número de qualidade foi gerado.
+
 ## Resultados
 
 | Medida | Estratégia | Grupo | k | Resultado |

@@ -8,6 +8,11 @@ from rich.console import Console
 from escolio.app.cli_paths import compose_path
 from escolio.app.config import get_settings
 from escolio.app.paths import ensure_runtime_dirs
+from escolio.benchmark.compare_flags import (
+    executar_compare_com_flags,
+    gravar_faithfulness,
+    validar_flags_compare,
+)
 from escolio.benchmark.coverage_cli import coverage as coverage_command
 from escolio.benchmark.datasets import (
     demo_dataset,
@@ -20,6 +25,7 @@ from escolio.benchmark.faithfulness import (
 )
 from escolio.benchmark.grounded import evaluate_grounded_answers
 from escolio.benchmark.ia_report import build_ia_report
+from escolio.benchmark.json_merge import mesclar_chaves_json
 from escolio.benchmark.model_compare import (
     NOME_RELATORIO,
     arquivos_da_suite,
@@ -205,6 +211,8 @@ def compare(
     hybrid_lexical_pool: int | None = typer.Option(None, '--hybrid-lexical-pool', min=1, help='Pool lexical candidato para strategy=hybrid.'),
     hybrid_vector_pool: int | None = typer.Option(None, '--hybrid-vector-pool', min=1, help='Pool vetorial candidato para strategy=hybrid.'),
     rerank_model: str | None = typer.Option(None, '--rerank-model', help="Cross-encoder para reordenar os candidatos (ex.: BAAI/bge-reranker-v2-m3); vazio mantém o ranking atual."),
+    com_baseline: bool = typer.Option(False, '--com-baseline', help="Com --rerank-model: roda a suíte sem e com o reranker e grava o bloco reranked e baseline_ci."),
+    cobertura: str | None = typer.Option(None, '--cobertura', help="Profundidades k da cobertura entre trechos, ex.: 3,5,10 (grava o bloco coverage com a maior)."),
     registrar_respostas: bool = typer.Option(False, '--registrar-respostas', help="Grava no JSON a resposta do chat e os trechos citados (entrada do benchmark faithfulness)."),
     export: bool = typer.Option(False, '--export', help="Exporta JSON e CSV em data/results."),
 ) -> None:
@@ -222,6 +230,10 @@ def compare(
         raise typer.BadParameter(f"answer-provider deve ser um de: {', '.join(ANSWER_PROVIDER_NAMES)}.")
     if answer_provider == 'extractive' and (answer_model or answer_base_url):
         raise typer.BadParameter('--answer-model e --answer-base-url exigem --answer-provider diferente de extractive.')
+    try:
+        ks = validar_flags_compare(com_baseline=com_baseline, rerank_model=rerank_model, cobertura=cobertura)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
     # Mesmo provider que o app monta em tui/actions.py; sem --answer-provider, fica o extrativo de antes.
     answer_llm = get_answer_provider(
         answer_provider,  # type: ignore[arg-type]
@@ -239,8 +251,13 @@ def compare(
     reranker = reranker_from_settings(settings.model_copy(update={'rerank_model': rerank_model or settings.rerank_model}))
 
     try:
-        result = compare_benchmark_suite(
+        result, extras = executar_compare_com_flags(
             suite,
+            comparar=compare_benchmark_suite,
+            reranker=reranker,
+            rerank_model=rerank_model,
+            com_baseline=com_baseline,
+            ks=ks,
             workspace_dir=settings.workspace_dir,
             connection=connection,
             top_k=top_k,
@@ -256,16 +273,21 @@ def compare(
             settings_snapshot=build_settings_snapshot(settings),
             answer_provider=answer_llm,
             keep_answers=registrar_respostas,
-            reranker=reranker,
         )
         payload = result.model_dump(mode='json')
+        payload.update(extras)
         if export:
             output_base = settings.results_dir / result.comparison_id
             json_path = export_benchmark_comparison_json(result, output_base.with_suffix('.json'))
             csv_path = export_benchmark_comparison_csv(result, output_base.with_suffix('.csv'))
+            if extras:
+                mesclar_chaves_json(json_path, extras)
             payload['json_report_path'] = str(json_path)
             payload['csv_report_path'] = str(csv_path)
         typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
+    except ValueError as exc:  # erros de uso das flags novas (ex.: trecho fora do texto da nota)
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from None
     finally:
         connection.close()
 
@@ -373,15 +395,18 @@ def faithfulness(
     saida: Path = typer.Option(..., '--saida', help="Arquivo JSON de saída."),
     judge_api_key: str | None = typer.Option(None, '--judge-api-key', help="Chave do juiz, se o endpoint exigir."),
     timeout: int = typer.Option(120, '--timeout', min=1, help="Timeout por chamada ao juiz, em segundos."),
+    mesclar_em: Path | None = typer.Option(None, '--mesclar-em', help="JSON do compare onde gravar a chave faithfulness (além do --saida)."),
+    estrategia: str | None = typer.Option(None, '--estrategia', help="Estratégia do bloco faithfulness (padrão: a do chat, default_ask_strategy)."),
 ) -> None:
     """Faithfulness semântica com juiz LLM (offline; fora do gate do CI)."""
     comparison = BenchmarkComparisonResult.model_validate_json(results_path.read_text(encoding='utf-8'))
     try:
         judge = make_openai_compatible_judge(judge_base_url, judge_model, api_key=judge_api_key, timeout=timeout)
         report = build_faithfulness_report(comparison, judge, judge_model=judge_model, judge_base_url=judge_base_url)
+        payload = gravar_faithfulness(
+            report, comparison, saida=saida, mesclar_em=mesclar_em, estrategia=estrategia
+        )
     except (ValueError, AnswerProviderError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from None
-    saida.parent.mkdir(parents=True, exist_ok=True)
-    saida.write_text(report.model_dump_json(indent=2) + '\n', encoding='utf-8', newline='\n')
-    typer.echo(json.dumps({'ok': True, 'saida': str(saida)}, ensure_ascii=True, indent=2))
+    typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))

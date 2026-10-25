@@ -7,38 +7,20 @@ latências) viram `<volatil>` antes da comparação; o resto tem de bater byte a
 import json
 from pathlib import Path
 
+from benchmark_compare_fakes import (
+    ARGUMENTOS_BASE,
+    FakeEmbedder,
+    criar_suite,
+    mascarar,
+    settings_para,
+)
 from typer.testing import CliRunner
 
 from escolio.benchmark.runner_models import BenchmarkComparisonResult
 from escolio.cli import app
-from benchmark_compare_fakes import FakeEmbedder, criar_suite, settings_para
 
 runner = CliRunner()
 GOLDEN = Path(__file__).parent / 'fixtures' / 'compare_sem_flags_golden.json'
-CHAVES_VOLATEIS = {
-    'comparison_id',
-    'benchmark_run_id',
-    'started_at',
-    'finished_at',
-    'created_at',
-    'settings_created_at',
-    'json_report_path',
-    'csv_report_path',
-    'duration_ms',
-}
-ARGUMENTOS_BASE = ['--top-k', '3', '--chunk-size', '120', '--overlap', '30', '--embedding-model', 'sentence-transformer:fake-hash']
-
-
-def mascarar(valor):
-    if isinstance(valor, dict):
-        return {
-            chave: '<volatil>' if chave in CHAVES_VOLATEIS or chave.endswith('_ms') or 'latency' in chave
-            else mascarar(conteudo)
-            for chave, conteudo in valor.items()
-        }
-    if isinstance(valor, list):
-        return [mascarar(item) for item in valor]
-    return valor
 
 
 def executar_compare(tmp_path: Path, monkeypatch, argumentos: list[str]):
