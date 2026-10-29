@@ -45,6 +45,7 @@ from escolio.tui.audio_actions import (  # noqa: F401 -- public shared facade
     transcribe_audio,
     verify_voice_model,
 )
+from escolio.tui.folder_paths import _failed_batch, _resolve_folder_path
 
 AskStrategy = Literal["lexical", "vector", "hybrid"]
 ProgressCallback = Callable[[CorpusIndexProgress], None]
@@ -143,18 +144,6 @@ def corpus_status_from_tui(*, settings: Settings | None = None) -> CorpusStatusR
     return get_corpus_status(settings=settings or get_settings())
 
 
-def _resolve_folder_path(folder_path: Path | str) -> Path:
-    raw_path = str(folder_path).strip()
-    if not raw_path:
-        raise ValueError("Informe uma pasta para indexar.")
-
-    target = Path(raw_path).expanduser()
-    if not target.exists():
-        raise FileNotFoundError(f"Pasta nao encontrada: {target}")
-    if not target.is_dir():
-        raise ValueError(f"Path precisa ser pasta: {target}")
-    return target
-
 
 def preflight_corpus_folder(
     folder_path: Path | str, *, recursive: bool | None = None
@@ -164,21 +153,6 @@ def preflight_corpus_folder(
     return discover_corpus_files(
         target,
         recursive=settings.corpus_recursive_default if recursive is None else recursive,
-    )
-
-
-def _failed_batch(path: Path, message: str) -> CorpusIndexBatchResult:
-    _ = message
-    return CorpusIndexBatchResult(
-        source_path=str(path),
-        recursive=True,
-        status="failed",
-        total_found=0,
-        indexed_count=0,
-        failed_count=0,
-        skipped_count=0,
-        results=[],
-        skipped=[],
     )
 
 
