@@ -1,12 +1,26 @@
 import re
 import sqlite3
+from collections.abc import Callable
 from time import perf_counter
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from escolio.corpus.answer_context import (
+    build_answer_context_items,
+    citation_snippet,
+    normalize_answer_markers,
+)
 from escolio.notes.schemas import Note
-from escolio.providers.answer import NO_ANSWER_SENTINEL, AnswerProvider
+from escolio.providers.answer import AnswerProvider, AnswerProviderError
+from escolio.providers.answer_quality import (
+    ANSWER_MARKER_PATTERN,
+    contains_token_sequence,
+    has_source_marker,
+    is_echoed_question,
+    is_echoed_title,
+    is_no_answer_sentinel,
+)
 from escolio.providers.embed import Embedder
 from escolio.retrieval.debug import build_ask_debug
 from escolio.retrieval.models import (
@@ -14,6 +28,7 @@ from escolio.retrieval.models import (
     AskDebug,
     AskDebugTimings,
     AskResponse,
+    Chunk,
     Citation,
     SearchHit,
     UsedSource,
@@ -25,7 +40,6 @@ from escolio.retrieval.rag import (
     _is_question_like,
     _question_needs_multiple_claims,
     _rank_claim_candidates,
-    _shorten_snippet,
     _support_level,
     _trim_claim_span,
 )
@@ -48,6 +62,7 @@ from escolio.storage.sqlite import (
     list_chunk_ids,
     list_chunks,
     list_fts_vocabulary,
+    note_ids_under_root,
     search_chunks_fts,
 )
 from escolio.storage.vector import LocalVectorStore
@@ -82,10 +97,9 @@ def corpus_vocabulary_stems(connection: sqlite3.Connection) -> frozenset[str] | 
         _VOCABULARY_STEMS[key] = stems
     return stems
 TEAM_ANSWER_PATTERN = re.compile(r'\bequipe\s+(?:de|da|do|dos|das)\s+[0-9A-Za-zÀ-ÖØ-öø-ÿ_-]+')
-FRONTMATTER_PATTERN = re.compile(r'\A\s*---\s*\r?\n.*?\r?\n---\s*\r?\n', re.DOTALL)
-ANSWER_CONTEXT_TOTAL_CHAR_BUDGET = 6000
-ANSWER_CONTEXT_MAX_CHARS = 1500
-GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*[A-Za-zÀ-ÖØ-öø-ÿ%]{1,8})?')
+CONTEXT_METADATA_KEYS = ('source_path:', 'note_id:', 'chunk_id:', 'claim_extrativo:')
+# Unidade só conta quando é conhecida ("2.1 foi" é 2.1 e uma palavra). ponytail: R$ fica de fora; incluir aqui se a comparação precisar.
+GENERATED_NUMBER_PATTERN = re.compile(r'\b\d+(?:[.,]\d+)?(?:\s*(?:%|(?:kb|mb|gb|tb|dias?|m[êe]s(?:es)?|anos?|horas?|minutos?|semanas?)\b))?', re.IGNORECASE)
 GENERATED_ANCHOR_PATTERN = re.compile(r'\b[A-ZÀ-Ö][A-Za-zÀ-ÖØ-öø-ÿ0-9_-]{2,}\b')
 GENERIC_NO_ANSWER_MARKERS = (
     'nao consegui recuperar',
@@ -119,17 +133,18 @@ class GeneratedAnswerValidation(BaseModel):
 
 
 def _provider_failure_limitation(exc: Exception) -> str:
-    return f'Provider de resposta falhou; usando resposta extrativa. Erro: {type(exc).__name__}.'
+    detail = str(exc)[:200].rstrip('.') if isinstance(exc, AnswerProviderError) else type(exc).__name__
+    return f'A IA falhou; usando resposta extrativa. Erro: {detail}.'
 
 
-def _citation_from_corpus_hit(hit: SearchHit, note_lookup: dict[str, Note]) -> Citation:
+def _citation_from_corpus_hit(hit: SearchHit, note_lookup: dict[str, Note], claim_text: str | None = None) -> Citation:
     chunk = hit.chunk
     note = note_lookup.get(chunk.note_id)
     return Citation(
         note_id=chunk.note_id,
         note_version=chunk.note_version,
         chunk_id=chunk.chunk_id,
-        snippet=_shorten_snippet(chunk.chunk_text),
+        snippet=citation_snippet(chunk.chunk_text, claim_text),
         source_path=str(note.source_path) if note else None,
         char_start=chunk.char_start,
         char_end=chunk.char_end,
@@ -164,75 +179,60 @@ def _hits_for_citations(hits: list[SearchHit], citations: list[Citation]) -> lis
     return [hit for hit in hits if hit.chunk.chunk_id in cited_chunk_ids]
 
 
-def _clean_chunk_text_for_answer_context(text: str) -> str:
-    cleaned = FRONTMATTER_PATTERN.sub('', text, count=1).strip()
-    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
-    return cleaned
+SINGLE_CHUNK_LIMITATION = 'A resposta se apoia em um único trecho recuperado.'
+MULTI_FILE_LIMITATION = 'A resposta combina evidência de múltiplos arquivos do corpus.'
 
 
-def _clip_context_text(text: str, max_chars: int) -> str:
-    if max_chars <= 0:
-        return ''
-    if len(text) <= max_chars:
-        return text
-    marker = '\n...[truncado]'
-    if max_chars <= len(marker):
-        return text[:max_chars]
-    return f'{text[: max_chars - len(marker)].rstrip()}{marker}'
-
-
-def build_answer_contexts(
-    claims: list[AnswerClaim],
+def _with_cited_context_citations(
+    answer: str,
+    answer_sources: list[str],
+    citations: list[Citation],
     hits: list[SearchHit],
     note_lookup: dict[str, Note],
-    *,
-    max_total_chars: int = ANSWER_CONTEXT_TOTAL_CHAR_BUDGET,
-    max_context_chars: int = ANSWER_CONTEXT_MAX_CHARS,
+) -> list[Citation]:
+    """Acrescenta a citação dos trechos que a resposta gerada cita com [n] e que os claims não trouxeram."""
+    cited_ids = {
+        answer_sources[int(match.group(1)) - 1]
+        for match in ANSWER_MARKER_PATTERN.finditer(answer)
+        if 1 <= int(match.group(1)) <= len(answer_sources)
+    }
+    known_ids = {citation.chunk_id for citation in citations}
+    extra = [
+        _citation_from_corpus_hit(hit, note_lookup)
+        for hit in hits
+        if hit.chunk.chunk_id in cited_ids and hit.chunk.chunk_id not in known_ids
+    ]
+    return [*citations, *extra]
+
+
+def _with_source_limitations(
+    limitations: list[str],
+    citations: list[Citation],
+    cited_sources: list[UsedSource],
 ) -> list[str]:
-    """Monta contexto generativo com evidencia citavel real e budget fixo."""
-    hit_by_chunk_id = {hit.chunk.chunk_id: hit for hit in hits}
-    contexts: list[str] = []
-    total_chars = 0
-    for index, claim in enumerate(claims, start=1):
-        if total_chars >= max_total_chars:
-            break
-        citation = claim.citations[0] if claim.citations else None
-        if citation is None:
-            continue
+    kept = [line for line in limitations if line not in {SINGLE_CHUNK_LIMITATION, MULTI_FILE_LIMITATION}]
+    if len(citations) == 1:
+        kept.append(SINGLE_CHUNK_LIMITATION)
+    if len(cited_sources) > 1:
+        kept.append(MULTI_FILE_LIMITATION)
+    return kept
 
-        note = note_lookup.get(citation.note_id)
-        source_path = str(note.source_path) if note else citation.source_path or ''
-        title = note.title if note else ''
-        chunk_ids = ', '.join(item.chunk_id for item in claim.citations)
-        evidence_parts: list[str] = []
-        for item in claim.citations:
-            cited_hit = hit_by_chunk_id.get(item.chunk_id)
-            raw_text = cited_hit.chunk.chunk_text if cited_hit else item.snippet
-            evidence = _clean_chunk_text_for_answer_context(raw_text)
-            if evidence:
-                evidence_parts.append(evidence)
 
-        header = (
-            f'[{index}]\n'
-            f'source_path: {source_path}\n'
-            f'title: {title}\n'
-            f'note_id: {citation.note_id}\n'
-            f'chunk_id: {chunk_ids}\n'
-            f'claim_extrativo: {claim.text}\n'
-            'trecho:\n'
-        )
-        remaining_total = max_total_chars - total_chars
-        allowed_context_chars = min(max_context_chars, remaining_total)
-        evidence_budget = max(0, allowed_context_chars - len(header))
-        evidence_text = _clip_context_text('\n\n'.join(evidence_parts), evidence_budget)
-        context = _clip_context_text(f'{header}{evidence_text}', allowed_context_chars)
-        contexts.append(context)
-        total_chars += len(context)
-    return contexts
+
+def _without_answer_markers(text: str) -> str:
+    return ANSWER_MARKER_PATTERN.sub('', text)
+
+
+def _drop_unknown_answer_markers(text: str, context_count: int) -> str:
+    """Mantém [n] só para contextos que existem; marcador inventado some sem derrubar a resposta."""
+    return ANSWER_MARKER_PATTERN.sub(
+        lambda match: match.group() if 1 <= int(match.group(1)) <= context_count else '',
+        text,
+    )
 
 
 def _normalized_support_text(contexts: list[str], claims: list[AnswerClaim]) -> str:
-    return '\n'.join([*contexts, *(claim.text for claim in claims)]).casefold()
+    return '\n'.join([*(context.split('trecho:\n', 1)[-1] for context in contexts), *(claim.text for claim in claims)]).casefold()
 
 
 def _unsupported_generated_numbers(answer: str, support_text: str) -> list[str]:
@@ -244,10 +244,19 @@ def _unsupported_generated_numbers(answer: str, support_text: str) -> list[str]:
     return unsupported
 
 
+def _starts_sentence(text: str, start: int) -> bool:
+    before = text[:start].rstrip(' \t*->"“(')
+    return not before or before[-1] in '.!?:\n'
+
+
 def _unsupported_generated_anchors(answer: str, support_text: str) -> list[str]:
     unsupported: list[str] = []
-    for anchor in GENERATED_ANCHOR_PATTERN.findall(answer):
+    for match in GENERATED_ANCHOR_PATTERN.finditer(answer):
+        anchor = match.group()
         if anchor in IGNORED_GENERATED_ANCHORS:
+            continue
+        # Maiúscula no início da frase não indica nome ("Inicialmente,"); sigla em caixa alta, sim.
+        if not anchor.isupper() and _starts_sentence(answer, match.start()):
             continue
         normalized = anchor.casefold()
         if normalized and normalized not in support_text and normalized not in unsupported:
@@ -257,8 +266,8 @@ def _unsupported_generated_anchors(answer: str, support_text: str) -> list[str]:
 
 def _is_generic_generated_no_answer(answer: str) -> bool:
     lowered = answer.casefold()
-    return any(marker in lowered for marker in GENERIC_NO_ANSWER_MARKERS) and any(
-        marker in lowered for marker in GENERIC_SUGGESTION_MARKERS
+    return (len(lowered.split()) <= 12 and lowered.startswith(GENERIC_NO_ANSWER_MARKERS)) or (
+        any(marker in lowered for marker in GENERIC_NO_ANSWER_MARKERS) and any(marker in lowered for marker in GENERIC_SUGGESTION_MARKERS)
     )
 
 
@@ -269,19 +278,45 @@ def validate_generated_answer(
     claims: list[AnswerClaim],
 ) -> GeneratedAnswerValidation:
     """Valida se resposta gerativa pode substituir a resposta extrativa."""
-    _ = question
-    cleaned_answer = answer.strip()
-    if cleaned_answer.startswith('NAO_ENCONTRADO') or cleaned_answer == NO_ANSWER_SENTINEL:
+    # Os [n] são só ponteiros para o contexto: número, anchor e sobreposição são checados sem eles.
+    cleaned_answer = _without_answer_markers(answer).strip()
+    # O qchat às vezes devolve só "[1]": sem os marcadores não sobra texto, e nada abaixo recusaria.
+    if not any(char.isalnum() for char in cleaned_answer):
+        return GeneratedAnswerValidation(
+            action='fallback_extractive',
+            reason='empty_generated_answer',
+            limitations=['Resposta generativa ignorada: o modelo devolveu só marcações de fonte, sem texto.'],
+        )
+    if is_no_answer_sentinel(cleaned_answer, contexts):
         return GeneratedAnswerValidation(
             action='no_answer',
             reason='generated_no_answer_sentinel',
-            limitations=['Provider generativo declarou que os contextos não sustentam resposta.'],
+            limitations=['A IA declarou que os contextos não sustentam resposta.'],
         )
     if _is_generic_generated_no_answer(cleaned_answer):
         return GeneratedAnswerValidation(
             action='no_answer',
             reason='generated_generic_no_answer',
-            limitations=['Provider generativo retornou negativa generica em vez de resposta sustentada.'],
+            limitations=['A IA respondeu com uma negativa genérica em vez de uma resposta sustentada.'],
+        )
+    # Trecho vazio (nota só com frontmatter) faz modelo pequeno copiar o cabeçalho do contexto.
+    if any(key in cleaned_answer for key in CONTEXT_METADATA_KEYS):
+        return GeneratedAnswerValidation(
+            action='fallback_extractive',
+            reason='echoed_context_metadata',
+            limitations=['Resposta generativa ignorada: o modelo repetiu os metadados do contexto em vez de responder.'],
+        )
+    if is_echoed_title(cleaned_answer, contexts):
+        return GeneratedAnswerValidation(
+            action='fallback_extractive',
+            reason='echoed_title',
+            limitations=['Resposta generativa ignorada: o modelo copiou um título do contexto em vez de responder.'],
+        )
+    if is_echoed_question(question, cleaned_answer):
+        return GeneratedAnswerValidation(
+            action='fallback_extractive',
+            reason='echoed_question',
+            limitations=['Resposta generativa ignorada: o modelo repetiu a pergunta em vez de responder.'],
         )
 
     support_text = _normalized_support_text(contexts, claims)
@@ -290,9 +325,7 @@ def validate_generated_answer(
         return GeneratedAnswerValidation(
             action='fallback_extractive',
             reason='unsupported_number',
-            limitations=[
-                f'unsupported_number: resposta generativa ignorada por numero sem suporte: {", ".join(unsupported_numbers)}.'
-            ],
+            limitations=[f'Resposta generativa ignorada por número sem suporte: {", ".join(unsupported_numbers)}.'],
         )
 
     unsupported_anchors = _unsupported_generated_anchors(cleaned_answer, support_text)
@@ -300,34 +333,31 @@ def validate_generated_answer(
         return GeneratedAnswerValidation(
             action='fallback_extractive',
             reason='unsupported_anchor',
-            limitations=[
-                f'unsupported_anchor: resposta generativa ignorada por anchor sem suporte: {", ".join(unsupported_anchors)}.'
-            ],
+            limitations=[f'Resposta generativa ignorada por nome citado sem suporte: {", ".join(unsupported_anchors)}.'],
         )
 
+    # Sobreposição com os trechos entregues ao modelo, não só com o claim extraído: em nota
+    # Markdown o claim costuma ser o título ("VLAN - [!note]") e derrubava respostas fiéis.
     answer_terms = normalize_query_terms(cleaned_answer)
-    claim_text = ' '.join(claim.text for claim in claims)
     if len(answer_terms) >= 4:
-        _, claim_coverage = match_terms_in_text(answer_terms, claim_text)
+        _, claim_coverage = match_terms_in_text(answer_terms, support_text)
         if claim_coverage < 0.35:
             return GeneratedAnswerValidation(
                 action='fallback_extractive',
                 reason='low_claim_overlap',
-                limitations=['Resposta generativa ignorada por baixa sobreposicao com claims citaveis.'],
+                limitations=['Resposta generativa ignorada por baixa sobreposição com os trechos e as frases extraídas.'],
             )
+    if not has_source_marker(answer, len(contexts)):
+        return GeneratedAnswerValidation(
+            action='fallback_extractive', reason='no_source_marker',
+            limitations=['Resposta generativa ignorada: o modelo não citou nenhum trecho com [n].'],
+        )
 
     return GeneratedAnswerValidation(action='accept')
 
 
 def _normalized_anchor_tokens(text: str) -> list[str]:
     return [token.casefold() for token in TOKEN_PATTERN.findall(text)]
-
-
-def _contains_token_sequence(tokens: list[str], sequence: list[str]) -> bool:
-    if not sequence or len(sequence) > len(tokens):
-        return False
-    width = len(sequence)
-    return any(tokens[index : index + width] == sequence for index in range(len(tokens) - width + 1))
 
 
 def _has_conflicting_short_anchor(tokens: list[str], prefix: list[str], expected_anchor: str) -> bool:
@@ -388,9 +418,9 @@ def _short_anchor_score_delta(question: str, hit: SearchHit, note: Note | None) 
     evidence_tokens = _anchor_evidence_tokens(hit, note)
     delta = 0.0
     for sequence in sequences:
-        if _contains_token_sequence(evidence_tokens, sequence):
+        if contains_token_sequence(evidence_tokens, sequence):
             delta += SHORT_ANCHOR_EXACT_BOOST
-        elif len(sequence) > 2 and _contains_token_sequence(evidence_tokens, sequence[-2:]):
+        elif len(sequence) > 2 and contains_token_sequence(evidence_tokens, sequence[-2:]):
             delta += SHORT_ANCHOR_TAIL_BOOST
 
         if _has_conflicting_short_anchor(evidence_tokens, sequence[:-1], sequence[-1]):
@@ -442,6 +472,7 @@ def fts_lexical_search_hits(
     *,
     top_k: int = 5,
     candidate_limit: int | None = None,
+    note_ids: frozenset[str] | None = None,
 ) -> list[SearchHit]:
     """Busca lexical do corpus via FTS5/BM25, com fallback Python se FTS falhar."""
     if top_k <= 0:
@@ -461,9 +492,10 @@ def fts_lexical_search_hits(
             connection,
             match_query,
             limit=candidate_limit or max(top_k * 4, 40),
+            note_ids=note_ids,
         )
     except sqlite3.OperationalError:
-        return lexical_search_hits(query, list_chunks(connection), top_k=top_k)
+        return lexical_search_hits(query, _chunks_in_scope(connection, note_ids), top_k=top_k)
 
     scored: list[SearchHit] = []
     for rank, (chunk, bm25_score) in enumerate(candidate_rows, start=1):
@@ -483,7 +515,14 @@ def fts_lexical_search_hits(
 
     if scored:
         return scored[:top_k]
-    return lexical_search_hits(query, list_chunks(connection), top_k=top_k)
+    return lexical_search_hits(query, _chunks_in_scope(connection, note_ids), top_k=top_k)
+
+
+def _chunks_in_scope(connection: sqlite3.Connection, note_ids: frozenset[str] | None) -> list[Chunk]:
+    chunks = list_chunks(connection)
+    if note_ids is None:
+        return chunks
+    return [chunk for chunk in chunks if chunk.note_id in note_ids]
 
 
 def _trim_claim_preserving_query_terms(question: str, query_terms: list[str], claim_text: str) -> str:
@@ -580,7 +619,7 @@ def _build_corpus_claims(
         claims.append(
             AnswerClaim(
                 text=trimmed_claim,
-                citations=[_citation_from_corpus_hit(hit, note_lookup)],
+                citations=[_citation_from_corpus_hit(hit, note_lookup, trimmed_claim)],
                 support_level=_support_level(hit, query_terms),
             )
         )
@@ -599,16 +638,18 @@ def retrieve_corpus_hits(
     strategy: RetrievalStrategy,
     vector_store: LocalVectorStore | None,
     embedder: Embedder | None,
+    note_ids: frozenset[str] | None = None,
 ) -> tuple[list[SearchHit], int]:
+    # O escopo entra na consulta (FTS: IN; Chroma: $in), então a pasta nunca fica sem candidatos por pool curto.
     if strategy == 'lexical':
-        return fts_lexical_search_hits(connection, question, top_k=top_k), 0
+        return fts_lexical_search_hits(connection, question, top_k=top_k, note_ids=note_ids), 0
 
     if vector_store is None or embedder is None:
         raise ValueError('Vector store e embedder sao obrigatorios para strategy=vector e strategy=hybrid.')
 
     candidate_pool_size = max(top_k * 8, 24)
     if strategy == 'vector':
-        vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size)
+        vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size, note_ids=note_ids)
         filtered_hits, stale_count = _filter_hits_to_persisted_chunks(vector_hits, valid_chunk_ids)
         return filtered_hits[:top_k], stale_count
 
@@ -617,8 +658,9 @@ def retrieve_corpus_hits(
             connection,
             question,
             top_k=max(top_k * 3, top_k),
+            note_ids=note_ids,
         )
-        vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size)
+        vector_hits = open_semantic_search(question, vector_store, embedder, top_k=candidate_pool_size, note_ids=note_ids)
         filtered_vector_hits, stale_count = _filter_hits_to_persisted_chunks(vector_hits, valid_chunk_ids)
         return (
             fuse_hits_by_rank(
@@ -647,8 +689,10 @@ def answer_corpus_with_citations(
     max_claims: int = 3,
     answer_provider: AnswerProvider | None = None,
     include_debug: bool = False,
+    source_root: str | None = None,
+    on_answer_delta: Callable[[str], None] | None = None,
 ) -> AskResponse:
-    """Responde usando todo o corpus persistido, mantendo citacoes por chunk."""
+    """Responde usando todo o corpus persistido (ou só a pasta `source_root`), mantendo citacoes por chunk."""
     started_at = perf_counter()
     query_terms = normalize_query_terms(question)
     named_query_terms = extract_named_query_terms(question)
@@ -690,6 +734,7 @@ def answer_corpus_with_citations(
         limitations: list[str],
         used_sources: list[UsedSource],
         rejected_hits: list[SearchHit] | None = None,
+        discard_reason: str | None = None,
     ) -> AskResponse:
         return _build_no_answer(
             question=question,
@@ -698,13 +743,21 @@ def answer_corpus_with_citations(
             used_sources=used_sources,
             latency_ms=int((perf_counter() - started_at) * 1000),
             debug=_debug_payload(reason=reason, rejected_hits=rejected_hits),
+            answer_discard_reason=discard_reason,
+            answer_model=provider_model,
         )
 
     if not query_terms:
         return _no_answer('query_without_content', ['A pergunta não contém termos informativos suficientes para recuperação.'], [])
 
     if count_chunks(connection) == 0:
-        return _no_answer('empty_corpus', ['O corpus persistido ainda não contém chunks indexados.'], [])
+        return _no_answer('empty_corpus', ['O corpus persistido ainda não contém trechos indexados.'], [])
+
+    note_ids: frozenset[str] | None = None
+    if source_root:
+        note_ids = frozenset(note_ids_under_root(connection, source_root))
+        if not note_ids:
+            return _no_answer('source_root_without_notes', ['Nenhuma nota indexada está na pasta escolhida.'], [])
 
     # Um termo de conteúdo que não está em nenhuma nota quase sempre é o assunto da pergunta
     # ("senha", "Splunk", "orçamento"): os outros termos acham trechos parecidos e o chat responderia
@@ -730,16 +783,17 @@ def answer_corpus_with_citations(
         strategy=strategy,
         vector_store=vector_store,
         embedder=embedder,
+        note_ids=note_ids,
     )
     hits = _dedupe_hits(raw_hits)
     stale_limitations = (
-        [f'{stale_vector_hits_count} hit(s) vetoriais stale foram descartados por nao existirem no SQLite.']
+        [f'{stale_vector_hits_count} hit(s) vetoriais desatualizados foram descartados por não existirem no SQLite.']
         if stale_vector_hits_count
         else []
     )
 
     def _with_stale_limitations(limitations: list[str]) -> list[str]:
-        return [*stale_limitations, *limitations]
+        return [*limitations, *stale_limitations]
 
     note_lookup = get_notes_by_id(connection, [hit.chunk.note_id for hit in hits])
     hits = _rerank_hits_by_short_anchor(question, hits, note_lookup)
@@ -749,7 +803,7 @@ def answer_corpus_with_citations(
     if not hits:
         return _no_answer(
             'no_retrieval_hits',
-            _with_stale_limitations(['Nenhum chunk do corpus contém termos informativos suficientes da pergunta.']),
+            _with_stale_limitations(['Nenhum trecho do corpus contém termos informativos suficientes da pergunta.']),
             used_sources,
         )
 
@@ -801,7 +855,7 @@ def answer_corpus_with_citations(
     if not claims or any(not claim.citations for claim in claims):
         return _no_answer(
             'citation_validation_failed',
-            _with_stale_limitations(['A evidência foi recuperada, mas não gerou claims citaveis de forma consistente.']),
+            _with_stale_limitations(['A evidência foi recuperada, mas não gerou frases extraídas citáveis de forma consistente.']),
             used_sources,
             rejected_hits=hits,
         )
@@ -811,13 +865,13 @@ def answer_corpus_with_citations(
             reason = 'insufficient_vector_specificity' if strategy == 'vector' else 'insufficient_hybrid_specificity'
             return _no_answer(
                 reason,
-                _with_stale_limitations(['Os claims gerados não trouxeram especificidade textual suficiente.']),
+                _with_stale_limitations(['As frases extraídas não trouxeram especificidade textual suficiente.']),
                 used_sources,
                 rejected_hits=hits,
             )
         return _no_answer(
             'insufficient_grounded_claims',
-            _with_stale_limitations(['Os claims gerados não mantiveram ancoragem textual suficiente com a pergunta.']),
+            _with_stale_limitations(['As frases extraídas não mantiveram ancoragem textual suficiente com a pergunta.']),
             used_sources,
             rejected_hits=hits,
         )
@@ -827,7 +881,7 @@ def answer_corpus_with_citations(
         if named_coverage < 1.0:
             return _no_answer(
                 'missing_named_anchor',
-                _with_stale_limitations(['A resposta não sustentou os anchors nomeados presentes na pergunta.']),
+                _with_stale_limitations(['A resposta não sustentou os nomes citados na pergunta.']),
                 used_sources,
                 rejected_hits=hits,
             )
@@ -850,53 +904,73 @@ def answer_corpus_with_citations(
             )
 
     cited_sources = _summarize_corpus_sources(_hits_for_citations(hits, citations), note_lookup)
-    limitations: list[str] = list(stale_limitations)
+    limitations: list[str] = []
     if any(claim.support_level == 'partial' for claim in claims):
         limitations.append('Parte da resposta depende de evidência parcial recuperada.')
     if len(citations) == 1:
-        limitations.append('A resposta se apoia em um único chunk recuperado.')
+        limitations.append(SINGLE_CHUNK_LIMITATION)
     if len(cited_sources) > 1:
-        limitations.append('A resposta combina evidência de multiplos arquivos do corpus.')
+        limitations.append(MULTI_FILE_LIMITATION)
 
+    generated = False
+    answer_sources: list[str] = []
+    discard_reason: str | None = None
     if answer_provider is not None:
-        try:
-            context_started_at = perf_counter()
-            answer_contexts = build_answer_contexts(claims, hits, note_lookup)
-            stage_timings.context_build_ms = _elapsed_ms(context_started_at)
+        context_started_at = perf_counter()
+        context_items = build_answer_context_items(claims, hits, note_lookup)
+        answer_contexts = [context for context, _ in context_items]
+        stage_timings.context_build_ms = _elapsed_ms(context_started_at)
 
-            provider_started_at = perf_counter()
-            try:
+        provider_started_at = perf_counter()
+        try:
+            if on_answer_delta is not None and hasattr(answer_provider, 'answer_stream'):
+                generated_answer = answer_provider.answer_stream(question, answer_contexts, on_answer_delta)
+            else:
                 generated_answer = answer_provider.answer(question, answer_contexts)
-            finally:
-                stage_timings.provider_ms = _elapsed_ms(provider_started_at)
+        except Exception as exc:
+            stage_timings.provider_ms = _elapsed_ms(provider_started_at)
+            discard_reason = 'provider_error'
+            limitations.append(_provider_failure_limitation(exc))
+        else:
+            stage_timings.provider_ms = _elapsed_ms(provider_started_at)
+            generated_answer = normalize_answer_markers(generated_answer)
 
             validation_started_at = perf_counter()
             validation = validate_generated_answer(question, generated_answer, answer_contexts, claims)
             stage_timings.validation_ms = _elapsed_ms(validation_started_at)
             if validation.action == 'accept':
-                answer = generated_answer
+                answer = _drop_unknown_answer_markers(generated_answer, len(answer_contexts))
+                generated = True
+                answer_sources = [chunk_id for _, chunk_id in context_items]
+                citations = _with_cited_context_citations(answer, answer_sources, citations, hits, note_lookup)
+                cited_sources = _summarize_corpus_sources(_hits_for_citations(hits, citations), note_lookup)
+                limitations = _with_source_limitations(limitations, citations, cited_sources)
             elif validation.action == 'no_answer':
                 return _no_answer(
                     validation.reason or 'generated_answer_rejected',
                     _with_stale_limitations(validation.limitations),
                     cited_sources,
                     rejected_hits=hits,
+                    discard_reason=validation.reason or 'generated_answer_rejected',
                 )
             else:
+                discard_reason = validation.reason
                 limitations.extend(validation.limitations)
-        except Exception as exc:
-            limitations.append(_provider_failure_limitation(exc))
 
     return AskResponse(
         query=question,
         status='answer',
         no_answer=False,
         answer=answer,
+        generated=generated,
+        answer_sources=answer_sources,
         claims=claims,
         citations=citations,
-        limitations=limitations,
+        limitations=[*limitations, *stale_limitations],
         reason_for_no_answer=None,
         used_sources=cited_sources,
         latency_ms=int((perf_counter() - started_at) * 1000),
         debug=_debug_payload(hits=hits),
+        answer_discard_reason=discard_reason,
+        answer_model=provider_model,
     )

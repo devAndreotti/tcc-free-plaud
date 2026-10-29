@@ -48,6 +48,7 @@ class CorpusIndexBatchResult(BaseModel):
     failed_count: int
     skipped_count: int
     unchanged_count: int = 0
+    removed_count: int = 0
     commit_mode_requested: CorpusCommitMode = 'auto'
     commit_mode_resolved: ResolvedCorpusCommitMode = 'atomic'
     results: list[CorpusIndexResult] = Field(default_factory=list)

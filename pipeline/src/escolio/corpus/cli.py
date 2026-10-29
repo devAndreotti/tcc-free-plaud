@@ -30,7 +30,7 @@ app = typer.Typer(help='Comandos para operar o corpus local indexado.', no_args_
 
 @app.command('status')
 def status() -> None:
-    """Mostra consistencia entre SQLite e Chroma sem modificar dados."""
+    """Mostra consistência entre SQLite e Chroma sem modificar dados."""
     settings = get_settings()
     result = get_corpus_status(settings=settings)
     typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
@@ -38,7 +38,7 @@ def status() -> None:
 
 @app.command('embedding-info')
 def embedding_info() -> None:
-    """Mostra modelo de embedding e device efetivo."""
+    """Mostra o modelo de busca semântica e o dispositivo efetivo."""
     settings = get_settings()
     result = describe_embedding_config(settings.embedding_model, device=settings.embedding_device)
     typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
@@ -49,7 +49,7 @@ def reset(
     dry_run: bool = typer.Option(False, '--dry-run', help='Simula a limpeza sem apagar dados.'),
     yes: bool = typer.Option(False, '--yes', help='Executa a limpeza do corpus local.'),
 ) -> None:
-    """Limpa notas/chunks e vetores do corpus ativo com preview seguro."""
+    """Limpa notas, trechos e vetores do corpus ativo com prévia segura."""
     settings = get_settings()
     result = reset_corpus(settings=settings, dry_run=(dry_run or not yes))
     typer.echo(json.dumps(result.model_dump(mode='json'), ensure_ascii=True, indent=2))
@@ -60,12 +60,12 @@ def rebuild(
     path_parts: list[str] = typer.Argument(..., metavar='PATH'),
     chunk_size: int | None = typer.Option(None, '--chunk-size', min=1),
     overlap: int | None = typer.Option(None, '--overlap', min=0),
-    recursive: bool = typer.Option(False, '--recursive', help='Indexa subpastas recursivamente quando PATH for diretorio.'),
+    recursive: bool = typer.Option(False, '--recursive', help='Indexa subpastas recursivamente quando PATH for uma pasta.'),
     commit_mode: Literal['auto', 'atomic', 'microbatch'] = typer.Option('auto', '--commit-mode'),
     dry_run: bool = typer.Option(False, '--dry-run', help='Simula rebuild sem apagar ou indexar.'),
-    yes: bool = typer.Option(False, '--yes', help='Executa reset e indexacao do corpus.'),
+    yes: bool = typer.Option(False, '--yes', help='Executa reset e indexação do corpus.'),
 ) -> None:
-    """Reconstroi o corpus ativo a partir de arquivo ou pasta."""
+    """Reconstrói o corpus ativo a partir de arquivo ou pasta."""
     settings = get_settings()
     target = compose_path(path_parts)
     result = rebuild_corpus(
@@ -84,13 +84,13 @@ def rebuild(
 
 @app.command('index-benchmark')
 def index_benchmark(
-    files: int = typer.Option(100, '--files', min=1, help='Quantidade de arquivos suportados sinteticos.'),
-    repeat: int = typer.Option(2, '--repeat', min=1, help='Quantidade de rodadas sobre o mesmo corpus temporario.'),
+    files: int = typer.Option(100, '--files', min=1, help='Quantidade de arquivos suportados sintéticos.'),
+    repeat: int = typer.Option(2, '--repeat', min=1, help='Quantidade de rodadas sobre o mesmo corpus temporário.'),
     chunk_size: int | None = typer.Option(None, '--chunk-size', min=1),
     overlap: int | None = typer.Option(None, '--overlap', min=0),
     commit_mode: Literal['auto', 'atomic', 'microbatch'] = typer.Option('auto', '--commit-mode'),
 ) -> None:
-    """Mede indexacao de corpus em workspace temporario nao destrutivo."""
+    """Mede a indexação de corpus em workspace temporário e não destrutivo."""
     settings = get_settings()
     result = benchmark_corpus_indexing(
         files=files,
@@ -107,15 +107,15 @@ def index_benchmark(
 
 @app.command('perf-benchmark')
 def perf_benchmark(
-    files: int = typer.Option(100, '--files', min=1, help='Quantidade de arquivos suportados sinteticos.'),
-    repeat: int = typer.Option(1, '--repeat', min=1, help='Quantidade de rodadas de indexacao.'),
-    ask_repeat: int = typer.Option(10, '--ask-repeat', min=0, help='Quantidade de perguntas apos indexar.'),
+    files: int = typer.Option(100, '--files', min=1, help='Quantidade de arquivos suportados sintéticos.'),
+    repeat: int = typer.Option(1, '--repeat', min=1, help='Quantidade de rodadas de indexação.'),
+    ask_repeat: int = typer.Option(10, '--ask-repeat', min=0, help='Quantidade de perguntas após indexar.'),
     commit_mode: Literal['auto', 'atomic', 'microbatch'] = typer.Option('auto', '--commit-mode'),
     chunk_size: int | None = typer.Option(None, '--chunk-size', min=1),
     overlap: int | None = typer.Option(None, '--overlap', min=0),
-    include_cold_start: bool = typer.Option(False, '--include-cold-start', help='Mede init e primeiro embed do provider.'),
+    include_cold_start: bool = typer.Option(False, '--include-cold-start', help='Mede a inicialização e o primeiro uso do modelo de busca semântica.'),
 ) -> None:
-    """Mede performance de indexacao + ask e salva JSON em data/results/corpus_perf."""
+    """Mede o desempenho da indexação e das perguntas e salva JSON em data/results/corpus_perf."""
     settings = get_settings()
     result = perf_benchmark_corpus(
         files=files,
@@ -137,7 +137,7 @@ def index(
     path_parts: list[str] = typer.Argument(..., metavar='PATH'),
     chunk_size: int | None = typer.Option(None, '--chunk-size', min=1),
     overlap: int | None = typer.Option(None, '--overlap', min=0),
-    recursive: bool = typer.Option(False, '--recursive', help='Indexa subpastas recursivamente quando PATH for diretorio.'),
+    recursive: bool = typer.Option(False, '--recursive', help='Indexa subpastas recursivamente quando PATH for uma pasta.'),
     commit_mode: Literal['auto', 'atomic', 'microbatch'] = typer.Option('auto', '--commit-mode'),
 ) -> None:
     """Indexa um arquivo ou pasta suportada no corpus local."""
@@ -167,16 +167,22 @@ def index(
 @app.command('ask')
 def ask(
     question: str = typer.Option(..., '--question', '-q', help='Pergunta em linguagem natural contra o corpus.'),
-    top_k: int = typer.Option(6, '--top-k', min=1, help='Quantidade maxima de chunks recuperados.'),
+    top_k: int | None = typer.Option(
+        None,
+        '--top-k',
+        min=1,
+        help='Quantidade máxima de trechos recuperados. Sem a opção, usa a configuração de trechos por pergunta.',
+    ),
     strategy: Literal['lexical', 'vector', 'hybrid'] = typer.Option(
         'hybrid',
         '--strategy',
         '-s',
-        help='Estrategia de retrieval: lexical, vector ou hybrid.',
+        help='Estratégia de recuperação: lexical, vector ou hybrid.',
     ),
-    debug: bool = typer.Option(False, '--debug', help='Inclui sinais de retrieval para tuning do Ask.'),
+    debug: bool = typer.Option(False, '--debug', help='Inclui sinais de recuperação para ajuste do Ask.'),
+    root: str | None = typer.Option(None, '--root', help='Restringe a pergunta às notas sob esta pasta indexada.'),
 ) -> None:
-    """Pergunta contra todos os chunks persistidos no corpus local."""
+    """Pergunta contra todos os trechos persistidos no corpus local."""
     settings = get_settings()
     connection = init_sqlite(settings.sqlite_path)
     vector_store = None
@@ -203,8 +209,9 @@ def ask(
             vector_store=vector_store,
             embedder=embedder,
             strategy=strategy,
-            top_k=top_k,
+            top_k=top_k or settings.retrieval_top_k,
             include_debug=debug,
+            source_root=root,
             answer_provider=get_answer_provider(
                 settings.answer_provider,
                 model=settings.answer_model,

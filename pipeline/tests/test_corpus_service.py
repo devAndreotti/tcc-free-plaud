@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from escolio.app.config import Settings
 from escolio.corpus.cancellation import CancellationToken
 from escolio.corpus.service import (
@@ -7,10 +9,12 @@ from escolio.corpus.service import (
     index_corpus_file,
     index_corpus_path,
 )
+from escolio.ingest.loaders import load_document
 from escolio.notes.metadata import build_note_id
 from escolio.storage.sqlite import (
     connect_sqlite,
     count_notes,
+    get_all_notes,
     init_sqlite,
     list_chunk_ids,
 )
@@ -76,15 +80,15 @@ def test_index_corpus_file_persists_note_chunks_and_embeddings(tmp_path: Path) -
     result = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
 
     assert result.status == 'success'
-    assert result.note_id == 'plataforma'
+    assert result.note_id == build_note_id(source, hash_unrooted=True)
     assert result.chunks_indexed >= 1
     assert result.embedding_model == 'fake-hash'
     assert result.vector_collection_name == 'corpus_service_test'
     assert result.vector_entries_count == result.chunks_indexed
 
     connection = connect_sqlite(settings.sqlite_path)
-    note_row = connection.execute('SELECT note_id, source_path FROM notes WHERE note_id = ?', ('plataforma',)).fetchone()
-    chunk_rows = connection.execute('SELECT chunk_id FROM chunks WHERE note_id = ?', ('plataforma',)).fetchall()
+    note_row = connection.execute('SELECT note_id, source_path FROM notes WHERE note_id = ?', (result.note_id,)).fetchone()
+    chunk_rows = connection.execute('SELECT chunk_id FROM chunks WHERE note_id = ?', (result.note_id,)).fetchall()
 
     assert note_row['source_path'] == str(source)
     assert len(chunk_rows) == result.chunks_indexed
@@ -106,8 +110,8 @@ def test_index_corpus_file_is_idempotent_for_same_file(tmp_path: Path) -> None:
     second = index_corpus_file(source, settings=settings, embedder=second_embedder)
 
     connection = connect_sqlite(settings.sqlite_path)
-    note_count = connection.execute('SELECT COUNT(*) AS total FROM notes WHERE note_id = ?', ('reindexavel',)).fetchone()
-    chunk_count = connection.execute('SELECT COUNT(*) AS total FROM chunks WHERE note_id = ?', ('reindexavel',)).fetchone()
+    note_count = connection.execute('SELECT COUNT(*) AS total FROM notes WHERE note_id = ?', (first.note_id,)).fetchone()
+    chunk_count = connection.execute('SELECT COUNT(*) AS total FROM chunks WHERE note_id = ?', (first.note_id,)).fetchone()
 
     assert first.status == 'success'
     assert second.status == 'unchanged'
@@ -282,7 +286,7 @@ def test_index_corpus_path_replaces_legacy_file_note_id_for_same_source_path(tmp
     ]
 
     assert legacy.status == 'success'
-    assert legacy.note_id == 'migravel'
+    assert legacy.note_id == build_note_id(source, hash_unrooted=True)
     assert migrated.status == 'success'
     assert migrated.results[0].note_id == new_note_id
     assert note_ids == [new_note_id]
@@ -322,6 +326,23 @@ def test_index_corpus_file_reports_unsupported_extension(tmp_path: Path) -> None
     assert result.error_code == 'UNSUPPORTED_MEDIA_TYPE'
     assert result.note_id is None
     assert result.chunks_indexed == 0
+
+
+def test_index_corpus_file_reports_os_error_as_failed(tmp_path: Path, monkeypatch) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'trancado.md'
+    source.write_text('# Trancado\n\nConteudo.\n', encoding='utf-8')
+
+    def denied(path):
+        raise PermissionError('Acesso negado')
+
+    monkeypatch.setattr('escolio.corpus.service.load_document', denied)
+
+    result = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
+
+    assert result.status == 'failed'
+    assert result.error_code == 'PermissionError'
+    assert result.note_id is None
 
 
 def test_index_corpus_file_reports_indexing_failure_without_partial_sqlite_write(tmp_path: Path) -> None:
@@ -377,6 +398,62 @@ def test_index_corpus_path_indexes_directory_without_stopping_on_file_failure(tm
         build_note_id(root / 'base.md', root_path=root),
         build_note_id(nested / 'detalhe.md', root_path=root),
     }
+    failed = [item for item in result.results if item.status == 'failed']
+    assert failed[0].error_code == 'EMPTY_CONTENT'
+
+
+@pytest.mark.parametrize('workers', [1, 2])
+def test_index_corpus_path_keeps_indexing_when_one_file_is_unreadable(monkeypatch, tmp_path: Path, workers: int) -> None:
+    settings = _settings(tmp_path).model_copy(update={'corpus_index_workers': workers})
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    (root / 'a.md').write_text('# A\n\nRabbitMQ foi adotado como message broker padrao.\n', encoding='utf-8')
+    (root / 'b.md').write_text('# B\n\nO time SRE ficou responsavel pelo runbook.\n', encoding='utf-8')
+    (root / 'bloqueado.md').write_text('# Bloqueado\n\nConteudo que outro programa mantem aberto.\n', encoding='utf-8')
+
+    def load_document_locking_one_file(path: Path):
+        if path.name == 'bloqueado.md':
+            raise PermissionError(13, 'Permission denied', str(path))
+        return load_document(path)
+
+    monkeypatch.setattr('escolio.corpus.service.load_document', load_document_locking_one_file)
+
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+
+    assert result.status == 'partial'
+    assert result.indexed_count == 2
+    assert result.failed_count == 1
+    failed = [item for item in result.results if item.status == 'failed']
+    assert Path(failed[0].source_path).name == 'bloqueado.md'
+    assert failed[0].error_code == 'PermissionError'
+
+
+def test_regressao_index_corpus_file_rejects_markdown_with_only_frontmatter(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'so-frontmatter.md'
+    source.write_text('---\ntitle: x\n---\n', encoding='utf-8')
+
+    result = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
+
+    assert result.status == 'failed'
+    assert result.error_code == 'EMPTY_CONTENT'
+    assert result.note_id is None
+    assert result.chunks_indexed == 0
+
+
+def test_regressao_index_corpus_path_rejects_frontmatter_only_note_and_indexes_others(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    (root / 'base.md').write_text('# Base\n\nRabbitMQ foi adotado como broker.\n', encoding='utf-8')
+    (root / 'so-frontmatter.md').write_text('---\ntitle: x\n---\n', encoding='utf-8')
+    (root / 'com-corpo.md').write_text('---\ntitle: y\n---\n\nO time SRE ficou com o runbook.\n', encoding='utf-8')
+
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+
+    assert result.status == 'partial'
+    assert result.indexed_count == 2
+    assert result.failed_count == 1
     failed = [item for item in result.results if item.status == 'failed']
     assert failed[0].error_code == 'EMPTY_CONTENT'
 
@@ -468,3 +545,155 @@ def test_index_corpus_path_non_recursive_skips_nested_files(tmp_path: Path) -> N
     assert result.indexed_count == 1
     assert result.skipped_count == 1
     assert result.skipped[0].reason == 'directory_requires_recursive'
+
+
+def test_regressao_arquivos_unicos_com_mesmo_nome_nao_se_sobrescrevem(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    first_dir = tmp_path / 'a'
+    second_dir = tmp_path / 'b'
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first = first_dir / 'notas.md'
+    second = second_dir / 'notas.md'
+    first.write_text('# Notas\n\nFerias de julho da equipe financeira.\n', encoding='utf-8')
+    second.write_text('# Notas\n\nMigracao do cluster de banco de dados.\n', encoding='utf-8')
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+
+    first_result = index_corpus_file(first, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+    second_result = index_corpus_file(second, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+
+    assert first_result.status == 'success'
+    assert second_result.status == 'success'
+    assert first_result.note_id != second_result.note_id
+    assert count_notes(connection) == 2
+    found_note_ids = {
+        hit.chunk.note_id
+        for text in ('Ferias de julho', 'Migracao do cluster')
+        for hit in vector_store.query(FakeEmbedder().embed([text])[0], top_k=5)
+    }
+    assert found_note_ids == {first_result.note_id, second_result.note_id}
+
+
+def test_regressao_nota_com_id_so_slug_e_substituida_sem_duplicata(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    source = root / 'legada.md'
+    source.write_text('# Legada\n\nNota gravada com o id antigo, so pelo slug.\n', encoding='utf-8')
+    connection = init_sqlite(settings.sqlite_path)
+    vector_store = LocalVectorStore(settings.vector_store_dir, collection_name=settings.vector_collection_name)
+    monkeypatch.setattr('escolio.notes.structurer.build_note_id', lambda path, **kwargs: 'legada')
+    legacy = index_corpus_file(source, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+    monkeypatch.undo()
+
+    current = index_corpus_file(source, settings=settings, connection=connection, vector_store=vector_store, embedder=FakeEmbedder())
+    note_ids = [row['note_id'] for row in connection.execute('SELECT note_id FROM notes').fetchall()]
+
+    assert legacy.note_id == 'legada'
+    assert current.status == 'success'
+    assert note_ids == [current.note_id]
+    assert count_notes(connection) == 1
+    assert vector_store.count() == current.chunks_indexed
+
+
+def _notes_by_name(settings: Settings) -> list[str]:
+    connection = init_sqlite(settings.sqlite_path)
+    try:
+        return sorted(Path(note.source_path).name for note in get_all_notes(connection))
+    finally:
+        connection.close()
+
+
+def test_regressao_indexacao_de_pasta_remove_nota_de_arquivo_apagado(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'vault'
+    root.mkdir()
+    (root / 'a.md').write_text('# A\n\nPrimeiro conteudo do corpus.\n', encoding='utf-8')
+    (root / 'b.md').write_text('# B\n\nSegundo conteudo do corpus.\n', encoding='utf-8')
+    index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+    assert _notes_by_name(settings) == ['a.md', 'b.md']
+
+    (root / 'a.md').unlink()
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+
+    assert _notes_by_name(settings) == ['b.md']
+    assert result.removed_count == 1
+
+
+def test_regressao_arquivo_de_pasta_indexada_mantem_note_id_ao_ser_indexado_sozinho(tmp_path: Path) -> None:
+    # Watcher e área de soltar indexam um arquivo por vez; o id tem de ser o mesmo da Fila.
+    settings = _settings(tmp_path)
+    root = tmp_path / 'vault'
+    (root / 'sub').mkdir(parents=True)
+    source = root / 'sub' / 'nota.md'
+    source.write_text('# Nota\n\nTexto original da vault.\n', encoding='utf-8')
+    folder_id = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True).results[0].note_id
+
+    source.write_text('# Nota\n\nTexto editado no Obsidian.\n', encoding='utf-8')
+    single = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
+
+    assert single.status == 'success'
+    assert single.note_id == folder_id == build_note_id(source, root_path=root)
+    connection = connect_sqlite(settings.sqlite_path)
+    try:
+        assert count_notes(connection) == 1
+    finally:
+        connection.close()
+
+
+def test_regressao_indexacao_de_pasta_nao_mexe_em_notas_fora_da_raiz(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    outside = tmp_path / 'outra-pasta'
+    outside.mkdir()
+    (outside / 'fora.md').write_text('# Fora\n\nNota de outra raiz.\n', encoding='utf-8')
+    index_corpus_path(outside, settings=settings, embedder=FakeEmbedder(), recursive=True)
+    (outside / 'fora.md').unlink()
+
+    root = tmp_path / 'vault'
+    root.mkdir()
+    (root / 'dentro.md').write_text('# Dentro\n\nNota da raiz indexada.\n', encoding='utf-8')
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+
+    assert _notes_by_name(settings) == ['dentro.md', 'fora.md']
+    assert result.removed_count == 0
+
+
+def test_regressao_indexacao_nao_recursiva_so_remove_filhos_diretos(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'vault'
+    (root / 'sub').mkdir(parents=True)
+    (root / 'a.md').write_text('# A\n\nFilho direto da raiz.\n', encoding='utf-8')
+    (root / 'sub' / 's.md').write_text('# S\n\nNeto da raiz.\n', encoding='utf-8')
+    index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=True)
+
+    (root / 'a.md').unlink()
+    (root / 'sub' / 's.md').unlink()
+    result = index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), recursive=False)
+
+    assert _notes_by_name(settings) == ['s.md']
+    assert result.removed_count == 1
+
+
+def test_regressao_reindexa_nota_com_titulo_salvo_errado_mesmo_com_conteudo_igual(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = tmp_path / 'Trilha Cisco.md'
+    source.write_text(
+        '---\ntype: index\ntags:\n  - tema/cisco\n---\n\nTrilha de cursos Cisco para o time de rede.\n',
+        encoding='utf-8',
+    )
+    first = index_corpus_file(source, settings=settings, embedder=FakeEmbedder())
+    connection = connect_sqlite(settings.sqlite_path)
+    connection.execute('UPDATE notes SET title = ? WHERE note_id = ?', ('tags:', first.note_id))
+    connection.commit()
+
+    second_embedder = CountingEmbedder()
+    second = index_corpus_file(source, settings=settings, embedder=second_embedder)
+    third = index_corpus_file(source, settings=settings, embedder=CountingEmbedder())
+
+    title = connection.execute('SELECT title FROM notes WHERE note_id = ?', (first.note_id,)).fetchone()['title']
+    assert first.status == 'success'
+    assert second.status == 'success'
+    assert second_embedder.calls == 1
+    assert title == 'Trilha Cisco'
+    assert third.status == 'unchanged'

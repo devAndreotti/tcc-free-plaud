@@ -55,6 +55,10 @@ type AskResponse = {
   reason_for_no_answer: string | null
   used_sources: UsedSource[]
   latency_ms: number
+  generated: boolean        // true quando `answer` veio da IA e passou na validação
+  answer_sources: string[]  // chunk_id de cada [n] da resposta gerada, na ordem
+  answer_discard_reason: string | null  // motivo do descarte da resposta gerada (ver lista abaixo); null se aceita ou sem provedor
+  answer_model: string | null           // provider.model quando há provedor de resposta; null sem provedor
 }
 ```
 
@@ -70,6 +74,8 @@ type AskResponse = {
 - `used_sources` resume quais fontes sustentaram a resposta
 - `latency_ms` ajuda em debug e benchmark visual
 - `source_path` e offsets ajudam a ligar UI, debug e rastreabilidade
+- `answer_discard_reason` diz por que a resposta gerada foi tentada e não foi aceita. Quando a validação troca a IA pela resposta extrativa, `status` segue `answer` com `generated: false`; quando vira abstenção, traz o mesmo código de `reason_for_no_answer`. É `null` quando a IA foi aceita, quando não houve provedor e quando a abstenção veio da recuperação
+- `answer_model` traz o modelo configurado do provedor (ex.: `qchat:latest`) sempre que há provedor, mesmo que ele não tenha respondido; é `null` sem provedor
 
 ### Motivos atuais de abstencao
 
@@ -83,6 +89,19 @@ Hoje o backend pode devolver, entre outros, motivos como:
 - `missing_named_anchor`
 - `insufficient_vector_specificity`
 - `citation_validation_failed`
+
+### Motivos de descarte da resposta gerada (`answer_discard_reason`)
+
+- `generated_no_answer_sentinel`: a IA escreveu `NAO_ENCONTRADO` (no começo ou no meio da resposta, sem a palavra nos contextos); vira abstenção
+- `generated_generic_no_answer`: negativa genérica da IA, com sugestão de consultar documentação; vira abstenção
+- `echoed_context_metadata`: a IA repetiu metadados do trecho (`source_path:`, `note_id:`, ...); volta para a extrativa
+- `echoed_title`: a IA só copiou um título ou cabeçalho do contexto, em até 10 palavras; volta para a extrativa
+- `echoed_question`: a IA devolveu a própria pergunta (termina em `?`, ou só usa palavras dela); volta para a extrativa
+- `unsupported_number`: número que não aparece nos contextos; volta para a extrativa
+- `unsupported_anchor`: nome próprio ou sigla que não aparece nos contextos; volta para a extrativa
+- `low_claim_overlap`: pouca sobreposição com os trechos citáveis; volta para a extrativa
+- `empty_generated_answer`: a IA devolveu só marcadores `[n]`, sem texto; volta para a extrativa
+- `provider_error`: o provedor falhou (erro, timeout, payload inválido); volta para a extrativa
 
 O frontend nao deve depender de um texto amigavel fixo para esses motivos.
 
@@ -234,6 +253,14 @@ interface BackendBridge {
   getIndexJob(jobId: string): Promise<IndexJobSnapshot>
   cancelIndexJob(jobId: string): Promise<IndexJobSnapshot>
   listExperiments(): Promise<ExperimentRunSummary[]>
+  loadConversations(): Promise<SavedConversations | null>
+  saveConversations(payload: SavedConversations): Promise<{ ok: boolean; message?: string }>
+  listNoteLinks(): Promise<{ source: string; target: string }[]>  // [[links]] entre notas, por note_id
+  // Pergunta em segundo plano: pollAsk devolve { ask_id, stage: 'retrieving' | 'writing' | 'done' | 'error',
+  // partial (texto gerado até agora), result (AskResponse no fim), error }.
+  startAsk(message: string, strategy?: AskStrategy, sourceRoot?: string): Promise<{ ask_id: string }>
+  pollAsk(askId: string): Promise<AskProgress>
+  warmAnswerModel(): Promise<{ ok: boolean; started: boolean }>  // carrega o modelo local antes da 1ª pergunta
 }
 ```
 

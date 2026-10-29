@@ -252,7 +252,7 @@ def test_corpus_index_cli_persists_file(monkeypatch, tmp_path: Path) -> None:
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload['status'] == 'success'
-    assert payload['note_id'] == 'documento-com-espaco'
+    assert payload['note_id'].startswith('documento-com-espaco--')
     assert payload['chunks_indexed'] >= 1
     assert payload['embedding_model'] == 'fake-hash'
 
@@ -426,6 +426,31 @@ def test_corpus_index_cli_accepts_recursive_directory(monkeypatch, tmp_path: Pat
     assert payload['status'] == 'success'
     assert payload['total_found'] == 2
     assert payload['indexed_count'] == 2
+
+
+def test_corpus_ask_cli_uses_settings_top_k_unless_flag_is_given(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    settings.retrieval_top_k = 3
+    seen: list[int] = []
+
+    class Response:
+        def model_dump(self, **kwargs):
+            return {'status': 'answer'}
+
+    def fake_answer(question, **kwargs):
+        seen.append(kwargs['top_k'])
+        return Response()
+
+    monkeypatch.setattr('escolio.corpus.cli.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.corpus.cli.answer_corpus_with_citations', fake_answer)
+    monkeypatch.setattr('escolio.corpus.cli.get_answer_provider', lambda *args, **kwargs: None)
+
+    default_result = runner.invoke(app, ['corpus', 'ask', '-q', 'Qual?', '--strategy', 'lexical'])
+    flag_result = runner.invoke(app, ['corpus', 'ask', '-q', 'Qual?', '--strategy', 'lexical', '--top-k', '4'])
+
+    assert default_result.exit_code == 0
+    assert flag_result.exit_code == 0
+    assert seen == [3, 4]
 
 
 def test_corpus_ask_cli_answers_against_indexed_directory(monkeypatch, tmp_path: Path) -> None:

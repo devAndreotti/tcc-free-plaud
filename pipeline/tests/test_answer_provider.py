@@ -2,7 +2,7 @@ import json
 from io import BytesIO
 from pathlib import Path
 from typing import Self
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -19,6 +19,7 @@ from escolio.providers.answer import (
 from escolio.providers.answer import (
     test_answer_provider as run_answer_provider_test,
 )
+from escolio.providers.answer_warmup import warm_up_answer_model
 from escolio.providers.smoke import run_provider_smoke_local
 
 
@@ -94,11 +95,24 @@ def test_grounded_chat_messages_forbid_external_knowledge_and_define_sentinel() 
     assert 'Nao complete lacunas' in system_prompt
     assert 'NAO_ENCONTRADO' in system_prompt
     assert 'nao sustentam resposta' in system_prompt
-    assert 'Cada frase factual precisa estar suportada' in system_prompt
+    assert 'Responda a PERGUNTA em frases completas' in system_prompt
+    assert 'use mais de um CONTEXTO' in system_prompt
+    assert 'Nunca responda so com colchetes' in system_prompt
     assert 'Preserve numeros, nomes e termos tecnicos exatamente' in system_prompt
     assert 'seja criativo' not in system_prompt.lower()
     assert 'PERGUNTA:\nQual broker?' in user_prompt
     assert 'CONTEXTOS:\n[1]' in user_prompt
+
+
+def test_grounded_user_message_asks_second_person_and_forbids_first_person() -> None:
+    messages = build_grounded_chat_messages(
+        'O que estudei na Cisco?',
+        ['[1]\nsource_path: note.md\nchunk_id: c1\ntrecho:\nEstudei redes e seguranca de perimetro.'],
+    )
+
+    user_prompt = messages[1]['content']
+    assert 'fale com quem pergunta usando voce' in user_prompt
+    assert 'Nao use eu nem verbos em primeira pessoa' in user_prompt
 
 
 def test_openai_compatible_provider_wraps_http_errors(monkeypatch) -> None:
@@ -429,3 +443,180 @@ def test_provider_smoke_local_uses_temp_corpus_and_does_not_call_provider_for_mi
     assert result.missing_question.status == 'no_answer'
     assert provider.questions == ['O que e Estrutura Disco D?']
     assert result.workspace_dir is None
+
+
+class FakeStreamResponse:
+    """Stream SSE falso: itera linhas em bytes, como o HTTPResponse do urllib."""
+
+    def __init__(self, lines: list[bytes], fail_after: Exception | None = None) -> None:
+        self.lines = lines
+        self.fail_after = fail_after
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        return None
+
+    def __iter__(self):
+        yield from self.lines
+        if self.fail_after is not None:
+            raise self.fail_after
+
+
+class FakeStatusResponse:
+    def __init__(self, status: int) -> None:
+        self.status = status
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        return None
+
+
+def _sse_chunk(delta: dict[str, object], finish_reason: str | None = None) -> bytes:
+    event = {'choices': [{'delta': delta, 'finish_reason': finish_reason}]}
+    return f'data: {json.dumps(event)}\n'.encode()
+
+
+def _stream_provider(
+    monkeypatch, lines: list[bytes], captured: dict[str, object] | None = None
+) -> OpenAICompatibleAnswerProvider:
+    def fake_urlopen(request, timeout):
+        if captured is not None:
+            captured['url'] = request.full_url
+            captured['body'] = json.loads(request.data.decode('utf-8'))
+        return FakeStreamResponse(lines)
+
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
+    return OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='llama3.1:8b', max_tokens=64)
+
+
+def test_answer_stream_monta_texto_e_repassa_pedacos_em_ordem(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    provider = _stream_provider(
+        monkeypatch,
+        [
+            _sse_chunk({'role': 'assistant'}),
+            _sse_chunk({'reasoning_content': 'pensando antes de responder'}),
+            _sse_chunk({'content': 'Resposta '}),
+            b'\n',
+            _sse_chunk({'content': 'curta.'}, 'stop'),
+            b'data: [DONE]\n',
+            _sse_chunk({'content': ' depois do DONE não conta'}),
+        ],
+        captured,
+    )
+    pieces: list[str] = []
+
+    answer = provider.answer_stream('Qual broker?', ['[chunk-1] RabbitMQ foi adotado.'], pieces.append)
+
+    assert answer == 'Resposta curta.'
+    assert pieces == ['Resposta ', 'curta.']
+    assert captured['url'] == 'http://localhost:11434/v1/chat/completions'
+    assert captured['body']['stream'] is True  # type: ignore[index]
+    assert captured['body']['max_tokens'] == 64  # type: ignore[index]
+
+
+def test_answer_stream_so_raciocinio_vira_erro_de_reasoning(monkeypatch) -> None:
+    provider = _stream_provider(
+        monkeypatch,
+        [_sse_chunk({'reasoning': 'CADEIA_DE_PENSAMENTO'}), _sse_chunk({}, 'length'), b'data: [DONE]\n'],
+    )
+    pieces: list[str] = []
+
+    with pytest.raises(AnswerProviderError) as excinfo:
+        provider.answer_stream('Qual broker?', ['[chunk] Evidencia.'], pieces.append)
+
+    assert str(excinfo.value) == REASONING_EMPTY_ANSWER_ERROR
+    assert pieces == []
+
+
+def test_answer_stream_sem_texto_nem_raciocinio_vira_resposta_vazia(monkeypatch) -> None:
+    provider = _stream_provider(monkeypatch, [_sse_chunk({'role': 'assistant'}, 'stop'), b'data: [DONE]\n'])
+
+    with pytest.raises(AnswerProviderError) as excinfo:
+        provider.answer_stream('Qual broker?', ['[chunk] Evidencia.'], lambda piece: None)
+
+    assert str(excinfo.value) == EMPTY_ANSWER_ERROR
+
+
+def test_answer_stream_payload_invalido_vira_erro_de_formato(monkeypatch) -> None:
+    provider = _stream_provider(monkeypatch, [b'data: {nao e json\n'])
+
+    with pytest.raises(AnswerProviderError, match='payload invalido'):
+        provider.answer_stream('Qual broker?', ['[chunk] Evidencia.'], lambda piece: None)
+
+
+def test_answer_stream_timeout_no_meio_do_stream_mantem_pedacos_recebidos(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        return FakeStreamResponse([_sse_chunk({'content': 'Parcial'})], fail_after=TimeoutError('timed out'))
+
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
+    provider = OpenAICompatibleAnswerProvider(base_url='http://localhost:11434/v1', model='llama3.1:8b')
+    pieces: list[str] = []
+
+    with pytest.raises(AnswerProviderError, match='timeout'):
+        provider.answer_stream('Qual broker?', ['[chunk] Evidencia.'], pieces.append)
+
+    assert pieces == ['Parcial']
+
+
+def test_answer_stream_http_error_usa_a_mesma_mensagem_de_answer(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        raise HTTPError(
+            url=request.full_url,
+            code=401,
+            msg='Unauthorized',
+            hdrs=None,
+            fp=BytesIO(b'{"error":"bad key"}'),
+        )
+
+    monkeypatch.setattr('escolio.providers.answer.urlopen', fake_urlopen)
+    provider = OpenAICompatibleAnswerProvider(base_url='https://api.example/v1', model='model')
+
+    with pytest.raises(AnswerProviderError, match='401'):
+        provider.answer_stream('Pergunta?', ['[chunk] Evidencia.'], lambda piece: None)
+
+
+def test_answer_stream_erro_do_callback_nao_vira_erro_do_provider(monkeypatch) -> None:
+    provider = _stream_provider(monkeypatch, [_sse_chunk({'content': 'Texto'})])
+
+    def quebra(piece: str) -> None:
+        raise ValueError('callback quebrou')
+
+    with pytest.raises(ValueError, match='callback quebrou'):
+        provider.answer_stream('Qual broker?', ['[chunk] Evidencia.'], quebra)
+
+
+def test_warm_up_answer_model_posta_api_generate_na_raiz_do_ollama(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request, timeout):
+        captured['url'] = request.full_url
+        captured['timeout'] = timeout
+        captured['body'] = json.loads(request.data.decode('utf-8'))
+        return FakeStatusResponse(200)
+
+    monkeypatch.setattr('escolio.providers.answer_warmup.urlopen', fake_urlopen)
+
+    assert warm_up_answer_model(_settings(tmp_path)) is True
+    assert captured['url'] == 'http://localhost:11434/api/generate'
+    assert captured['body'] == {'model': 'llama3.1:8b'}
+    assert captured['timeout'] == 12
+
+
+def test_warm_up_answer_model_so_age_com_ollama_e_engole_falhas(monkeypatch, tmp_path: Path) -> None:
+    def sem_rede(request, timeout):
+        raise AssertionError('fora do ollama não pode haver chamada de rede')
+
+    monkeypatch.setattr('escolio.providers.answer_warmup.urlopen', sem_rede)
+    assert warm_up_answer_model(_settings(tmp_path, answer_provider='lmstudio')) is False
+    assert warm_up_answer_model(_settings(tmp_path, answer_provider='extractive')) is False
+
+    def offline(request, timeout):
+        raise URLError('connection refused')
+
+    monkeypatch.setattr('escolio.providers.answer_warmup.urlopen', offline)
+    assert warm_up_answer_model(_settings(tmp_path)) is False

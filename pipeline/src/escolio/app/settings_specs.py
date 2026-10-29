@@ -2,16 +2,18 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from escolio.app.setting_options import (
+    ANSWER_PROVIDER_OPTIONS,
+    COMMIT_MODE_OPTIONS,
+    DEVICE_OPTIONS,
+    STRATEGY_OPTIONS,
+    SettingOption,
+)
 from escolio.providers.audio_catalog import load_catalog
 
 SettingValueType = Literal['string', 'int', 'float', 'bool', 'path', 'enum', 'secret']
 SettingStorage = Literal['user_settings', 'local_env']
 SettingLayer = Literal['simple', 'advanced']
-
-
-class SettingOption(BaseModel):
-    value: str
-    label: str
 
 
 class SettingSpec(BaseModel):
@@ -59,7 +61,7 @@ AUDIO_GROUP = 'Áudio'
 SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='embedding_model',
-        label='Modelo de embedding',
+        label='Modelo de busca semântica',
         description='Modelo que transforma texto em vetores para busca semântica.',
         group='Embeddings',
         value_type='string',
@@ -68,12 +70,12 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     ),
     SettingSpec(
         key='embedding_device',
-        label='Device de embedding',
-        description='Onde roda o modelo de embedding quando ele suporta device.',
+        label='Dispositivo de busca semântica',
+        description='Onde roda o modelo de busca semântica quando ele suporta device (o chroma-default sempre usa o processador).',
         group='Embeddings',
         value_type='enum',
         layer='simple',
-        options=[SettingOption(value='auto', label='Auto'), SettingOption(value='cpu', label='CPU'), SettingOption(value='cuda', label='CUDA')],
+        options=DEVICE_OPTIONS,
         recommended='auto',
     ),
     SettingSpec(
@@ -83,20 +85,20 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         group='Retrieval',
         value_type='enum',
         layer='simple',
-        options=[SettingOption(value='lexical', label='Lexical'), SettingOption(value='vector', label='Vetorial'), SettingOption(value='hybrid', label='Híbrida')],
+        options=STRATEGY_OPTIONS,
         recommended='hybrid',
     ),
     SettingSpec(
         key='retrieval_top_k',
-        label='Chunks por pergunta',
-        description='Quantos chunks o Ask recupera para montar evidências e resposta.',
+        label='Trechos por pergunta',
+        description='Quantos trechos a pergunta recupera para montar evidências e resposta.',
         group='Retrieval',
         value_type='int',
         recommended=4,
     ),
     SettingSpec(
         key='default_chunk_size',
-        label='Tamanho do chunk',
+        label='Tamanho do trecho',
         description='Tamanho alvo de cada pedaço indexado do texto.',
         group='Chunks',
         value_type='int',
@@ -105,7 +107,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='default_chunk_overlap',
         label='Sobreposição',
-        description='Quanto texto um chunk repete do anterior para evitar corte de contexto.',
+        description='Quanto texto um trecho repete do anterior para evitar corte de contexto.',
         group='Chunks',
         value_type='int',
         recommended=120,
@@ -116,7 +118,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         description='Quando a indexação grava SQLite e Chroma.',
         group='Corpus',
         value_type='enum',
-        options=[SettingOption(value='auto', label='Auto'), SettingOption(value='atomic', label='Atomic'), SettingOption(value='microbatch', label='Microbatch')],
+        options=COMMIT_MODE_OPTIONS,
         recommended='auto',
     ),
     SettingSpec(
@@ -139,8 +141,8 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     ),
     SettingSpec(
         key='corpus_embedding_batch_size',
-        label='Batch de embeddings',
-        description='Quantidade de chunks processados por lote no embedding.',
+        label='Lote de indexação',
+        description='Quantidade de trechos processados por lote no modelo de busca semântica.',
         group='Corpus',
         value_type='int',
         recommended=64,
@@ -148,7 +150,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         key='corpus_index_workers',
         label='Workers de indexação',
-        description='Paralelismo para carregar e preparar arquivos antes do embedding.',
+        description='Paralelismo para carregar e preparar arquivos antes do modelo de busca semântica.',
         group='Corpus',
         value_type='int',
         recommended=1,
@@ -160,22 +162,22 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         group='LLM',
         value_type='enum',
         layer='simple',
-        options=[SettingOption(value='extractive', label='Extractive'), SettingOption(value='ollama', label='Ollama'), SettingOption(value='lmstudio', label='LM Studio'), SettingOption(value='openai-compatible', label='OpenAI-compatible')],
+        options=ANSWER_PROVIDER_OPTIONS,
         recommended='extractive',
     ),
     SettingSpec(
         key='answer_model',
         label='Modelo de resposta',
-        description='Modelo LLM usado pelo provider generativo.',
+        description='Modelo que escreve a resposta. Os de ~3B (como qwen2.5:3b) cabem numa GPU de 4 GB e respondem em segundos; 7B ou mais ficam lentos.',
         group='LLM',
         value_type='string',
         layer='simple',
-        recommended='llama3.1:8b',
+        recommended='qwen2.5:3b',
     ),
     SettingSpec(
         key='answer_base_url',
         label='URL do provider',
-        description='Endpoint OpenAI-compatible; vazio usa default do provider.',
+        description='Endereço do servidor da IA; vazio usa o padrão do provedor escolhido.',
         group='LLM',
         value_type='string',
         placeholder='http://localhost:11434/v1',
@@ -233,13 +235,21 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         recommended='pt',
     ),
     SettingSpec(
+        key='audio_input_device',
+        label='Microfone',
+        description='Dispositivo usado para gravar a pergunta por voz. "Padrão do sistema" segue o microfone padrão do Windows.',
+        group=AUDIO_GROUP,
+        value_type='string',
+        layer='simple',
+    ),
+    SettingSpec(
         key='audio_device',
         label='Device de transcrição',
         description='Onde roda o modelo de voz quando ele suporta device.',
         group=AUDIO_GROUP,
         value_type='enum',
         layer='simple',
-        options=[SettingOption(value='auto', label='Auto'), SettingOption(value='cpu', label='CPU'), SettingOption(value='cuda', label='CUDA')],
+        options=DEVICE_OPTIONS,
         recommended='auto',
     ),
     SettingSpec(

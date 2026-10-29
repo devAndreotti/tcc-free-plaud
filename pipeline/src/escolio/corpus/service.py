@@ -16,6 +16,7 @@ from escolio.app.paths import ensure_runtime_dirs
 from escolio.corpus.ask import answer_corpus_with_citations
 from escolio.corpus.cancellation import CancellationToken
 from escolio.corpus.discovery import discover_corpus_files
+from escolio.corpus.jobs import corpus_write_lock
 from escolio.corpus.models import (
     CorpusCommitMode,
     CorpusIndexBatchResult,
@@ -26,28 +27,36 @@ from escolio.corpus.models import (
     CorpusPerfBenchmarkResult,
     CorpusRebuildResult,
     CorpusResetResult,
+    CorpusSkippedPath,
     CorpusStatusResult,
     ResolvedCorpusCommitMode,
 )
 from escolio.ingest.loaders import PDF_PARSE_FAILED, load_document
+from escolio.ingest.validators import has_indexable_content
 from escolio.notes.schemas import Note
+from escolio.notes.service import delete_notes_by_source_path
 from escolio.notes.structurer import structure_document
 from escolio.providers.embed import Embedder, get_embedder
 from escolio.retrieval.indexer import index_note
 from escolio.retrieval.models import Chunk
 from escolio.storage.sqlite import (
+    corpus_root_for_path,
     count_chunks,
     count_fts_chunks,
     count_notes,
     delete_corpus_notes_and_chunks,
     delete_note_and_chunks,
+    forget_corpus_root,
     get_note_content_hash,
+    get_note_title,
     init_sqlite,
     list_chunk_ids,
     list_chunk_ids_for_note,
     list_note_ids_by_source_path,
     note_chunks_match_config,
+    record_corpus_root,
     replace_chunks_for_note,
+    split_ignored,
     upsert_note,
 )
 from escolio.storage.vector import LocalVectorStore
@@ -151,7 +160,7 @@ def _unchanged_result(
         embedding_model=embedding_model,
         vector_collection_name=vector_store.collection_name,
         vector_entries_count=vector_store.count(),
-        message='Document unchanged.',
+        message='Documento sem alterações.',
     )
 
 
@@ -176,8 +185,8 @@ def _failure_result(
 
 
 def _error_code_for_exception(exc: Exception) -> str:
-    if isinstance(exc, FileNotFoundError):
-        return 'INPUT_NOT_FOUND'
+    if isinstance(exc, OSError):
+        return 'INPUT_NOT_FOUND' if isinstance(exc, FileNotFoundError) else exc.__class__.__name__
     if isinstance(exc, ValueError):
         text = str(exc)
         if text == 'EMPTY_CONTENT':
@@ -356,7 +365,7 @@ def _resolve_embedder_for_index(
         total_found=total_found,
         commit_mode_requested=commit_mode_requested,
         commit_mode_resolved=commit_mode_resolved,
-        message=f'Aquecendo embeddings: {settings.embedding_model} device={settings.embedding_device}.',
+        message=f'Aquecendo o modelo de busca semântica: {settings.embedding_model} device={settings.embedding_device}.',
     )
     warmup_started_at = perf_counter()
     resolved_embedder = get_embedder(settings.embedding_model, device=settings.embedding_device)
@@ -370,7 +379,7 @@ def _resolve_embedder_for_index(
         warmup_ms=warmup_ms,
         commit_mode_requested=commit_mode_requested,
         commit_mode_resolved=commit_mode_resolved,
-        message=f'Embeddings prontos em {warmup_ms} ms.',
+        message=f'Modelo de busca semântica pronto em {warmup_ms} ms.',
     )
     return resolved_embedder, warmup_ms
 
@@ -452,7 +461,7 @@ def _commit_pending_items(
             commit_mode_resolved=commit_mode_resolved,
             batch_index=batch_index,
             batch_total=batch_total,
-            message=f'Gerando embeddings: lote {batch_index}/{batch_total or 1}, {len(chunk_batch)} chunks.',
+            message=f'Gerando vetores de busca semântica: lote {batch_index}/{batch_total or 1}, {len(chunk_batch)} trechos.',
         )
         chunks = [chunk for _, chunk in chunk_batch]
         embedding_started_at = perf_counter()
@@ -463,7 +472,7 @@ def _commit_pending_items(
                 _failure_result(
                     item.source_path,
                     error_code='INDEXING_FAILED',
-                    message='A quantidade de embeddings precisa bater com a quantidade de chunks.',
+                    message='A quantidade de vetores precisa bater com a quantidade de trechos.',
                     vector_store=vector_store,
                     embedding_model=embedder.model_name,
                 )
@@ -603,6 +612,42 @@ def get_corpus_status(
             embedding_model_mismatch_chunk_ids=embedding_model_mismatch_chunk_ids,
             status=status,  # type: ignore[arg-type]
         )
+    finally:
+        if owns_connection:
+            resolved_connection.close()
+
+
+def remove_corpus_root(
+    root: Path | str,
+    *,
+    settings: Settings | None = None,
+    connection: sqlite3.Connection | None = None,
+    vector_store: LocalVectorStore | None = None,
+) -> int:
+    """Tira uma pasta do corpus: remove as notas sob ela (SQLite e Chroma) e esquece a raiz.
+
+    Não apaga nada do disco. Devolve quantas notas foram removidas.
+    """
+    resolved_settings = settings or get_settings()
+    ensure_runtime_dirs(resolved_settings)
+    owns_connection = connection is None
+    resolved_connection = connection or init_sqlite(resolved_settings.sqlite_path)
+    resolved_vector_store = vector_store or LocalVectorStore(
+        resolved_settings.vector_store_dir,
+        collection_name=resolved_settings.vector_collection_name,
+    )
+    try:
+        with corpus_write_lock:
+            removed = delete_notes_by_source_path(
+                root,
+                folder=True,
+                recursive=True,
+                settings=resolved_settings,
+                connection=resolved_connection,
+                vector_store=resolved_vector_store,
+            )
+            forget_corpus_root(resolved_connection, root)
+        return removed
     finally:
         if owns_connection:
             resolved_connection.close()
@@ -841,7 +886,7 @@ def perf_benchmark_corpus(
     if repeat <= 0:
         raise ValueError('repeat precisa ser maior que zero.')
     if ask_repeat < 0:
-        raise ValueError('ask-repeat nao pode ser negativo.')
+        raise ValueError('ask-repeat não pode ser negativo.')
 
     resolved_settings = settings or get_settings()
     resolved_chunk_size = chunk_size or resolved_settings.default_chunk_size
@@ -1036,7 +1081,7 @@ def rebuild_corpus(
                 status='failed',
                 before_status=before_status,
                 error_code='INPUT_NOT_FOUND',
-                message='Path not found.',
+                message='Caminho não encontrado.',
             )
 
         reset_result = reset_corpus(
@@ -1098,15 +1143,15 @@ def _load_structure_chunk_corpus_file(
 ) -> _PendingCorpusIndex | _PreparationFailure:
     try:
         document = load_document(path)
-        if not document.raw_text.strip():
+        if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
-        note = structure_document(document, source_root=source_root)
+        note = structure_document(document, source_root=source_root, hash_unrooted=True)
         return _PendingCorpusIndex(
             source_path=document.source_path,
             note=note,
             chunks=index_note(note, chunk_size=chunk_size, overlap=overlap),
         )
-    except (FileNotFoundError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         return _PreparationFailure(
             source_path=path,
             error_code=_error_code_for_exception(exc),
@@ -1133,6 +1178,7 @@ def _resolve_prepared_corpus_file(
         )
 
     existing_hash = get_note_content_hash(connection, prepared.note.note_id)
+    existing_title = get_note_title(connection, prepared.note.note_id)
     existing_chunk_ids = list_chunk_ids_for_note(connection, prepared.note.note_id)
     chunks_match_config = note_chunks_match_config(
         connection,
@@ -1140,7 +1186,13 @@ def _resolve_prepared_corpus_file(
         chunk_size=chunk_size,
         overlap=overlap,
     )
-    if existing_hash == prepared.note.content_hash and chunks_match_config and vector_store.has_chunk_ids(existing_chunk_ids):
+    # Título recalculado (ex.: regra de frontmatter) também conta como mudança: sem isso a nota nunca seria corrigida.
+    if (
+        existing_hash == prepared.note.content_hash
+        and existing_title == prepared.note.title
+        and chunks_match_config
+        and vector_store.has_chunk_ids(existing_chunk_ids)
+    ):
         return _unchanged_result(
             prepared.note,
             source_path=prepared.source_path,
@@ -1211,12 +1263,26 @@ def index_corpus_file(
     resolved_overlap = resolved_settings.default_chunk_overlap if overlap is None else overlap
 
     try:
+        # Arquivo que o usuário mandou ignorar fica fora do índice (watcher, área de soltar, "tentar de novo").
+        if not split_ignored(resolved_connection, [source_path])[0]:
+            return CorpusIndexResult(
+                source_path=str(source_path),
+                status='unchanged',
+                embedding_model=resolved_embedder.model_name,
+                vector_collection_name=resolved_vector_store.collection_name,
+                vector_entries_count=resolved_vector_store.count(),
+                message='Arquivo ignorado na indexação.',
+            )
         document = load_document(source_path)
-        if not document.raw_text.strip():
+        if not has_indexable_content(document):
             raise ValueError('EMPTY_CONTENT')
 
-        note = structure_document(document, source_root=source_root)
+        # Arquivo de uma pasta já indexada (watcher, área de soltar) mantém o note_id da Fila.
+        if source_root is None:
+            source_root = corpus_root_for_path(resolved_connection, source_path)
+        note = structure_document(document, source_root=source_root, hash_unrooted=True)
         existing_hash = get_note_content_hash(resolved_connection, note.note_id)
+        existing_title = get_note_title(resolved_connection, note.note_id)
         existing_chunk_ids = list_chunk_ids_for_note(resolved_connection, note.note_id)
         chunks_match_config = note_chunks_match_config(
             resolved_connection,
@@ -1226,6 +1292,7 @@ def index_corpus_file(
         )
         if (
             existing_hash == note.content_hash
+            and existing_title == note.title
             and chunks_match_config
             and resolved_vector_store.has_chunk_ids(existing_chunk_ids)
         ):
@@ -1240,7 +1307,7 @@ def index_corpus_file(
         chunks = index_note(note, chunk_size=resolved_chunk_size, overlap=resolved_overlap)
         embeddings = resolved_embedder.embed([chunk.chunk_text for chunk in chunks])
         if len(embeddings) != len(chunks):
-            raise ValueError('A quantidade de embeddings precisa bater com a quantidade de chunks.')
+            raise ValueError('A quantidade de vetores precisa bater com a quantidade de trechos.')
 
         _delete_superseded_source_notes(resolved_connection, resolved_vector_store, note)
         resolved_vector_store.delete_by_note_id(note.note_id)
@@ -1258,7 +1325,7 @@ def index_corpus_file(
             vector_entries_count=resolved_vector_store.count(),
             message='Nota indexada.',
         )
-    except (FileNotFoundError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         return _failure_result(
             source_path,
             error_code=_error_code_for_exception(exc),
@@ -1327,7 +1394,7 @@ def index_corpus_path(
                     total_found=1,
                     commit_mode_requested=commit_mode_requested,
                     commit_mode_resolved=commit_mode_resolved,
-                    message='Indexacao cancelada.',
+                    message='Indexação cancelada.',
                 )
                 return _cancelled_batch_result(
                     source_path,
@@ -1370,7 +1437,7 @@ def index_corpus_path(
                 warmup_ms=warmup_ms,
                 commit_mode_requested=commit_mode_requested,
                 commit_mode_resolved=commit_mode_resolved,
-                message=f'Estruturando e embedando {source_path.name}',
+                message=f'Estruturando e indexando {source_path.name}',
             )
             result = index_corpus_file(
                 source_path,
@@ -1417,7 +1484,7 @@ def index_corpus_path(
                 commit_mode_resolved=commit_mode_resolved,
                 batch_index=1,
                 batch_total=1,
-                message='Indexacao concluida.',
+                message='Indexação concluída.',
             )
             return CorpusIndexBatchResult(
                 source_path=str(source_path),
@@ -1452,7 +1519,7 @@ def index_corpus_path(
                 skipped_count=len(discovery.skipped),
                 commit_mode_requested=commit_mode_requested,
                 commit_mode_resolved=commit_mode_resolved,
-                message='Pasta nao encontrada.',
+                message='Pasta não encontrada.',
             )
             return CorpusIndexBatchResult(
                 source_path=str(source_path),
@@ -1466,6 +1533,32 @@ def index_corpus_path(
                 commit_mode_resolved=commit_mode_resolved,
                 results=[],
                 skipped=discovery.skipped,
+            )
+
+        # Arquivos ignorados pelo usuário (Fila) não entram; contam como pulados.
+        kept_files, ignored_files = split_ignored(resolved_connection, discovery.files)
+        if ignored_files:
+            discovery = discovery.model_copy(
+                update={
+                    'files': kept_files,
+                    'skipped': [*discovery.skipped, *(CorpusSkippedPath(path=str(p), reason='ignored_by_user') for p in ignored_files)],
+                }
+            )
+
+        # Antes de qualquer arquivo: a pasta vira raiz do corpus mesmo que a reindexação venha toda "unchanged".
+        record_corpus_root(resolved_connection, source_path.resolve())
+
+        # Notas de arquivos apagados da pasta saem do índice; só após confirmar a raiz e sem cancelamento.
+        removed_count = 0
+        if not _is_cancelled(cancel_token):
+            removed_count = delete_notes_by_source_path(
+                source_path,
+                folder=True,
+                recursive=recursive,
+                missing_only=True,
+                settings=resolved_settings,
+                connection=resolved_connection,
+                vector_store=resolved_vector_store,
             )
 
         pending_items: list[_PendingCorpusIndex] = []
@@ -1509,7 +1602,7 @@ def index_corpus_path(
                 commit_mode_requested=commit_mode_requested,
                 commit_mode_resolved=commit_mode_resolved,
                 batch_total=batch_total,
-                message='Indexacao concluida sem arquivos suportados.',
+                message='Indexação concluída sem arquivos suportados.',
             )
             return CorpusIndexBatchResult(
                 source_path=str(source_path),
@@ -1520,6 +1613,7 @@ def index_corpus_path(
                 failed_count=0,
                 skipped_count=skipped_count,
                 unchanged_count=0,
+                removed_count=removed_count,
                 commit_mode_requested=commit_mode_requested,
                 commit_mode_resolved=commit_mode_resolved,
                 results=[],
@@ -1697,7 +1791,7 @@ def index_corpus_path(
                             commit_mode_requested=commit_mode_requested,
                             commit_mode_resolved=commit_mode_resolved,
                             batch_total=batch_total,
-                            message='Indexacao cancelada.',
+                            message='Indexação cancelada.',
                         )
                         return _cancelled_batch_result(
                             source_path,
@@ -1733,7 +1827,7 @@ def index_corpus_path(
                         commit_mode_resolved=commit_mode_resolved,
                         batch_index=batch_index,
                         batch_total=batch_total,
-                        message='Indexacao cancelada.',
+                        message='Indexação cancelada.',
                     )
                     return _cancelled_batch_result(
                         source_path,
@@ -1785,7 +1879,7 @@ def index_corpus_path(
                         commit_mode_resolved=commit_mode_resolved,
                         batch_index=batch_index,
                         batch_total=batch_total,
-                        message='Indexacao cancelada.',
+                        message='Indexação cancelada.',
                     )
                     return _cancelled_batch_result(
                         source_path,
@@ -1846,7 +1940,7 @@ def index_corpus_path(
                         commit_mode_resolved=commit_mode_resolved,
                         batch_index=batch_index,
                         batch_total=batch_total,
-                        message='Indexacao cancelada.',
+                        message='Indexação cancelada.',
                     )
                     return _cancelled_batch_result(
                         source_path,
@@ -1881,7 +1975,7 @@ def index_corpus_path(
                 commit_mode_resolved=commit_mode_resolved,
                 batch_index=batch_index,
                 batch_total=batch_total,
-                message='Indexacao cancelada antes da gravacao.',
+                message='Indexação cancelada antes da gravação.',
             )
             return _cancelled_batch_result(
                 source_path,
@@ -1921,7 +2015,7 @@ def index_corpus_path(
             commit_mode_resolved=commit_mode_resolved,
             batch_index=batch_index,
             batch_total=max(batch_total, batch_index),
-            message='Indexacao concluida.',
+            message='Indexação concluída.',
         )
         return CorpusIndexBatchResult(
             source_path=str(source_path),
@@ -1932,6 +2026,7 @@ def index_corpus_path(
             failed_count=failed_count,
             skipped_count=len(discovery.skipped),
             unchanged_count=unchanged_count,
+            removed_count=removed_count,
             commit_mode_requested=commit_mode_requested,
             commit_mode_resolved=commit_mode_resolved,
             results=results,

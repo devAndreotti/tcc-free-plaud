@@ -19,6 +19,18 @@
 const isDesktopApp = (): boolean =>
   typeof window !== 'undefined' && 'pywebview' in window && Boolean(window.pywebview?.api);
 
+// No app (build de produção) o PyWebView injeta a API depois do bundle e avisa com 'pywebviewready'.
+// As chamadas esperam esse aviso: sem isso, as da abertura caíam no mock (vaults e números de exemplo na tela).
+// Em dev e nos testes (navegador, Vitest, Playwright) não há PyWebView e o mock responde na hora.
+let desktopReady: Promise<boolean> | null = null;
+const whenDesktopReady = (): Promise<boolean> => {
+  if (isDesktopApp() || import.meta.env.DEV) return Promise.resolve(isDesktopApp());
+  desktopReady ??= new Promise((resolve) => {
+    window.addEventListener('pywebviewready', () => resolve(isDesktopApp()), { once: true });
+  });
+  return desktopReady;
+};
+
 // ─── Declaração de tipos da API Python exposta pelo PyWebView ───────────────
 /** Metadados de um arquivo Markdown retornado pelo scanVault */
 export interface MarkdownNodeRaw {
@@ -44,7 +56,7 @@ export interface WatcherStatus {
 export interface DroppedFileEvent {
   name: string;
   source_path: string;
-  status: 'indexed' | 'unchanged' | 'failed';
+  status: 'indexed' | 'unchanged' | 'failed' | 'removed';
   chunks: number;
   error_code: string | null;
   message: string | null;
@@ -56,27 +68,13 @@ export interface DroppedFilesEnqueueResult {
   missing: string[];
 }
 
-export interface WatcherIngestionEvent {
-  ingestion_id: string;
-  correlation_id: string;
-  source_path: string;
-  source_type: string | null;
-  detected_media_type: string | null;
-  status: "success" | "failed";
-  size_bytes: number;
-  content_sha256: string | null;
-  error_code: string | null;
-  message: string | null;
-  warnings: string[];
-  created_at: string;
-}
-
 export interface IndexVaultResult {
   ok: boolean;
   status: string;
   total_found: number;
   indexed_count: number;
   unchanged_count: number;
+  removed_count: number;
   failed_count: number;
   skipped_count: number;
 }
@@ -106,6 +104,19 @@ export interface IndexJobFileError {
   source_path: string;
   message: string;
   error_code: string | null;
+}
+
+/** Arquivo que a indexação da vault pula (Fila: "Ignorar"). */
+export interface IgnoredPath {
+  path: string;
+  reason: string | null;
+  ignored_at: string;
+}
+
+/** Resultado de "Tentar de novo" por arquivo (status: indexed | unchanged | failed). */
+export interface RetryIndexResult {
+  ok: boolean;
+  results: { name: string; source_path: string; status: string; chunks: number; error_code: string | null; message: string | null }[];
 }
 
 export interface IndexJobSnapshot {
@@ -195,7 +206,7 @@ export interface BackendSettings {
   vector_chunks_count: number;
   settings_catalog: SettingRow[];
   settings_presets: SettingPreset[];
-  doctor?: DoctorReport;
+  doctor?: DoctorReport | null;
 }
 
 export interface SaveApiKeyResult {
@@ -207,6 +218,8 @@ export interface SaveApiKeyResult {
 export interface SettingOption {
   value: string;
   label: string;
+  /** Explicação da opção (Extractive, Ollama, Auto, CPU, CUDA...). */
+  description?: string | null;
 }
 
 export interface SettingRow {
@@ -310,6 +323,11 @@ export interface NoteSummary {
   chunk_count: number;
 }
 
+export interface NoteLink {
+  source: string;
+  target: string;
+}
+
 export interface NoteChunkSummary {
   chunk_id: string;
   chunk_index: number;
@@ -393,6 +411,60 @@ export interface BenchmarkCompareResult {
 
 export type AskStrategy = 'hybrid' | 'vector' | 'lexical';
 
+/** Pasta indexada do corpus com notas (corpus/service.py: raiz gravada na indexação). */
+export interface CorpusRoot {
+  root: string;
+  notes_count: number;
+}
+
+/** Resultado de tirar uma pasta do corpus (UI/main.py: removeCorpusRoot). Não apaga arquivos do disco. */
+export interface CorpusRootRemoveResult {
+  ok: boolean;
+  status?: string;
+  removed_notes?: number;
+  message?: string;
+}
+
+/** Ícones de vault: ids do conjunto de Icons.tsx (sem o sufixo "Icon"). Espelha escolio/app/vaults.py. */
+export type VaultIconId = 'notes' | 'ask' | 'graph' | 'layers' | 'chart' | 'sparkle' | 'stars' | 'code' | 'folder' | 'mic' | 'vault' | 'file';
+export type VaultColor = 'violet' | 'blue' | 'green' | 'amber' | 'rose' | 'teal' | 'slate';
+
+/** Vault: corpus independente (SQLite + Chroma + pastas de origem). */
+export interface Vault {
+  id: string;
+  name: string;
+  icon: VaultIconId;
+  color: VaultColor;
+  folders: string[];
+  embedding_model: string | null;
+  created_at: string;
+  sqlite_path: string | null;
+  vector_store_dir: string | null;
+  note_count?: number;
+  /** Pastas indexadas no banco da vault, com as notas de cada uma (listVaults). */
+  roots?: CorpusRoot[];
+}
+
+export interface VaultList {
+  active: string;
+  vaults: Vault[];
+}
+
+export interface VaultPatch {
+  name?: string;
+  icon?: VaultIconId;
+  color?: VaultColor;
+  folders?: string[];
+}
+
+/** Resultado de criar, editar, excluir ou trocar vault (UI/main.py). */
+export interface VaultMutationResult {
+  ok: boolean;
+  message?: string;
+  vault?: Vault;
+  active?: string;
+}
+
 /** Trecho do corpus que sustenta uma resposta (retrieval/models.py: Citation). */
 export interface AskCitation {
   note_id: string;
@@ -424,7 +496,60 @@ export interface AskResult {
   latency_ms: number;
   strategy?: string;
   top_k?: number;
-  answer_provider?: string;
+  /** Provedor que escreveu a resposta; 'extractive' quando não houve IA. */
+  answer_provider?: string | null;
+  /** Modelo que escreveu a resposta (ex.: qchat:latest); null quando não houve provedor. */
+  answer_model?: string | null;
+  /** true quando `answer` foi escrito pela IA e passou na validação contra os trechos. */
+  generated?: boolean;
+  /** Motivo pelo qual a resposta gerada foi descartada (ex.: unsupported_anchor); só vem com generated = false. */
+  answer_discard_reason?: string | null;
+  /** chunk_id principal de cada contexto [n] (índice n-1), só quando a resposta gerada foi aceita. */
+  answer_sources?: string[];
+}
+
+/** Estágio de uma pergunta em streaming: buscando trechos, escrevendo a resposta, ou terminada. */
+export type AskStage = 'retrieving' | 'writing' | 'done' | 'error';
+
+/** Estado de uma pergunta iniciada com startAsk (pollAsk). */
+export interface AskProgress {
+  ask_id: string;
+  stage: AskStage;
+  /** Texto gerado até agora. Se a validação rejeitar no fim, result.generated vem false e vale a resposta extrativa. */
+  partial: string;
+  result: AskResult | null;
+  error: string | null;
+}
+
+/** Provedor, modelo e URL que estão na tela de Configurações, ainda sem salvar. */
+export interface AnswerDraft {
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+}
+
+/** Aba salva: o mesmo formato de Tab (Header.tsx), sem importar componentes para dentro da ponte. */
+export interface SavedTab {
+  id: string;
+  label: string;
+  type: 'chat' | 'graph';
+  vaultId?: string;
+}
+
+/** Mensagem salva: o timestamp vai como texto ISO e volta a ser Date na tela. */
+export interface SavedMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  ask?: AskResult;
+}
+
+/** Conversas salvas entre aberturas: conversations.json no backend, localStorage no navegador. */
+export interface SavedConversations {
+  tabs: SavedTab[];
+  activeTabId: string | null;
+  tabMessages: Record<string, SavedMessage[]>;
 }
 
 interface PythonApi {
@@ -437,7 +562,22 @@ interface PythonApi {
   sendMessage: (message: string, attachment?: string) => Promise<string>;
 
   /** Pergunta ao corpus e devolve a resposta estruturada, com citações por afirmação. */
-  askCorpus?: (message: string, strategy?: AskStrategy) => Promise<AskResult>;
+  askCorpus?: (message: string, strategy?: AskStrategy, sourceRoot?: string) => Promise<AskResult>;
+
+  /** Inicia a pergunta em segundo plano e devolve o id para acompanhar com pollAsk. */
+  startAsk?: (message: string, strategy?: AskStrategy, sourceRoot?: string) => Promise<{ ask_id: string }>;
+
+  /** Estado da pergunta: estágio, texto gerado até agora e, ao terminar, o resultado. */
+  pollAsk?: (askId: string) => Promise<AskProgress>;
+
+  /** Descarta a pergunta em andamento; o pollAsk dela deixa de encontrá-la. */
+  cancelAsk?: (askId: string) => Promise<{ ok: boolean }>;
+
+  /** Carrega o modelo de resposta na memória, para a primeira pergunta não esperar. */
+  warmAnswerModel?: () => Promise<{ ok: boolean; started: boolean }>;
+
+  /** Pastas indexadas com notas, para o seletor de pasta do chat. */
+  listCorpusRoots?: () => Promise<CorpusRoot[]>;
 
   /**
    * Abre o seletor nativo de pasta do sistema operacional.
@@ -476,9 +616,6 @@ interface PythonApi {
 
   /** Consulta se ha monitoramento ativo e qual pasta esta sendo observada. */
   getWatcherStatus?: () => Promise<WatcherStatus>;
-
-  /** Drena eventos de ingestao capturados pelo watcher desde a ultima consulta. */
-  pollWatcherEvents?: () => Promise<WatcherIngestionEvent[]>;
 
   /** Indexa no corpus os arquivos soltos na área de soltar (pelo nome; o caminho fica no Python). */
   indexDroppedFiles?: (names: string[]) => Promise<DroppedFilesEnqueueResult>;
@@ -520,7 +657,7 @@ interface PythonApi {
   cancelVoiceModelDownload?: (jobId: string) => Promise<VoiceModelDownloadSnapshot>;
 
   /** Retorna resumo das configurações/backend para o modal. */
-  getBackendSettings?: () => Promise<BackendSettings>;
+  getBackendSettings?: (doctor?: boolean) => Promise<BackendSettings>;
 
   /** Retorna diagnostico estruturado do backend. */
   getDoctor?: () => Promise<DoctorReport>;
@@ -534,11 +671,15 @@ interface PythonApi {
   /** Aplica preset em uma escrita transacional e limpa runtime. */
   applySettingsPreset?: (name: string) => Promise<SettingPresetResult>;
 
-  /** Testa provider LLM com prompt sintetico, sem usar corpus. */
-  testAnswerProvider?: () => Promise<AnswerProviderTestResult>;
+  /** Testa provider LLM com prompt sintetico, sem usar corpus; null usa o valor salvo. */
+  testAnswerProvider?: (
+    provider?: string | null,
+    model?: string | null,
+    baseUrl?: string | null
+  ) => Promise<AnswerProviderTestResult>;
 
-  /** Lista modelos expostos pelo provider LLM configurado. */
-  listAnswerModels?: () => Promise<ModelDiscoveryResult>;
+  /** Lista modelos expostos pelo provider LLM (o salvo ou o passado); null usa o valor salvo. */
+  listAnswerModels?: (provider?: string | null, baseUrl?: string | null) => Promise<ModelDiscoveryResult>;
 
   /** Salva ou remove ESCOLIO_ANSWER_API_KEY em pipeline/.env. */
   saveApiKey?: (apiKey: string) => Promise<SaveApiKeyResult>;
@@ -549,14 +690,39 @@ interface PythonApi {
   /** Salva varios settings do catalogo numa unica escrita atomica; retorna o BackendSettings atualizado. */
   saveBackendSettings?: (values: Record<string, string>) => Promise<BackendSettings>;
 
+  /** Conversas salvas na abertura anterior; null quando não há nenhuma. */
+  loadConversations?: () => Promise<SavedConversations | null>;
+
+  /** Grava as conversas; ok false traz o motivo quando o backend recusa o payload. */
+  saveConversations?: (payload: SavedConversations) => Promise<{ ok: boolean; message?: string }>;
+
   /** Lista notas indexadas no corpus. */
   listNotes?: () => Promise<NoteSummary[]>;
+
+  /** Ligações [[...]] entre as notas indexadas (arestas do grafo). */
+  listNoteLinks?: () => Promise<NoteLink[]>;
 
   /** Retorna detalhe operacional de uma nota indexada. */
   getNoteDetail?: (noteId: string) => Promise<NoteDetail>;
 
   /** Remove uma nota do corpus, exigindo confirmação textual. */
   deleteNote?: (noteId: string, confirmation: string) => Promise<NoteDeleteResult>;
+
+  /** Tira a pasta do corpus (notas e raiz), exigindo 'REMOVER'. Não apaga arquivos do disco. */
+  removeCorpusRoot?: (root: string, confirmation: string) => Promise<CorpusRootRemoveResult>;
+  listIgnoredPaths?: () => Promise<IgnoredPath[]>;
+  ignoreIndexPaths?: (paths: string[]) => Promise<{ ok: boolean; ignored?: number; removed_notes?: number; message?: string }>;
+  unignoreIndexPaths?: (paths: string[]) => Promise<{ ok: boolean; restored?: number; queued?: number; message?: string }>;
+  retryIndexPaths?: (paths: string[]) => Promise<RetryIndexResult>;
+  openIndexPath?: (path: string, reveal: boolean) => Promise<{ ok: boolean; message?: string }>;
+
+  /** Vaults cadastradas, com a ativa e a contagem de notas de cada uma. */
+  listVaults?: () => Promise<VaultList>;
+  createVault?: (name: string, icon: VaultIconId, color: VaultColor, folders: string[]) => Promise<VaultMutationResult>;
+  updateVault?: (vaultId: string, patch: VaultPatch) => Promise<VaultMutationResult>;
+  /** Exclui a vault; `confirm` precisa ser o nome dela. Nunca apaga pastas de origem. */
+  deleteVault?: (vaultId: string, confirm: string) => Promise<VaultMutationResult>;
+  selectVault?: (vaultId: string) => Promise<VaultMutationResult>;
 
   /** Reindexa uma nota a partir do source_path salvo no banco. */
   reindexNote?: (noteId: string) => Promise<NoteReindexResult>;
@@ -598,13 +764,18 @@ const plainAskResult = (query: string, text: string): AskResult => ({
   latency_ms: 0,
 });
 
+const MOCK_CORPUS_ROOTS: CorpusRoot[] = [
+  { root: 'D:\\Notas\\Obsidian', notes_count: 42 },
+  { root: 'D:\\Notas\\Culinaria', notes_count: 7 },
+];
+
 const MOCK_CITATIONS: AskCitation[] = [
   {
     note_id: 'arquitetura--3f9a1c',
     note_version: 1,
     chunk_id: 'arquitetura--3f9a1c::v1::ofs-000680-001480::9a41',
-    snippet: 'O id de um chunk junta o id da nota, a versão e o deslocamento no texto.',
-    source_path: 'Projetos/escolio/Arquitetura do índice.md',
+    snippet: 'O id de um trecho junta o id da nota, a versão e o deslocamento no texto.',
+    source_path: 'D:\\Notas\\Obsidian\\Projetos\\escolio\\Arquitetura do índice.md',
     char_start: 680,
     char_end: 1480,
   },
@@ -613,7 +784,7 @@ const MOCK_CITATIONS: AskCitation[] = [
     note_version: 1,
     chunk_id: 'arquitetura--3f9a1c::v1::ofs-001360-002160::77c0',
     snippet: 'Se o hash não mudou desde a última indexação, a nota entra como inalterada.',
-    source_path: 'Projetos/escolio/Arquitetura do índice.md',
+    source_path: 'D:\\Notas\\Obsidian\\Projetos\\escolio\\Arquitetura do índice.md',
     char_start: 1360,
     char_end: 2160,
   },
@@ -621,12 +792,35 @@ const MOCK_CITATIONS: AskCitation[] = [
     note_id: 'pipeline--b21e07',
     note_version: 2,
     chunk_id: 'pipeline--b21e07::v2::ofs-000000-000800::1c3d',
-    snippet: 'Notas alteradas voltam para a fila e passam de novo pelo chunking.',
-    source_path: 'Projetos/escolio/Pipeline de ingestão.md',
+    snippet: 'Notas alteradas voltam para a fila e passam de novo pela divisão em trechos.',
+    source_path: 'D:\\Notas\\Obsidian\\Projetos\\escolio\\Pipeline de ingestão.md',
     char_start: 0,
     char_end: 800,
   },
 ];
+
+// Provedor e modelo de resposta do modo navegador; Salvar em Configurações › IA muda os dois.
+const mockAnswer = { provider: 'extractive', model: 'qwen2.5:3b' };
+
+const MOCK_LOCAL_MODELS: ModelInfo[] = [
+  { id: 'qchat:latest', label: 'qchat:latest', provider: 'ollama', details: { parameter_size: '3.1B', quantization_level: 'Q4_K_M', size: 1929912432 } },
+  { id: 'qwen2.5:3b', label: 'qwen2.5:3b', provider: 'ollama', details: { parameter_size: '3.1B', quantization_level: 'Q4_K_M', size: 1929912432 } },
+  { id: 'qwen2.5-coder:3b', label: 'qwen2.5-coder:3b', provider: 'ollama', details: { parameter_size: '3.1B', quantization_level: 'Q4_K_M', size: 1929912461 } },
+  { id: 'deepseek-r1:1.5b', label: 'deepseek-r1:1.5b', provider: 'ollama', details: { parameter_size: '1.8B', quantization_level: 'Q4_K_M', size: 1117322768 } },
+];
+
+// Modo navegador: com a IA ligada, uma pergunta com "descart" mostra o rodapé de IA descartada.
+const mockDiscardedAnswer = (): Partial<AskResult> => ({
+  answer: null,
+  answer_model: mockAnswer.model,
+  generated: false,
+  answer_discard_reason: 'unsupported_anchor',
+  limitations: [
+    'A resposta se apoia em um único trecho recuperado.',
+    'Resposta generativa ignorada por nome citado sem suporte: NAO_ENCONTRADO.',
+  ],
+  latency_ms: 2400,
+});
 
 const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'): Promise<AskResult> => {
   await new Promise((resolve) => setTimeout(resolve, 700));
@@ -637,9 +831,9 @@ const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'):
     no_answer: false,
     answer: '(mock) Resposta de exemplo montada a partir de três trechos.',
     claims: [
-      { text: '(mock) Cada nota indexada guarda uma versão, e o id de cada chunk carrega essa versão.', citations: [c1], support_level: 'direct' },
+      { text: '(mock) Cada nota indexada guarda uma versão, e o id de cada trecho carrega essa versão.', citations: [c1], support_level: 'direct' },
       { text: 'Na indexação seguinte, o conteúdo é comparado pelo hash: se não mudou, a nota entra como inalterada.', citations: [c2], support_level: 'direct' },
-      { text: 'Quando o hash muda, a nota volta para a fila e é quebrada em chunks de novo.', citations: [c3], support_level: 'partial' },
+      { text: 'Quando o hash muda, a nota volta para a fila e é quebrada em trechos de novo.', citations: [c3], support_level: 'partial' },
     ],
     citations: MOCK_CITATIONS,
     limitations: ['As fontes não dizem o que acontece com vetores já gravados se a reindexação for interrompida.'],
@@ -647,8 +841,49 @@ const mockAskCorpus = async (message: string, strategy: AskStrategy = 'hybrid'):
     latency_ms: 700,
     strategy,
     top_k: 5,
-    answer_provider: 'extractive',
+    answer_provider: mockAnswer.provider,
+    ...(mockAnswer.provider === 'extractive'
+      ? {}
+      : /descart/i.test(message)
+        ? mockDiscardedAnswer()
+        : {
+          answer:
+            '(mock) Cada nota guarda uma versão, e o id de cada trecho carrega essa versão. [1] ' +
+            'Ao indexar de novo, o hash decide: se o conteúdo não mudou, a nota fica como está. [2] ' +
+            'Se mudou, ela volta para a fila e é quebrada em trechos outra vez. [3]',
+          answer_model: mockAnswer.model,
+          answer_sources: MOCK_CITATIONS.map((citation) => citation.chunk_id),
+          generated: true,
+          latency_ms: 2400,
+        }),
   };
+};
+
+// Perguntas em andamento no modo navegador: cada pollAsk avança um estágio, como o backend.
+const mockAskJobs = new Map<string, { message: string; strategy: AskStrategy; polls: number; result?: AskResult }>();
+let mockAskSeq = 0;
+const MOCK_WORDS_PER_POLL = 4;
+
+const mockStartAsk = (message: string, strategy: AskStrategy = 'hybrid'): { ask_id: string } => {
+  const ask_id = `mock-ask-${++mockAskSeq}`;
+  mockAskJobs.set(ask_id, { message, strategy, polls: 0 });
+  return { ask_id };
+};
+
+// 1º poll: buscando trechos. Com a IA ligada, os polls seguintes revelam a resposta gerada aos poucos.
+const mockPollAsk = async (askId: string): Promise<AskProgress> => {
+  const job = mockAskJobs.get(askId);
+  if (!job) return { ask_id: askId, stage: 'error', partial: '', result: null, error: 'Pergunta não encontrada.' };
+  job.polls += 1;
+  if (job.polls === 1) return { ask_id: askId, stage: 'retrieving', partial: '', result: null, error: null };
+  const result = (job.result ??= await mockAskCorpus(job.message, job.strategy));
+  const words = (result.answer ?? '').split(' ');
+  const shown = (job.polls - 1) * MOCK_WORDS_PER_POLL;
+  if (mockAnswer.provider !== 'extractive' && shown < words.length) {
+    return { ask_id: askId, stage: 'writing', partial: words.slice(0, shown).join(' '), result: null, error: null };
+  }
+  mockAskJobs.delete(askId);
+  return { ask_id: askId, stage: 'done', partial: '', result, error: null };
 };
 
 const mockSendMessage = async (message: string): Promise<string> => {
@@ -668,6 +903,13 @@ type MockSettingRow = Omit<
 > &
   Partial<Pick<SettingRow, 'storage' | 'options' | 'placeholder' | 'warning' | 'local_env_path' | 'min' | 'max'>>;
 
+// Mesmas explicações do catálogo do backend (settings_specs.py), para o modo navegador.
+const MOCK_DEVICE_OPTIONS = [
+  { value: 'auto', label: 'Auto', description: 'Usa a placa de vídeo NVIDIA (CUDA) se houver; senão, o processador. A escolha segura.' },
+  { value: 'cpu', label: 'CPU', description: 'Roda no processador. Funciona em qualquer PC; mais lento com modelos grandes.' },
+  { value: 'cuda', label: 'CUDA', description: 'Roda na placa de vídeo NVIDIA: bem mais rápido, mas exige GPU NVIDIA com CUDA; sem ela, dá erro.' },
+];
+
 const mockSettingRow = (row: MockSettingRow): SettingRow => ({
   storage: 'user_settings',
   options: [],
@@ -679,6 +921,74 @@ const mockSettingRow = (row: MockSettingRow): SettingRow => ({
   max: null,
   ...row,
 });
+
+// Notas do grafo no modo navegador. As duas primeiras são as citadas por MOCK_CITATIONS: trazem os trechos citados
+// (mesmo chunk_id, snippet e offsets) no lugar do chunk genérico, para o destaque aparecer.
+const mockVaultNote = (note_id: string, title: string, rel: string, cited: NoteChunkSummary[] = []): NoteDetail => ({
+  note_id,
+  title,
+  source_type: 'md',
+  source_path: `D:\\Notas\\Obsidian\\${rel}`,
+  created_at: '2026-10-18T12:00:00-03:00',
+  tags: ['md'],
+  chunk_count: Math.max(cited.length, 1),
+  structured_markdown: `# ${title}\n\n(mock) Nota de exemplo do modo navegador.`,
+  chunks: cited.length
+    ? cited
+    : [{ chunk_id: `${note_id}::v1::0000`, chunk_index: 0, char_start: 0, char_end: 42, token_count: 8, snippet: '(mock) Nota de exemplo do modo navegador.' }],
+});
+
+const MOCK_VAULT_NOTES: NoteDetail[] = [
+  mockVaultNote('arquitetura--3f9a1c', 'Arquitetura do índice', 'Projetos\\escolio\\Arquitetura do índice.md', [
+    {
+      chunk_id: 'arquitetura--3f9a1c::v1::ofs-000680-001480::9a41',
+      chunk_index: 0,
+      char_start: 680,
+      char_end: 1480,
+      token_count: 180,
+      snippet: 'O id de um trecho junta o id da nota, a versão e o deslocamento no texto.',
+    },
+    {
+      chunk_id: 'arquitetura--3f9a1c::v1::ofs-001360-002160::77c0',
+      chunk_index: 1,
+      char_start: 1360,
+      char_end: 2160,
+      token_count: 180,
+      snippet: 'Se o hash não mudou desde a última indexação, a nota entra como inalterada.',
+    },
+  ]),
+  mockVaultNote('pipeline--b21e07', 'Pipeline de ingestão', 'Projetos\\escolio\\Pipeline de ingestão.md', [
+    {
+      chunk_id: 'pipeline--b21e07::v2::ofs-000000-000800::1c3d',
+      chunk_index: 0,
+      char_start: 0,
+      char_end: 800,
+      token_count: 180,
+      snippet: 'Notas alteradas voltam para a fila e passam de novo pela divisão em trechos.',
+    },
+  ]),
+  mockVaultNote('roadmap--5c1d', 'Roadmap', 'Projetos\\escolio\\Roadmap.md'),
+  mockVaultNote('benchmark--8e2a', 'Benchmark de busca', 'Projetos\\escolio\\Benchmark de busca.md'),
+  mockVaultNote('vlan--11aa', 'VLAN', 'Estudos\\Redes\\VLAN.md'),
+  mockVaultNote('mac--22bb', 'Endereço MAC', 'Estudos\\Redes\\Endereço MAC.md'),
+  mockVaultNote('ospf--33cc', 'OSPF', 'Estudos\\Redes\\OSPF.md'),
+  mockVaultNote('docker--44dd', 'Docker vs Máquinas Virtuais', 'Estudos\\Infra\\Docker vs Maquinas Virtuais.md'),
+  mockVaultNote('linux--55ee', 'Distribuições Linux', 'Estudos\\Infra\\Distribuicoes Linux.md'),
+  mockVaultNote('zustand--66ff', 'Zustand', 'Estudos\\Front\\Zustand.md'),
+  mockVaultNote('diario-29--77aa', 'Segunda-feira, 29 de Junho', 'Diário\\2026-06-29.md'),
+  mockVaultNote('diario-30--88bb', 'Terça-feira, 30 de Junho', 'Diário\\2026-06-30.md'),
+];
+
+// Ligações [[...]] entre as notas de exemplo do modo navegador (aba Links do grafo)
+const MOCK_NOTE_LINKS: NoteLink[] = [
+  { source: 'arquitetura--3f9a1c', target: 'pipeline--b21e07' },
+  { source: 'pipeline--b21e07', target: 'arquitetura--3f9a1c' },
+  { source: 'vlan--11aa', target: 'mac--22bb' },
+  { source: 'ospf--33cc', target: 'vlan--11aa' },
+  { source: 'docker--44dd', target: 'linux--55ee' },
+  { source: 'roadmap--5c1d', target: 'benchmark--8e2a' },
+  { source: 'roadmap--5c1d', target: 'arquitetura--3f9a1c' },
+];
 
 const MOCK_NOTES: NoteDetail[] = [
   {
@@ -710,6 +1020,7 @@ const MOCK_NOTES: NoteDetail[] = [
       },
     ],
   },
+  ...MOCK_VAULT_NOTES,
 ];
 
 const MOCK_BENCHMARK_RESULT: BenchmarkCompareResult = {
@@ -791,6 +1102,8 @@ const MOCK_BENCHMARK_RESULT: BenchmarkCompareResult = {
   },
 };
 
+let mockJobPolls = 0;
+
 const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobSnapshot => ({
   job_id: 'idx-mock',
   status,
@@ -823,12 +1136,21 @@ const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobS
     total_found: 5,
     indexed_count: 5,
     unchanged_count: 0,
+    removed_count: 0,
     failed_count: 0,
     skipped_count: 0,
   },
   error_code: null,
   message: status === 'running' ? 'Processando Introdução.md' : 'Indexação finalizada.',
-  last_errors: [],
+  // Exemplos de falhas (modo navegador): templates vazios e um PDF escaneado.
+  last_errors:
+    status === 'running'
+      ? []
+      : [
+          { source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Templates\\Mensal.md', message: 'EMPTY_CONTENT', error_code: 'EMPTY_CONTENT' },
+          { source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Templates\\Reunião.md', message: 'EMPTY_CONTENT', error_code: 'EMPTY_CONTENT' },
+          { source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Anexos\\contrato-escaneado.pdf', message: 'PDF_PARSE_FAILED', error_code: 'PDF_PARSE_FAILED' },
+        ],
   cancel_requested: status === 'cancelled',
   files_per_second: 2.08,
   chunks_per_second: 8.33,
@@ -889,6 +1211,44 @@ const MOCK_VOICE_MODELS: VoiceModelInfo[] = [
     selectable: true,
   },
   {
+    id: 'sensevoice-small',
+    engine: 'sensevoice',
+    format: 'onnx',
+    repo_id: 'csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17',
+    revision: 'mock',
+    languages: ['zh', 'en', 'ja', 'ko', 'yue'],
+    license: 'Apache-2.0',
+    files: [{ path: 'model.int8.onnx', size: 239_549_735, sha256: 'mock' }],
+    installed: false,
+    size_bytes: 239_549_735,
+    label: 'SenseVoice Small',
+    description: 'Multilíngue (zh/en/ja/ko/yue), boa precisão.',
+    speed_tier: 'medio',
+    quality_tier: 'boa',
+    recommended: false,
+    supports_auto_language: false,
+    selectable: true,
+  },
+  {
+    id: 'sensevoice-gguf-q8',
+    engine: 'catalog-only',
+    format: 'gguf',
+    repo_id: 'handy-computer/SenseVoiceSmall-gguf',
+    revision: 'mock',
+    languages: ['zh', 'en', 'ja', 'ko', 'yue'],
+    license: 'Apache-2.0',
+    files: [{ path: 'model.gguf', size: 252_684_608, sha256: 'mock' }],
+    installed: false,
+    size_bytes: 252_684_608,
+    label: 'SenseVoice GGUF Q8',
+    description: 'Variante quantizada; menor, com precisão um pouco menor.',
+    speed_tier: 'rapido',
+    quality_tier: 'boa',
+    recommended: false,
+    supports_auto_language: false,
+    selectable: true,
+  },
+  {
     id: 'silero-vad',
     engine: 'silero',
     format: 'onnx',
@@ -926,6 +1286,22 @@ const mockVoiceModelDownload = (
 let mockWatcherActive = false;
 let mockWatcherDirectory: string | null = null;
 
+// Arquivos ignorados na indexação (mock).
+const MOCK_IGNORED_PATHS: IgnoredPath[] = [];
+
+// ─── Vaults (mock) ──────────────────────────────────────────────────────────
+const MOCK_VAULTS: Vault[] = [
+  { id: 'obsidian', name: 'Obsidian', icon: 'notes', color: 'violet', folders: ['C:/Notas/Obsidian'], embedding_model: 'chroma-default', created_at: '2026-10-18T12:00:00-03:00', sqlite_path: null, vector_store_dir: null, note_count: 42, roots: [{ root: 'D:\\Notas\\Obsidian', notes_count: 42 }] },
+  { id: 'culinaria', name: 'Culinária', icon: 'layers', color: 'amber', folders: ['C:/Notas/Receitas'], embedding_model: 'chroma-default', created_at: '2026-10-18T12:05:00-03:00', sqlite_path: null, vector_store_dir: null, note_count: 7, roots: [{ root: 'D:\\Notas\\Culinaria', notes_count: 7 }] },
+];
+let mockActiveVaultId = 'obsidian';
+
+const mockVaultId = (name: string): string =>
+  name.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'vault';
+
+// Conversas no navegador (sem PyWebView): o localStorage guarda o que o backend guardaria em conversations.json.
+export const CONVERSATIONS_STORAGE_KEY = 'escolio:conversations';
+
 export const bridge = {
   /**
    * Envia uma mensagem ao backend Python.
@@ -936,7 +1312,7 @@ export const bridge = {
     message: string,
     attachmentName?: string
   ): Promise<string> => {
-    if (isDesktopApp() && window.pywebview?.api) {
+    if ((await whenDesktopReady()) && window.pywebview?.api) {
       // Produção: delega ao backend Python via PyWebView
       return window.pywebview.api.sendMessage(message, attachmentName);
     }
@@ -944,15 +1320,59 @@ export const bridge = {
     return mockSendMessage(message);
   },
 
-  askCorpus: async (message: string, strategy?: AskStrategy): Promise<AskResult> => {
-    if (isDesktopApp() && window.pywebview?.api.askCorpus) {
-      return window.pywebview.api.askCorpus(message, strategy);
+  askCorpus: async (message: string, strategy?: AskStrategy, sourceRoot?: string | null): Promise<AskResult> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.askCorpus) {
+      // Sem pasta escolhida, o backend recebe só (message, strategy): corpus inteiro.
+      return sourceRoot
+        ? window.pywebview.api.askCorpus(message, strategy, sourceRoot)
+        : window.pywebview.api.askCorpus(message, strategy);
     }
     // Backend antigo (ou mocks de E2E) só expõem sendMessage: vira resposta sem citações.
-    if (isDesktopApp() && window.pywebview?.api.sendMessage) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.sendMessage) {
       return plainAskResult(message, await window.pywebview.api.sendMessage(message));
     }
     return mockAskCorpus(message, strategy);
+  },
+
+  /** Inicia a pergunta em segundo plano; a tela acompanha o progresso com pollAsk. */
+  startAsk: async (message: string, strategy?: AskStrategy, sourceRoot?: string | null): Promise<{ ask_id: string }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startAsk) {
+      return sourceRoot
+        ? window.pywebview.api.startAsk(message, strategy, sourceRoot)
+        : window.pywebview.api.startAsk(message, strategy);
+    }
+    return mockStartAsk(message, strategy);
+  },
+
+  /** Estado de uma pergunta iniciada com startAsk. */
+  pollAsk: async (askId: string): Promise<AskProgress> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.pollAsk) {
+      return window.pywebview.api.pollAsk(askId);
+    }
+    return mockPollAsk(askId);
+  },
+
+  /** Descarta a pergunta em andamento; o pollAsk dela deixa de encontrá-la. */
+  cancelAsk: async (askId: string): Promise<{ ok: boolean }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.cancelAsk) {
+      return window.pywebview.api.cancelAsk(askId);
+    }
+    mockAskJobs.delete(askId);
+    return { ok: true };
+  },
+
+  /** Aquece o modelo de resposta (Ollama): a próxima pergunta não espera o carregamento. */
+  warmAnswerModel: async (): Promise<{ ok: boolean; started: boolean }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.warmAnswerModel) {
+      return window.pywebview.api.warmAnswerModel();
+    }
+    return { ok: true, started: mockAnswer.provider === 'ollama' };
+  },
+
+  /** true quando o backend responde em streaming (startAsk e pollAsk); sem isso a tela usa askCorpus. */
+  supportsAskStreaming: async (): Promise<boolean> => {
+    if (await whenDesktopReady()) return Boolean(window.pywebview?.api.startAsk);
+    return true;
   },
 
   /**
@@ -961,7 +1381,7 @@ export const bridge = {
    * Em produção: chama window.pywebview.api.selectFolder().
    */
   selectFolder: async (): Promise<string> => {
-    if (isDesktopApp() && window.pywebview?.api) {
+    if ((await whenDesktopReady()) && window.pywebview?.api) {
       return window.pywebview.api.selectFolder();
     }
     // Mock de desenvolvimento: simula delay e retorna caminho fictício
@@ -974,7 +1394,7 @@ export const bridge = {
    * Em dev: retorna lista de arquivos fictícios.
    */
   scanVault: async (folderPath: string): Promise<MarkdownNodeRaw[]> => {
-    if (isDesktopApp() && window.pywebview?.api) {
+    if ((await whenDesktopReady()) && window.pywebview?.api) {
       return window.pywebview.api.scanVault(folderPath);
     }
     // Mock de desenvolvimento
@@ -994,7 +1414,7 @@ export const bridge = {
    * Em dev: no-op.
    */
   saveVaultPath: async (path: string): Promise<boolean> => {
-    if (isDesktopApp() && window.pywebview?.api) {
+    if ((await whenDesktopReady()) && window.pywebview?.api) {
       return window.pywebview.api.saveVaultPath(path);
     }
     // Mock: simula sucesso silencioso
@@ -1007,7 +1427,7 @@ export const bridge = {
    * Em dev: retorna string vazia.
    */
   loadVaultPath: async (): Promise<string> => {
-    if (isDesktopApp() && window.pywebview?.api) {
+    if ((await whenDesktopReady()) && window.pywebview?.api) {
       return window.pywebview.api.loadVaultPath();
     }
     // Mock: sem persistência em dev
@@ -1015,7 +1435,7 @@ export const bridge = {
   },
 
   indexVault: async (folderPath: string): Promise<IndexVaultResult> => {
-    if (isDesktopApp() && window.pywebview?.api.indexVault) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.indexVault) {
       return window.pywebview.api.indexVault(folderPath);
     }
     await new Promise((resolve) => setTimeout(resolve, 700));
@@ -1025,30 +1445,34 @@ export const bridge = {
       total_found: 5,
       indexed_count: 5,
       unchanged_count: 0,
+      removed_count: 0,
       failed_count: 0,
       skipped_count: 0,
     };
   },
 
   startIndexJob: async (folderPath: string, rebuild = false): Promise<IndexJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.startIndexJob) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startIndexJob) {
       return window.pywebview.api.startIndexJob(folderPath, rebuild);
     }
     console.debug(`[Bridge Mock] startIndexJob: ${folderPath} rebuild=${String(rebuild)}`);
     await new Promise((resolve) => setTimeout(resolve, 250));
+    mockJobPolls = 0;
     return mockIndexJob('running');
   },
 
   getIndexJob: async (jobId: string): Promise<IndexJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.getIndexJob) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getIndexJob) {
       return window.pywebview.api.getIndexJob(jobId);
     }
     console.debug(`[Bridge Mock] getIndexJob: ${jobId}`);
-    return mockIndexJob('running');
+    // O job de exemplo termina na quarta consulta (com as falhas de exemplo).
+    mockJobPolls += 1;
+    return mockIndexJob(mockJobPolls >= 4 ? 'completed' : 'running');
   },
 
   cancelIndexJob: async (jobId: string): Promise<IndexJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.cancelIndexJob) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.cancelIndexJob) {
       return window.pywebview.api.cancelIndexJob(jobId);
     }
     console.debug(`[Bridge Mock] cancelIndexJob: ${jobId}`);
@@ -1056,7 +1480,7 @@ export const bridge = {
   },
 
   startAudioCapture: async (): Promise<AudioJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.startAudioCapture) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startAudioCapture) {
       return window.pywebview.api.startAudioCapture();
     }
     console.debug('[Bridge Mock] startAudioCapture');
@@ -1065,7 +1489,7 @@ export const bridge = {
   },
 
   getAudioCapture: async (jobId: string): Promise<AudioJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.getAudioCapture) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getAudioCapture) {
       return window.pywebview.api.getAudioCapture(jobId);
     }
     console.debug(`[Bridge Mock] getAudioCapture: ${jobId}`);
@@ -1073,7 +1497,7 @@ export const bridge = {
   },
 
   stopAudioCapture: async (jobId: string): Promise<AudioJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.stopAudioCapture) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.stopAudioCapture) {
       return window.pywebview.api.stopAudioCapture(jobId);
     }
     console.debug(`[Bridge Mock] stopAudioCapture: ${jobId}`);
@@ -1082,7 +1506,7 @@ export const bridge = {
   },
 
   cancelAudioCapture: async (jobId: string): Promise<AudioJobSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.cancelAudioCapture) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.cancelAudioCapture) {
       return window.pywebview.api.cancelAudioCapture(jobId);
     }
     console.debug(`[Bridge Mock] cancelAudioCapture: ${jobId}`);
@@ -1090,7 +1514,7 @@ export const bridge = {
   },
 
   listVoiceModels: async (): Promise<VoiceModelInfo[]> => {
-    if (isDesktopApp() && window.pywebview?.api.listVoiceModels) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.listVoiceModels) {
       return window.pywebview.api.listVoiceModels();
     }
     console.debug('[Bridge Mock] listVoiceModels');
@@ -1098,7 +1522,7 @@ export const bridge = {
   },
 
   startVoiceModelDownload: async (modelId: string): Promise<VoiceModelDownloadSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.startVoiceModelDownload) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startVoiceModelDownload) {
       return window.pywebview.api.startVoiceModelDownload(modelId);
     }
     console.debug(`[Bridge Mock] startVoiceModelDownload: ${modelId}`);
@@ -1107,7 +1531,7 @@ export const bridge = {
   },
 
   getVoiceModelDownload: async (jobId: string): Promise<VoiceModelDownloadSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.getVoiceModelDownload) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getVoiceModelDownload) {
       return window.pywebview.api.getVoiceModelDownload(jobId);
     }
     console.debug(`[Bridge Mock] getVoiceModelDownload: ${jobId}`);
@@ -1115,7 +1539,7 @@ export const bridge = {
   },
 
   cancelVoiceModelDownload: async (jobId: string): Promise<VoiceModelDownloadSnapshot> => {
-    if (isDesktopApp() && window.pywebview?.api.cancelVoiceModelDownload) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.cancelVoiceModelDownload) {
       return window.pywebview.api.cancelVoiceModelDownload(jobId);
     }
     console.debug(`[Bridge Mock] cancelVoiceModelDownload: ${jobId}`);
@@ -1123,7 +1547,7 @@ export const bridge = {
   },
 
   startWatcher: async (folderPath: string): Promise<WatcherStartResult> => {
-    if (isDesktopApp() && window.pywebview?.api.startWatcher) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startWatcher) {
       return window.pywebview.api.startWatcher(folderPath);
     }
     console.debug(`[Bridge Mock] startWatcher: ${folderPath}`);
@@ -1133,7 +1557,7 @@ export const bridge = {
   },
 
   stopWatcher: async (): Promise<WatcherStartResult> => {
-    if (isDesktopApp() && window.pywebview?.api.stopWatcher) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.stopWatcher) {
       return window.pywebview.api.stopWatcher();
     }
     console.debug("[Bridge Mock] stopWatcher");
@@ -1143,21 +1567,14 @@ export const bridge = {
   },
 
   getWatcherStatus: async (): Promise<WatcherStatus> => {
-    if (isDesktopApp() && window.pywebview?.api.getWatcherStatus) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getWatcherStatus) {
       return window.pywebview.api.getWatcherStatus();
     }
     return { active: mockWatcherActive, directory: mockWatcherDirectory };
   },
 
-  pollWatcherEvents: async (): Promise<WatcherIngestionEvent[]> => {
-    if (isDesktopApp() && window.pywebview?.api.pollWatcherEvents) {
-      return window.pywebview.api.pollWatcherEvents();
-    }
-    return [];
-  },
-
   indexDroppedFiles: async (names: string[]): Promise<DroppedFilesEnqueueResult> => {
-    if (isDesktopApp() && window.pywebview?.api.indexDroppedFiles) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.indexDroppedFiles) {
       return window.pywebview.api.indexDroppedFiles(names);
     }
     // Fora do app desktop o navegador não expõe o caminho do arquivo.
@@ -1165,19 +1582,19 @@ export const bridge = {
   },
 
   pollDroppedFiles: async (): Promise<DroppedFileEvent[]> => {
-    if (isDesktopApp() && window.pywebview?.api.pollDroppedFiles) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.pollDroppedFiles) {
       return window.pywebview.api.pollDroppedFiles();
     }
     return [];
   },
 
-  getBackendSettings: async (): Promise<BackendSettings> => {
-    if (isDesktopApp() && window.pywebview?.api.getBackendSettings) {
-      return window.pywebview.api.getBackendSettings();
+  getBackendSettings: async (options?: { doctor?: boolean }): Promise<BackendSettings> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getBackendSettings) {
+      return window.pywebview.api.getBackendSettings(options?.doctor ?? true);
     }
     return {
-      answer_provider: 'extractive',
-      answer_model: 'llama3.1:8b',
+      answer_provider: mockAnswer.provider,
+      answer_model: mockAnswer.model,
       answer_base_url: null,
       answer_api_key_configured: false,
       local_env_path: 'pipeline\\.env',
@@ -1189,9 +1606,8 @@ export const bridge = {
         {
           key: 'cpu_rapido',
           label: 'CPU rápido',
-          description: 'Notebook sem GPU dedicada; usa embeddings Chroma e busca hybrid.',
+          description: 'Notebook sem GPU dedicada; usa o modelo de busca semântica Chroma e busca hybrid.',
           values: {
-            embedding_model: 'chroma-default',
             embedding_device: 'cpu',
             retrieval_top_k: 4,
           },
@@ -1203,7 +1619,7 @@ export const bridge = {
           {
             code: 'mock',
             status: 'warning',
-            message: 'Doctor mock; abra via PyWebView para diagnostico real.',
+            message: 'Doctor mock; abra via PyWebView para diagnóstico real.',
             action: null,
             latency_ms: 0,
             details: {},
@@ -1218,18 +1634,14 @@ export const bridge = {
         mockSettingRow({
           index: 1,
           key: 'embedding_device',
-          label: 'Device de embedding',
-          description: 'Onde roda o modelo de embedding quando ele suporta device.',
-          group: 'Embeddings',
+          label: 'Device do modelo de busca semântica',
+          description: 'Onde roda o modelo de busca semântica quando ele suporta device.',
+          group: 'Busca semântica',
           value_type: 'enum',
           layer: 'simple',
           value: 'cpu',
           display_value: 'cpu',
-          options: [
-            { value: 'auto', label: 'Auto' },
-            { value: 'cpu', label: 'CPU' },
-            { value: 'cuda', label: 'CUDA' },
-          ],
+          options: MOCK_DEVICE_OPTIONS,
           recommended: 'auto',
         }),
         mockSettingRow({
@@ -1240,13 +1652,29 @@ export const bridge = {
           group: 'LLM',
           value_type: 'enum',
           layer: 'simple',
-          value: 'extractive',
-          display_value: 'extractive',
+          value: mockAnswer.provider,
+          display_value: mockAnswer.provider,
           options: [
-            { value: 'extractive', label: 'Extractive' },
-            { value: 'ollama', label: 'Ollama' },
-            { value: 'lmstudio', label: 'LM Studio' },
-            { value: 'openai-compatible', label: 'OpenAI-compatible' },
+            {
+              value: 'extractive',
+              label: 'Extractive',
+              description: 'Sem IA generativa: monta a resposta com trechos das suas notas, cada um com a fonte. Rápido, offline e sem custo.',
+            },
+            {
+              value: 'ollama',
+              label: 'Ollama',
+              description: 'IA local pelo Ollama (localhost:11434): escreve a resposta a partir dos trechos sem enviar nada para fora. Precisa do Ollama aberto e de um modelo baixado.',
+            },
+            {
+              value: 'lmstudio',
+              label: 'LM Studio',
+              description: 'IA local pelo servidor do LM Studio (localhost:1234). Mesmo papel do Ollama: privado, mas exige o servidor ligado com um modelo carregado.',
+            },
+            {
+              value: 'openai-compatible',
+              label: 'OpenAI-compatible',
+              description: 'Qualquer API no padrão OpenAI (OpenAI, OpenRouter, Groq…). Usa a API key e envia os trechos recuperados para o serviço.',
+            },
           ],
           recommended: 'extractive',
         }),
@@ -1254,19 +1682,32 @@ export const bridge = {
           index: 3,
           key: 'answer_model',
           label: 'Modelo de resposta',
-          description: 'Modelo LLM usado pelo provider generativo.',
+          description: 'Modelo que escreve a resposta. Os de ~3B (como qwen2.5:3b) cabem numa GPU de 4 GB e respondem em segundos; 7B ou mais ficam lentos.',
           group: 'LLM',
           value_type: 'string',
           layer: 'simple',
-          value: 'llama3.1:8b',
-          display_value: 'llama3.1:8b',
-          recommended: 'llama3.1:8b',
+          value: mockAnswer.model,
+          display_value: mockAnswer.model,
+          recommended: 'qwen2.5:3b',
+        }),
+        mockSettingRow({
+          index: 3,
+          key: 'answer_base_url',
+          label: 'URL do provedor de resposta',
+          description: 'Endereço do servidor da IA; vazio usa o padrão do provedor escolhido.',
+          group: 'LLM',
+          value_type: 'string',
+          layer: 'advanced',
+          value: null,
+          display_value: '',
+          recommended: null,
+          placeholder: 'http://localhost:11434/v1',
         }),
         mockSettingRow({
           index: 4,
           key: 'retrieval_top_k',
-          label: 'Chunks por pergunta',
-          description: 'Quantos chunks o Ask recupera para montar evidências e resposta.',
+          label: 'Trechos por pergunta',
+          description: 'Quantos trechos o Ask recupera para montar evidências e resposta.',
           group: 'Retrieval',
           value_type: 'int',
           layer: 'advanced',
@@ -1328,19 +1769,31 @@ export const bridge = {
           layer: 'simple',
           value: 'auto',
           display_value: 'auto',
-          options: [
-            { value: 'auto', label: 'Auto' },
-            { value: 'cpu', label: 'CPU' },
-            { value: 'cuda', label: 'CUDA' },
-          ],
+          options: MOCK_DEVICE_OPTIONS,
           recommended: 'auto',
+        }),
+        mockSettingRow({
+          index: 8,
+          key: 'audio_input_device',
+          label: 'Microfone',
+          description: 'Dispositivo usado para gravar a pergunta por voz. "Padrão do sistema" segue o microfone padrão do Windows.',
+          group: 'Áudio',
+          value_type: 'string',
+          layer: 'simple',
+          value: null,
+          display_value: 'vazio',
+          options: [
+            { value: '', label: 'Padrão do sistema' },
+            { value: 'Headset (QCY H3 Pro)', label: 'Headset (QCY H3 Pro)' },
+          ],
+          recommended: null,
         }),
       ],
     };
   },
 
   getDoctor: async (): Promise<DoctorReport> => {
-    if (isDesktopApp() && window.pywebview?.api.getDoctor) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getDoctor) {
       return window.pywebview.api.getDoctor();
     }
     return {
@@ -1349,7 +1802,7 @@ export const bridge = {
         {
           code: 'mock',
           status: 'warning',
-          message: 'Doctor mock; abra via PyWebView para diagnostico real.',
+          message: 'Doctor mock; abra via PyWebView para diagnóstico real.',
           action: null,
           latency_ms: 0,
           details: {},
@@ -1363,16 +1816,15 @@ export const bridge = {
   },
 
   listSettingsPresets: async (): Promise<SettingPreset[]> => {
-    if (isDesktopApp() && window.pywebview?.api.listSettingsPresets) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.listSettingsPresets) {
       return window.pywebview.api.listSettingsPresets();
     }
     return [
       {
         key: 'cpu_rapido',
         label: 'CPU rápido',
-        description: 'Notebook sem GPU dedicada; usa embeddings Chroma e busca hybrid.',
+        description: 'Notebook sem GPU dedicada; usa o modelo de busca semântica Chroma e busca hybrid.',
         values: {
-          embedding_model: 'chroma-default',
           embedding_device: 'cpu',
           retrieval_top_k: 4,
         },
@@ -1381,7 +1833,7 @@ export const bridge = {
   },
 
   previewSettingsPreset: async (name: string): Promise<SettingPresetResult> => {
-    if (isDesktopApp() && window.pywebview?.api.previewSettingsPreset) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.previewSettingsPreset) {
       return window.pywebview.api.previewSettingsPreset(name);
     }
     const preset = (await bridge.listSettingsPresets()).find((item) => item.key === name);
@@ -1396,7 +1848,7 @@ export const bridge = {
   },
 
   applySettingsPreset: async (name: string): Promise<SettingPresetResult> => {
-    if (isDesktopApp() && window.pywebview?.api.applySettingsPreset) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.applySettingsPreset) {
       return window.pywebview.api.applySettingsPreset(name);
     }
     const preview = await bridge.previewSettingsPreset(name);
@@ -1404,43 +1856,47 @@ export const bridge = {
     return { ...preview, ok: true };
   },
 
-  testAnswerProvider: async (): Promise<AnswerProviderTestResult> => {
-    if (isDesktopApp() && window.pywebview?.api.testAnswerProvider) {
-      return window.pywebview.api.testAnswerProvider();
+  testAnswerProvider: async (draft: AnswerDraft = {}): Promise<AnswerProviderTestResult> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.testAnswerProvider) {
+      return window.pywebview.api.testAnswerProvider(draft.provider ?? null, draft.model ?? null, draft.baseUrl ?? null);
     }
     await new Promise((resolve) => setTimeout(resolve, 300));
+    const provider = draft.provider ?? mockAnswer.provider;
     return {
-      provider: 'extractive',
-      model: 'llama3.1:8b',
-      base_url: null,
-      status: 'not_applicable',
-      latency_ms: 0,
+      provider,
+      model: draft.model || mockAnswer.model,
+      base_url: draft.baseUrl || null,
+      status: provider === 'extractive' ? 'not_applicable' : 'ok',
+      latency_ms: provider === 'extractive' ? 0 : 840,
       error: null,
     };
   },
 
-  listAnswerModels: async (): Promise<ModelDiscoveryResult> => {
+  listAnswerModels: async (draft: AnswerDraft = {}): Promise<ModelDiscoveryResult> => {
+    const desktop = await whenDesktopReady();
     const pywebviewApi = globalThis.window?.pywebview?.api;
-    if (isDesktopApp() && pywebviewApi?.listAnswerModels) {
-      return pywebviewApi.listAnswerModels();
+    if (desktop && pywebviewApi?.listAnswerModels) {
+      return pywebviewApi.listAnswerModels(draft.provider ?? null, draft.baseUrl ?? null);
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
+    const provider = draft.provider ?? mockAnswer.provider;
+    // Modo navegador: Ollama com os modelos de exemplo; LM Studio desligado, para ver o aviso.
+    if (provider === 'ollama') {
+      return { provider, base_url: 'http://localhost:11434', status: 'ok', models: MOCK_LOCAL_MODELS, latency_ms: 12, cached: false, message: null };
+    }
     return {
-      provider: 'ollama',
-      base_url: 'http://localhost:11434',
-      status: 'ok',
-      models: [
-        { id: 'llama3.1:8b', label: 'llama3.1:8b', provider: 'ollama', details: { size: 4661224676 } },
-        { id: 'mistral:7b', label: 'mistral:7b', provider: 'ollama', details: {} },
-      ],
-      latency_ms: 12,
+      provider,
+      base_url: provider === 'lmstudio' ? 'http://localhost:1234/v1' : null,
+      status: provider === 'lmstudio' ? 'offline' : 'not_applicable',
+      models: [],
+      latency_ms: 4,
       cached: false,
-      message: null,
+      message: provider === 'lmstudio' ? 'Servidor indisponível ou timeout.' : null,
     };
   },
 
   saveApiKey: async (apiKey: string): Promise<SaveApiKeyResult> => {
-    if (isDesktopApp() && window.pywebview?.api.saveApiKey) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.saveApiKey) {
       return window.pywebview.api.saveApiKey(apiKey);
     }
     console.debug('[Bridge Mock] saveApiKey:', apiKey ? '<redacted>' : '<empty>');
@@ -1455,7 +1911,7 @@ export const bridge = {
     key: string,
     value: string | number | boolean | null
   ): Promise<{ ok: boolean }> => {
-    if (isDesktopApp() && window.pywebview?.api.saveBackendSetting) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.saveBackendSetting) {
       return window.pywebview.api.saveBackendSetting(key, value);
     }
     console.debug(`[Bridge Mock] saveBackendSetting: ${key}=${String(value)}`);
@@ -1463,15 +1919,47 @@ export const bridge = {
   },
 
   saveBackendSettings: async (values: Record<string, string>): Promise<BackendSettings> => {
-    if (isDesktopApp() && window.pywebview?.api.saveBackendSettings) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.saveBackendSettings) {
       return window.pywebview.api.saveBackendSettings(values);
     }
     console.debug('[Bridge Mock] saveBackendSettings:', values);
+    if (values.answer_provider) mockAnswer.provider = values.answer_provider;
+    if (values.answer_model) mockAnswer.model = values.answer_model;
     return bridge.getBackendSettings();
   },
 
+  /** Conversas salvas na abertura anterior (backend); no navegador, o localStorage. */
+  loadConversations: async (): Promise<SavedConversations | null> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.loadConversations) {
+      return window.pywebview.api.loadConversations();
+    }
+    const raw = window.localStorage.getItem(CONVERSATIONS_STORAGE_KEY);
+    return raw === null ? null : (JSON.parse(raw) as SavedConversations);
+  },
+
+  /** Grava as conversas (backend, ou localStorage no navegador). */
+  saveConversations: async (payload: SavedConversations): Promise<{ ok: boolean; message?: string }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.saveConversations) {
+      return window.pywebview.api.saveConversations(payload);
+    }
+    try {
+      window.localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(payload));
+      return { ok: true };
+    } catch {
+      return { ok: false, message: 'Armazenamento do navegador indisponível.' };
+    }
+  },
+
+  listCorpusRoots: async (): Promise<CorpusRoot[]> => {
+    if ((await whenDesktopReady())) {
+      // Backend sem o método devolve lista vazia, sem pastas inventadas.
+      return window.pywebview?.api.listCorpusRoots ? window.pywebview.api.listCorpusRoots() : [];
+    }
+    return MOCK_CORPUS_ROOTS.map((root) => ({ ...root }));
+  },
+
   listNotes: async (): Promise<NoteSummary[]> => {
-    if (isDesktopApp() && window.pywebview?.api.listNotes) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.listNotes) {
       return window.pywebview.api.listNotes();
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -1486,18 +1974,26 @@ export const bridge = {
     }));
   },
 
+  listNoteLinks: async (): Promise<NoteLink[]> => {
+    if (await whenDesktopReady()) {
+      // Backend sem o método devolve lista vazia: o grafo mostra só pastas e notas.
+      return window.pywebview?.api.listNoteLinks ? window.pywebview.api.listNoteLinks() : [];
+    }
+    return MOCK_NOTE_LINKS.map((link) => ({ ...link }));
+  },
+
   getNoteDetail: async (noteId: string): Promise<NoteDetail> => {
-    if (isDesktopApp() && window.pywebview?.api.getNoteDetail) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getNoteDetail) {
       return window.pywebview.api.getNoteDetail(noteId);
     }
     await new Promise((resolve) => setTimeout(resolve, 180));
     const note = MOCK_NOTES.find((item) => item.note_id === noteId);
-    if (!note) throw new Error(`Nota nao encontrada: ${noteId}`);
+    if (!note) throw new Error(`Nota não encontrada: ${noteId}`);
     return note;
   },
 
   deleteNote: async (noteId: string, confirmation: string): Promise<NoteDeleteResult> => {
-    if (isDesktopApp() && window.pywebview?.api.deleteNote) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.deleteNote) {
       return window.pywebview.api.deleteNote(noteId, confirmation);
     }
     if (confirmation !== 'APAGAR') {
@@ -1507,8 +2003,150 @@ export const bridge = {
     return { ok: true, note_id: noteId, deleted_vectors: 2 };
   },
 
+  removeCorpusRoot: async (root: string, confirmation: string): Promise<CorpusRootRemoveResult> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.removeCorpusRoot) {
+      return window.pywebview.api.removeCorpusRoot(root, confirmation);
+    }
+    if (confirmation !== 'REMOVER') {
+      return { ok: false, status: 'confirmation_required', message: 'Digite REMOVER para confirmar.' };
+    }
+    console.debug(`[Bridge Mock] removeCorpusRoot: ${root}`);
+    const index = MOCK_CORPUS_ROOTS.findIndex((item) => item.root === root);
+    const removed = index >= 0 ? MOCK_CORPUS_ROOTS.splice(index, 1)[0].notes_count : 0;
+    return { ok: true, removed_notes: removed };
+  },
+
+  // ─── Falhas da Fila: ignorar, voltar a indexar, tentar de novo, abrir ──────
+  listIgnoredPaths: async (): Promise<IgnoredPath[]> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.listIgnoredPaths) {
+      return window.pywebview.api.listIgnoredPaths();
+    }
+    return MOCK_IGNORED_PATHS.map((item) => ({ ...item }));
+  },
+
+  ignoreIndexPaths: async (paths: string[]) => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.ignoreIndexPaths) {
+      return window.pywebview.api.ignoreIndexPaths(paths);
+    }
+    for (const path of paths) {
+      if (!MOCK_IGNORED_PATHS.some((item) => item.path === path)) {
+        MOCK_IGNORED_PATHS.push({ path, reason: 'usuario', ignored_at: new Date().toISOString() });
+      }
+    }
+    return { ok: true, ignored: paths.length, removed_notes: 0 };
+  },
+
+  unignoreIndexPaths: async (paths: string[]) => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.unignoreIndexPaths) {
+      return window.pywebview.api.unignoreIndexPaths(paths);
+    }
+    const before = MOCK_IGNORED_PATHS.length;
+    const keep = MOCK_IGNORED_PATHS.filter((item) => !paths.includes(item.path));
+    MOCK_IGNORED_PATHS.splice(0, MOCK_IGNORED_PATHS.length, ...keep);
+    return { ok: true, restored: before - keep.length, queued: 0 };
+  },
+
+  retryIndexPaths: async (paths: string[]): Promise<RetryIndexResult> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.retryIndexPaths) {
+      return window.pywebview.api.retryIndexPaths(paths);
+    }
+    const results = paths.map((path) => ({
+      name: path.split(/[\\/]/).pop() ?? path,
+      source_path: path,
+      status: 'failed',
+      chunks: 0,
+      error_code: 'EMPTY_CONTENT',
+      message: 'EMPTY_CONTENT',
+    }));
+    return { ok: true, results };
+  },
+
+  openIndexPath: async (path: string, reveal = false) => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.openIndexPath) {
+      return window.pywebview.api.openIndexPath(path, reveal);
+    }
+    console.debug(`[Bridge Mock] openIndexPath: ${path} reveal=${reveal}`);
+    return { ok: true };
+  },
+
+  listVaults: async (): Promise<VaultList> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.listVaults) {
+      return window.pywebview.api.listVaults();
+    }
+    return { active: mockActiveVaultId, vaults: MOCK_VAULTS.map((vault) => ({ ...vault })) };
+  },
+
+  createVault: async (name: string, icon: VaultIconId, color: VaultColor, folders: string[]): Promise<VaultMutationResult> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.createVault) {
+      return window.pywebview.api.createVault(name, icon, color, folders);
+    }
+    if (!name.trim()) {
+      return { ok: false, message: 'O nome da vault não pode ser vazio.' };
+    }
+    const id = mockVaultId(name);
+    const vault: Vault = {
+      id: MOCK_VAULTS.some((item) => item.id === id) ? `${id}-2` : id,
+      name: name.trim(),
+      icon,
+      color,
+      folders,
+      embedding_model: 'chroma-default',
+      created_at: new Date().toISOString(),
+      sqlite_path: null,
+      vector_store_dir: null,
+      note_count: 0,
+    };
+    MOCK_VAULTS.push(vault);
+    return { ok: true, vault };
+  },
+
+  updateVault: async (vaultId: string, patch: VaultPatch): Promise<VaultMutationResult> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.updateVault) {
+      return window.pywebview.api.updateVault(vaultId, patch);
+    }
+    const vault = MOCK_VAULTS.find((item) => item.id === vaultId);
+    if (!vault) {
+      return { ok: false, message: `vault não encontrada: ${vaultId}` };
+    }
+    Object.assign(vault, patch);
+    return { ok: true, vault: { ...vault } };
+  },
+
+  deleteVault: async (vaultId: string, confirm: string): Promise<VaultMutationResult> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.deleteVault) {
+      return window.pywebview.api.deleteVault(vaultId, confirm);
+    }
+    const index = MOCK_VAULTS.findIndex((item) => item.id === vaultId);
+    if (index < 0) {
+      return { ok: false, message: `vault não encontrada: ${vaultId}` };
+    }
+    if (MOCK_VAULTS.length === 1) {
+      return { ok: false, message: 'Não é possível excluir a única vault.' };
+    }
+    if (confirm !== MOCK_VAULTS[index].name) {
+      return { ok: false, message: 'Digite o nome da vault para confirmar a exclusão.' };
+    }
+    MOCK_VAULTS.splice(index, 1);
+    if (mockActiveVaultId === vaultId) {
+      mockActiveVaultId = MOCK_VAULTS[0].id;
+    }
+    return { ok: true, active: mockActiveVaultId };
+  },
+
+  selectVault: async (vaultId: string): Promise<VaultMutationResult> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.selectVault) {
+      return window.pywebview.api.selectVault(vaultId);
+    }
+    const vault = MOCK_VAULTS.find((item) => item.id === vaultId);
+    if (!vault) {
+      return { ok: false, message: `vault não encontrada: ${vaultId}` };
+    }
+    mockActiveVaultId = vault.id;
+    return { ok: true, vault: { ...vault } };
+  },
+
   reindexNote: async (noteId: string): Promise<NoteReindexResult> => {
-    if (isDesktopApp() && window.pywebview?.api.reindexNote) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.reindexNote) {
       return window.pywebview.api.reindexNote(noteId);
     }
     await new Promise((resolve) => setTimeout(resolve, 350));
@@ -1522,7 +2160,7 @@ export const bridge = {
   },
 
   selectBenchmarkSuite: async (): Promise<string> => {
-    if (isDesktopApp() && window.pywebview?.api.selectBenchmarkSuite) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.selectBenchmarkSuite) {
       return window.pywebview.api.selectBenchmarkSuite();
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -1530,7 +2168,7 @@ export const bridge = {
   },
 
   runBenchmarkCompare: async (suitePath: string): Promise<BenchmarkCompareResult> => {
-    if (isDesktopApp() && window.pywebview?.api.runBenchmarkCompare) {
+    if ((await whenDesktopReady()) && window.pywebview?.api.runBenchmarkCompare) {
       return window.pywebview.api.runBenchmarkCompare(suitePath);
     }
     console.debug(`[Bridge Mock] runBenchmarkCompare: ${suitePath}`);

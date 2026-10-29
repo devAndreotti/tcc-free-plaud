@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import get_args
 
 import typer
 from rich.console import Console
@@ -13,6 +14,7 @@ from escolio.benchmark.datasets import (
     load_benchmark_suite,
 )
 from escolio.benchmark.grounded import evaluate_grounded_answers
+from escolio.benchmark.ia_report import build_ia_report
 from escolio.benchmark.reports import (
     export_benchmark_comparison_csv,
     export_benchmark_comparison_json,
@@ -20,6 +22,7 @@ from escolio.benchmark.reports import (
     export_benchmark_json,
 )
 from escolio.benchmark.runners import (
+    BenchmarkComparisonResult,
     benchmark_compare_dir,
     compare_benchmark_suite,
     run_benchmark,
@@ -27,6 +30,7 @@ from escolio.benchmark.runners import (
 from escolio.benchmark.service import build_settings_snapshot
 from escolio.ingest.loaders import load_document
 from escolio.notes.structurer import structure_document
+from escolio.providers.answer import AnswerProviderName, get_answer_provider
 from escolio.providers.embed import (
     EmbeddingConfigurationError,
     get_embedder,
@@ -42,6 +46,7 @@ from escolio.storage.vector import LocalVectorStore
 
 app = typer.Typer(help="Comandos de benchmark experimental.", no_args_is_help=True)
 console = Console()
+ANSWER_PROVIDER_NAMES = get_args(AnswerProviderName)
 
 
 @app.command("run-demo")
@@ -171,6 +176,9 @@ def compare(
     chunk_size: int = typer.Option(800, '--chunk-size', min=1),
     overlap: int = typer.Option(120, '--overlap', min=0),
     embedding_model: str | None = typer.Option(None, '--embedding-model', help="Override do embedding model para a comparacao vetorial."),
+    answer_provider: str = typer.Option('extractive', '--answer-provider', help="Resposta do chat: extractive (padrão), ollama, lmstudio ou openai-compatible."),
+    answer_model: str | None = typer.Option(None, '--answer-model', help="Modelo do provider generativo (padrão: answer_model das settings)."),
+    answer_base_url: str | None = typer.Option(None, '--answer-base-url', help="Base URL do provider generativo (padrão: answer_base_url das settings ou a do provider)."),
     hybrid_rank_constant: int = typer.Option(DEFAULT_HYBRID_RANK_CONSTANT, '--hybrid-rank-constant', min=1, help='Constante da rank fusion para strategy=hybrid.'),
     hybrid_lexical_weight: float = typer.Option(DEFAULT_HYBRID_LEXICAL_WEIGHT, '--hybrid-lexical-weight', min=0.0, help='Peso do ranking lexical para strategy=hybrid.'),
     hybrid_vector_weight: float = typer.Option(DEFAULT_HYBRID_VECTOR_WEIGHT, '--hybrid-vector-weight', min=0.0, help='Peso do ranking vetorial para strategy=hybrid.'),
@@ -188,6 +196,20 @@ def compare(
     except EmbeddingConfigurationError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from None
+    if answer_provider not in ANSWER_PROVIDER_NAMES:
+        raise typer.BadParameter(f"answer-provider deve ser um de: {', '.join(ANSWER_PROVIDER_NAMES)}.")
+    if answer_provider == 'extractive' and (answer_model or answer_base_url):
+        raise typer.BadParameter('--answer-model e --answer-base-url exigem --answer-provider diferente de extractive.')
+    # Mesmo provider que o app monta em tui/actions.py; sem --answer-provider, fica o extrativo de antes.
+    answer_llm = get_answer_provider(
+        answer_provider,  # type: ignore[arg-type]
+        model=answer_model or settings.answer_model,
+        base_url=answer_base_url or settings.answer_base_url,
+        api_key=settings.answer_api_key,
+        temperature=settings.answer_temperature,
+        max_tokens=settings.answer_max_tokens,
+        timeout_seconds=settings.answer_timeout_seconds,
+    )
     compare_dir = benchmark_compare_dir(settings.results_dir, suite.suite_name)
     connection = init_sqlite(compare_dir / 'benchmark.sqlite3')
     vector_store = LocalVectorStore(compare_dir, collection_name=f'{suite.suite_name}_compare')
@@ -209,6 +231,7 @@ def compare(
             hybrid_lexical_pool=hybrid_lexical_pool,
             hybrid_vector_pool=hybrid_vector_pool,
             settings_snapshot=build_settings_snapshot(settings),
+            answer_provider=answer_llm,
         )
         payload = result.model_dump(mode='json')
         if export:
@@ -220,3 +243,22 @@ def compare(
         typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
     finally:
         connection.close()
+
+
+@app.command("report-ia")
+def report_ia(
+    extractive_path: Path = typer.Option(..., '--extractive', help="JSON do compare com a resposta extrativa."),
+    generativo_path: Path = typer.Option(..., '--generativo', help="JSON do compare com o provider generativo."),
+    saida: Path = typer.Option(..., '--saida', help="Arquivo Markdown de saída."),
+) -> None:
+    """Monta o relatório em Markdown com a IA local contra o extractive."""
+    extractive = BenchmarkComparisonResult.model_validate_json(extractive_path.read_text(encoding='utf-8'))
+    generativo = BenchmarkComparisonResult.model_validate_json(generativo_path.read_text(encoding='utf-8'))
+    try:
+        markdown = build_ia_report(extractive, generativo)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from None
+    saida.parent.mkdir(parents=True, exist_ok=True)
+    saida.write_text(markdown, encoding='utf-8', newline='\n')
+    typer.echo(json.dumps({'ok': True, 'saida': str(saida)}, ensure_ascii=True, indent=2))

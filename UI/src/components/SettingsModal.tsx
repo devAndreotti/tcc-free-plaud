@@ -1,10 +1,9 @@
-import { useContext, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { readThemeChoice, saveThemeChoice, type ThemeChoice } from '../theme';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangleIcon,
   CheckCircleIcon,
-  ChevronRightIcon,
   CodeIcon,
   ContrastIcon,
   DownloadIcon,
@@ -16,13 +15,17 @@ import {
   XCircleIcon,
   XIcon,
 } from './Icons';
+import MomentumRail from './MomentumRail';
 import Select from './Select';
-import { useVaultContext } from '../hooks/useVaultContext';
-import { QueueContext } from '../contexts/QueueContextObject';
+import VaultsTab from './VaultsTab';
+import { VaultGlyph } from './VaultGlyph';
+import { useVaults } from '../hooks/useVaults';
+import { checkLabel, groupChecks } from '../lib/doctorChecks';
 import {
   bridge,
   type BackendSettings,
   type ModelDiscoveryResult,
+  type SettingOption,
   type SettingRow,
   type VoiceModelDownloadSnapshot,
   type VoiceModelInfo,
@@ -41,25 +44,63 @@ interface SettingsModalProps {
 // Chaves do catálogo que pertencem à aba IA (o resto de layer não-secreto vai para Avançado)
 const IA_CATALOG_KEYS = ['answer_provider', 'answer_model', 'answer_base_url'];
 
-// Chaves de preset que não são editáveis e por isso não estão no catálogo.
-const PRESET_KEY_LABELS: Record<string, string> = { embedding_model: 'Modelo de embedding' };
+// Chaves que o desktop não mostra nem grava: o embedding em uso é o da vault ativa (config.py, _apply_active_vault), e a pasta padrão do corpus só é lida pela TUI.
+const DESKTOP_HIDDEN_KEYS = ['embedding_model', 'default_corpus_path'];
 
 const MODEL_STATUS: Record<string, string> = { offline: 'offline', unauthorized: 'sem autorização', error: 'erro' };
 
-export type SettingsTab = 'geral' | 'vault' | 'ia' | 'voz' | 'avancado' | 'aparencia';
+// URL que o backend usa com o campo vazio (providers/answer.py::_default_base_url).
+const PROVIDER_DEFAULT_URL: Record<string, string> = {
+  ollama: 'http://localhost:11434/v1',
+  lmstudio: 'http://localhost:1234/v1',
+  'openai-compatible': 'https://api.openai.com/v1',
+};
+const PROVIDER_LABEL: Record<string, string> = { ollama: 'Ollama', lmstudio: 'LM Studio', 'openai-compatible': 'provedor' };
+// IA local: os modelos instalados aparecem sozinhos ao abrir a aba (remoto só lista no botão).
+const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio']);
+
+// "3.1B · Q4_K_M · 2,3 GB" com o que o Ollama informa; o LM Studio não manda esses dados.
+const modelDescription = (details: Record<string, unknown>) => {
+  const size = typeof details.size === 'number'
+    ? `${(details.size / 1e9).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} GB`
+    : null;
+  return [details.parameter_size, details.quantization_level, size].filter(Boolean).join(' · ') || undefined;
+};
+
+export type SettingsTab = 'geral' | 'vaults' | 'ia' | 'voz' | 'avancado' | 'aparencia';
 
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: 'geral', label: 'Geral' },
-  { id: 'vault', label: 'Vault' },
+  { id: 'vaults', label: 'Vaults' },
   { id: 'ia', label: 'IA' },
   { id: 'voz', label: 'Voz' },
   { id: 'avancado', label: 'Avançado' },
   { id: 'aparencia', label: 'Aparência' },
 ];
 
+// Avançado fica escondido: "Desbloquear avançado" libera a aba depois de alguns cliques, e a liberação fica gravada.
+const ADVANCED_UNLOCK_CLICKS = 5;
+const ADVANCED_UNLOCK_KEY = 'escolio.avancadoLiberado';
+
+function readAdvancedUnlocked(): boolean {
+  try {
+    return window.localStorage.getItem(ADVANCED_UNLOCK_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveAdvancedUnlocked(): void {
+  try {
+    window.localStorage.setItem(ADVANCED_UNLOCK_KEY, '1');
+  } catch {
+    // Sem storage (modo privado): a liberação vale só até fechar o app.
+  }
+}
+
 const TAB_ICONS: Record<SettingsTab, ComponentType<{ size?: number }>> = {
   geral: SlidersIcon,
-  vault: VaultIcon,
+  vaults: VaultIcon,
   ia: StarsIcon,
   voz: MicIcon,
   avancado: CodeIcon,
@@ -77,6 +118,9 @@ const Meter = ({ level, label }: { level: number; label: string }) => (
   </span>
 );
 
+// Aviso flutuante: sucesso some sozinho; erro fica até fechar.
+type Toast = { tone: 'ok' | 'error'; text: string };
+
 const draftsFrom = (settings: BackendSettings) =>
   Object.fromEntries(
     settings.settings_catalog
@@ -90,37 +134,75 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [backendSettings, setBackendSettings] = useState<BackendSettings | null>(null);
   const [settingDrafts, setSettingDrafts] = useState<Record<string, string>>({});
   const [isSavingApiKey, setIsSavingApiKey] = useState(false);
+  const [isConfirmingKeyRemoval, setIsConfirmingKeyRemoval] = useState(false);
+  const [isConfirmingClose, setIsConfirmingClose] = useState(false);
   const [isSavingBackendSettings, setIsSavingBackendSettings] = useState(false);
   const [applyingPreset, setApplyingPreset] = useState('');
   const [isTestingProvider, setIsTestingProvider] = useState(false);
   const [isListingModels, setIsListingModels] = useState(false);
   const [modelDiscovery, setModelDiscovery] = useState<ModelDiscoveryResult | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>('voz');
-  const [operationStatus, setOperationStatus] = useState('');
+  const [toast, setToast] = useState<Toast | null>(null);
   const [voiceModels, setVoiceModels] = useState<VoiceModelInfo[]>([]);
   const [downloadJob, setDownloadJob] = useState<VoiceModelDownloadSnapshot | null>(null);
   const [downloadError, setDownloadError] = useState('');
   const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice);
+  const [advancedUnlocked, setAdvancedUnlocked] = useState(readAdvancedUnlocked);
+  const [advancedClicks, setAdvancedClicks] = useState(0);
+  // Sem a aba liberada, "Avançado" não aparece e nunca é o painel exibido.
+  const currentTab: SettingsTab = activeTab === 'avancado' && !advancedUnlocked ? 'geral' : activeTab;
+
+  const handleAdvancedUnlockClick = () => {
+    if (advancedClicks + 1 < ADVANCED_UNLOCK_CLICKS) {
+      setAdvancedClicks(advancedClicks + 1);
+      return;
+    }
+    saveAdvancedUnlocked();
+    setAdvancedUnlocked(true);
+    setAdvancedClicks(0);
+  };
+
+  // Esconde o Avançado de novo e apaga a liberação gravada.
+  const handleHideAdvanced = () => {
+    try {
+      window.localStorage.removeItem(ADVANCED_UNLOCK_KEY);
+    } catch {
+      // Sem storage não há liberação gravada para apagar.
+    }
+    setAdvancedUnlocked(false);
+    setAdvancedClicks(0);
+    // Sem isso, desbloquear de novo abriria direto a aba que ficou marcada como ativa.
+    if (activeTab === 'avancado') setActiveTab('geral');
+  };
+
+  const { active } = useVaults();
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- abre na aba pedida por quem chamou o modal.
     if (isOpen && initialTab) setActiveTab(initialTab);
   }, [isOpen, initialTab]);
 
-  // Consome o contexto global do vault
-  const { vaultPath, selectVault, isScanning } = useVaultContext();
-  const isSelectingVault = isScanning;
-  // Opcional: sem QueueProvider (testes), o link só navega.
-  const queue = useContext(QueueContext);
+
+  const pendingChanges = useMemo(() => {
+    if (!backendSettings) return 0;
+    const saved = draftsFrom(backendSettings);
+    return Object.keys(saved).filter((key) => (settingDrafts[key] ?? '') !== saved[key]).length;
+  }, [backendSettings, settingDrafts]);
+
+  // Com rascunho pendente, fechar pede confirmação antes de descartar.
+  const requestClose = useCallback(() => {
+    if (pendingChanges > 0) setIsConfirmingClose(true);
+    else onClose();
+  }, [pendingChanges, onClose]);
 
   // Fecha o modal ao pressionar Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') requestClose();
     };
     if (isOpen) document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, requestClose]);
 
   // Foca o modal quando abre (acessibilidade)
   useEffect(() => {
@@ -130,11 +212,19 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [isRunningDoctor, setIsRunningDoctor] = useState(false);
 
   useEffect(() => {
+    if (toast?.tone !== 'ok') return undefined;
+    const timer = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
     if (!isOpen) return;
     bridge.getBackendSettings()
       .then((settings) => {
         setBackendSettings(settings);
         setSettingDrafts(draftsFrom(settings));
+        setIsConfirmingKeyRemoval(false);
+        setIsConfirmingClose(false);
       })
       .catch((error) => {
         console.error('[SettingsModal] Erro ao carregar settings do backend:', error);
@@ -148,17 +238,32 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
       const settings = await bridge.getBackendSettings();
       setBackendSettings((prev) => (prev ? { ...prev, doctor: settings.doctor, notes_count: settings.notes_count, sqlite_chunks_count: settings.sqlite_chunks_count } : settings));
     } catch (error) {
-      setOperationStatus(error instanceof Error ? error.message : 'Falha ao rodar o diagnóstico.');
+      setToast({ tone: 'error', text: error instanceof Error ? error.message : 'Falha ao rodar o diagnóstico.' });
     } finally {
       setIsRunningDoctor(false);
     }
   };
 
-  const pendingChanges = useMemo(() => {
-    if (!backendSettings) return 0;
-    const saved = draftsFrom(backendSettings);
-    return Object.keys(saved).filter((key) => (settingDrafts[key] ?? '') !== saved[key]).length;
-  }, [backendSettings, settingDrafts]);
+  // Provedor e URL que estão na tela (ainda não salvos): Testar e Listar usam estes.
+  const draftProvider = settingDrafts.answer_provider || backendSettings?.answer_provider || 'extractive';
+  const draftBaseUrl = settingDrafts.answer_base_url ?? '';
+
+  // IA local: lista os modelos instalados ao abrir a aba e ao trocar provedor ou URL.
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'ia' || !LOCAL_PROVIDERS.has(draftProvider)) return undefined;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      bridge.listAnswerModels({ provider: draftProvider, baseUrl: draftBaseUrl })
+        .then((result) => {
+          if (!cancelled) setModelDiscovery(result);
+        })
+        .catch((error) => console.error('[SettingsModal] Erro ao listar modelos:', error));
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isOpen, activeTab, draftProvider, draftBaseUrl]);
 
   // Carrega o catálogo de modelos de voz (com estado instalado) quando o modal abre.
   useEffect(() => {
@@ -237,30 +342,22 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     }
   };
 
-  // Chama o contexto para abrir o seletor e escanear automaticamente
-  const handleSelectVault = async () => {
-    await selectVault();
-  };
-
-  const handleOpenQueue = () => {
-    if (queue && !queue.folderPath && vaultPath) queue.setFolderPath(vaultPath);
-    onOpenQueue?.();
-  };
-
-  const handleSaveApiKey = async () => {
+  // Vazio apaga a chave no backend: só o botão Remover chave manda campo vazio.
+  const handleSaveApiKey = async (value: string) => {
     if (isSavingApiKey) return;
     setIsSavingApiKey(true);
     try {
-      const result = await bridge.saveApiKey(apiKey);
+      const result = await bridge.saveApiKey(value);
       setApiKey('');
-      setOperationStatus(result.configured ? `API key salva em ${result.local_env_path}` : `API key removida de ${result.local_env_path}`);
+      setToast({ tone: 'ok', text: result.configured ? 'API key salva no .env local.' : 'API key removida do .env local.' });
       const settings = await bridge.getBackendSettings();
       setBackendSettings(settings);
     } catch (error) {
       console.error('[SettingsModal] Erro ao salvar API key:', error);
-      setOperationStatus('Erro ao salvar API key.');
+      setToast({ tone: 'error', text: 'Não foi possível salvar a API key.' });
     } finally {
       setIsSavingApiKey(false);
+      setIsConfirmingKeyRemoval(false);
     }
   };
 
@@ -268,7 +365,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     if (!backendSettings || isSavingBackendSettings) return;
     setIsSavingBackendSettings(true);
     try {
-      const editableRows = backendSettings.settings_catalog.filter((row) => !row.secret);
+      const editableRows = backendSettings.settings_catalog.filter((row) => !row.secret && !DESKTOP_HIDDEN_KEYS.includes(row.key));
       const values = Object.fromEntries(
         editableRows.map((row) => [row.key, settingDrafts[row.key] ?? ''])
       );
@@ -281,14 +378,13 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
             .map((row) => [row.key, row.value === null ? '' : String(row.value)])
         )
       );
-      setOperationStatus('Configurações salvas.');
+      setToast({ tone: 'ok', text: 'Configurações salvas.' });
     } catch (error) {
       console.error('[SettingsModal] Erro ao salvar settings do backend:', error);
-      setOperationStatus(
-        error instanceof Error
-          ? `Erro ao salvar configurações: ${error.message}`
-          : 'Erro ao salvar configurações do backend.'
-      );
+      setToast({
+        tone: 'error',
+        text: error instanceof Error ? `Não foi possível salvar: ${error.message}` : 'Não foi possível salvar as configurações.',
+      });
     } finally {
       setIsSavingBackendSettings(false);
     }
@@ -312,10 +408,10 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     try {
       const result = await bridge.applySettingsPreset(presetKey);
       await refreshBackendSettings();
-      setOperationStatus(`Preset ${result.preset.label} aplicado.`);
+      setToast({ tone: 'ok', text: `Preset ${result.preset.label} aplicado.` });
     } catch (error) {
       console.error('[SettingsModal] Erro ao aplicar preset:', error);
-      setOperationStatus('Erro ao aplicar preset.');
+      setToast({ tone: 'error', text: 'Não foi possível aplicar o preset.' });
     } finally {
       setApplyingPreset('');
     }
@@ -325,15 +421,20 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     if (isTestingProvider) return;
     setIsTestingProvider(true);
     try {
-      const result = await bridge.testAnswerProvider();
-      setOperationStatus(
+      const result = await bridge.testAnswerProvider({
+        provider: draftProvider,
+        model: settingDrafts.answer_model ?? '',
+        baseUrl: draftBaseUrl,
+      });
+      const name = PROVIDER_LABEL[result.provider] ?? result.provider;
+      setToast(
         result.error
-          ? `O teste do ${result.provider} falhou: ${result.error}`
-          : `${result.provider} respondeu em ${result.latency_ms} ms.`
+          ? { tone: 'error', text: `O teste do ${name} falhou: ${result.error}` }
+          : { tone: 'ok', text: `${name} respondeu em ${result.latency_ms} ms com ${result.model}.` }
       );
     } catch (error) {
       console.error('[SettingsModal] Erro ao testar provider:', error);
-      setOperationStatus('Erro ao testar provider.');
+      setToast({ tone: 'error', text: 'Não foi possível testar o provedor.' });
     } finally {
       setIsTestingProvider(false);
     }
@@ -342,21 +443,22 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const handleListModels = async () => {
     if (isListingModels) return;
     setIsListingModels(true);
-    setOperationStatus('');
+    setToast(null);
     try {
-      // O resultado aparece logo abaixo dos botões; a barra de status fica para erros.
-      setModelDiscovery(await bridge.listAnswerModels());
+      // O resultado vira a lista do campo Modelo; o aviso flutuante fica para erros.
+      setModelDiscovery(await bridge.listAnswerModels({ provider: draftProvider, baseUrl: draftBaseUrl }));
     } catch (error) {
       console.error('[SettingsModal] Erro ao listar modelos:', error);
-      setOperationStatus('Erro ao listar modelos.');
+      setToast({ tone: 'error', text: 'Não foi possível listar os modelos.' });
     } finally {
       setIsListingModels(false);
     }
   };
 
-  const handleSelectModel = (modelId: string) => {
-    setSettingDrafts((prev) => ({ ...prev, answer_model: modelId }));
-    setOperationStatus(`Modelo ${modelId} escolhido. Clique em Salvar para gravar.`);
+  const discardDrafts = () => {
+    if (backendSettings) setSettingDrafts(draftsFrom(backendSettings));
+    setDownloadJob(null);
+    setDownloadError('');
   };
 
   // Estado de instalado/baixando/erro de UM modelo de voz - reusado tanto
@@ -407,24 +509,32 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     );
   };
 
-  const renderSettingRow = (row: SettingRow, overrideOptions?: { value: string; label: string; disabled?: boolean }[]) => (
+  const renderSettingRow = (row: SettingRow, overrideOptions?: (SettingOption & { disabled?: boolean })[]) => {
+    const options = overrideOptions ?? row.options;
+    const draft = settingDrafts[row.key] ?? '';
+    const recommended =
+      row.recommended === null || row.recommended === undefined || row.recommended === ''
+        ? null
+        : options.find((option) => option.value === String(row.recommended))?.label ?? String(row.recommended);
+    const choice = options.find((option) => option.value === draft)?.description;
+    return (
     <div key={row.key} className="settings-item settings-item--stacked">
       <div className="settings-item__info">
-        <span className="settings-item__label">{row.label}</span>
-        <span className="settings-item__description">
-          {row.description}
-          {row.recommended !== null && ` · recomendado: ${row.recommended}`}
+        <span className="settings-item__head">
+          <span className="settings-item__label">{row.label}</span>
+          {recommended && <span className="settings-item__rec">Recomendado: {recommended}</span>}
         </span>
+        <span className="settings-item__description">{row.description}</span>
         {row.warning && (
           <span className="settings-warning">{row.warning}</span>
         )}
       </div>
 
-      {(overrideOptions ?? row.options).length > 0 ? (
+      {options.length > 0 ? (
         <Select
           className="settings-control-wide"
-          value={settingDrafts[row.key] ?? ''}
-          options={overrideOptions ?? row.options}
+          value={draft}
+          options={options}
           ariaLabel={row.label}
           onChange={(value) =>
             setSettingDrafts((prev) => ({ ...prev, [row.key]: value }))
@@ -458,11 +568,15 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
           }
         />
       )}
+      {choice && <p className="settings-item__choice">{choice}</p>}
     </div>
-  );
+    );
+  };
 
   if (!isOpen) return null;
 
+  const doctor = backendSettings?.doctor;
+  const doctorTotal = doctor ? doctor.ok_count + doctor.warning_count + doctor.error_count : 0;
   const audioRows = backendSettings?.settings_catalog.filter((row) => row.group === 'Áudio' && !row.secret) ?? [];
   const audioModelRow = audioRows.find((row) => row.key === 'audio_model') ?? null;
   const audioLanguageRow = audioRows.find((row) => row.key === 'audio_language') ?? null;
@@ -479,18 +593,42 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
       : false,
   }));
   const catalogLabel = (key: string) =>
-    backendSettings?.settings_catalog.find((row) => row.key === key)?.label ?? PRESET_KEY_LABELS[key] ?? key;
+    backendSettings?.settings_catalog.find((row) => row.key === key)?.label ?? key;
   // Modelo, URL, API key, Testar e Listar só existem para provedores generativos.
-  const isGenerative = (settingDrafts.answer_provider || backendSettings?.answer_provider || 'extractive') !== 'extractive';
+  const isGenerative = draftProvider !== 'extractive';
+  const needsApiKey = draftProvider === 'openai-compatible';
+  const providerLabel = PROVIDER_LABEL[draftProvider] ?? draftProvider;
+  // Lista de modelos só vale para o provedor que está na tela (trocar de provedor descarta a anterior).
+  const discovered = modelDiscovery?.provider === draftProvider ? modelDiscovery : null;
+  const draftModel = settingDrafts.answer_model ?? '';
+  // "qchat" e "qchat:latest" são o mesmo modelo no Ollama: a opção fica com a grafia salva.
+  const isDraftModel = (id: string) => id === draftModel || id === `${draftModel}:latest`;
+  const modelOptions: SettingOption[] = (discovered?.models ?? []).map((model) => ({
+    value: isDraftModel(model.id) ? draftModel : model.id,
+    label: model.label,
+    description: modelDescription(model.details),
+  }));
+  if (modelOptions.length > 0 && draftModel && !modelOptions.some((option) => option.value === draftModel)) {
+    modelOptions.push({ value: draftModel, label: draftModel, description: `Não está instalado no ${providerLabel}: escolha um da lista.` });
+  }
   const iaCatalogRows = backendSettings?.settings_catalog.filter((row) => IA_CATALOG_KEYS.includes(row.key) && !row.secret) ?? [];
   const advancedRows = backendSettings?.settings_catalog.filter(
-    (row) => !row.secret && row.group !== 'Áudio' && !IA_CATALOG_KEYS.includes(row.key)
+    (row) => !row.secret && row.group !== 'Áudio' && !IA_CATALOG_KEYS.includes(row.key) && !DESKTOP_HIDDEN_KEYS.includes(row.key)
   ) ?? [];
 
   // Renderiza diretamente no document.body via Portal.
   // O overlay usa display:flex para centralizar o modal de forma confiável.
   return createPortal(
     <div className="modal-overlay">
+      {/* Fundo clicável fecha o modal. Botão nativo atrás do card: arrastar de dentro do card
+          para fora não dispara o clique nele (o click cai no overlay, ancestral comum). */}
+      <button
+        type="button"
+        className="modal-backdrop"
+        aria-label="Fechar configurações clicando fora"
+        tabIndex={-1}
+        onClick={requestClose}
+      />
       {/* Janela do modal — filho direto do overlay flex */}
       <div
         ref={modalRef}
@@ -508,7 +646,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
             type="button"
             className="modal__close"
             aria-label="Fechar configurações"
-            onClick={onClose}
+            onClick={requestClose}
           >
             <XIcon size={16} />
           </button>
@@ -517,12 +655,12 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
         {/* Corpo do modal: navegação lateral + painel da aba ativa */}
         <div className="modal__body modal__body--settings">
           <nav className="settings-nav" aria-label="Categorias de configuração">
-            {SETTINGS_TABS.map((tab) => (
+            {SETTINGS_TABS.filter((tab) => tab.id !== 'avancado' || advancedUnlocked).map((tab) => (
               <button
                 key={tab.id}
                 type="button"
-                className={`settings-nav__item${activeTab === tab.id ? ' settings-nav__item--active' : ''}`}
-                aria-current={activeTab === tab.id ? 'page' : undefined}
+                className={`settings-nav__item${currentTab ===tab.id ? ' settings-nav__item--active' : ''}`}
+                aria-current={currentTab ===tab.id ? 'page' : undefined}
                 onClick={() => setActiveTab(tab.id)}
               >
                 {(() => {
@@ -535,55 +673,99 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                 )}
               </button>
             ))}
+            {!advancedUnlocked && (
+              <button type="button" className="settings-nav__item settings-nav__unlock" onClick={handleAdvancedUnlockClick}>
+                <span>
+                  {advancedClicks > 0
+                    ? `Desbloquear avançado (${advancedClicks}/${ADVANCED_UNLOCK_CLICKS})`
+                    : 'Desbloquear avançado'}
+                </span>
+              </button>
+            )}
+            {advancedUnlocked && (
+              <button type="button" className="settings-nav__item settings-nav__unlock" onClick={handleHideAdvanced}>
+                <span>Ocultar Avançado</span>
+              </button>
+            )}
           </nav>
 
           <div className="settings-panel">
-            {activeTab === 'geral' && (
+            {currentTab ==='geral' && (
               <section className="settings-section" aria-labelledby="settings-doctor">
-                <h3 id="settings-doctor" className="settings-section__title">
-                  Diagnóstico
+                <h3 id="settings-doctor" className={`settings-section__title${active ? ' settings-section__title--vault' : ''}`}>
+                  {active ? (
+                    <>
+                      Diagnóstico da vault
+                      <VaultGlyph icon={active.icon} color={active.color} size={12} />
+                      <span>{active.name}</span>
+                    </>
+                  ) : (
+                    'Diagnóstico'
+                  )}
                 </h3>
-                {backendSettings?.doctor ? (
+                {backendSettings && doctor ? (
                   <>
-                    <div className={`doctor__summary doctor__summary--${backendSettings.doctor.status}`}>
+                    <div className={`doctor__summary doctor__summary--${doctor.status}`}>
                       <span className="doctor__summary-icon" aria-hidden="true">
-                        {backendSettings.doctor.status === 'ok' ? <CheckCircleIcon size={17} /> : <AlertTriangleIcon size={17} />}
+                        {doctor.status === 'ok' ? (
+                          <CheckCircleIcon size={18} />
+                        ) : doctor.status === 'error' ? (
+                          <XCircleIcon size={18} />
+                        ) : (
+                          <AlertTriangleIcon size={18} />
+                        )}
                       </span>
                       <div>
                         <b>
-                          {backendSettings.doctor.error_count > 0
-                            ? `${backendSettings.doctor.error_count} ${backendSettings.doctor.error_count === 1 ? 'verificação com erro' : 'verificações com erro'}`
-                            : backendSettings.doctor.warning_count > 0
-                              ? `${backendSettings.doctor.warning_count} ${backendSettings.doctor.warning_count === 1 ? 'aviso' : 'avisos'}`
+                          {doctor.error_count > 0
+                            ? `${doctor.error_count} ${doctor.error_count === 1 ? 'verificação com erro' : 'verificações com erro'}`
+                            : doctor.warning_count > 0
+                              ? `${doctor.warning_count} ${doctor.warning_count === 1 ? 'aviso' : 'avisos'}`
                               : 'Tudo certo'}
                         </b>
-                        <span className="mono">
-                          {backendSettings.doctor.ok_count} ok · {backendSettings.doctor.warning_count} {backendSettings.doctor.warning_count === 1 ? 'aviso' : 'avisos'} · {backendSettings.doctor.error_count} {backendSettings.doctor.error_count === 1 ? 'erro' : 'erros'} · {backendSettings.doctor.latency_ms} ms
+                        <span className="doctor__summary-meta">
+                          {doctorTotal} {doctorTotal === 1 ? 'verificação' : 'verificações'} · {doctor.latency_ms} ms
                         </span>
                       </div>
-                      <button type="button" className="btn btn--sm" onClick={handleRerunDoctor} disabled={isRunningDoctor}>
+                      <button type="button" className="btn" onClick={handleRerunDoctor} disabled={isRunningDoctor}>
                         <RefreshIcon size={14} />
                         {isRunningDoctor ? 'Verificando…' : 'Verificar de novo'}
                       </button>
                     </div>
-                    <ul className="doctor__checks">
-                      {[...backendSettings.doctor.checks]
-                        .sort((a, b) => (a.status === 'ok' ? 1 : 0) - (b.status === 'ok' ? 1 : 0))
-                        .map((check) => (
-                          <li key={check.code} className={`doctor__check doctor__check--${check.status}`}>
-                            {check.status === 'ok' ? <CheckCircleIcon size={15} /> : check.status === 'warning' ? <AlertTriangleIcon size={15} /> : <XCircleIcon size={15} />}
-                            <div>
-                              <code>{check.code}</code>
-                              <span className="doctor__msg">{check.message}</span>
-                              {check.action && check.status !== 'ok' && <span className="doctor__action">{check.action}</span>}
-                            </div>
-                            {check.latency_ms != null && <span className="doctor__lat mono">{check.latency_ms} ms</span>}
-                          </li>
-                        ))}
-                    </ul>
-                    <p className="settings-inline-status">
-                      Corpus: {backendSettings.notes_count.toLocaleString('pt-BR')} notas · {backendSettings.sqlite_chunks_count.toLocaleString('pt-BR')} chunks no SQLite · {backendSettings.vector_chunks_count.toLocaleString('pt-BR')} vetores no Chroma
-                    </p>
+                    <dl className="doctor__stats">
+                      <div className="doctor__stat">
+                        <dt>Notas</dt>
+                        <dd className="mono">{backendSettings.notes_count.toLocaleString('pt-BR')}</dd>
+                      </div>
+                      <div className="doctor__stat">
+                        <dt>Trechos no SQLite</dt>
+                        <dd className="mono">{backendSettings.sqlite_chunks_count.toLocaleString('pt-BR')}</dd>
+                      </div>
+                      <div className="doctor__stat">
+                        <dt>Vetores no Chroma</dt>
+                        <dd className="mono">{backendSettings.vector_chunks_count.toLocaleString('pt-BR')}</dd>
+                      </div>
+                    </dl>
+                    {groupChecks(doctor.checks).map((group) => (
+                      <Fragment key={group.id}>
+                        <h4 className="doctor__group">{group.title}</h4>
+                        <ul className="doctor__checks">
+                          {group.checks.map((check) => (
+                            <li key={check.code} className={`doctor__check doctor__check--${check.status}`}>
+                              {check.status === 'ok' ? <CheckCircleIcon size={15} /> : check.status === 'warning' ? <AlertTriangleIcon size={15} /> : <XCircleIcon size={15} />}
+                              <div>
+                                <span className="doctor__label">{checkLabel(check.code)}</span>
+                                <span className="doctor__msg">{check.message}</span>
+                                {check.action && check.status !== 'ok' && <span className="doctor__action">{check.action}</span>}
+                              </div>
+                              <span className="doctor__meta mono">
+                                {check.latency_ms != null && check.latency_ms >= 100 ? `${check.code} · ${check.latency_ms} ms` : check.code}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </Fragment>
+                    ))}
                   </>
                 ) : (
                   <div className="settings-item settings-item--stacked" aria-label="Carregando diagnóstico">
@@ -594,102 +776,76 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
               </section>
             )}
 
-            {activeTab === 'vault' && (
-              <section className="settings-section" aria-labelledby="settings-vault">
-                <h3 id="settings-vault" className="settings-section__title">
-                  Vault
-                </h3>
+            {currentTab ==='vaults' && <VaultsTab onOpenQueue={() => onOpenQueue?.()} />}
 
-                <div className="settings-item settings-item--stacked">
-                  <div className="settings-item__info">
-                    <span className="settings-item__label">Pasta do vault</span>
-                    <span className="settings-item__description">
-                      Alimenta o painel de grafo. Indexar no corpus é feito na Fila.
-                    </span>
-                  </div>
-
-                  <div className="vault-picker" role="group" aria-label="Selecionar pasta do vault">
-                    <input
-                      id="input-vault-path"
-                      type="text"
-                      className="vault-picker__input mono"
-                      value={vaultPath}
-                      placeholder="Nenhuma pasta selecionada"
-                      readOnly
-                      aria-label="Caminho da pasta do vault"
-                      title={vaultPath || 'Nenhuma pasta selecionada'}
-                    />
-                    <button
-                      id="btn-select-vault"
-                      type="button"
-                      className="btn"
-                      onClick={handleSelectVault}
-                      disabled={isSelectingVault}
-                      aria-label="Selecionar pasta do vault"
-                    >
-                      {isSelectingVault ? 'Selecionando…' : 'Selecionar'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="vault-queue">
-                  <div>
-                    <b>Corpus indexado</b>
-                    <span className="mono">
-                      {(backendSettings?.notes_count ?? 0).toLocaleString('pt-BR')} notas ·{' '}
-                      {(backendSettings?.sqlite_chunks_count ?? 0).toLocaleString('pt-BR')} chunks
-                    </span>
-                  </div>
-                  <button
-                    id="btn-open-queue"
-                    type="button"
-                    className="btn"
-                    onClick={handleOpenQueue}
-                  >
-                    Indexar na Fila
-                    <ChevronRightIcon size={14} />
-                  </button>
-                </div>
-              </section>
-            )}
-
-            {activeTab === 'ia' && (
+            {currentTab ==='ia' && (
               <section className="settings-section" aria-labelledby="settings-ai">
                 <h3 id="settings-ai" className="settings-section__title">
                   IA
                 </h3>
+                <p className="settings-section__lede">Como a resposta é escrita a partir dos trechos das suas notas.</p>
 
-                {iaCatalogRows.filter((row) => isGenerative || row.key === 'answer_provider').map((row) => renderSettingRow(row))}
+                {iaCatalogRows
+                  .filter((row) => isGenerative || row.key === 'answer_provider')
+                  .map((row) => {
+                    // Modelo: lista do que está instalado no provedor; URL: o padrão do provedor escolhido.
+                    if (row.key === 'answer_model' && modelOptions.length > 0) return renderSettingRow(row, modelOptions);
+                    if (row.key === 'answer_base_url') {
+                      return renderSettingRow({ ...row, placeholder: PROVIDER_DEFAULT_URL[draftProvider] ?? row.placeholder });
+                    }
+                    return renderSettingRow(row);
+                  })}
 
                 {isGenerative ? (
                     <div className="settings-item settings-item--stacked">
                     <div className="settings-item__info">
-                      <span className="settings-item__label">API key</span>
+                      <span className="settings-item__label">{needsApiKey ? 'API key' : 'Conexão'}</span>
                       <span className="settings-item__description">
-                        {backendSettings?.answer_api_key_configured ? 'Configurada no .env local.' : 'Ausente.'} Teste o provedor ou liste os modelos dele.
+                        {needsApiKey
+                          ? `${backendSettings?.answer_api_key_configured ? 'Configurada no .env local.' : 'Ausente.'} Teste o provedor ou liste os modelos dele.`
+                          : `Roda no seu computador, sem API key. Testar manda uma pergunta curta ao ${providerLabel} com o modelo escolhido.`}
                       </span>
                     </div>
 
-                    <div className="vault-picker" role="group" aria-label="Salvar API key local">
-                      <input
-                        id="input-api-key"
-                        type="password"
-                        className="vault-picker__input"
-                        value={apiKey}
-                        placeholder="ESCOLIO_ANSWER_API_KEY"
-                        aria-label="API key"
-                        onChange={(event) => setApiKey(event.target.value)}
-                      />
-                      <button
-                        id="btn-save-api-key"
-                        type="button"
-                        className="btn"
-                        onClick={handleSaveApiKey}
-                        disabled={isSavingApiKey}
-                        aria-label="Salvar API key"
-                      >
-                        {isSavingApiKey ? 'Salvando…' : 'Salvar'}
-                      </button>
+                    <div className="vault-picker" role="group" aria-label={needsApiKey ? 'Salvar API key local' : `Conexão com o ${providerLabel}`}>
+                      {needsApiKey && (
+                        <>
+                          <input
+                            id="input-api-key"
+                            type="password"
+                            className="vault-picker__input"
+                            value={apiKey}
+                            placeholder="ESCOLIO_ANSWER_API_KEY"
+                            aria-label="API key"
+                            onChange={(event) => setApiKey(event.target.value)}
+                          />
+                          <button
+                            id="btn-save-api-key"
+                            type="button"
+                            className="btn"
+                            onClick={() => handleSaveApiKey(apiKey)}
+                            disabled={isSavingApiKey || !apiKey.trim()}
+                            aria-label="Salvar API key"
+                          >
+                            {isSavingApiKey ? 'Salvando…' : 'Salvar'}
+                          </button>
+                          {backendSettings?.answer_api_key_configured && (
+                            <button
+                              id="btn-remove-api-key"
+                              type="button"
+                              className={`btn${isConfirmingKeyRemoval ? ' btn--danger' : ''}`}
+                              onClick={() => {
+                                if (isConfirmingKeyRemoval) void handleSaveApiKey('');
+                                else setIsConfirmingKeyRemoval(true);
+                              }}
+                              onBlur={() => setIsConfirmingKeyRemoval(false)}
+                              disabled={isSavingApiKey}
+                            >
+                              {isConfirmingKeyRemoval ? 'Confirmar remoção' : 'Remover chave'}
+                            </button>
+                          )}
+                        </>
+                      )}
                       <button
                         id="btn-test-provider"
                         type="button"
@@ -711,48 +867,33 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                         {isListingModels ? 'Listando…' : 'Listar modelos'}
                       </button>
                     </div>
-                    {modelDiscovery && (
-                      <div className="settings-item settings-item--stacked" aria-live="polite">
+                    {discovered && (
+                      <div className="settings-discovery" aria-live="polite">
                         <span className="settings-inline-status">
-                          {modelDiscovery.models.length} {modelDiscovery.models.length === 1 ? 'modelo' : 'modelos'} no{' '}
-                          {modelDiscovery.provider} · {modelDiscovery.latency_ms} ms{modelDiscovery.cached ? ' · em cache' : ''}
-                          {modelDiscovery.status !== 'ok' && ` · ${MODEL_STATUS[modelDiscovery.status] ?? modelDiscovery.status}`}
+                          {discovered.models.length} {discovered.models.length === 1 ? 'modelo' : 'modelos'} no {providerLabel} ·{' '}
+                          {discovered.latency_ms} ms{discovered.cached ? ' · em cache' : ''}
+                          {discovered.status !== 'ok' && ` · ${MODEL_STATUS[discovered.status] ?? discovered.status}`}
                         </span>
-                        {modelDiscovery.message && (
-                          <span className="settings-warning">{modelDiscovery.message}</span>
-                        )}
-                        {modelDiscovery.models.length > 0 && (
-                          <ul className="settings-model-list" aria-label="Modelos encontrados">
-                            {modelDiscovery.models.map((model) => (
-                              <li key={model.id} className="settings-model-list__item">
-                                <button
-                                  type="button"
-                                  className="btn btn--sm settings-model-option"
-                                  onClick={() => handleSelectModel(model.id)}
-                                  aria-label={`Selecionar ${model.label}`}
-                                >
-                                  {model.label}
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
+                        {discovered.status === 'offline' && LOCAL_PROVIDERS.has(draftProvider) ? (
+                          <span className="settings-warning">
+                            O {providerLabel} não respondeu em {discovered.base_url}. Abra o {providerLabel} e clique em Listar modelos.
+                          </span>
+                        ) : (
+                          discovered.message && <span className="settings-warning">{discovered.message}</span>
                         )}
                       </div>
                     )}
                   </div>
-                ) : (
-                  <p className="settings-inline-status">
-                    O extractive responde só com trechos das notas: não usa LLM, modelo nem API key.
-                  </p>
-                )}
+                ) : null}
               </section>
             )}
 
-            {activeTab === 'voz' && (
+            {currentTab ==='voz' && (
               <section className="settings-section" aria-labelledby="settings-voz">
                 <h3 id="settings-voz" className="settings-section__title">
                   Voz
                 </h3>
+                <p className="settings-section__lede">Transcrição local da pergunta falada: nada sai do seu computador.</p>
 
                 <div className="settings-item settings-item--stacked">
                   <div className="settings-item__info">
@@ -760,14 +901,13 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                       {audioModelRow?.label ?? 'Modelo de transcrição (voz)'}
                     </span>
                     <span className="settings-item__description">
-                      {audioModelRow?.description ?? 'Modelo local usado para transcrever o áudio gravado no chat.'}
-                      {audioModelRow?.recommended !== null && audioModelRow?.recommended !== undefined &&
-                        ` · recomendado: ${audioModelRow.recommended}`}
+                      {audioModelRow?.description ?? 'Modelo local usado para transcrever o áudio gravado no chat.'} Arraste para
+                      ver todos.
                     </span>
                   </div>
 
                   {selectableVoiceModels.length > 0 ? (
-                    <div className="voice-models" role="radiogroup" aria-label={audioModelRow?.label ?? 'Modelo de transcrição (voz)'}>
+                    <MomentumRail className="voice-models" role="radiogroup" aria-label={audioModelRow?.label ?? 'Modelo de transcrição (voz)'}>
                       {selectableVoiceModels.map((model) => {
                         const checked = settingDrafts.audio_model === model.id;
                         const autoLang = model.supports_auto_language;
@@ -821,7 +961,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                           </div>
                         );
                       })}
-                    </div>
+                    </MomentumRail>
                   ) : (
                     <Select
                       className="settings-control-wide"
@@ -848,19 +988,20 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
               </section>
             )}
 
-            {activeTab === 'avancado' && (
+            {currentTab ==='avancado' && (
               <>
                 <section className="settings-section" aria-labelledby="settings-presets">
                   <h3 id="settings-presets" className="settings-section__title">
                     Presets
                   </h3>
+                  <p className="settings-section__lede">Combinações prontas de busca e indexação. Aplicar grava na hora.</p>
                   {backendSettings?.settings_presets.map((preset) => (
                     <div key={preset.key} className="settings-item settings-item--stacked">
                       <div className="settings-item__info">
                         <span className="settings-item__label">{preset.label}</span>
                         <span className="settings-item__description">{preset.description}</span>
                         <dl className="preset__values">
-                          {Object.entries(preset.values).map(([key, value]) => (
+                          {Object.entries(preset.values).filter(([key]) => !DESKTOP_HIDDEN_KEYS.includes(key)).map(([key, value]) => (
                             <div key={key}>
                               <dt>{catalogLabel(key)}</dt>
                               <dd className="mono">{String(value)}</dd>
@@ -872,7 +1013,8 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                         type="button"
                         className="btn btn--sm preset__apply"
                         onClick={() => handleApplyPreset(preset.key)}
-                        disabled={Boolean(applyingPreset)}
+                        disabled={Boolean(applyingPreset) || pendingChanges > 0}
+                        title={pendingChanges > 0 ? 'Salve ou descarte antes de aplicar' : undefined}
                         aria-label={`Aplicar preset ${preset.label}`}
                       >
                         {applyingPreset === preset.key ? 'Aplicando…' : 'Aplicar'}
@@ -887,12 +1029,13 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   <h3 id="settings-advanced" className="settings-section__title">
                     Avançado
                   </h3>
+                  <p className="settings-section__lede">Ajustes finos de busca, trechos e indexação. Mude só se souber o efeito.</p>
                   {advancedRows.map((row) => renderSettingRow(row))}
                 </section>
               </>
             )}
 
-            {activeTab === 'aparencia' && (
+            {currentTab ==='aparencia' && (
               <>
                 <section className="settings-section" aria-labelledby="settings-appearance">
                   <h3 id="settings-appearance" className="settings-section__title">
@@ -948,40 +1091,68 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
           </div>
         </div>
 
-        {operationStatus && (
-          <p className="settings-inline-status settings-status-bar" role="status">
-            {operationStatus}
-          </p>
+        {toast && (
+          <div
+            className={`settings-toast settings-toast--${toast.tone}${pendingChanges > 0 ? ' settings-toast--raised' : ''}`}
+            role={toast.tone === 'error' ? 'alert' : 'status'}
+          >
+            {toast.tone === 'ok' ? <CheckCircleIcon size={16} /> : <AlertTriangleIcon size={16} />}
+            <span>{toast.text}</span>
+            {toast.tone === 'error' && (
+              <button type="button" className="settings-toast__close" aria-label="Fechar aviso" onClick={() => setToast(null)}>
+                <XIcon size={12} />
+              </button>
+            )}
+          </div>
         )}
 
-        {/* Rodapé do modal */}
-        <div className="modal__footer">
-          <span className="modal__pending" aria-live="polite">
-            {pendingChanges > 0 ? (
-              <>
-                <span className="modal__pending-dot" aria-hidden="true" />
-                {pendingChanges} {pendingChanges === 1 ? 'alteração não salva' : 'alterações não salvas'}
-              </>
-            ) : (
-              'Nenhuma alteração'
-            )}
-          </span>
-          <div className="modal__footer-actions">
-            <button id="btn-settings-close" type="button" className="btn btn--ghost" onClick={onClose}>
-              Cancelar
-            </button>
-            <button
-              id="btn-save-backend-settings"
-              type="button"
-              className="btn btn--primary"
-              onClick={handleSaveBackendSettings}
-              disabled={!backendSettings || isSavingBackendSettings}
-              aria-label="Salvar configurações do backend"
-            >
-              {isSavingBackendSettings ? 'Salvando…' : 'Salvar'}
-            </button>
+        {/* Fechar com rascunho pendente: confirma antes de descartar. */}
+        {pendingChanges > 0 && isConfirmingClose && (
+          <div className="modal__footer settings-savebar" role="region" aria-label="Fechar sem salvar">
+            <span className="modal__pending">Fechar sem salvar? As alterações serão descartadas.</span>
+            <div className="modal__footer-actions">
+              <button type="button" className="btn btn--ghost" onClick={() => setIsConfirmingClose(false)}>
+                Continuar editando
+              </button>
+              <button
+                type="button"
+                className="btn btn--danger"
+                onClick={() => {
+                  discardDrafts();
+                  setIsConfirmingClose(false);
+                  onClose();
+                }}
+              >
+                Descartar alterações
+              </button>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Barra de salvar: só existe com alteração pendente (sem "Nenhuma alteração" parado no rodapé). */}
+        {pendingChanges > 0 && !isConfirmingClose && (
+          <div className="modal__footer settings-savebar" role="region" aria-label="Alterações não salvas">
+            <span className="modal__pending" aria-live="polite">
+              <span className="modal__pending-dot" aria-hidden="true" />
+              {pendingChanges} {pendingChanges === 1 ? 'alteração não salva' : 'alterações não salvas'}
+            </span>
+            <div className="modal__footer-actions">
+              <button type="button" className="btn btn--ghost" onClick={discardDrafts}>
+                Descartar
+              </button>
+              <button
+                id="btn-save-backend-settings"
+                type="button"
+                className="btn btn--primary"
+                onClick={handleSaveBackendSettings}
+                disabled={!backendSettings || isSavingBackendSettings}
+                aria-label="Salvar configurações do backend"
+              >
+                {isSavingBackendSettings ? 'Salvando…' : 'Salvar alterações'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>,
     document.body

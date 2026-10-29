@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from escolio.tui.actions import index_corpus_folder, preflight_corpus_folder
+from escolio.app.config import Settings
+from escolio.tui.actions import ask_corpus, index_corpus_folder, preflight_corpus_folder
 
 
 def test_preflight_corpus_folder_rejects_empty_path() -> None:
@@ -33,3 +34,27 @@ def test_index_corpus_folder_rejects_empty_path_before_settings(monkeypatch) -> 
 
     with pytest.raises(ValueError, match='Informe uma pasta'):
         index_corpus_folder('')
+
+
+def test_ask_corpus_repassa_on_answer_delta_ao_fluxo_de_resposta(monkeypatch, tmp_path: Path) -> None:
+    recebido: dict[str, object] = {}
+
+    def fake_answer(question, **kwargs):
+        recebido['callback'] = kwargs.get('on_answer_delta')
+        return 'resposta-fake'
+
+    monkeypatch.setattr('escolio.tui.actions.answer_corpus_with_citations', fake_answer)
+    settings = Settings(
+        workspace_dir=tmp_path,
+        data_dir=tmp_path / 'data',
+        notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+        results_dir=tmp_path / 'data' / 'results',
+        sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
+        vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+    )
+
+    def callback(piece: str) -> None:
+        return None
+
+    assert ask_corpus('Pergunta?', 'lexical', settings=settings, on_answer_delta=callback) == 'resposta-fake'
+    assert recebido['callback'] is callback

@@ -8,7 +8,7 @@ from escolio.app.audio_service import (
     audio_runtime,
     download_jobs,
 )
-from escolio.app.config import Settings
+from escolio.app.config import Settings, get_settings
 from escolio.providers.audio_models import AudioOptions, TranscriptionResult
 from escolio.providers.voice_model_meta import ui_meta_for
 
@@ -86,6 +86,8 @@ def start_audio_capture(
     device=None,
     settings: Settings | None = None,
 ):
+    if device is None:
+        device = (settings or get_settings()).audio_input_device
     return audio_jobs(settings).start(options or audio_options(settings), device=device)
 
 

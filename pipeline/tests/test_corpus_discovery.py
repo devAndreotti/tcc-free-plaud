@@ -40,3 +40,25 @@ def test_discover_corpus_files_recurses_and_ignores_runtime_directories(tmp_path
     assert str(git_dir) in skipped_paths
     assert str(node_modules) in skipped_paths
     assert str(vector_store) in skipped_paths
+
+
+def test_discover_corpus_files_skips_unreadable_subdirectory_and_keeps_going(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / 'corpus'
+    locked = root / 'locked'
+    locked.mkdir(parents=True)
+    (root / 'a.md').write_text('# A\n', encoding='utf-8')
+    (root / 'b.txt').write_text('B\n', encoding='utf-8')
+    (locked / 'c.md').write_text('# C\n', encoding='utf-8')
+    original_iterdir = Path.iterdir
+
+    def iterdir(self):
+        if self == locked:
+            raise PermissionError('Acesso negado')
+        return original_iterdir(self)
+
+    monkeypatch.setattr(Path, 'iterdir', iterdir)
+
+    result = discover_corpus_files(root, recursive=True)
+
+    assert [path.name for path in result.files] == ['a.md', 'b.txt']
+    assert [(item.path, item.reason) for item in result.skipped] == [(str(locked), 'unreadable_directory')]

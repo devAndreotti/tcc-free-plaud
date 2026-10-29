@@ -62,3 +62,51 @@ def test_excecao_no_runner_vira_falha_e_nao_derruba_a_fila(tmp_path: Path) -> No
     assert events['explode.md'].status == 'failed'
     assert events['explode.md'].message == 'embedder caiu'
     assert events['ok.md'].status == 'indexed'
+
+
+def test_regressao_stage_guarda_arquivos_de_mesmo_nome_de_pastas_diferentes(tmp_path: Path) -> None:
+    calls: list[Path] = []
+
+    def runner(path: Path) -> CorpusIndexBatchResult:
+        calls.append(path)
+        return _batch(path, 'success', chunks_indexed=1)
+
+    indexer = DroppedFileIndexer(runner=runner)
+    first = tmp_path / 'a' / 'notas.md'
+    second = tmp_path / 'b' / 'notas.md'
+    indexer.stage([str(first), str(second)])
+
+    result = indexer.enqueue(['notas.md', 'notas.md'])
+    indexer.join()
+
+    assert result.queued == ['notas.md', 'notas.md']
+    assert result.missing == []
+    assert calls == [first, second]
+
+
+def test_regressao_enqueue_paths_ignora_extensao_nao_suportada_sem_evento(tmp_path: Path) -> None:
+    calls: list[Path] = []
+
+    def runner(path: Path) -> CorpusIndexBatchResult:
+        calls.append(path)
+        return _batch(path, 'success', chunks_indexed=1)
+
+    indexer = DroppedFileIndexer(runner=runner)
+    indexer.enqueue_paths([tmp_path / 'foto.png', tmp_path / 'nota.md'])
+    indexer.join()
+
+    assert [p.name for p in calls] == ['nota.md']
+    assert [e.name for e in indexer.poll_events()] == ['nota.md']
+
+
+def test_regressao_remove_paths_emite_removed_so_quando_remove_notas(tmp_path: Path) -> None:
+    removed_by_name = {'a.md': 2}
+    indexer = DroppedFileIndexer(
+        runner=lambda path: _batch(path, 'success'),
+        remover=lambda path, folder: removed_by_name.get(path.name, 0),
+    )
+
+    indexer.remove_paths(tmp_path / 'a.md', folder=False)
+    indexer.remove_paths(tmp_path / 'b.md', folder=False)
+
+    assert [(e.name, e.status) for e in indexer.poll_events()] == [('a.md', 'removed')]

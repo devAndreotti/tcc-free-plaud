@@ -11,15 +11,23 @@
  * ──────────────────────────────────────────────────────────────
  */
 
-import { type ReactNode } from 'react';
-import { useIndexJob } from '../hooks/useIndexJob';
+import { type ReactNode, useMemo } from 'react';
+import { type QueueState, useIndexJob } from '../hooks/useIndexJob';
 import { QueueContext } from './QueueContextObject';
 
-/** Provedor: envolve a aplicação inteira em App.tsx */
-export function QueueProvider({ children }: { children: ReactNode }) {
+/** Provedor: envolve a aplicação inteira em App.tsx. A fila indexa na vault ativa (o backend decide). */
+export function QueueProvider({ children }: Readonly<{ children: ReactNode }>) {
   const queue = useIndexJob();
+  const { job, folderPath, setFolderPath, status, isBusy, watcherActive, chooseFolder, startJob, cancelJob, toggleWatcher, resetWatcher } = queue;
+
+  // useIndexJob devolve um objeto novo a cada render: o value só muda quando um campo muda
+  const value = useMemo<QueueState>(() => ({
+    folderPath, setFolderPath, job, status, isBusy, watcherActive,
+    chooseFolder, startJob, cancelJob, toggleWatcher, resetWatcher,
+  }), [folderPath, setFolderPath, job, status, isBusy, watcherActive, chooseFolder, startJob, cancelJob, toggleWatcher, resetWatcher]);
+
   return (
-    <QueueContext.Provider value={queue}>
+    <QueueContext.Provider value={value}>
       {children}
     </QueueContext.Provider>
   );

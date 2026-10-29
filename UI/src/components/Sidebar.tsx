@@ -1,7 +1,9 @@
-import { useEffect, useState, type ComponentType } from 'react';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
 import {
   AskIcon,
   BarChartIcon,
+  CheckIcon,
+  ChevronsUpDownIcon,
   CodeIcon,
   ContrastIcon,
   FolderIcon,
@@ -9,6 +11,7 @@ import {
   MicIcon,
   NoteIcon,
   PanelLeftIcon,
+  PlusIcon,
   SettingsIcon,
   SlidersIcon,
   StarsIcon,
@@ -16,7 +19,10 @@ import {
 } from './Icons';
 import type { SettingsTab } from './SettingsModal';
 import { useQueueContext } from '../hooks/useQueueContext';
-import { useVaultContext } from '../hooks/useVaultContext';
+import { useVaults } from '../hooks/useVaults';
+import { vaultMeta } from '../lib/vaultVisuals';
+import VaultDialog from './VaultDialog';
+import { VaultGlyph } from './VaultGlyph';
 import { useCorpusHealth } from '../hooks/useCorpusHealth';
 import { readMigratedItem } from '../services/localStorageMigration';
 
@@ -41,7 +47,7 @@ const NAV: { view: WorkspaceView; label: string; icon: IconType; id: string }[] 
 
 const SECTIONS: { tab: SettingsTab; label: string; icon: IconType }[] = [
   { tab: 'geral', label: 'Geral', icon: SlidersIcon },
-  { tab: 'vault', label: 'Vault', icon: VaultIcon },
+  { tab: 'vaults', label: 'Vaults', icon: VaultIcon },
   { tab: 'ia', label: 'IA', icon: StarsIcon },
   { tab: 'voz', label: 'Voz', icon: MicIcon },
   { tab: 'avancado', label: 'Avançado', icon: CodeIcon },
@@ -64,7 +70,27 @@ const plural = (n: number, one: string, many: string) => `${n.toLocaleString('pt
 const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const { job, watcherActive, folderPath } = useQueueContext();
-  const { vaultPath } = useVaultContext();
+  const { vaults, active, select } = useVaults();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const switchRef = useRef<HTMLDivElement>(null);
+
+  // Menu de vaults fecha ao clicar fora ou com Esc.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (event: MouseEvent) => {
+      if (!switchRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
   const health = useCorpusHealth(healthKey);
 
   useEffect(() => {
@@ -93,7 +119,7 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
     : null;
 
   const toggleLabel = collapsed ? 'Expandir menu' : 'Recolher menu';
-  const vaultName = folderName(folderPath || vaultPath);
+  const vaultName = folderName(folderPath);
   const healthStatus = health?.status ?? 'unknown';
   const healthText = !health
     ? 'Verificando corpus'
@@ -104,10 +130,11 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
         : 'saudável';
 
   return (
+    <>
     <aside className={`sb${collapsed ? ' sb--collapsed' : ''}`} aria-label="Navegação">
       <div className="sb__head">
         <span className="sb__mark" aria-hidden="true">ES</span>
-        <span className="sb__name">Escólio<small>vault local</small></span>
+        <span className="sb__name">Escólio</span>
         <button
           type="button"
           id="btn-sidebar-toggle"
@@ -119,6 +146,79 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
           <PanelLeftIcon />
           <span className="sb__tip">{toggleLabel}<small>Ctrl B</small></span>
         </button>
+      </div>
+
+      {/* Seletor da vault ativa: cartão com nome e contagens; recolhida, só o ícone. */}
+      <div className="sb__vault-switch" ref={switchRef}>
+        <button
+          type="button"
+          id="btn-vault-switcher"
+          className="sb__vault"
+          aria-expanded={menuOpen}
+          aria-label={`Vault ativa: ${active?.name ?? 'nenhuma'}. Trocar vault`}
+          onClick={() => setMenuOpen((prev) => !prev)}
+        >
+          {active ? (
+            <VaultGlyph icon={active.icon} color={active.color} size={17} />
+          ) : (
+            <span className="vault-glyph vault-glyph--slate" aria-hidden="true">
+              <FolderIcon size={17} />
+            </span>
+          )}
+          <span className="sb__vault-text">
+            <span className="sb__vault-name">{active?.name ?? 'Carregando vaults…'}</span>
+            {active && <span className="sb__vault-meta mono">{vaultMeta(active)}</span>}
+          </span>
+          <ChevronsUpDownIcon size={16} className="sb__vault-chevron" />
+          <span className="sb__tip">{active?.name ?? 'Vault'}<small>trocar vault</small></span>
+        </button>
+        {menuOpen && (
+          <div className="sb__vault-menu" role="group" aria-label="Vaults">
+            <div className="sb__vault-menu-head" aria-hidden="true">Trocar de vault</div>
+            {vaults.map((vault) => (
+              <button
+                key={vault.id}
+                type="button"
+                aria-pressed={vault.id === active?.id}
+                className="sb__vault-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  if (vault.id !== active?.id) void select(vault.id);
+                }}
+              >
+                <VaultGlyph icon={vault.icon} color={vault.color} size={15} />
+                <span className="sb__vault-item-text">
+                  <span>{vault.name}</span>
+                  <small className="mono">{vaultMeta(vault)}</small>
+                </span>
+                {vault.id === active?.id && <CheckIcon size={16} className="sb__vault-check" />}
+              </button>
+            ))}
+            <div className="sb__sep" role="separator" />
+            <button
+              type="button"
+              className="sb__vault-item"
+              onClick={() => {
+                setMenuOpen(false);
+                setCreating(true);
+              }}
+            >
+              <PlusIcon size={16} />
+              <span>Nova vault</span>
+            </button>
+            <button
+              type="button"
+              className="sb__vault-item"
+              onClick={() => {
+                setMenuOpen(false);
+                onOpenSettings('vaults');
+              }}
+            >
+              <VaultIcon size={16} />
+              <span>Gerenciar vaults</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <nav className="sb__nav" aria-label="Navegação principal">
@@ -160,7 +260,7 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
             <span className="sb__label">Configurações</span>
             <span className="sb__tip">Configurações</span>
           </button>
-          <div className="sb__flyout" role="menu" aria-label="Seções de configuração">
+          <div className="sb__flyout" role="group" aria-label="Seções de configuração">
             <div className="sb__flyout-head">
               <span>Configurações</span>
             </div>
@@ -168,7 +268,6 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
               <button
                 key={tab}
                 type="button"
-                role="menuitem"
                 className="sb__fly-item"
                 onClick={() => onOpenSettings(tab)}
               >
@@ -199,7 +298,7 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
         </span>
         {health && (
           <span className="sb__health-sub mono">
-            {plural(health.notes, 'nota', 'notas')} · {plural(health.chunks, 'chunk', 'chunks')}
+            {plural(health.notes, 'nota', 'notas')} · {plural(health.chunks, 'trecho', 'trechos')}
           </span>
         )}
         {vaultName && (
@@ -215,6 +314,8 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
         <span className="sb__tip">Corpus: {healthText}<small>abrir diagnóstico</small></span>
       </button>
     </aside>
+    {creating && <VaultDialog onClose={() => setCreating(false)} />}
+    </>
   );
 };
 

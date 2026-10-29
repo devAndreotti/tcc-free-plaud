@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal
 
+from escolio.notes.readable import readable_chunk_text
 from escolio.notes.schemas import Note
 from escolio.providers.embed import Embedder
 from escolio.retrieval.debug import build_ask_debug
@@ -515,8 +516,9 @@ def _question_needs_multiple_claims(question: str) -> bool:
 
 def _rank_claim_candidates(chunk_text: str, question: str, query_terms: list[str]) -> list[tuple[tuple[int, ...], str]]:
     candidate_query_terms = _claim_query_terms(query_terms)
-    sentence_candidates = _sentence_candidates(chunk_text)
-    line_candidates = _line_candidates(chunk_text)
+    readable_text = readable_chunk_text(chunk_text)
+    sentence_candidates = _sentence_candidates(readable_text)
+    line_candidates = _line_candidates(readable_text)
     candidates = list(dict.fromkeys([*sentence_candidates, *line_candidates]))
     if not candidates:
         return []
@@ -580,7 +582,7 @@ def _citation_from_hit(note: Note, hit: SearchHit) -> Citation:
         note_id=chunk.note_id,
         note_version=chunk.note_version,
         chunk_id=chunk.chunk_id,
-        snippet=_shorten_snippet(chunk.chunk_text),
+        snippet=_shorten_snippet(readable_chunk_text(chunk.chunk_text)),
         source_path=str(note.source_path),
         char_start=chunk.char_start,
         char_end=chunk.char_end,
@@ -729,6 +731,8 @@ def _build_no_answer(
     used_sources: list[UsedSource],
     latency_ms: int,
     debug: AskDebug | None = None,
+    answer_discard_reason: str | None = None,
+    answer_model: str | None = None,
 ) -> AskResponse:
     return AskResponse(
         query=question,
@@ -742,6 +746,8 @@ def _build_no_answer(
         used_sources=used_sources,
         latency_ms=latency_ms,
         debug=debug,
+        answer_discard_reason=answer_discard_reason,
+        answer_model=answer_model,
     )
 
 
@@ -856,7 +862,7 @@ def answer_with_citations(
     used_sources = _summarize_sources(note, hits)
 
     if not hits:
-        return _no_answer('no_retrieval_hits', ['Nenhum chunk recuperado contém termos informativos suficientes da pergunta.'], used_sources)
+        return _no_answer('no_retrieval_hits', ['Nenhum trecho recuperado contém termos informativos suficientes da pergunta.'], used_sources)
 
     if strategy == 'lexical' and hits[0].term_coverage < min_term_coverage:
         return _no_answer(
@@ -924,7 +930,7 @@ def answer_with_citations(
         if named_coverage < 1.0:
             return _no_answer(
                 'missing_named_anchor',
-                ['A resposta não sustentou os anchors nomeados presentes na pergunta.'],
+                ['A resposta não sustentou os nomes citados na pergunta.'],
                 used_sources,
                 rejected_hits=hits,
             )
@@ -963,7 +969,7 @@ def answer_with_citations(
             )
         )
     if len(citations) == 1:
-        limitations.append('A resposta se apoia em um único chunk recuperado.')
+        limitations.append('A resposta se apoia em um único trecho recuperado.')
 
     return AskResponse(
         query=question,

@@ -8,6 +8,11 @@ from chromadb.errors import NotFoundError
 from escolio.app.legacy import DEFAULT_CHROMA_COLLECTION, LEGACY_CHROMA_COLLECTION
 from escolio.retrieval.models import Chunk, SearchHit
 
+# Clientes Chroma abertos por pasta. O chromadb reaproveita o sistema por pasta e só solta os arquivos quando
+# todos os clientes dela fecham; excluir uma vault fecha os dela (no Windows, arquivo aberto impede apagar a pasta).
+# ponytail: guarda um cliente leve por ativação da vault; limpar ao trocar se trocas viram milhares.
+_OPEN_CLIENTS: dict[str, list[chromadb.ClientAPI]] = {}
+
 
 def _distance_to_score(distance: float) -> float:
     return 1.0 / (1.0 + max(distance, 0.0))
@@ -59,6 +64,7 @@ class LocalVectorStore:
         self._client = chromadb.PersistentClient(
             path=str(self.base_dir), settings=ChromaSettings(anonymized_telemetry=False)
         )
+        _OPEN_CLIENTS.setdefault(str(self.base_dir.resolve()), []).append(self._client)
         self.collection_name = _resolve_collection_name(self._client, collection_name)
 
     def _collection(self) -> Collection:
@@ -103,6 +109,12 @@ class LocalVectorStore:
         self._collection().delete(ids=chunk_ids)
         return len(chunk_ids)
 
+    def delete_by_note_ids(self, note_ids: list[str]) -> None:
+        # ponytail: um delete por bloco de 500 notas; sem get prévio, o filtro $in roda no próprio Chroma.
+        for start in range(0, len(note_ids), 500):
+            block = note_ids[start : start + 500]
+            self._collection().delete(where={'note_id': {'$in': block}})
+
     def reset(self) -> None:
         try:
             self._client.delete_collection(self.collection_name)
@@ -140,14 +152,29 @@ class LocalVectorStore:
             metadatas=metadatas,
         )
 
-    def query(self, query_embedding: list[float], *, top_k: int = 5, note_id: str | None = None) -> list[SearchHit]:
+    def query(
+        self,
+        query_embedding: list[float],
+        *,
+        top_k: int = 5,
+        note_id: str | None = None,
+        note_ids: frozenset[str] | None = None,
+    ) -> list[SearchHit]:
         if top_k <= 0 or self.count() == 0:
             return []
+        if note_ids is not None and not note_ids:
+            return []
 
+        if note_id:
+            where: dict[str, object] | None = {'note_id': note_id}
+        elif note_ids is not None:
+            where = {'note_id': {'$in': sorted(note_ids)}}
+        else:
+            where = None
         result = self._collection().query(
             query_embeddings=[query_embedding],
             n_results=top_k,
-            where={'note_id': note_id} if note_id else None,
+            where=where,
             include=['documents', 'metadatas', 'distances'],
         )
 
@@ -169,3 +196,9 @@ class LocalVectorStore:
                 )
             )
         return hits
+
+
+def close_vector_stores(base_dir: Path) -> None:
+    """Fecha todos os clientes Chroma abertos em `base_dir`, liberando os arquivos para apagar a pasta."""
+    for client in _OPEN_CLIENTS.pop(str(base_dir.resolve()), []):
+        client.close()

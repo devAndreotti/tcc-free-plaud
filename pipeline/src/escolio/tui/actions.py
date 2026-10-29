@@ -25,13 +25,14 @@ from escolio.corpus.service import (
     get_corpus_status,
     index_corpus_path,
     rebuild_corpus,
+    remove_corpus_root,
     reset_corpus,
 )
 from escolio.notes.schemas import Note
 from escolio.providers.answer import get_answer_provider
 from escolio.providers.embed import get_embedder, validate_runtime_embedding_model
 from escolio.retrieval.models import AskResponse
-from escolio.storage.sqlite import get_all_notes, init_sqlite
+from escolio.storage.sqlite import get_all_notes, init_sqlite, list_corpus_roots
 from escolio.storage.vector import LocalVectorStore
 from escolio.tui.audio_actions import (  # noqa: F401 -- public shared facade
     cancel_audio_capture,
@@ -54,6 +55,8 @@ def ask_corpus(
     *,
     settings: Settings | None = None,
     runtime: CorpusRuntime | None = None,
+    source_root: str | None = None,
+    on_answer_delta: Callable[[str], None] | None = None,
 ) -> AskResponse:
     cleaned_question = question.strip()
     if not cleaned_question:
@@ -89,6 +92,7 @@ def ask_corpus(
             embedder=embedder,
             strategy=strategy,
             top_k=resolved_settings.retrieval_top_k,
+            source_root=source_root, on_answer_delta=on_answer_delta,
             answer_provider=get_answer_provider(
                 resolved_settings.answer_provider,
                 model=resolved_settings.answer_model,
@@ -111,6 +115,26 @@ def list_corpus_notes(*, settings: Settings | None = None) -> list[Note]:
         return get_all_notes(connection)
     finally:
         connection.close()
+
+
+def corpus_roots_from_tui(*, settings: Settings | None = None) -> list[dict[str, object]]:
+    resolved_settings = settings or get_settings()
+    ensure_runtime_dirs(resolved_settings)
+    connection = init_sqlite(resolved_settings.sqlite_path)
+    try:
+        return list_corpus_roots(connection)
+    finally:
+        connection.close()
+
+
+def remove_corpus_root_from_tui(
+    root: str,
+    *,
+    settings: Settings | None = None,
+    runtime: CorpusRuntime | None = None,
+) -> int:
+    vector_store = runtime.get_vector_store() if runtime is not None else None
+    return remove_corpus_root(root, settings=settings or get_settings(), vector_store=vector_store)
 
 
 def corpus_status_from_tui(*, settings: Settings | None = None) -> CorpusStatusResult:

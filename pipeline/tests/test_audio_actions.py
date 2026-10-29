@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from escolio.app.config import Settings
-from escolio.tui.audio_actions import list_voice_models
+from escolio.tui.audio_actions import list_voice_models, start_audio_capture
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -61,3 +61,21 @@ def test_list_voice_models_marks_installed_when_verified(tmp_path: Path, monkeyp
 
     assert by_id['whisper-small']['installed'] is True
     assert by_id['moonshine-tiny-en']['installed'] is False
+
+
+def test_start_audio_capture_uses_configured_input_device(tmp_path: Path, monkeypatch) -> None:
+    seen = []
+
+    class Jobs:
+        def start(self, options, *, device):
+            seen.append(device)
+            return 'job'
+
+    monkeypatch.setattr('escolio.tui.audio_actions.audio_jobs', lambda settings=None: Jobs())
+    monkeypatch.setattr('escolio.tui.audio_actions.audio_options', lambda settings=None: None)
+    settings = Settings(results_dir=tmp_path, audio_input_device='Headset (QCY H3 Pro)')
+
+    start_audio_capture(settings=settings)
+    start_audio_capture(device=3, settings=settings)
+
+    assert seen == ['Headset (QCY H3 Pro)', 3]

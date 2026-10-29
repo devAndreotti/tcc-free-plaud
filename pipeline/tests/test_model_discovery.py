@@ -76,6 +76,22 @@ def test_ollama_default_calls_api_tags(monkeypatch, tmp_path) -> None:
     assert result.models[0].details['family'] == 'llama'
 
 
+def test_ollama_deixa_modelos_de_embedding_fora_da_lista_de_resposta(monkeypatch, tmp_path) -> None:
+    clear_model_discovery_cache()
+    tags = {
+        'models': [
+            {'name': 'qchat:latest', 'details': {'family': 'qwen2'}},
+            {'name': 'nomic-embed-text:latest', 'details': {'family': 'nomic-bert'}},
+            {'name': 'all-minilm:22m', 'details': {'family': 'bert'}},
+        ]
+    }
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', lambda request, timeout: FakeResponse(tags))
+
+    result = list_answer_models(_settings(tmp_path, provider='ollama'))
+
+    assert [model.id for model in result.models] == ['qchat:latest']
+
+
 def test_ollama_strips_v1_from_base_url(monkeypatch, tmp_path) -> None:
     clear_model_discovery_cache()
     called_urls: list[str] = []
@@ -170,7 +186,27 @@ def test_connection_error_is_offline(monkeypatch, tmp_path) -> None:
     result = list_answer_models(_settings(tmp_path, provider='ollama'))
 
     assert result.status == 'offline'
+    assert result.base_url == 'http://localhost:11434'
     assert result.models == []
+
+
+def test_offline_result_is_not_cached(monkeypatch, tmp_path) -> None:
+    clear_model_discovery_cache()
+    online = False
+
+    def fake_urlopen(request, timeout):
+        if not online:
+            raise URLError('connection refused')
+        return FakeResponse({'models': [{'name': 'qchat:latest'}]})
+
+    monkeypatch.setattr('escolio.providers.model_discovery.urlopen', fake_urlopen)
+
+    offline = list_answer_models(_settings(tmp_path, provider='ollama'))
+    online = True
+    retry = list_answer_models(_settings(tmp_path, provider='ollama'))
+
+    assert offline.status == 'offline'
+    assert retry.status == 'ok'
 
 
 def test_invalid_json_is_error(monkeypatch, tmp_path) -> None:

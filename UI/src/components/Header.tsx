@@ -1,11 +1,16 @@
+import { useState } from 'react';
 import { GraphIcon, PlusIcon, XIcon } from './Icons';
 import SettingsModal, { type SettingsTab } from './SettingsModal';
+import { VaultGlyph } from './VaultGlyph';
+import type { Vault } from '../services/bridge';
 
 // Dados de uma aba aberta
 export interface Tab {
   id: string;
   label: string;
   type: 'chat' | 'graph';
+  /** Vault da conversa ('' = aberta antes da lista de vaults chegar). */
+  vaultId?: string;
 }
 
 // Props do componente de cabeçalho/barra de abas
@@ -14,6 +19,8 @@ interface HeaderProps {
   activeTabId: string | null;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
+  onRenameTab: (id: string, label: string) => void;
+  vaults: Vault[];
   onNewTab: () => void;
   isSettingsOpen: boolean;
   settingsTab?: SettingsTab;
@@ -47,6 +54,8 @@ const Header = ({
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onRenameTab,
+  vaults,
   onNewTab,
   isSettingsOpen,
   settingsTab,
@@ -55,6 +64,13 @@ const Header = ({
   isGraphPanelOpen,
   onToggleGraphPanel,
 }: HeaderProps) => {
+  // Aba em edição do nome (duplo clique): Enter ou sair do campo salva, Esc cancela.
+  const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
+  const commitRename = () => {
+    if (editing?.draft.trim()) onRenameTab(editing.id, editing.draft.trim());
+    setEditing(null);
+  };
+
   return (
     <>
       <header className="header" role="banner" aria-label="Barra de abas">
@@ -62,23 +78,43 @@ const Header = ({
         <div className="tab-bar" role="tablist" aria-label="Abas abertas">
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;
+            const vault = vaults.find((item) => item.id === tab.vaultId);
             return (
               <div
                 key={tab.id}
                 id={`tab-${tab.id}`}
-                className={`tab ${isActive ? 'tab--active' : ''}`}
+                className={`tab${isActive ? ' tab--active' : ''}${vault ? ` vault-glyph--${vault.color}` : ''}`}
                 role="tab"
                 aria-selected={isActive}
                 aria-controls={`tabpanel-${tab.id}`}
+                title={vault ? `${tab.label} · ${vault.name}` : tab.label}
                 onClick={() => onSelectTab(tab.id)}
+                onDoubleClick={() => setEditing({ id: tab.id, draft: tab.label })}
               >
-                {/* Ícone da aba conforme o tipo */}
+                {/* Ícone e cor da vault da conversa */}
                 <span className="tab__icon" aria-hidden="true">
-                  <ChatTabIcon />
+                  {vault ? <VaultGlyph icon={vault.icon} color={vault.color} size={12} /> : <ChatTabIcon />}
                 </span>
 
-                {/* Label da aba */}
-                <span className="tab__label">{tab.label}</span>
+                {/* Label da aba; duplo clique renomeia */}
+                {editing?.id === tab.id ? (
+                  <input
+                    className="tab__rename"
+                    aria-label="Nome da conversa"
+                    value={editing.draft}
+                    maxLength={60}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setEditing({ id: tab.id, draft: e.target.value })}
+                    onBlur={commitRename}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitRename();
+                      if (e.key === 'Escape') setEditing(null);
+                    }}
+                  />
+                ) : (
+                  <span className="tab__label">{tab.label}</span>
+                )}
 
                 {/* Botão de fechar */}
                 <button

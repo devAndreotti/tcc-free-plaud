@@ -36,9 +36,16 @@ const TypeIcon = ({ type }: { type: string | null | undefined }) => {
   return <NoteIcon size={15} />;
 };
 
-const NotesPanel = () => {
+interface NotesPanelProps {
+  /** Nota pedida pelo grafo: abre o detalhe dela ao montar ou quando muda */
+  initialNoteId?: string | null;
+  /** Trecho citado numa resposta do chat: a nota abre com ele destacado */
+  initialChunkId?: string | null;
+}
+
+const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelProps) => {
   const [notes, setNotes] = useState<NoteSummary[]>(() => notesCache ?? []);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialNoteId);
   const [detail, setDetail] = useState<NoteDetail | null>(null);
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -83,6 +90,9 @@ const NotesPanel = () => {
     setIsLoadingList(true);
     try {
       const loaded = await bridge.listNotes();
+      if (initialNoteId && !loaded.some((note) => note.note_id === initialNoteId)) {
+        setStatus('Esta nota não existe mais no corpus.');
+      }
       // Evita re-render/flicker quando o resultado é idêntico ao já exibido.
       const changed = JSON.stringify(loaded) !== JSON.stringify(notesCache);
       notesCache = loaded;
@@ -100,7 +110,7 @@ const NotesPanel = () => {
     } finally {
       setIsLoadingList(false);
     }
-  }, []);
+  }, [initialNoteId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vinda da bridge (sistema externo).
@@ -164,7 +174,7 @@ const NotesPanel = () => {
     setStatus('Reindexando nota…');
     try {
       const result: NoteReindexResult = await bridge.reindexNote(detail.note_id);
-      setStatus(`Nota reindexada · ${result.chunks_indexed} ${result.chunks_indexed === 1 ? 'chunk' : 'chunks'}. ${result.message ?? ''}`.trim());
+      setStatus(`Nota reindexada · ${result.chunks_indexed} ${result.chunks_indexed === 1 ? 'trecho' : 'trechos'}. ${result.message ?? ''}`.trim());
       await loadNotes();
       setSelectedId(result.note_id ?? detail.note_id);
       notifyCorpusChanged();
@@ -245,7 +255,7 @@ const NotesPanel = () => {
                         <span className="notes__item-body">
                           <span className="notes__item-title">{note.title}</span>
                           <span className="notes__item-meta">
-                            {note.chunk_count ?? 0} {note.chunk_count === 1 ? 'chunk' : 'chunks'}
+                            {note.chunk_count ?? 0} {note.chunk_count === 1 ? 'trecho' : 'trechos'}
                             {date && ` · ${date}`}
                           </span>
                         </span>
@@ -255,7 +265,7 @@ const NotesPanel = () => {
                 </div>
               ))}
 
-              {!isLoadingList && visibleCount === 0 && (
+              {!isLoadingList && visibleCount === 0 && (notes.length > 0 || !status) && (
                 <div className="notes__empty">
                   {notes.length === 0 ? 'Nenhuma nota indexada ainda. Indexe uma pasta na Fila.' : 'Nenhuma nota com esse filtro.'}
                 </div>
@@ -275,6 +285,7 @@ const NotesPanel = () => {
             isLoadingDetail={isLoadingDetail}
             onReindex={handleReindex}
             onDelete={handleDelete}
+            highlightChunkId={initialChunkId}
           />
         ) : (
           <div className="notes__empty notes__empty--detail">

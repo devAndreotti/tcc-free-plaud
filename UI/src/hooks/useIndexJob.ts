@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { bridge, type IndexJobSnapshot } from '../services/bridge';
 import { notifyCorpusChanged } from './useCorpusHealth';
+import { VAULT_SWITCHED_EVENT } from '../contexts/VaultsContextObject';
 
 export interface QueueState {
   folderPath: string;
@@ -26,9 +27,11 @@ export interface QueueState {
   isBusy: boolean;
   watcherActive: boolean;
   chooseFolder: () => Promise<void>;
-  startJob: () => Promise<void>;
+  startJob: (path?: string) => Promise<void>;
   cancelJob: () => Promise<void>;
   toggleWatcher: () => Promise<void>;
+  /** Zera o toggle local (o backend já parou o watcher ao trocar de vault). */
+  resetWatcher: () => void;
 }
 
 export function useIndexJob(): QueueState {
@@ -56,6 +59,12 @@ export function useIndexJob(): QueueState {
     return () => window.clearInterval(interval);
   }, [job, refreshJob]);
 
+  const resetWatcher = useCallback(() => setWatcherActive(false), []);
+  useEffect(() => {
+    window.addEventListener(VAULT_SWITCHED_EVENT, resetWatcher);
+    return () => window.removeEventListener(VAULT_SWITCHED_EVENT, resetWatcher);
+  }, [resetWatcher]);
+
   const toggleWatcher = useCallback(async () => {
     if (watcherActive) {
       await bridge.stopWatcher();
@@ -79,15 +88,17 @@ export function useIndexJob(): QueueState {
     }
   }, []);
 
-  const startJob = useCallback(async () => {
-    if (!folderPath.trim()) {
+  // Aceita um caminho explícito (ex.: Reindexar de uma pasta do corpus); sem ele, usa o campo.
+  const startJob = useCallback(async (path?: string) => {
+    const target = (typeof path === 'string' ? path : folderPath).trim();
+    if (!target) {
       setStatus('Escolha uma pasta para indexar.');
       return;
     }
     setIsBusy(true);
     setStatus('');
     try {
-      const created = await bridge.startIndexJob(folderPath.trim(), false);
+      const created = await bridge.startIndexJob(target, false);
       setJob(created);
       if (created.status === 'running') {
         void refreshJob(created.job_id);
@@ -124,5 +135,6 @@ export function useIndexJob(): QueueState {
     startJob,
     cancelJob,
     toggleWatcher,
+    resetWatcher,
   };
 }

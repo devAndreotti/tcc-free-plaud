@@ -18,12 +18,16 @@ Integração atual:
 """
 
 import os
+import subprocess
+import sqlite3
 import sys
 import threading
 import json
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import get_args
 
 try:
     import webview
@@ -35,7 +39,16 @@ PIPELINE_SRC = REPO_ROOT / 'pipeline' / 'src'
 if PIPELINE_SRC.exists() and str(PIPELINE_SRC) not in sys.path:
     sys.path.insert(0, str(PIPELINE_SRC))
 
-from escolio.app.config import get_settings
+from escolio.app.config import base_settings, get_settings, settings_for_vault
+from escolio.app.vaults import (
+    active_vault,
+    create_vault,
+    delete_vault,
+    load_registry,
+    set_active,
+    update_vault,
+)
+from escolio.app.conversations import load_conversations, save_conversations
 from escolio.app.doctor import run_doctor
 from escolio.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
 from escolio.app.settings_catalog import save_catalog_setting, save_catalog_settings, settings_catalog_payload
@@ -43,14 +56,25 @@ from escolio.app.settings_presets import apply_settings_preset, list_settings_pr
 from escolio.benchmark.service import run_benchmark_compare
 from escolio.corpus.ask import corpus_vocabulary_stems
 from escolio.corpus.dropped import DroppedFileIndexer
-from escolio.corpus.jobs import cancel_index_job, get_index_job, start_index_job
+from escolio.corpus.jobs import cancel_index_job, corpus_write_lock, get_index_job, index_job_manager, start_index_job
 from escolio.corpus.runtime import CorpusRuntime
+from escolio.notes.links import note_link_edges
 from escolio.notes.service import delete_note, get_note_detail, list_notes, reindex_note
-from escolio.providers.answer import test_answer_provider
+from escolio.providers.answer import AnswerProviderName, test_answer_provider
+from escolio.providers.answer_warmup import warm_up_answer_model
 from escolio.providers.model_discovery import list_answer_models
 from escolio.retrieval.models import AskResponse
-from escolio.storage.sqlite import init_sqlite
-from escolio.tui.actions import ask_corpus, corpus_status_from_tui, index_corpus_folder
+from escolio.ingest.validators import SUPPORTED_EXTENSIONS
+from escolio.notes.service import delete_notes_by_source_path
+from escolio.storage.sqlite import ignore_paths, init_sqlite, list_corpus_roots, list_ignored_paths, unignore_paths
+from escolio.storage.vector import close_vector_stores
+from escolio.tui.actions import (
+    ask_corpus,
+    corpus_roots_from_tui,
+    corpus_status_from_tui,
+    index_corpus_folder,
+    remove_corpus_root_from_tui,
+)
 from escolio.tui.audio_actions import (
     cancel_audio_capture,
     cancel_voice_model_download,
@@ -79,8 +103,165 @@ class Api:
     """
 
     def __init__(self) -> None:
-        self.runtime = CorpusRuntime()
+        self.runtime: CorpusRuntime | None = None
+        self.dropped_files: DroppedFileIndexer | None = None
+        self._ask_jobs: dict[str, dict] = {}  # respostas em streaming, por ask_id
+        self._answer_lock = threading.Lock()  # protege _ask_jobs e _warming
+        self._warming = False
+        self._activate_vault(stop_watcher=False)
+
+    def _activate_vault(self, stop_watcher: bool = True) -> None:
+        """Recria runtime e indexador de drop a partir da vault ativa e para o watcher da anterior."""
+        base = base_settings()
+        settings = settings_for_vault(active_vault(base), base)
+        if stop_watcher:
+            watcher_manager.stop()
+        self.runtime = CorpusRuntime(settings)
         self.dropped_files = DroppedFileIndexer(runtime=self.runtime)
+        get_settings.cache_clear()
+
+    def _vault_row(self, vault, base) -> dict:
+        db_path = settings_for_vault(vault, base).sqlite_path
+        note_count = 0
+        roots: list[dict] = []
+        if db_path.exists():
+            try:  # leitura pura: nao migra o banco de outra vault
+                connection = sqlite3.connect(f'file:{db_path.as_posix()}?mode=ro', uri=True)
+                connection.row_factory = sqlite3.Row
+                try:
+                    note_count = int(connection.execute('SELECT COUNT(*) FROM notes').fetchone()[0])
+                    # Pastas reais da vault (o registro so guarda as da criacao/migracao).
+                    roots = list_corpus_roots(connection)
+                finally:
+                    connection.close()
+            except sqlite3.Error:  # banco vazio ou de antes da tabela corpus_roots
+                pass
+        return {**vault.model_dump(), 'note_count': note_count, 'roots': roots}
+
+    def listVaults(self) -> dict:
+        """Vaults cadastradas, com a vault ativa e a contagem de notas de cada uma."""
+        base = base_settings()
+        registry = load_registry(base)
+        return {'active': registry.active, 'vaults': [self._vault_row(v, base) for v in registry.vaults]}
+
+    def createVault(self, name: str, icon: str, color: str, folders: list[str]) -> dict:
+        try:
+            vault = create_vault(name, icon, color, folders or [], base_settings())
+        except ValueError as exc:
+            return {'ok': False, 'message': str(exc)}
+        return {'ok': True, 'vault': vault.model_dump()}
+
+    def updateVault(self, vault_id: str, patch: dict) -> dict:
+        allowed = {key: patch[key] for key in ('name', 'icon', 'color', 'folders') if key in patch}
+        try:
+            vault = update_vault(vault_id, base_settings(), **allowed)
+        except ValueError as exc:
+            return {'ok': False, 'message': str(exc)}
+        return {'ok': True, 'vault': vault.model_dump()}
+
+    def deleteVault(self, vault_id: str, confirm: str = '') -> dict:
+        """Exclui a vault. `confirm` precisa ser igual ao nome dela. Nunca apaga pastas de origem."""
+        base = base_settings()
+        try:
+            target = next(v for v in load_registry(base).vaults if v.id == vault_id)
+        except StopIteration:
+            return {'ok': False, 'message': f'vault nao encontrada: {vault_id}'}
+        if confirm != target.name:
+            return {'ok': False, 'message': 'Digite o nome da vault para confirmar a exclusão.'}
+        registry = load_registry(base)
+        if len(registry.vaults) == 1:
+            return {'ok': False, 'message': 'Não é possível excluir a única vault.'}
+        if index_job_manager.is_busy():
+            return {'ok': False, 'message': 'Espere a indexação terminar para excluir uma vault.'}
+        # Sai da vault antes de apagar e fecha o Chroma dela: no Windows, arquivo aberto impede apagar a pasta.
+        if registry.active == vault_id:
+            set_active(next(v.id for v in registry.vaults if v.id != vault_id), base)
+            self._activate_vault()
+        close_vector_stores(settings_for_vault(target, base).vector_store_dir)
+        try:
+            delete_vault(vault_id, base)
+        except ValueError as exc:
+            return {'ok': False, 'message': str(exc)}
+        return {'ok': True, 'active': load_registry(base).active}
+
+    def selectVault(self, vault_id: str) -> dict:
+        """Ativa a vault e refaz o runtime. Um job em andamento segue com o runtime antigo."""
+        base = base_settings()
+        try:
+            vault = set_active(vault_id, base)
+        except ValueError as exc:
+            return {'ok': False, 'message': str(exc)}
+        self._activate_vault()
+        return {'ok': True, 'vault': vault.model_dump()}
+
+    def _vault_connection(self):
+        return init_sqlite(self.runtime.settings_snapshot().sqlite_path)
+
+    def listIgnoredPaths(self) -> list[dict]:
+        """Arquivos que a indexação desta vault pula (Fila: "Ignorados")."""
+        connection = self._vault_connection()
+        try:
+            return list_ignored_paths(connection)
+        finally:
+            connection.close()
+
+    def ignoreIndexPaths(self, paths: list[str]) -> dict:
+        """Ignora arquivos nas próximas indexações e tira do índice o que já estava lá. Não apaga do disco."""
+        clean = [path for path in (paths or []) if path]
+        if not clean:
+            return {'ok': False, 'message': 'Nenhum arquivo informado.'}
+        settings = self.runtime.settings_snapshot()
+        connection = init_sqlite(settings.sqlite_path)
+        try:
+            with corpus_write_lock:
+                ignore_paths(connection, clean, reason='usuario')
+                vector_store = self.runtime.get_vector_store()
+                removed = sum(
+                    delete_notes_by_source_path(path, settings=settings, connection=connection, vector_store=vector_store)
+                    for path in clean
+                )
+        finally:
+            connection.close()
+        return {'ok': True, 'ignored': len(clean), 'removed_notes': removed}
+
+    def unignoreIndexPaths(self, paths: list[str]) -> dict:
+        """Volta a indexar arquivos ignorados: saem da lista e entram na fila serial de escrita."""
+        clean = [path for path in (paths or []) if path]
+        connection = self._vault_connection()
+        try:
+            restored = unignore_paths(connection, clean)
+        finally:
+            connection.close()
+        existing = [Path(path) for path in clean if Path(path).is_file()]
+        if existing:
+            self.dropped_files.enqueue_paths(existing)
+        return {'ok': True, 'restored': restored, 'queued': len(existing)}
+
+    def retryIndexPaths(self, paths: list[str]) -> dict:
+        """Tenta indexar de novo arquivos que falharam e devolve o resultado de cada um."""
+        results = [self.dropped_files.index_now(Path(path)).model_dump() for path in (paths or []) if path]
+        return {'ok': True, 'results': results}
+
+    def openIndexPath(self, path: str, reveal: bool = False) -> dict:
+        """Abre o arquivo no programa padrão ou mostra na pasta (falhas da Fila)."""
+        target = Path(path or '')
+        if not path or not target.exists():
+            return {'ok': False, 'message': 'Arquivo não encontrado: foi movido ou apagado.'}
+        # Abrir qualquer caminho executaria programas (.exe, .bat): só os tipos que o Escólio indexa.
+        if not reveal and target.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            return {'ok': False, 'message': 'Este tipo de arquivo não pode ser aberto daqui.'}
+        try:
+            if sys.platform == 'win32':
+                if reveal:
+                    subprocess.Popen(['explorer', f'/select,{target}'])
+                else:
+                    os.startfile(target)
+            else:
+                opener = 'open' if sys.platform == 'darwin' else 'xdg-open'
+                subprocess.Popen([opener, str(target.parent if reveal else target)])
+        except OSError as exc:
+            return {'ok': False, 'message': f'Não foi possível abrir: {exc}'}
+        return {'ok': True}
 
     def _warmup(self) -> None:
         """Abre o Chroma, carrega o embedding e o vocabulário do corpus antes da primeira pergunta (~8 s a frio)."""
@@ -144,16 +325,117 @@ class Api:
         response = ask_corpus(message, settings.default_ask_strategy, runtime=self.runtime)
         return self._format_ask_response(response)
 
-    def askCorpus(self, message: str, strategy: str | None = None) -> dict:
-        """Pergunta ao corpus e devolve a resposta estruturada (afirmações, citações, limitações)."""
+    def askCorpus(self, message: str, strategy: str | None = None, source_root: str | None = None) -> dict:
+        """Pergunta ao corpus e devolve a resposta estruturada (afirmações, citações, limitações).
+
+        source_root restringe a busca às notas sob essa pasta indexada; None usa o corpus inteiro.
+        """
         settings = get_settings()
         resolved = strategy if strategy in ASK_STRATEGIES else settings.default_ask_strategy
-        response = ask_corpus(message, resolved, runtime=self.runtime)
+        response = ask_corpus(message, resolved, runtime=self.runtime, source_root=source_root or None)
+        return self._ask_payload(response, resolved)
+
+    def _ask_payload(self, response: AskResponse, strategy: str) -> dict:
+        settings = get_settings()
         payload = response.model_dump(mode='json', exclude={'debug'})
-        payload['strategy'] = resolved
+        payload['strategy'] = strategy
         payload['top_k'] = settings.retrieval_top_k
         payload['answer_provider'] = settings.answer_provider
+        payload['answer_model'] = settings.answer_model
         return payload
+
+    def startAsk(self, message: str, strategy: str | None = None, source_root: str | None = None) -> dict:
+        """Começa a pergunta em segundo plano. pollAsk devolve as etapas e o texto que a IA já escreveu."""
+        resolved = strategy if strategy in ASK_STRATEGIES else get_settings().default_ask_strategy
+        ask_id = uuid.uuid4().hex
+        job = {'ask_id': ask_id, 'stage': 'retrieving', 'partial': '', 'result': None, 'error': None, 'finished_at': None}
+        with self._answer_lock:
+            self._prune_ask_jobs()
+            self._ask_jobs[ask_id] = job
+        threading.Thread(target=self._run_ask, args=(job, message, resolved, source_root or None), daemon=True).start()
+        return {'ask_id': ask_id}
+
+    def _run_ask(self, job: dict, message: str, strategy: str, source_root: str | None) -> None:
+        def on_delta(piece: str) -> None:
+            with self._answer_lock:
+                job['stage'] = 'writing'
+                job['partial'] += piece
+
+        try:
+            response = ask_corpus(
+                message, strategy, runtime=self.runtime, source_root=source_root, on_answer_delta=on_delta
+            )
+            outcome = {'stage': 'done', 'result': self._ask_payload(response, strategy)}
+        except Exception as exc:  # a thread não pode morrer calada: o erro vai para a tela
+            print(f'[Backend] Pergunta falhou: {exc}')
+            outcome = {'stage': 'error', 'error': str(exc) or 'Não foi possível responder.'}
+        with self._answer_lock:
+            job.update(outcome, finished_at=time.monotonic())
+
+    def pollAsk(self, ask_id: str) -> dict:
+        """Estado da pergunta. Ao terminar (done ou error) a entrega é única: o job sai do registro."""
+        with self._answer_lock:
+            job = self._ask_jobs.get(ask_id)
+            if job is None:
+                return {'ask_id': ask_id, 'stage': 'error', 'partial': '', 'result': None, 'error': 'Pergunta não encontrada.'}
+            snapshot = {key: job[key] for key in ('ask_id', 'stage', 'partial', 'result', 'error')}
+            if job['stage'] in ('done', 'error'):
+                del self._ask_jobs[ask_id]
+        return snapshot
+
+    def cancelAsk(self, ask_id: str) -> dict:
+        """Descarta a pergunta em andamento; pollAsk deixa de encontrá-la."""
+        # ponytail: a chamada ao provedor segue até o timeout dele; cancelar de verdade pede um token em ask_corpus.
+        with self._answer_lock:
+            self._ask_jobs.pop(ask_id, None)
+        return {'ok': True}
+
+    def _prune_ask_jobs(self) -> None:
+        """Descarta respostas terminadas há mais de 10 min que ninguém consultou (chamar com _answer_lock)."""
+        limit = time.monotonic() - 600
+        expired = [key for key, job in self._ask_jobs.items() if job['finished_at'] is not None and job['finished_at'] < limit]
+        for key in expired:
+            del self._ask_jobs[key]
+
+    def warmAnswerModel(self) -> dict:
+        """Carrega o modelo do Ollama na VRAM em segundo plano. Nunca levanta exceção."""
+        try:
+            settings = get_settings()
+            if settings.answer_provider != 'ollama':
+                return {'ok': True, 'started': False}
+            with self._answer_lock:
+                if self._warming:
+                    return {'ok': True, 'started': False}
+                self._warming = True
+
+            def warm() -> None:
+                try:
+                    warm_up_answer_model(settings)
+                finally:
+                    with self._answer_lock:
+                        self._warming = False
+
+            threading.Thread(target=warm, daemon=True).start()
+            return {'ok': True, 'started': True}
+        except Exception as exc:
+            print(f'[Backend] Aquecimento do modelo falhou: {exc}')
+            return {'ok': False, 'started': False}
+
+    def listCorpusRoots(self) -> list[dict]:
+        """Pastas indexadas com notas, para o seletor de pasta do chat."""
+        return corpus_roots_from_tui()
+
+    def removeCorpusRoot(self, root: str, confirm: str = '') -> dict:
+        """Tira a pasta do corpus (notas e raiz). Não apaga arquivos do disco."""
+        if confirm != 'REMOVER':
+            return {
+                'ok': False,
+                'status': 'confirmation_required',
+                'removed_notes': 0,
+                'message': 'Digite REMOVER para confirmar.',
+            }
+        removed = remove_corpus_root_from_tui(root, runtime=self.runtime)
+        return {'ok': True, 'removed_notes': removed}
 
     def indexVault(self, folder_path: str) -> dict:
         """
@@ -180,10 +462,10 @@ class Api:
     def cancelIndexJob(self, job_id: str) -> dict:
         return cancel_index_job(job_id).model_dump(mode='json')
 
-    def getBackendSettings(self) -> dict:
+    def getBackendSettings(self, doctor: bool = True) -> dict:
         settings = get_settings()
         status = corpus_status_from_tui(settings=settings)
-        doctor = run_doctor(settings=settings)
+        report = run_doctor(settings=settings) if doctor else None
         return {
             'answer_provider': settings.answer_provider,
             'answer_model': settings.answer_model,
@@ -196,7 +478,7 @@ class Api:
             'vector_chunks_count': status.vector_chunks_count,
             'settings_catalog': settings_catalog_payload(settings),
             'settings_presets': [preset.model_dump(mode='json') for preset in list_settings_presets()],
-            'doctor': doctor.model_dump(mode='json'),
+            'doctor': report.model_dump(mode='json') if report is not None else None,
         }
 
     def getDoctor(self) -> dict:
@@ -214,7 +496,8 @@ class Api:
         }
 
     def applySettingsPreset(self, name: str) -> dict:
-        result = apply_settings_preset(name)
+        # embedding_model fica com a vault ativa; o preset não o grava no global.
+        result = apply_settings_preset(name, exclude=('embedding_model',))
         self.runtime.clear()
         return {
             'ok': True,
@@ -223,11 +506,23 @@ class Api:
             'changes': {key: change.model_dump(mode='json') for key, change in result.changes.items()},
         }
 
-    def testAnswerProvider(self) -> dict:
-        return test_answer_provider().model_dump(mode='json')
+    def _answer_settings(self, provider: str | None, model: str | None, base_url: str | None):
+        """Settings salvas com o que está na tela (rascunho): testar e listar antes de salvar."""
+        update: dict = {}
+        if provider in get_args(AnswerProviderName):
+            update['answer_provider'] = provider
+        if model and model.strip():
+            update['answer_model'] = model.strip()
+        if base_url is not None:
+            update['answer_base_url'] = base_url.strip() or None
+        settings = get_settings()
+        return settings.model_copy(update=update) if update else settings
 
-    def listAnswerModels(self) -> dict:  # NOSONAR - contrato publico do PyWebView consumido pelo front.
-        return list_answer_models().model_dump(mode='json')
+    def testAnswerProvider(self, provider: str | None = None, model: str | None = None, base_url: str | None = None) -> dict:
+        return test_answer_provider(self._answer_settings(provider, model, base_url)).model_dump(mode='json')
+
+    def listAnswerModels(self, provider: str | None = None, base_url: str | None = None) -> dict:  # NOSONAR - contrato publico do PyWebView consumido pelo front.
+        return list_answer_models(self._answer_settings(provider, None, base_url)).model_dump(mode='json')
 
     def saveApiKey(self, api_key: str) -> dict:
         path = save_answer_api_key(api_key)
@@ -247,8 +542,26 @@ class Api:
         self.runtime.clear()
         return self.getBackendSettings()
 
+    def loadConversations(self) -> dict:
+        return load_conversations()
+
+    def saveConversations(self, payload: dict) -> dict:
+        try:
+            save_conversations(payload)
+        except ValueError as exc:
+            return {'ok': False, 'message': str(exc)}
+        return {'ok': True}
+
     def listNotes(self) -> list[dict]:
         return [note.model_dump(mode='json') for note in list_notes()]
+
+    def listNoteLinks(self) -> list[dict]:
+        """Ligações [[...]] entre as notas indexadas da vault ativa (arestas do grafo)."""
+        connection = init_sqlite(get_settings().sqlite_path)
+        try:
+            return note_link_edges(connection)
+        finally:
+            connection.close()
 
     def getNoteDetail(self, note_id: str) -> dict:
         return get_note_detail(note_id).model_dump(mode='json')
@@ -326,12 +639,15 @@ class Api:
 
         nodes = []
         for md_file in vault.rglob('*.md'):
+            # .obsidian, .trash e afins não são notas do usuário
+            if any(part.startswith('.') for part in md_file.relative_to(vault).parts):
+                continue
             try:
                 stat = md_file.stat()
                 # Caminho relativo ao vault (usa barras normais para consistência)
                 relative = md_file.relative_to(vault).as_posix()
                 nodes.append({
-                    'id': str(uuid.uuid4()),
+                    'id': relative,  # estável entre varreduras: o grafo mantém o desenho
                     'name': md_file.stem,                           # nome sem .md
                     'path': relative,                              # caminho relativo
                     'size': stat.st_size,                          # bytes
@@ -347,7 +663,7 @@ class Api:
 
     def startWatcher(self, folder_path: str) -> dict:
         """Inicia monitoramento continuo da pasta para auto-ingestao de novos arquivos."""
-        return watcher_manager.start(folder_path)
+        return watcher_manager.start(folder_path, self.dropped_files)
 
     def stopWatcher(self) -> dict:
         """Para o monitoramento continuo ativo, se houver."""
@@ -364,10 +680,6 @@ class Api:
     def pollDroppedFiles(self) -> list:
         """Drena os resultados da indexação de arquivos soltos."""
         return [event.model_dump(mode='json') for event in self.dropped_files.poll_events()]
-
-    def pollWatcherEvents(self) -> list:
-        """Drena e retorna eventos de ingestao capturados pelo watcher desde a ultima consulta."""
-        return [event.model_dump(mode="json") for event in watcher_manager.poll_events()]
 
     def startAudioCapture(self) -> dict:
         """Inicia gravacao do microfone padrao do sistema e devolve o job_id."""

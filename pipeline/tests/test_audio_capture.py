@@ -1,3 +1,4 @@
+import sys
 import wave
 from threading import Event
 from types import SimpleNamespace
@@ -5,7 +6,11 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from escolio.ingest.audio_capture import AudioCapture
+from escolio.ingest.audio_capture import (
+    AudioCapture,
+    list_input_devices,
+    resolve_input_device,
+)
 from escolio.ingest.audio_jobs import AudioJobManager
 from escolio.ingest.audio_vad import SpeechDetector
 from escolio.providers.audio_models import AudioError
@@ -143,3 +148,76 @@ def test_job_queue_transcribes_only_after_stop(tmp_path, microphone):
         assert len(calls) == 1
     finally:
         manager.close()
+
+
+def test_cancel_removes_partial_recording(tmp_path, microphone):
+    runtime = SimpleNamespace(
+        root=tmp_path,
+        prepare=lambda options: None,
+        detector=lambda: SpeechDetector(lambda audio: 0.9),
+    )
+    manager = AudioJobManager(runtime)
+    try:
+        job = manager.start()
+        manager.cancel(job.job_id)
+        assert not job.source_path.exists()
+    finally:
+        manager.close()
+
+
+MME, DIRECTSOUND, WASAPI = 1, 0, 2
+QCY = "Headset (QCY H3 Pro)"
+DEVICES = [
+    {"name": QCY, "max_input_channels": 1, "hostapi": DIRECTSOUND, "default_samplerate": 48000},
+    {"name": QCY, "max_input_channels": 1, "hostapi": MME, "default_samplerate": 48000},
+    {"name": "Speakers", "max_input_channels": 0, "hostapi": MME, "default_samplerate": 48000},
+    {"name": QCY, "max_input_channels": 1, "hostapi": WASAPI, "default_samplerate": 48000},
+]
+
+
+@pytest.fixture
+def input_devices(monkeypatch):
+    fake = SimpleNamespace(
+        default=SimpleNamespace(hostapi=MME),
+        query_devices=lambda device=None, kind=None: DEVICES if device is None else DEVICES[device],
+    )
+    monkeypatch.setitem(sys.modules, "sounddevice", fake)
+    return fake
+
+
+def test_resolve_input_device_picks_default_hostapi_index(input_devices):
+    assert list_input_devices() == [QCY]
+    assert resolve_input_device(QCY) == 1
+    assert resolve_input_device(3) == 3
+    assert resolve_input_device(None) is None
+
+
+def test_resolve_input_device_rejects_unknown_name(input_devices):
+    with pytest.raises(AudioError) as caught:
+        resolve_input_device("Microfone inexistente")
+    assert caught.value.code == "AUDIO_DEVICE_UNAVAILABLE"
+    assert "Microfone inexistente" in str(caught.value)
+
+
+def test_start_opens_stream_on_resolved_index(tmp_path, input_devices, monkeypatch):
+    opened = []
+
+    class Stream:
+        def __init__(self, **kwargs):
+            opened.append(kwargs["device"])
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def close(self):
+            pass
+
+    input_devices.check_input_settings = lambda **kwargs: None
+    input_devices.InputStream = Stream
+    recording = capture(tmp_path / "named.wav", device=QCY)
+    recording.start()
+    recording.cancel()
+    assert opened == [1]

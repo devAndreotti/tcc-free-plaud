@@ -212,8 +212,12 @@ def terms_missing_from_vocabulary(query_terms: list[str], vocabulary_stems: froz
         # Mesma raiz com outra terminação (responsavel / responsabilidade): 6 letras iniciais em comum.
         # ponytail: heurística de morfologia; um stemmer de português (RSLP) resolveria melhor.
         prefix = stem[:6] if len(stem) >= 6 else None
+        # Palavra do corpus dentro do termo só conta se cobrir ao menos metade dele: "gera" em
+        # "geram" e "suficient" em "insuficient" contam; "quartz" em "zanzibarquartz" não.
+        # ponytail: razão fixa de 1/2, calibrada para não mudar as positivas do benchmark.
         return any(
-            _stem_matches(stem, candidate) or (prefix is not None and candidate.startswith(prefix))
+            (_stem_matches(stem, candidate) and (stem in candidate or 2 * len(candidate) >= len(stem)))
+            or (prefix is not None and candidate.startswith(prefix))
             for candidate in vocabulary_stems
         )
 
@@ -264,13 +268,15 @@ def semantic_search(
     *,
     top_k: int = 5,
     note_id: str | None = None,
+    note_ids: frozenset[str] | None = None,
 ) -> list[SearchHit]:
     """Executa busca semântica no vector store local."""
     if not query.strip() or top_k <= 0:
         return []
     query_terms = normalize_query_terms(query)
     query_embedding = embedder.embed([query])[0]
-    hits = vector_store.query(query_embedding, top_k=top_k, note_id=note_id)
+    scope = {} if note_ids is None else {'note_ids': note_ids}
+    hits = vector_store.query(query_embedding, top_k=top_k, note_id=note_id, **scope)
     for hit in hits:
         matched_terms, term_coverage = match_terms_in_text(query_terms, hit.chunk.chunk_text)
         hit.matched_terms = matched_terms
@@ -338,6 +344,7 @@ def open_semantic_search(
     embedder: Embedder,
     *,
     top_k: int = 5,
+    note_ids: frozenset[str] | None = None,
 ) -> list[SearchHit]:
     """Busca vetorial aberta com reranking lexical-aware e poda leve de falso positivo."""
     if not query.strip() or top_k <= 0:
@@ -347,7 +354,7 @@ def open_semantic_search(
     high_signal_terms = _high_signal_query_terms(query_terms)
     named_terms = extract_named_query_terms(query)
     candidate_pool = max(top_k * 4, 12)
-    hits = semantic_search(query, vector_store, embedder, top_k=candidate_pool, note_id=None)
+    hits = semantic_search(query, vector_store, embedder, top_k=candidate_pool, note_id=None, note_ids=note_ids)
     if not hits:
         return []
 

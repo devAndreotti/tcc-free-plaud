@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bridge } from './bridge';
 
 describe('bridge watcher and audio (mock mode)', () => {
@@ -21,10 +21,6 @@ describe('bridge watcher and audio (mock mode)', () => {
     const result = await bridge.stopWatcher();
     expect(result).toEqual({ ok: true, active: false, directory: null });
     expect(await bridge.getWatcherStatus()).toEqual({ active: false, directory: null });
-  });
-
-  it('returns empty ingestion events by default', async () => {
-    expect(await bridge.pollWatcherEvents()).toEqual([]);
   });
 
   it('exercises audio capture mock methods', async () => {
@@ -73,6 +69,20 @@ describe('isDesktopApp (lazy PyWebView detection)', () => {
     expect(await bridge.selectFolder()).toContain('mock');
   });
 
+  it('no app empacotado espera o pywebviewready em vez de cair no mock (regressao)', async () => {
+    // Build de produção: a primeira chamada sai antes do PyWebView injetar a API.
+    vi.stubEnv('DEV', false);
+    try {
+      const pending = bridge.listVaults();
+      const real = { active: 'area-de-ti', vaults: [] };
+      (window as unknown as { pywebview: { api: unknown } }).pywebview = { api: { listVaults: async () => real } };
+      window.dispatchEvent(new Event('pywebviewready'));
+      expect(await pending).toBe(real);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('delegates every bridge method to window.pywebview.api once it becomes available', async () => {
     const calls: string[] = [];
     const stubApi = new Proxy(
@@ -108,7 +118,6 @@ describe('isDesktopApp (lazy PyWebView detection)', () => {
     await bridge.startWatcher('C:\\Vault');
     await bridge.stopWatcher();
     await bridge.getWatcherStatus();
-    await bridge.pollWatcherEvents();
     await bridge.indexDroppedFiles(['nota.md']);
     await bridge.pollDroppedFiles();
     await bridge.getBackendSettings();
@@ -149,7 +158,6 @@ describe('isDesktopApp (lazy PyWebView detection)', () => {
       'startWatcher',
       'stopWatcher',
       'getWatcherStatus',
-      'pollWatcherEvents',
       'indexDroppedFiles',
       'pollDroppedFiles',
       'getBackendSettings',
@@ -199,5 +207,79 @@ describe('askCorpus', () => {
     expect(result.answer).toBe('texto simples');
     expect(result.claims).toEqual([]);
     expect(result.no_answer).toBe(false);
+  });
+
+  it('repassa a pasta de origem escolhida ao askCorpus do backend (regressao)', async () => {
+    const calls: unknown[][] = [];
+    (window as unknown as { pywebview: { api: unknown } }).pywebview = {
+      api: {
+        askCorpus: (...args: unknown[]) => {
+          calls.push(args);
+          return Promise.resolve({ query: 'q', status: 'answer', claims: [], citations: [] });
+        },
+      },
+    };
+    await bridge.askCorpus('q', 'hybrid', 'D:\\Notas\\Culinaria');
+    expect(calls).toEqual([['q', 'hybrid', 'D:\\Notas\\Culinaria']]);
+  });
+
+  it('lista as pastas do corpus pelo backend quando existe (regressao)', async () => {
+    const roots = [{ root: 'D:\\Notas\\Culinaria', notes_count: 3 }];
+    (window as unknown as { pywebview: { api: unknown } }).pywebview = {
+      api: { listCorpusRoots: () => Promise.resolve(roots) },
+    };
+    expect(await bridge.listCorpusRoots()).toEqual(roots);
+  });
+});
+
+describe('streaming de resposta (startAsk / pollAsk)', () => {
+  afterEach(async () => {
+    delete (window as unknown as { pywebview?: unknown }).pywebview;
+    await bridge.saveBackendSettings({ answer_provider: 'extractive' });
+  });
+
+  it('no navegador a tela usa streaming', async () => {
+    expect(await bridge.supportsAskStreaming()).toBe(true);
+  });
+
+  it('backend sem startAsk cai no askCorpus', async () => {
+    (window as unknown as { pywebview: { api: unknown } }).pywebview = {
+      api: { askCorpus: () => Promise.resolve({ query: 'q', status: 'answer', claims: [], citations: [] }) },
+    };
+    expect(await bridge.supportsAskStreaming()).toBe(false);
+  });
+
+  it('sem IA: retrieving e depois done com o resultado', async () => {
+    const { ask_id } = await bridge.startAsk('q');
+    expect((await bridge.pollAsk(ask_id)).stage).toBe('retrieving');
+    const done = await bridge.pollAsk(ask_id);
+    expect(done.stage).toBe('done');
+    expect(done.result?.answer).toContain('(mock)');
+    // Depois de done o job some: consultar de novo devolve erro.
+    expect((await bridge.pollAsk(ask_id)).stage).toBe('error');
+  });
+
+  it('cancelAsk descarta a pergunta no mock: pollAsk depois devolve erro', async () => {
+    const { ask_id } = await bridge.startAsk('q');
+    expect(await bridge.cancelAsk(ask_id)).toEqual({ ok: true });
+    expect((await bridge.pollAsk(ask_id)).stage).toBe('error');
+    expect(await bridge.cancelAsk('nao-existe')).toEqual({ ok: true });
+  });
+
+  it('com IA: writing com o texto crescendo até done', async () => {
+    await bridge.saveBackendSettings({ answer_provider: 'ollama' });
+    const { ask_id } = await bridge.startAsk('q');
+    expect((await bridge.pollAsk(ask_id)).stage).toBe('retrieving');
+    let progress = await bridge.pollAsk(ask_id);
+    expect(progress.stage).toBe('writing');
+    const partials: string[] = [];
+    while (progress.stage === 'writing') {
+      partials.push(progress.partial);
+      progress = await bridge.pollAsk(ask_id);
+    }
+    expect(progress.stage).toBe('done');
+    expect(progress.result?.generated).toBe(true);
+    expect(partials.length).toBeGreaterThan(1);
+    expect(partials[partials.length - 1].length).toBeGreaterThan(partials[0].length);
   });
 });

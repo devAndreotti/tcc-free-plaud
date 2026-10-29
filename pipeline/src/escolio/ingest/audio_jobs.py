@@ -1,6 +1,7 @@
 """One microphone session and one queued transcription per manager."""
 
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import suppress
 from pathlib import Path
 from threading import Event, Lock
 from uuid import uuid4
@@ -48,10 +49,10 @@ class AudioJobManager:
                 "queued",
                 "transcribing",
             ):
-                raise AudioError("AUDIO_JOB_BUSY", "An audio job is already active.")
+                raise AudioError("AUDIO_JOB_BUSY", "Já existe um job de áudio ativo.")
             if self._future is not None and not self._future.done():
                 raise AudioError(
-                    "AUDIO_JOB_BUSY", "Previous transcription is still stopping."
+                    "AUDIO_JOB_BUSY", "A transcrição anterior ainda está encerrando."
                 )
             self._options = options or AudioOptions()
             self.runtime.prepare(self._options)
@@ -69,7 +70,7 @@ class AudioJobManager:
 
     def _checked(self, job_id: str) -> AudioJobSnapshot:
         if self._snapshot is None or job_id != self._snapshot.job_id:
-            raise AudioError("AUDIO_JOB_UNKNOWN", "Unknown audio job.")
+            raise AudioError("AUDIO_JOB_UNKNOWN", "Job de áudio desconhecido.")
         return self._snapshot
 
     def get(self, job_id: str) -> AudioJobSnapshot:
@@ -136,6 +137,10 @@ class AudioJobManager:
                 self._capture.cancel()
             if self._future:
                 self._future.cancel()
+            if snapshot.status == "recording":
+                # Captura já encerrada pelo cancel(); se o .wav ainda estiver aberto (Windows), o unlink falha.
+                with suppress(OSError):
+                    snapshot.source_path.unlink(missing_ok=True)
             snapshot.status = "cancelled"
             return snapshot.model_copy(deep=True)
 

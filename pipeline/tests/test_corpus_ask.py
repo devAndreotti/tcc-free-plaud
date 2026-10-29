@@ -1,14 +1,21 @@
 from pathlib import Path
 
+import pytest
+
 from escolio.app.config import Settings
+from escolio.corpus.answer_context import build_answer_contexts
 from escolio.corpus.ask import (
+    _with_cited_context_citations,
+    _with_source_limitations,
     answer_corpus_with_citations,
-    build_answer_contexts,
+    build_answer_context_items,
     validate_generated_answer,
 )
 from escolio.corpus.service import index_corpus_path
 from escolio.notes.metadata import build_note_id
 from escolio.notes.schemas import Note
+from escolio.notes.service import delete_note
+from escolio.providers.answer import AnswerProviderError
 from escolio.retrieval.models import AnswerClaim, Chunk, Citation, SearchHit
 from escolio.retrieval.rag import (
     _clean_claim_candidate,
@@ -54,7 +61,7 @@ class FakeAnswerProvider:
 
     def answer(self, question: str, contexts: list[str]) -> str:
         self.calls.append((question, contexts))
-        return 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+        return 'RabbitMQ foi adotado como message broker padrao do pipeline. [1]'
 
 
 class UnsupportedNumberAnswerProvider:
@@ -78,6 +85,17 @@ class GenericNoAnswerProvider:
         return 'Nao consegui recuperar essa informacao. Voce pode verificar a documentacao oficial.'
 
 
+class ReplyAnswerProvider:
+    provider_name = 'reply'
+    model = 'fake-model'
+
+    def __init__(self, reply: str) -> None:
+        self.reply = reply
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        return self.reply
+
+
 class FailingAnswerProvider:
     provider_name = 'failing'
 
@@ -90,6 +108,13 @@ class SecretLeakingAnswerProvider:
 
     def answer(self, question: str, contexts: list[str]) -> str:
         raise RuntimeError('HTTP 401: {"error":"bad key sk-secret"}')
+
+
+class TimeoutAnswerProvider:
+    provider_name = 'timeout'
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        raise AnswerProviderError('Provider excedeu timeout.')
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -226,6 +251,84 @@ def test_build_answer_contexts_includes_clean_chunk_evidence_and_budget(tmp_path
     assert sum(len(item) for item in contexts) <= 460
 
 
+def _search_hit(chunk_id: str, text: str) -> SearchHit:
+    return SearchHit(chunk=_chunk(chunk_id, 'note-1', text), score=1.0, matched_terms=[], term_coverage=0.0, strategy='lexical')
+
+
+def _answer_claim(chunk_id: str, text: str) -> AnswerClaim:
+    citation = Citation(
+        note_id='note-1', note_version=1, chunk_id=chunk_id, snippet=text, source_path=None, char_start=0, char_end=len(text)
+    )
+    return AnswerClaim(text=text, citations=[citation], support_level='direct')
+
+
+def test_build_answer_context_items_sem_hits_usa_so_os_trechos_dos_claims() -> None:
+    # Com include_hits=False o contexto é só o claim (modo antigo, usado no experimento 17 com o 3B).
+    claim_text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    hits = [
+        _search_hit('chunk-1', claim_text),
+        _search_hit('chunk-2', 'O runbook do broker fica com a equipe de Plataforma.'),
+    ]
+
+    items = build_answer_context_items([_answer_claim('chunk-1', claim_text)], hits, {}, include_hits=False)
+
+    assert [chunk_id for _, chunk_id in items] == ['chunk-1']
+    assert items[0][0].startswith('[1]\n') and 'claim_extrativo:' in items[0][0]
+    assert 'runbook do broker' not in items[0][0]
+
+
+def test_build_answer_context_items_inclui_os_outros_trechos_depois_dos_claims() -> None:
+    claim_text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    hits = [
+        _search_hit('chunk-1', claim_text),
+        _search_hit('chunk-2', 'O runbook do broker fica com a equipe de Plataforma.'),
+    ]
+
+    items = build_answer_context_items([_answer_claim('chunk-1', claim_text)], hits, {})
+
+    assert [chunk_id for _, chunk_id in items] == ['chunk-1', 'chunk-2']
+    assert items[1][0].startswith('[2]\n') and 'claim_extrativo:' not in items[1][0]
+    assert 'runbook do broker' in items[1][0]
+
+
+def test_resposta_que_cita_trecho_extra_entra_nas_fontes_e_some_a_limitacao_de_um_chunk() -> None:
+    claim_text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    hits = [
+        _search_hit('chunk-1', claim_text),
+        _search_hit('chunk-2', 'O runbook do broker fica com a equipe de Plataforma.'),
+    ]
+    claims = [_answer_claim('chunk-1', claim_text)]
+    answer_sources = ['chunk-1', 'chunk-2']
+
+    citations = _with_cited_context_citations(
+        'RabbitMQ é o broker [1]. O runbook fica com a Plataforma [2].',
+        answer_sources,
+        [claims[0].citations[0]],
+        hits,
+        {},
+    )
+    assert [citation.chunk_id for citation in citations] == ['chunk-1', 'chunk-2']
+    assert _with_source_limitations(['A resposta se apoia em um único trecho recuperado.'], citations, []) == []
+
+    so_um = _with_cited_context_citations('RabbitMQ é o broker [1].', answer_sources, [claims[0].citations[0]], hits, {})
+    assert [citation.chunk_id for citation in so_um] == ['chunk-1']
+    assert _with_source_limitations([], so_um, []) == ['A resposta se apoia em um único trecho recuperado.']
+
+
+def test_validate_generated_answer_ignora_marcadores_de_fonte() -> None:
+    claim_text = 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    contexts = [f'[1]\nsource_path: \ntitle: \nnote_id: note-1\nchunk_id: chunk-1\ntrecho:\n{claim_text}']
+
+    validation = validate_generated_answer(
+        'Qual broker?',
+        f'{claim_text} [1] [7]',
+        contexts,
+        [_answer_claim('chunk-1', claim_text)],
+    )
+
+    assert validation.action == 'accept'
+
+
 def test_validate_generated_answer_rejects_unsupported_numbers(tmp_path: Path) -> None:
     claim = AnswerClaim(
         text='RabbitMQ foi adotado como message broker padrao do pipeline.',
@@ -252,6 +355,24 @@ def test_validate_generated_answer_rejects_unsupported_numbers(tmp_path: Path) -
 
     assert validation.action == 'fallback_extractive'
     assert validation.reason == 'unsupported_number'
+
+
+def test_validate_generated_answer_aceita_numero_seguido_de_palavra_comum() -> None:
+    aceita = validate_generated_answer(
+        'Qual versão foi lançada?',
+        'Versão 2.1 foi lançada em março [1].',
+        ['Versão 2.1, lançada em março com o painel novo.'],
+        [],
+    )
+    unidade_diferente = validate_generated_answer(
+        'Qual o prazo?',
+        'O prazo é de 15 dias.',
+        ['Prazo de 15 meses.'],
+        [],
+    )
+
+    assert aceita.action == 'accept'
+    assert unidade_diferente.reason == 'unsupported_number'
 
 
 def test_validate_generated_answer_turns_sentinel_into_no_answer() -> None:
@@ -285,13 +406,141 @@ def test_validate_generated_answer_accepts_faithful_short_answer(tmp_path: Path)
 
     validation = validate_generated_answer(
         'Qual message broker foi adotado?',
-        'RabbitMQ foi adotado como message broker padrao do pipeline.',
+        'RabbitMQ foi adotado como message broker padrao do pipeline. [1]',
         ['RabbitMQ foi adotado como message broker padrao do pipeline.'],
         [claim],
     )
 
     assert validation.action == 'accept'
     assert validation.reason is None
+
+
+def _title_claim(text: str) -> AnswerClaim:
+    citation = Citation(
+        note_id='vlan', note_version=1, chunk_id='vlan::1', snippet=text, source_path='VLAN.md', char_start=0, char_end=20
+    )
+    return AnswerClaim(text=text, citations=[citation], support_level='partial')
+
+
+VLAN_CONTEXT = (
+    '[1]\nsource_path: VLAN.md\ntitle: VLAN\nnote_id: vlan\nchunk_id: vlan::1\nclaim_extrativo: VLAN - [!note]\n'
+    'trecho:\nVLAN faz a segmentação lógica da rede em switches, com isolamento entre portas trunk e access.'
+)
+
+
+def test_validate_generated_answer_mede_sobreposicao_contra_o_trecho_e_nao_so_o_titulo() -> None:
+    validation = validate_generated_answer(
+        'o que é VLAN?',
+        'Inicialmente, VLAN faz a segmentação lógica da rede, com isolamento entre portas trunk e access. [1]',
+        [VLAN_CONTEXT],
+        [_title_claim('VLAN - [!note]')],
+    )
+
+    assert validation.action == 'accept'
+
+
+def test_validate_generated_answer_barra_nome_inventado_no_meio_da_frase() -> None:
+    validation = validate_generated_answer(
+        'o que é VLAN?',
+        'VLAN faz a segmentação lógica da rede, segundo a Juniper, com portas trunk e access.',
+        [VLAN_CONTEXT],
+        [_title_claim('VLAN - [!note]')],
+    )
+
+    assert validation.reason == 'unsupported_anchor'
+
+
+def test_validate_generated_answer_ignora_eco_do_cabecalho_do_contexto() -> None:
+    validation = validate_generated_answer(
+        'vlan',
+        'source_path: VLAN.md\ntitle: VLAN\nnote_id: vlan',
+        [VLAN_CONTEXT],
+        [_title_claim('VLAN - [!note]')],
+    )
+
+    assert validation.action == 'fallback_extractive'
+    assert validation.reason == 'echoed_context_metadata'
+
+
+def test_validate_generated_answer_sentinela_no_meio_vira_abstencao() -> None:
+    validation = validate_generated_answer(
+        'Qual message broker foi adotado?',
+        'RabbitMQ foi adotado como message broker padrao do pipeline. '
+        'NAO_ENCONTRADO: os dados recuperados nao sustentam resposta.',
+        ['RabbitMQ foi adotado como message broker padrao do pipeline.'],
+        [],
+    )
+
+    assert validation.action == 'no_answer'
+    assert validation.reason == 'generated_no_answer_sentinel'
+
+
+def test_validate_generated_answer_sentinela_no_meio_so_abstem_sem_a_palavra_no_contexto() -> None:
+    contexto = 'O modo de busca devolve NAO_ENCONTRADO quando nada casa com a pergunta.'
+
+    validation = validate_generated_answer(
+        'O que o modo de busca devolve?',
+        'O modo de busca devolve NAO_ENCONTRADO quando nada casa [1].',
+        [contexto],
+        [_answer_claim('chunk-1', contexto)],
+    )
+
+    assert validation.action == 'accept'
+
+
+def test_validate_generated_answer_titulo_copiado_vira_extrativa() -> None:
+    contexto = '[1]\nsource_path: cisco.md\ntitle: Cisco — Trilha de Cursos e Certificações\ntrecho:\nA trilha reúne cursos.'
+
+    validation = validate_generated_answer('sobre cisco', 'Cisco — Trilha de Cursos e Certificações [1]', [contexto], [])
+
+    assert validation.action == 'fallback_extractive'
+    assert validation.reason == 'echoed_title'
+
+
+def test_validate_generated_answer_sem_marcador_de_fonte_vira_extrativa() -> None:
+    contexto = '[1]\nsource_path: prazo.md\ntitle: Prazo\nnote_id: prazo\nchunk_id: prazo::1\ntrecho:\nO prazo de entrega é de 15 dias úteis.'
+
+    validation = validate_generated_answer('Qual o prazo?', 'O prazo de entrega é de 15 dias úteis.', [contexto], [])
+
+    assert validation.action == 'fallback_extractive'
+    assert validation.reason == 'no_source_marker'
+
+
+def test_validate_generated_answer_termo_so_no_cabecalho_nao_conta_como_suporte() -> None:
+    contexto = (
+        '[1]\nsource_path: Juniper.md\ntitle: VLAN\nnote_id: vlan\nchunk_id: vlan::1\n'
+        'trecho:\nVLAN faz a segmentação lógica da rede, com isolamento entre portas trunk e access.'
+    )
+
+    validation = validate_generated_answer(
+        'o que é VLAN?',
+        'VLAN faz a segmentação lógica da rede, segundo a Juniper, com portas trunk e access. [1]',
+        [contexto],
+        [_title_claim('VLAN - [!note]')],
+    )
+
+    assert validation.reason == 'unsupported_anchor'
+
+
+def test_validate_generated_answer_recusa_curta_vira_abstencao() -> None:
+    contexto = '[1]\nsource_path: prazo.md\ntitle: Prazo\ntrecho:\nO prazo de entrega é de 15 dias úteis.'
+
+    curta = validate_generated_answer('Qual o prazo do contrato?', 'Não encontrei essa informação nos trechos. [1]', [contexto], [])
+    longa = validate_generated_answer(
+        'Qual o prazo?',
+        'Não encontrei o prazo exato, mas a nota diz que a entrega leva 15 dias úteis. [1]',
+        [contexto],
+        [],
+    )
+
+    assert curta.action == 'no_answer'
+    assert longa.action != 'no_answer'
+
+
+def test_validate_generated_answer_compara_unidade_kb_e_mb() -> None:
+    validation = validate_generated_answer('Qual o limite?', 'O limite é de 10 MB. [1]', ['O limite é de 10 KB por requisição.'], [])
+
+    assert validation.reason == 'unsupported_number'
 
 
 def test_answer_corpus_with_citations_stitches_multiple_files(tmp_path: Path) -> None:
@@ -497,6 +746,164 @@ def test_answer_corpus_debug_includes_provider_timings_and_identity(tmp_path: Pa
     assert response.debug.provider_model == 'fake-model'
 
 
+class StreamingAnswerProvider:
+    provider_name = 'fake-stream'
+    model = 'fake-model'
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.answer_calls = 0
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        self.answer_calls += 1
+        return self.text
+
+    def answer_stream(self, question: str, contexts: list[str], on_delta) -> str:
+        on_delta(self.text[:20])
+        on_delta(self.text[20:])
+        return self.text
+
+
+def _indexed_connection(tmp_path: Path):
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+    return connection
+
+
+def test_answer_corpus_usa_answer_stream_quando_recebe_callback(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+    text = 'RabbitMQ foi adotado como message broker padrao do pipeline. [1]'
+    provider = StreamingAnswerProvider(text)
+    pieces: list[str] = []
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+        on_answer_delta=pieces.append,
+    )
+
+    assert pieces == [text[:20], text[20:]]
+    assert response.generated is True
+    assert response.answer == text
+    assert provider.answer_calls == 0
+
+
+def test_answer_corpus_stream_mantem_a_validacao_sobre_o_texto_final(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+    provider = StreamingAnswerProvider(
+        'RabbitMQ foi adotado como message broker padrao do pipeline com lote de 64 KB.'
+    )
+    pieces: list[str] = []
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+        on_answer_delta=pieces.append,
+    )
+
+    assert pieces  # o texto já foi repassado antes da validação
+    assert response.generated is False
+    assert '64 KB' not in (response.answer or '')
+    assert any('número sem suporte' in limitation for limitation in response.limitations)
+
+
+def test_answer_corpus_sem_callback_continua_usando_answer(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+    provider = StreamingAnswerProvider('RabbitMQ foi adotado como message broker padrao do pipeline. [1]')
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+    )
+
+    assert response.generated is True
+    assert provider.answer_calls == 1
+
+
+def test_answer_corpus_accepted_answer_lists_claim_chunks_as_sources(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+    provider = FakeAnswerProvider()
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+    )
+
+    _, contexts = provider.calls[0]
+    claim_ids = [claim.citations[0].chunk_id for claim in response.claims]
+    assert response.generated is True
+    assert len(contexts) >= len(claim_ids)  # os trechos recuperados vêm depois dos claims
+    assert response.answer_sources[: len(claim_ids)] == claim_ids
+    assert [citation.chunk_id for citation in response.citations] == claim_ids
+
+
+def test_answer_corpus_rejected_answer_has_no_answer_sources(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=UnsupportedNumberAnswerProvider(),
+    )
+
+    assert response.generated is False
+    assert response.answer_sources == []
+    assert [citation.chunk_id for citation in response.citations] == [claim.citations[0].chunk_id for claim in response.claims]
+
+
+def test_answer_corpus_drops_only_markers_without_context(tmp_path: Path) -> None:
+    connection = _indexed_connection(tmp_path)
+    provider = StreamingAnswerProvider(
+        'RabbitMQ foi adotado como message broker padrao do pipeline. [1] Ele segue o padrao da equipe. [9]'
+    )
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=provider,
+    )
+
+    assert response.generated is True
+    assert response.answer == 'RabbitMQ foi adotado como message broker padrao do pipeline. [1] Ele segue o padrao da equipe.'
+
+
+def test_answer_corpus_resposta_so_com_marcadores_volta_para_a_extrativa(tmp_path: Path) -> None:
+    # Regressão: o qchat devolveu só "[1]" numa pergunta real e a tela mostrou "[1]" como resposta.
+    connection = _indexed_connection(tmp_path)
+
+    for texto in ('[1]', ' [1] [2]. '):
+        response = answer_corpus_with_citations(
+            'Qual message broker foi adotado?',
+            connection=connection,
+            strategy='lexical',
+            top_k=4,
+            answer_provider=StreamingAnswerProvider(texto),
+        )
+
+        assert response.generated is False
+        assert response.answer and 'RabbitMQ' in response.answer
+        assert any('só marcações de fonte' in limitation for limitation in response.limitations)
+
+
 def test_answer_corpus_abstains_when_question_term_is_not_in_any_note(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     root = tmp_path / 'corpus'
@@ -524,6 +931,14 @@ def test_terms_missing_from_vocabulary_splits_identifiers_and_ignores_low_signal
 
     assert terms_missing_from_vocabulary(['note_id', 'redis_connect_timeout', 'arquivo', 'foi'], vocabulary) == []
     assert terms_missing_from_vocabulary(['splunk', 'arquivo'], vocabulary) == ['splunk']
+
+
+def test_regressao_terms_missing_from_vocabulary_ignores_short_fragment_inside_term() -> None:
+    # Positivas do benchmark (#112) dependem de flexões; o bug 5 vinha de um fragmento curto.
+    vocabulary = frozenset({'gera', 'suficient', 'cont', 'quartz'})  # radicais do corpus do benchmark
+
+    assert terms_missing_from_vocabulary(['geram', 'insuficiente', 'acontece'], vocabulary) == []
+    assert terms_missing_from_vocabulary(['zanzibarquartzo'], vocabulary) == ['zanzibarquartzo']
 
 
 def test_named_query_terms_ignore_capitalized_question_word() -> None:
@@ -580,7 +995,8 @@ def test_answer_corpus_calls_answer_provider_only_after_citations(tmp_path: Path
     )
 
     assert response.status == 'answer'
-    assert response.answer == 'RabbitMQ foi adotado como message broker padrao do pipeline.'
+    assert response.answer == 'RabbitMQ foi adotado como message broker padrao do pipeline. [1]'
+    assert response.generated is True
     assert response.citations
     assert len(provider.calls) == 1
     question, contexts = provider.calls[0]
@@ -608,7 +1024,8 @@ def test_answer_corpus_falls_back_when_generated_answer_has_unsupported_number(t
     assert response.status == 'answer'
     assert '64 KB' not in (response.answer or '')
     assert 'RabbitMQ foi adotado' in (response.answer or '')
-    assert any('unsupported_number' in limitation for limitation in response.limitations)
+    assert response.generated is False
+    assert any('número sem suporte' in limitation for limitation in response.limitations)
 
 
 def test_answer_corpus_turns_generated_sentinel_into_no_answer(tmp_path: Path) -> None:
@@ -649,6 +1066,47 @@ def test_answer_corpus_turns_generic_generated_no_answer_into_no_answer(tmp_path
     assert response.reason_for_no_answer == 'generated_generic_no_answer'
 
 
+def test_answer_corpus_preenche_motivo_do_descarte_e_modelo(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    def responder(provider=None):
+        return answer_corpus_with_citations(
+            'Qual message broker foi adotado?',
+            connection=connection,
+            strategy='lexical',
+            top_k=4,
+            answer_provider=provider,
+        )
+
+    sem_provedor = responder()
+    assert (sem_provedor.answer_model, sem_provedor.answer_discard_reason) == (None, None)
+
+    aceita = responder(FakeAnswerProvider())
+    assert (aceita.generated, aceita.answer_model, aceita.answer_discard_reason) == (True, 'fake-model', None)
+
+    copia_titulo = responder(ReplyAnswerProvider('Contexto base [1]'))
+    assert (copia_titulo.generated, copia_titulo.answer_discard_reason) == (False, 'echoed_title')
+    assert copia_titulo.answer_model == 'fake-model'
+
+    sentinela_no_meio = responder(
+        ReplyAnswerProvider(
+            'RabbitMQ foi adotado como message broker padrao do pipeline. '
+            'NAO_ENCONTRADO: os dados recuperados nao sustentam resposta.'
+        )
+    )
+    assert sentinela_no_meio.status == 'no_answer'
+    assert sentinela_no_meio.answer_discard_reason == 'generated_no_answer_sentinel'
+
+    falha = FailingAnswerProvider()
+    falha.model = 'fake-qchat'
+    falhou = responder(falha)
+    assert (falhou.generated, falhou.answer_discard_reason, falhou.answer_model) == (False, 'provider_error', 'fake-qchat')
+
+
 def test_answer_corpus_does_not_call_answer_provider_without_hits(tmp_path: Path) -> None:
     connection = init_sqlite(tmp_path / 'empty.sqlite3')
     provider = FakeAnswerProvider()
@@ -683,7 +1141,29 @@ def test_answer_corpus_falls_back_to_extractive_answer_when_provider_fails(tmp_p
 
     assert response.status == 'answer'
     assert 'RabbitMQ' in (response.answer or '')
-    assert any('provider de resposta falhou' in limitation.lower() for limitation in response.limitations)
+    assert any('a ia falhou' in limitation.lower() for limitation in response.limitations)
+
+
+def test_answer_corpus_erro_de_codigo_fora_do_provider_propaga(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    def validacao_quebrada(*_args: object) -> None:
+        raise TypeError('bug na validacao')
+
+    monkeypatch.setattr('escolio.corpus.ask.validate_generated_answer', validacao_quebrada)
+
+    with pytest.raises(TypeError, match='bug na validacao'):
+        answer_corpus_with_citations(
+            'Qual message broker foi adotado?',
+            connection=connection,
+            strategy='lexical',
+            top_k=4,
+            answer_provider=FakeAnswerProvider(),
+        )
 
 
 def test_answer_corpus_sanitizes_provider_failure_message(tmp_path: Path) -> None:
@@ -703,10 +1183,28 @@ def test_answer_corpus_sanitizes_provider_failure_message(tmp_path: Path) -> Non
     serialized = ' '.join(response.limitations)
 
     assert response.status == 'answer'
-    assert 'Provider de resposta falhou' in serialized
+    assert 'A IA falhou' in serialized
     assert 'RuntimeError' in serialized
     assert 'sk-secret' not in serialized
     assert 'bad key' not in serialized
+
+
+def test_answer_corpus_limitation_shows_safe_provider_error(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    _build_distributed_corpus(root)
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    response = answer_corpus_with_citations(
+        'Qual message broker foi adotado?',
+        connection=connection,
+        strategy='lexical',
+        top_k=4,
+        answer_provider=TimeoutAnswerProvider(),
+    )
+
+    assert 'Erro: Provider excedeu timeout.' in ' '.join(response.limitations)
 
 
 def test_answer_corpus_with_citations_returns_no_answer_for_irrelevant_question(tmp_path: Path) -> None:
@@ -754,7 +1252,8 @@ def test_answer_corpus_filters_stale_vector_hits_before_citations(tmp_path: Path
     assert response.no_answer is True
     assert response.citations == []
     assert all(source.doc_id != 'stale-filas' for source in response.used_sources)
-    assert any('stale' in limitation.lower() or 'obsoleto' in limitation.lower() for limitation in response.limitations)
+    assert 'desatualizados' not in response.limitations[0]
+    assert 'desatualizados' in response.limitations[-1]
 
 
 def test_answer_corpus_uses_valid_vector_hit_after_dropping_stale_hit(tmp_path: Path) -> None:
@@ -786,3 +1285,34 @@ def test_answer_corpus_uses_valid_vector_hit_after_dropping_stale_hit(tmp_path: 
     assert 'RabbitMQ' in (response.answer or '')
     assert {citation.note_id for citation in response.citations} == {context_note_id}
     assert all(citation.note_id != 'stale-broker' for citation in response.citations)
+
+
+class _NoVectorStore:
+    def delete_by_note_id(self, note_id: str) -> int:
+        return 0
+
+
+def test_answer_corpus_regressao_abstains_after_only_note_with_term_is_deleted(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root_a = tmp_path / 'nota_a'
+    root_b = tmp_path / 'nota_b'
+    root_a.mkdir()
+    root_b.mkdir()
+    (root_a / 'a.md').write_text(
+        '# Cafeteira\n\nA cafeteira moka modelo xilofone-quartzo-917 fica na copa.\n', encoding='utf-8'
+    )
+    (root_b / 'b.md').write_text('# Termo raro\n\nO codigo secreto e zanzibarquartzo.\n', encoding='utf-8')
+    connection = init_sqlite(settings.sqlite_path)
+    index_corpus_path(root_a, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+    index_corpus_path(root_b, settings=settings, connection=connection, embedder=FakeEmbedder(), recursive=True)
+
+    before = answer_corpus_with_citations('zanzibarquartzo', connection=connection, strategy='lexical')
+    note_b = connection.execute(
+        "SELECT note_id FROM chunks WHERE chunk_text LIKE '%zanzibarquartzo%'"
+    ).fetchone()[0]
+    delete_note(note_b, settings=settings, connection=connection, vector_store=_NoVectorStore())
+    after = answer_corpus_with_citations('zanzibarquartzo', connection=connection, strategy='lexical')
+
+    assert before.status == 'answer'
+    assert after.status == 'no_answer'
+    assert after.reason_for_no_answer == 'query_term_not_in_corpus'

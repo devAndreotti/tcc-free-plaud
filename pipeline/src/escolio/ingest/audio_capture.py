@@ -12,6 +12,34 @@ from escolio.ingest.audio_vad import SpeechDetector
 from escolio.providers.audio_models import SAMPLE_RATE, AudioError, SpeechRegion
 
 
+def _default_hostapi_inputs() -> list[tuple[int, dict]]:
+    # Só a host API padrão (MME no Windows): o mesmo mic aparece em várias APIs.
+    import sounddevice as sd
+
+    hostapi = sd.default.hostapi
+    return [
+        (index, info)
+        for index, info in enumerate(sd.query_devices())
+        if info["max_input_channels"] > 0 and info["hostapi"] == hostapi
+    ]
+
+
+def list_input_devices() -> list[str]:
+    return [info["name"] for _, info in _default_hostapi_inputs()]
+
+
+def resolve_input_device(device: int | str | None) -> int | None:
+    if device is None or isinstance(device, int):
+        return device
+    for index, info in _default_hostapi_inputs():
+        if info["name"] == device:
+            return index
+    raise AudioError(
+        "AUDIO_DEVICE_UNAVAILABLE",
+        f'Microfone "{device}" não encontrado. Conecte-o ou escolha outro em Configurações → Voz.',
+    )
+
+
 class AudioCapture:
     def __init__(
         self,
@@ -60,6 +88,7 @@ class AudioCapture:
         if self.path.exists():
             raise AudioError("AUDIO_OUTPUT_EXISTS", "Recording path already exists.")
         try:
+            self.device = resolve_input_device(self.device)
             info = sd.query_devices(self.device, kind="input")
             rate = int(info["default_samplerate"])
             sd.check_input_settings(

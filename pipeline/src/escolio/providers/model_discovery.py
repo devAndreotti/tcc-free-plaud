@@ -113,8 +113,15 @@ def _ollama_details(item: dict[str, object]) -> dict[str, object]:
     return details
 
 
+def _is_embedding_model(item: dict[str, object]) -> bool:
+    # nomic-embed-text, all-minilm, mxbai-embed... só geram vetores: não servem para escrever a resposta.
+    details = item.get('details')
+    family = str(details.get('family', '')) if isinstance(details, dict) else ''
+    return 'embed' in str(item['name']) or family.endswith('bert')
+
+
 def _ollama_model(item: object) -> ModelInfo | None:
-    if not isinstance(item, dict) or not item.get('name'):
+    if not isinstance(item, dict) or not item.get('name') or _is_embedding_model(item):
         return None
     model_id = str(item['name'])
     return ModelInfo(id=model_id, label=model_id, provider='ollama', details=_ollama_details(item))
@@ -269,6 +276,6 @@ def list_answer_models(
         timeout_seconds=timeout_seconds,
         started_at=started_at,
     )
-    if use_cache:
+    if use_cache and result.status == 'ok':
         _save_cache(key, result)
     return result

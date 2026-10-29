@@ -11,6 +11,8 @@ interface NoteDetailViewProps {
   isLoadingDetail: boolean;
   onReindex: () => void;
   onDelete: () => void;
+  /** Trecho citado numa resposta do chat: abre os chunks, rola até ele e o destaca. */
+  highlightChunkId?: string | null;
 }
 
 /** `código` e **negrito** dentro de uma linha; o React escapa o resto. */
@@ -153,17 +155,24 @@ function readableMarkdown(source: string): string {
   return end < 0 ? text : text.slice(0, end);
 }
 
-export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, onReindex, onDelete }: NoteDetailViewProps) => {
-  const [showChunks, setShowChunks] = useState(false);
+export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, onReindex, onDelete, highlightChunkId = null }: NoteDetailViewProps) => {
+  const chunks = detail.chunks ?? [];
+  // Trecho citado: a lista abre com os chunks visíveis; se a nota não tiver mais esse trecho, abre a leitura normal.
+  const [showChunks, setShowChunks] = useState(() => chunks.some((c) => c.chunk_id === highlightChunkId));
   const [menu, setMenu] = useState<'closed' | 'menu' | 'confirm'>('closed');
   const [copied, setCopied] = useState(false);
   const actionsRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const citedRef = useRef<HTMLLIElement>(null);
 
-  const chunks = detail.chunks ?? [];
   const tokens = chunks.reduce((sum, c) => sum + (c.token_count ?? 0), 0);
   const created = formatDate(detail.created_at);
   const busy = isMutating || isLoadingDetail;
+
+  // Rola até o trecho citado uma vez, ao abrir: a nota só monta depois de carregada.
+  useEffect(() => {
+    citedRef.current?.scrollIntoView({ block: 'center' });
+  }, []);
 
   useEffect(() => {
     if (menu === 'closed') return undefined;
@@ -215,7 +224,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
               onChange={(event) => setShowChunks(event.target.checked)}
             />
             <span className="switch__track" aria-hidden="true" />
-            <span>Mostrar chunks</span>
+            <span>Mostrar trechos</span>
           </label>
           <span className="nd__vr" aria-hidden="true" />
           <button type="button" className="btn btn--sm" onClick={onReindex} disabled={busy}>
@@ -226,7 +235,6 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
             type="button"
             className="btn-icon"
             aria-label="Mais ações"
-            aria-haspopup="menu"
             aria-expanded={menu !== 'closed'}
             onClick={() => setMenu((prev) => (prev === 'closed' ? 'menu' : 'closed'))}
           >
@@ -234,15 +242,14 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
           </button>
 
           {menu === 'menu' && (
-            <div className="popover nd__menu" role="menu">
-              <button type="button" role="menuitem" className="popover__item" onClick={copyPath}>
+            <div className="popover nd__menu">
+              <button type="button" className="popover__item" onClick={copyPath}>
                 <CopyIcon size={15} />
                 Copiar caminho
               </button>
               <hr />
               <button
                 type="button"
-                role="menuitem"
                 className="popover__item popover__item--danger"
                 onClick={() => setMenu('confirm')}
                 disabled={busy}
@@ -257,7 +264,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
             <div className="popover nd__confirm" role="alertdialog" aria-labelledby="nd-confirm-title" aria-describedby="nd-confirm-desc">
               <h4 id="nd-confirm-title">Apagar do corpus?</h4>
               <p id="nd-confirm-desc">
-                Remove <b>{detail.title}</b> e {chunks.length === 1 ? 'seu chunk' : `seus ${chunks.length} chunks`} do SQLite e do
+                Remove <b>{detail.title}</b> e {chunks.length === 1 ? 'seu trecho' : `seus ${chunks.length} trechos`} do SQLite e do
                 Chroma. O arquivo no vault não é alterado.
               </p>
               <div className="nd__confirm-actions">
@@ -286,7 +293,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
           <div className="reader__meta">
             <span>{typeLabel(detail.source_type)}</span>
             <span className="reader__sep">·</span>
-            <span>{chunks.length} {chunks.length === 1 ? 'chunk' : 'chunks'}</span>
+            <span>{chunks.length} {chunks.length === 1 ? 'trecho' : 'trechos'}</span>
             {tokens > 0 && (
               <>
                 <span className="reader__sep">·</span>
@@ -305,12 +312,19 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
           </div>
 
           {showChunks ? (
-            <ol className="reader__chunks" aria-label="Chunks indexados">
+            <ol className="reader__chunks" aria-label="Trechos indexados">
               {chunks.map((chunk, i) => {
                 const overlap = i > 0 ? chunks[i - 1].char_end - chunk.char_start : 0;
+                const cited = chunk.chunk_id === highlightChunkId;
                 return (
-                  <li key={chunk.chunk_id} className="reader__chunk" title={chunk.chunk_id}>
+                  <li
+                    key={chunk.chunk_id}
+                    ref={cited ? citedRef : undefined}
+                    className={`reader__chunk${cited ? ' reader__chunk--cited' : ''}`}
+                    title={chunk.chunk_id}
+                  >
                     <span className="reader__chunk-label mono">
+                      {cited && <span className="pill pill--accent">trecho citado</span>}
                       <b>#{chunk.chunk_index} · {chunk.token_count} tok</b>
                       {chunk.char_start}–{chunk.char_end}
                       {overlap > 0 && <><br />↥ {overlap} sobrepostos</>}
