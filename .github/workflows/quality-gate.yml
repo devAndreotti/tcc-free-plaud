@@ -118,6 +118,11 @@ jobs:
         run: uv sync --locked --dev --extra audio --extra cpu
       - name: Install microphone runtime library
         run: |
+          # Runners sem sudo sem senha (ex.: Emerald) já têm a lib; só instala se faltar.
+          if ldconfig -p | grep -q 'libportaudio\.so\.2'; then
+            echo "libportaudio2 já presente"
+            exit 0
+          fi
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y libportaudio2
       - name: Python tests and coverage
