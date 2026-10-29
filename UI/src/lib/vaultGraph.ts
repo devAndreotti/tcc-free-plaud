@@ -6,6 +6,8 @@
  * [[...]] entre notas como arestas próprias.
  */
 
+import { assignPaletteSlots, folderPaletteIndex, topFolderOf } from './graphColors';
+
 /** Metadados de uma nota indexada, no formato que o grafo usa. */
 export interface MarkdownNode {
   id: string;
@@ -22,6 +24,9 @@ export interface SimNode {
   label: string;
   kind: 'note' | 'folder';
   depth: number; // profundidade da pasta (0 = raiz do vault); notas usam a da pasta + 1
+  group: string;     // pasta de 1º nível ('' na raiz): dá a cor do nó e da legenda
+  folder: string;    // caminho da pasta (a própria, para pasta; a que contém, para nota); '' na raiz
+  colorSlot: number | null; // índice (0…7) na paleta de cores de graphColors.ts; null sem grupo
   x: number;     // pixels lógicos (CSS px)
   y: number;
   vx: number;
@@ -51,6 +56,11 @@ const GOLDEN_ANGLE  = 2.399963; // radianos (~137,5°): espalha nós novos sem a
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Campos de cor de um nó: pasta de 1º nível do caminho (ou '' na raiz) e o índice da paleta. */
+function colorFields(group: string, slots: Map<string, number>): Pick<SimNode, 'group' | 'colorSlot'> {
+  return { group, colorSlot: group ? (slots.get(group) ?? folderPaletteIndex(group)) : null };
+}
+
 function folderOf(path: string): string {
   const parts = path.replaceAll('\\', '/').split('/');
   return parts.slice(0, -1).join('/');
@@ -58,6 +68,24 @@ function folderOf(path: string): string {
 
 export function nodeRadius(n: SimNode): number {
   return n.kind === 'folder' ? Math.min(9, 3.5 + Math.sqrt(n.degree)) : 2.6;
+}
+
+/**
+ * Ligações que o grafo desenha: só entre notas do vault, sem laço e sem repetição
+ * (A → B e B → A viram uma linha só: o desenho e a mola não dependem do sentido).
+ */
+export function visibleLinks(vaultNodes: MarkdownNode[], links: VaultLink[]): VaultLink[] {
+  const noteIds = new Set(vaultNodes.map((n) => n.id));
+  const seen = new Set<string>();
+  const out: VaultLink[] = [];
+  for (const l of links) {
+    if (l.source === l.target || !noteIds.has(l.source) || !noteIds.has(l.target)) continue;
+    const key = JSON.stringify(l.source < l.target ? [l.source, l.target] : [l.target, l.source]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(l);
+  }
+  return out;
 }
 
 // ─── Constrói grafo a partir dos nós do vault ────────────────────────────────
@@ -73,6 +101,7 @@ export function buildGraph(
   const cx = logW / 2;
   const cy = logH / 2;
   const kept = new Map(previous.map((n) => [n.id, n]));
+  const slots = assignPaletteSlots(vaultNodes.map((n) => topFolderOf(n.path)));
   // Posição nova: espiral de ângulo áureo pelo índice do nó (determinística, sem Math.random)
   const place = (id: string, i: number): Pick<SimNode, 'x' | 'y' | 'vx' | 'vy'> => {
     const old = kept.get(id); // rescan do mesmo vault não embaralha o desenho
@@ -92,7 +121,10 @@ export function buildGraph(
     if (folders.has(dir)) return id;
     folders.add(dir);
     const parts = dir ? dir.split('/') : [];
-    nodes.push({ id, label: parts.at(-1) ?? 'vault', kind: 'folder', depth: parts.length, degree: 0, ...place(id, nodes.length) });
+    nodes.push({
+      id, label: parts.at(-1) ?? 'vault', kind: 'folder', depth: parts.length, folder: dir,
+      ...colorFields(parts[0] ?? '', slots), degree: 0, ...place(id, nodes.length),
+    });
     if (dir) edges.push({ source: ensureFolder(parts.slice(0, -1).join('/')), target: id });
     return id;
   };
@@ -103,21 +135,15 @@ export function buildGraph(
     const dir = folderOf(n.path);
     const folderId = withTree ? ensureFolder(dir) : null;
     const depth = dir ? dir.split('/').length + 1 : 1;
-    nodes.push({ id: n.id, label: n.name, kind: 'note', depth, degree: 0, ...place(n.id, nodes.length) });
+    nodes.push({
+      id: n.id, label: n.name, kind: 'note', depth, folder: dir, ...colorFields(topFolderOf(n.path), slots),
+      degree: 0, ...place(n.id, nodes.length),
+    });
     if (folderId) edges.push({ source: folderId, target: n.id });
   }
 
   if (mode !== 'pastas') {
-    const noteIds = new Set(vaultNodes.map((n) => n.id));
-    const seen = new Set<string>();
-    for (const l of links) {
-      if (l.source === l.target || !noteIds.has(l.source) || !noteIds.has(l.target)) continue;
-      // A → B e B → A viram uma linha só: o desenho e a mola não dependem do sentido
-      const key = JSON.stringify(l.source < l.target ? [l.source, l.target] : [l.target, l.source]);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      edges.push({ source: l.source, target: l.target, kind: 'link' });
-    }
+    for (const l of visibleLinks(vaultNodes, links)) edges.push({ source: l.source, target: l.target, kind: 'link' });
   }
 
   const deg = new Map<string, number>();

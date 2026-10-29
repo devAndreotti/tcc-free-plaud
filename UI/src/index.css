@@ -51,6 +51,18 @@
   --tip-fg: #16151b;
   --scrim: rgba(6, 6, 10, 0.58);
 
+  /* Paleta do grafo: cada pasta de 1º nível ganha uma destas (hash do nome, lib/graphColors.ts) */
+  --graph-1: #7aa2f7;
+  --graph-2: #5ccf96;
+  --graph-3: #e6b659;
+  --graph-4: #e8957f;
+  --graph-5: #d68bf0;
+  --graph-6: #4fc3c7;
+  --graph-7: #b5d46a;
+  --graph-8: #f59fc0;
+  /* Opacidade das notas (cor da pasta apagada); no claro ela é 1, senão a nota cai abaixo de 3:1 */
+  --graph-note-alpha: 0.75;
+
   --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 10px 24px -8px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 18px 40px -8px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.35);
@@ -126,6 +138,17 @@
   --tip-bg: #19181e;
   --tip-fg: #ffffff;
   --scrim: rgba(22, 20, 32, 0.28);
+
+  /* Paleta do grafo no tema claro: tons mais fundos para contrastar com o fundo claro */
+  --graph-1: #2f6fd1;
+  --graph-2: #1d8f5a;
+  --graph-3: #a8720c;
+  --graph-4: #b4543f;
+  --graph-5: #9c3fb0;
+  --graph-6: #0f8a8f;
+  --graph-7: #6d8a10;
+  --graph-8: #c2437a;
+  --graph-note-alpha: 1;
 
   --shadow-sm: 0 1px 3px rgba(20, 18, 30, 0.10);
   --shadow-md: 0 8px 20px -8px rgba(20, 18, 30, 0.16);
