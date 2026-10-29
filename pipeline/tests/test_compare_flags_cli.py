@@ -59,6 +59,9 @@ def _campos_ts(nome: str) -> set[str]:
 
 
 def test_com_baseline_sem_rerank_model_falha_antes_de_rodar(monkeypatch, tmp_path: Path) -> None:
+    # Largura fixa e sem cor: o Rich quebra a mensagem em terminais estreitos (CI) e o assert não a encontra.
+    monkeypatch.setenv('COLUMNS', '200')
+    monkeypatch.setenv('NO_COLOR', '1')
     resultado, _, _ = _rodar(tmp_path, monkeypatch, ['--com-baseline'])
 
     assert resultado.exit_code != 0
