@@ -23,7 +23,9 @@ def test_settings_reject_invalid_chunk_window() -> None:
         Settings(default_chunk_size=100, default_chunk_overlap=100)
 
 
-def test_settings_keep_runtime_data_inside_workspace() -> None:
+def test_settings_keep_runtime_data_inside_workspace(monkeypatch) -> None:
+    # Sem isso, um free_plaud.sqlite3 legado no disco do dev ativa o fallback de legacy.py.
+    monkeypatch.setattr('escolio.app.config.resolve_legacy_sqlite_path', lambda path: path)
     settings = Settings()
 
     assert settings.data_dir == settings.workspace_dir / 'data'
