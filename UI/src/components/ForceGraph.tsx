@@ -24,21 +24,22 @@ interface Tooltip  { label: string; x: number; y: number }
 
 const MAX_ITER = 300;
 
-// Cores vêm dos tokens do tema (index.css); o fundo é o do próprio painel.
+// Cores vêm dos tokens --ag-* do .force-graph (App.css), que seguem a paleta do dashboard do ai-ops-lab.
 function themeColors(el: Element) {
   const css = getComputedStyle(el);
   const v = (name: string) => css.getPropertyValue(name).trim();
   return {
-    edge: v('--border-color'),
-    node: v('--text-muted'),
-    folder: v('--accent-blue'),
-    label: v('--text-secondary'),
-    hover: v('--accent-blue-light'),
-    link: v('--accent-blue-light'),
-    focus: v('--accent-blue-light'),
-    bg: v('--bg-primary'),
-    tipBg: v('--tip-bg'),
-    tipFg: v('--tip-fg'),
+    edge: v('--ag-hairline'),
+    node: v('--ag-ink-muted'),
+    folder: v('--ag-accent'),
+    label: v('--ag-ink-2'),
+    hover: v('--ag-accent'),
+    link: v('--ag-accent'),
+    focus: v('--ag-accent'),
+    glow: v('--ag-glow'),
+    bg: v('--ag-plane'),
+    tipBg: v('--ag-surface'),
+    tipFg: v('--ag-ink'),
   };
 }
 
@@ -66,23 +67,32 @@ function drawEdges(ctx: Ctx, nodes: SimNode[], edges: SimEdge[], colors: Colors,
     }
     ctx.stroke();
   };
-  // Árvore em cinza; ligações [[...]] por cima, um pouco mais grossas e em azul claro transparente
+  // Árvore em filete discreto; ligações [[...]] por cima, em acento translúcido (estilo aiops)
   ctx.strokeStyle = colors.edge;
-  ctx.lineWidth   = 0.8 / cam.scale;
+  ctx.lineWidth   = 0.7 / cam.scale;
   stroke(false);
 
   const alpha = ctx.globalAlpha;
   ctx.strokeStyle = colors.link;
-  ctx.lineWidth   = 1.2 / cam.scale;
-  ctx.globalAlpha = alpha * 0.35;
+  ctx.lineWidth   = 1 / cam.scale;
+  ctx.globalAlpha = alpha * 0.45;
   stroke(true);
   ctx.globalAlpha = alpha;
 }
 
+// Pastas e o nó sob o mouse ganham um halo translúcido, como o glow dos ambientes no aiops
 function drawNodes(ctx: Ctx, nodes: SimNode[], colors: Colors, hoveredId: string | null) {
   for (const n of nodes) {
+    const r = nodeRadius(n);
+    const lit = n.id === hoveredId || n.kind === 'folder';
+    if (lit) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r * 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = colors.glow;
+      ctx.fill();
+    }
     ctx.beginPath();
-    ctx.arc(n.x, n.y, nodeRadius(n), 0, Math.PI * 2);
+    ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
     ctx.fillStyle = nodeColor(n, colors, hoveredId);
     ctx.fill();
   }
@@ -94,7 +104,7 @@ const NOTE_LABEL_SCALE = 1.6;
 
 function drawLabels(ctx: Ctx, nodes: SimNode[], colors: Colors, cam: Camera) {
   ctx.fillStyle = colors.label;
-  ctx.font = `${11 / cam.scale}px sans-serif`;
+  ctx.font = `500 ${11 / cam.scale}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
   ctx.textAlign = 'center';
   for (const n of nodes) {
     if (n.kind === 'folder' && n.depth === 0) continue;
@@ -120,12 +130,10 @@ function drawFocus(ctx: Ctx, chain: string[], nodes: SimNode[], colors: Colors, 
   path.forEach((n, i) => (i === 0 ? ctx.moveTo(n.x, n.y) : ctx.lineTo(n.x, n.y)));
   ctx.stroke();
 
-  ctx.fillStyle = colors.focus;
-  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = colors.glow;
   ctx.beginPath();
   ctx.arc(target.x, target.y, 14 * px, 0, Math.PI * 2);
   ctx.fill();
-  ctx.globalAlpha = 1;
   for (const n of path) {
     ctx.beginPath();
     ctx.arc(n.x, n.y, radius(n), 0, Math.PI * 2);
@@ -147,17 +155,20 @@ function drawFocus(ctx: Ctx, chain: string[], nodes: SimNode[], colors: Colors, 
 
   // Nome da nota numa pílula acima dela, sem sair pelas bordas do painel
   const label = target.label.length > 42 ? `${target.label.slice(0, 41)}…` : target.label;
-  ctx.font = `600 ${12 * px}px sans-serif`;
+  ctx.font = `600 ${12 * px}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
   const w = ctx.measureText(label).width + 16 * px;
-  const h = 22 * px;
+  const h = 24 * px;
   const minX = (6 - cam.x) * px;
   const maxX = (viewW - 6 - cam.x) * px - w;
   const left = Math.max(minX, Math.min(maxX, target.x - w / 2));
   const top = target.y - 18 * px - h;
   ctx.fillStyle = colors.tipBg;
   ctx.beginPath();
-  ctx.roundRect(left, top, w, h, 6 * px);
+  ctx.roundRect(left, top, w, h, 10 * px);
   ctx.fill();
+  ctx.strokeStyle = colors.focus;
+  ctx.lineWidth = 1 * px;
+  ctx.stroke();
   ctx.fillStyle = colors.tipFg;
   ctx.textBaseline = 'middle';
   ctx.fillText(label, left + w / 2, top + h / 2);
