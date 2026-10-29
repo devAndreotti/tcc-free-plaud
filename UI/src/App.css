@@ -246,12 +246,34 @@
    FORCE GRAPH (canvas interativo de notas)
    ============================================================ */
 
-/* Contêiner do grafo — ocupa 100% do corpo do painel */
+/* Contêiner do grafo — ocupa 100% do corpo do painel.
+   Paleta do dashboard do ai-ops-lab (tokens --surface/--plane/--ink/--accent). Os --ag-* só
+   existem aqui: o canvas lê estes valores em themeColors() (ForceGraph.tsx). */
 .force-graph {
   flex: 1;
   position: relative;
   overflow: hidden;
   display: flex;
+  --ag-surface: #1a1a19;
+  --ag-plane: #0d0d0d;
+  --ag-ink: #ffffff;
+  --ag-ink-2: #c3c2b7;
+  --ag-ink-muted: #8f8d87;
+  --ag-hairline: #2c2c2a;
+  --ag-accent: #3987e5;
+  --ag-glow: rgba(57, 135, 229, 0.35);
+  background: var(--ag-plane);
+}
+
+:root[data-theme="light"] .force-graph {
+  --ag-surface: #ffffff;
+  --ag-plane: #f7f7f5;
+  --ag-ink: #0b0b0b;
+  --ag-ink-2: #52514e;
+  --ag-ink-muted: #898781;
+  --ag-hairline: #e2e0d8;
+  --ag-accent: #2a78d6;
+  --ag-glow: rgba(42, 120, 214, 0.35);
 }
 
 /* Canvas ocupa o espaço total */
