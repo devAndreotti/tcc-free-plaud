@@ -35,8 +35,15 @@ def executar_compare(tmp_path: Path, monkeypatch, argumentos: list[str]):
 
 def test_sem_flags_o_json_bate_com_o_golden_de_antes(monkeypatch, tmp_path: Path) -> None:
     payload, _ = executar_compare(tmp_path, monkeypatch, [])
+    real = mascarar(payload)
+    esperado = json.loads(GOLDEN.read_text(encoding='utf-8'))
+    if real != esperado:
+        # Diagnostico: o diretorio coverage/ e enviado como artefato do CI (if: always()).
+        saida = Path(__file__).resolve().parents[2] / 'coverage' / 'golden_compare_actual.json'
+        saida.parent.mkdir(parents=True, exist_ok=True)
+        saida.write_text(json.dumps(real, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
 
-    assert mascarar(payload) == json.loads(GOLDEN.read_text(encoding='utf-8'))
+    assert real == esperado
 
 
 def test_sem_flags_so_existem_as_chaves_do_modelo(monkeypatch, tmp_path: Path) -> None:
