@@ -162,9 +162,9 @@ describe('ChatInput - gravação de áudio', () => {
     await user.click(screen.getByRole('button', { name: 'Gravar áudio' }));
     await screen.findByRole('button', { name: 'Parar gravação' });
 
-    await vi.advanceTimersByTimeAsync(3000);
-
-    expect(screen.getByText('0:03')).toBeTruthy();
+    // shouldAdvanceTime faz o relógio correr junto com o tempo real, então a fase
+    // do intervalo de 1s não é fixa: espera pelo valor em vez de avançar um total fixo.
+    await waitFor(() => expect(screen.getByText('0:03')).toBeTruthy(), { timeout: 5000 });
     vi.useRealTimers();
   });
 
