@@ -1,0 +1,327 @@
+AUDITORIA TECNICA - ESCOLIO (APS DE QUALIDADE)
+Arquivo 05: versionamento git, historico de correcoes e checklists de revisao
+==========================================================================================
+
+Repositorio : devAndreotti/tcc-free-plaud (GitHub, privado)
+Branch      : docs/aps-qualidade (worktree), origin/main em dbb82fe
+Data da coleta: 2026-10-14
+Convencao   : "(verificado em 2026-10-14)" = fato conferido pelo agente principal
+              e registrado em docs_aps_qualidade/_fontes/fatos_verificados.md.
+              Demais fontes: caminho:linha, comando git/gh, hash de commit ou PR.
+
+
+1. PADRAO DE VERSIONAMENTO
+==========================================================================================
+
+1.1 Modelo de branches
+----------------------
+- Modelo: trunk-based com branches curtas e squash merge via PR para a main.
+  Evidencias:
+  - 31 commits em origin/main terminam com "(#N)", padrao do squash merge
+    (git log --format=%s origin/main | grep -cE '\(#[0-9]+\)$').
+  - 8 commits de merge (git log --merges --oneline origin/main | wc -l).
+  - O corpo de 999aef5 diz: "Recriado sobre a main depois do squash do #100 e do #101 (antes eram
+    6 commits empilhados)". (git show -s 999aef5)
+  - Merges via PR: 53 PRs no estado MERGED (gh pr list -R devAndreotti/tcc-free-plaud
+    --state merged --limit 1000). Ultimo: #119 em 2026-10-14 (merge dbb82fe).
+  - AGENTS.md (regra 6-7) pede "um commit por decisao relevante" e "branches curtas e focadas".
+    (AGENTS.md, secao Non-Negotiable Rules)
+- Protecao de main: branch protection com status checks obrigatorios, strict = true, 0 revisoes
+  obrigatorias, enforce_admins = false. (verificado em 2026-10-14, API do GitHub; detalhes em 3.1)
+
+1.2 Prefixos de branch
+----------------------
+- Prefixos observados nos heads de PRs merged (gh pr list --state merged):
+  feat/ (ex.: feat/renomeia-escolio #119, feat/dropzone-indexacao #101), fix/ (fix/e2e-backend-real
+  #102), chore/ (chore/deps-2026-10 #113), ci/ (ci/torch-cpu #103), docs/ (docs/tcc-monograph-final
+  #63), test/ (test/playwright-e2e-parity #67).
+- Fora do padrao:
+  - codex/ (ex.: codex/sonar-quality-gate #42, codex/feat-8-provider-smoke-local #34);
+  - sem prefixo (ci-self-hosted #93).
+
+1.3 Branches remotas
+--------------------
+- git branch -r lista origin/main e 8 branches remotas:
+  chore/deps-2026-10, ci/torch-cpu, feat/benchmark-corpus, feat/dropzone-indexacao,
+  feat/limiares-abstencao, feat/limiares-abstencao-v2, feat/ui-v2-instrumento, fix/e2e-backend-real.
+- Situacao (gh pr list --head <branch>): 7 PRs MERGED (#113, #103, #104, #101, #112, #100, #102)
+  e 1 PR CLOSED (feat/limiares-abstencao = #105, substituido por #112).
+- Conclusao: todas as 8 branches ja foram integradas ou fechadas e nao foram apagadas. Branches
+  obsoletas (higiene). (verificado em 2026-10-14)
+- A branch feat/renomeia-escolio (#119) nao aparece em git branch -r. Nao verifiquei se ela foi
+  apagada no GitHub.
+
+1.4 Volume de commits
+---------------------
+- Total de commits em origin/main: 173 (git log --oneline origin/main | wc -l).
+- Commits com trailer Co-Authored-By: 65 (git log origin/main --format=%B | grep -c Co-Authored-By).
+  Nao e defeito por si so; registrado para rastreabilidade.
+
+1.5 Padrao de mensagem (Conventional Commits)
+---------------------------------------------
+- Contagem por tipo, com o comando:
+    git log --format=%s origin/main | sed -E 's/^([a-z]+)(\(.*\))?!?:.*/\1/' | sort | uniq -c | sort -rn
+
+      Tipo        Quantidade
+      ---------   ----------
+      feat            79
+      docs            30
+      fix             23
+      chore           17
+      test             5
+      ci               4
+      style            3
+      refactor         1
+      ---------   ----------
+      subtotal       162   (com prefixo convencional)
+      sem prefixo     11   (ver lista abaixo)
+      TOTAL          173
+
+- Os 11 sem prefixo convencional (git log --format=%s origin/main):
+  - 5 merges "Merge pull request #N from ..." (os 8 commits de merge do item 1.1 incluem outros);
+  - "fix[Sprint - 08.2] make Docker dry-run portable" (f2ba551);
+  - "feat[Sprint - 09] add local audio capture and transcription (#69)" (7596e06);
+  - "chore[Sprint - 08.2] configure Sonar quality gate" (f54c6ca);
+  - "Organizacao de pastas..." , "Interface Visual Inicial", "BarraLateral-abas-menulateral"
+    (commits antigos, anteriores ao padrao).
+  Nota: os tres "[Sprint - ...]" usam colchete no lugar de dois-pontos; o regex nao os reconhece.
+- Idioma: Conventional Commits com mistura de PT-BR e ingles. Exemplos:
+  - PT-BR: "fix: correcoes do teste ponta a ponta com o backend real" (999aef5);
+    "feat: renomeia o projeto para Escolio (#119)" (dbb82fe);
+  - ingles: "ci: bump node-version to 22 to fix undici markAsUncloneable regression" (97b1ece);
+    "feat(watcher): filesystem watcher daemon and UI dropzone" (#66).
+  - Conclusao: o padrao de idioma nao e consistente. Nao contei por idioma com precisao.
+
+
+2. HISTORICO DE CORRECAO DE BUGS
+==========================================================================================
+
+Fonte: git log --format='%h %ad %s' --date=short --grep='^fix' origin/main (23 commits com
+prefixo fix). Abaixo, 7 casos reais: 6 com corpo de commit ou PR e 1 pelo titulo (marcado).
+
+2.1 Casos
+---------
+
+CASO 1 - 999aef5 - 2026-10-02 - PR #102 (merge 2026-10-02T22:28Z)
+  Titulo    : fix: correcoes do teste ponta a ponta com o backend real
+  Defeitos (corpo do commit):
+    - reindexar: a correcao manteve o note_id (find_note_root). O corpo nao descreve o sintoma
+      exato, so o resultado;
+    - leitura mostrava o texto uma vez so (corrigido);
+    - "pergunta aquecida" levava cerca de 3 s (reduzido para cerca de 0,5 s);
+    - a comparacao do benchmark gravava no corpus do usuario (corrigido: nao grava mais).
+  Correcao  : embedder reaproveitado, padding dinamico, caches; benchmark isolado do corpus;
+              renderMarkdown dividido por bloco para cair a complexidade cognitiva de 34 para
+              abaixo de 15 (achado do SonarCloud); regex de item de lista sem backtracking.
+  Arquivos  : 42 arquivos, +673 / -301 (git show --stat 999aef5). Inclui UI/main.py,
+              UI/src/components/BenchmarkPanel.tsx, MessageBubble.tsx e testes.
+  Teste novo: testes de ramos da frase do Benchmark e do MessageBubble no mesmo commit.
+
+CASO 2 - 6c442ee - 2026-10-08 (commit) / merge 2026-10-09T00:56Z - PR #112
+  Titulo    : fix(chat): decisao de responder ou se abster, medida no benchmark do corpus
+  Defeitos (corpo do commit):
+    - recusas indevidas: pergunta interrogativa virava anchor nomeado;
+    - underline apagado em identificadores;
+    - comparacao "diferenca entre X e Y" com uma unica afirmacao era recusada.
+  Correcao  : novo filtro query_term_not_in_corpus (corpus/ask.py:718), que se abstem quando um
+              termo de conteudo nao existe no vocabulario FTS (cache montado no aquecimento).
+              Segundo lote de perguntas negativas, medido sem ajuste.
+  Arquivos  : 12 arquivos, +305 / -10 (git show --stat 6c442ee): corpus/ask.py (+45),
+              retrieval/search.py (+33), retrieval/rag.py, storage/sqlite.py (+8),
+              tests/test_corpus_ask.py (+60), data/datasets/manual_validation/negativas.json (+120).
+  Relacao   : este commit trata abstencao falsa, a mesma familia do defeito (b) em aberto (2.3).
+
+CASO 3 - 11d1f93 - 2026-09-09 - PR #70
+  Titulo    : fix(ui): lazy-evaluate PyWebView detection (#70)
+  Defeito   : app desktop funcionava so com dados simulados ("mock-only desktop app"). A deteccao
+              de PyWebView era calculada uma vez, antes de window.pywebview existir.
+  Correcao  : isDesktopApp virou funcao, reavaliada a cada chamada (UI/src/services/bridge.ts:17-19,
+              comentario em :17). Teste cobre todos os pontos de chamada via proxy da API.
+  Arquivos  : 2 arquivos, +120 / -32 (UI/src/services/bridge.ts, bridge.test.ts).
+
+CASO 4 - 97b1ece - 2026-09-21 - commit (subject "ci: ...", tratado como correcao)
+  Defeito   : regressao do undici no Node 20.20 (markAsUncloneable), que quebrava o CI com Node 20.
+  Correcao  : node-version para 22 nos workflows.
+  Arquivos  : .github/workflows/quality-gate.yml, 6 linhas +, 6 -. Entrou junto com PR #93 (runner
+              self-hosted). PR #93: "Usar runner self-hosted da OSTG 0.2 para evitar dependencia de
+              minutos do GitHub Actions".
+
+CASO 5 - fb87151 - 2026-08-14 - commit
+  Defeito   : uvx ruff ignorava o pin do pyproject.toml e buscava a versao mais recente do PyPI a
+              cada execucao. O drift quebrou o job Lint.
+  Correcao  : usar o ruff do venv (uv run ruff), pinado pelo uv.lock.
+  Arquivos  : .github/workflows/quality-gate.yml, 1 +, 1 -.
+  Observacao: o mesmo padrao continua no job Security audit: `uvx pip-audit --path .venv`
+              (quality-gate.yml:46). Ver 3.2.
+
+CASO 6 - 5e17e47 - 2026-08-14 - commit
+  Defeito   : CVE alta em brace-expansion (negacao de servico), dependencia transitiva de
+              @typescript-eslint. Detectada por npm audit.
+  Correcao  : npm audit fix, so no lockfile (package.json inalterado). "0 vulnerabilidades apos o fix".
+  Arquivos  : UI/package-lock.json, 20 +, 20 -.
+  Observacao: o gate `npm audit --audit-level=high` (quality-gate.yml:52) e o que pegaria isso.
+
+CASO 7 - 416ce40 - 2026-09-21 - commit SEM corpo (defeito inferido do titulo)
+  Titulo    : fix(ingest): enable soft_wrap when printing source path to prevent line wrapping in tests
+  Defeito   : (inferido) o Rich quebrava o caminho da fonte em varias linhas e os testes falhavam.
+  Correcao  : soft_wrap=True na impressao do caminho.
+  Arquivos  : 1 arquivo, 1 +, 1 -. No momento do commit o arquivo era
+              pipeline/src/free_plaud/ingest/cli.py; hoje esta em pipeline/src/escolio/ingest/cli.py.
+
+Outras correcoes de CI/qualidade citadas no historico (nao detalhadas):
+  - a3ea26a (PR #74, 2026-09-13): exclui CSS, TCSS e TUI do SonarCloud para ficar dentro do
+    limite de 50 mil linhas da organizacao;
+  - 531dbb0 (PR #44, 2026-08-22): achados do Copilot review;
+  - 11d1f93 e 999aef5: correcoes de achados do SonarCloud (ver casos 1 e 3).
+
+2.2 Padrao observado nas correcoes
+----------------------------------
+- Varias correcoes de CI vieram de falha de ambiente ou dependencia (casos 4, 5, 6), nao do codigo.
+- Defeitos de comportamento foram achados por teste ponta a ponta (caso 1) ou por uso real (caso 3).
+- O gate de SonarCloud gerou correcoes de manutencao e confiabilidade (caso 1).
+- Nao ha um campo de "defeito" estruturado (issue template ou label de bug). Fonte: busca em .github,
+  nenhum template encontrado (ver 3.2).
+
+2.3 Defeitos encontrados em 2026-10-14 e ainda abertos
+------------------------------------------------------
+Origem: smoke do backend real (VPS ARM, 2026-10-14, corpus temporario de 10 documentos, 78 chunks),
+conforme docs_aps_qualidade/_fontes/fatos_verificados.md. Resultado do smoke: 14/15 positivas com citacao e 5/6
+negativas abstidas. Os itens abaixo sao os 3 defeitos abertos.
+
+DEFEITO (a) - resposta irrelevante com citacao em vez de abstencao
+  Pergunta  : "Qual versao do Kubernetes roda no cluster de producao?"
+  Sintoma   : respondida com uma frase irrelevante de um documento sobre Docker, em vez de
+              retornar no_answer.
+  Gravidade : ALTA. Pelo criterio do projeto (resposta errada com citacao = pior falha).
+  Cobertura : pipeline/tests/test_corpus_ask.py:532 testa so a extracao do termo "Kubernetes"
+              (extract_named_query_terms). Nao ha teste de abstencao para essa pergunta.
+              Busca por "kubernetes" em pipeline/tests, pipeline/src e UI/src: 1 arquivo (acima).
+  Area provavel (nao diagnosticada): corte de termos e abstencao em retrieval/rag.py (decisao
+              antes de montar a resposta, rag.py:845-942) e corpus/ask.py:718.
+  Status    : aberto.
+
+DEFEITO (b) - abstencao falsa em pergunta respondivel
+  Pergunta  : "Quando o componente MAJOR deve ser incrementado?"
+  Sintoma   : abstencao com motivo missing_named_anchor, no modo hibrido.
+  Origem    : o motivo e emitido em retrieval/rag.py:926 quando named_coverage < 1.0 (rag.py:923-926).
+  Gravidade : MEDIA. Falha para o usuario (nao responde), sem dano por resposta errada.
+  Relacao   : mesma familia do caso 2 (PR #112), que tambem mexeu em ancoras nomeadas.
+  Status    : aberto.
+
+DEFEITO (c) - testes de TUI instaveis (flaky)
+  C1. test_tui_ask_button_ignores_double_click_while_running (pipeline/tests/test_tui_app.py:714)
+      - PR #118, run 38563746866: falhou com assert ['hybrid','hybrid'] == ['hybrid'].
+      - Re-execucao passou (14m47s).
+  C2. test_tui_notes_cancel_button_cancels_running_index (pipeline/tests/test_tui_app.py:1154)
+      - pytest completo na VPS (2026-10-14, main 6c442ee): 483 passaram e 1 falhou, em 22m37s (484 coletados).
+      - Passou 3/3 quando rodado isolado.
+      - Causa provavel: timing de pilot.pause e thread (fatos_verificados.md). Nao confirmada.
+  Gravidade : MEDIA para o processo: bloqueia merges com falso negativo e obriga re-execucao.
+  Status    : aberto.
+
+DEFEITO (d) - analise do SonarCloud da main falhando (processo)
+  - Analises da main falham desde 2026-10-08 com "CE Task finished abnormally" (lado do servidor).
+    A ultima analise bem-sucedida da main foi em 2026-07-21 (fatos_verificados.md, SonarCloud).
+  - No PR #119, o gate falhou por Security Rating C on New Code: a renomeacao fez o codigo antigo
+    contar como novo, e a issue python:S2245 (PRNG com seed fixa em benchmark/metrics.py:157)
+    entrou no calculo. O dono marcou como falso positivo com justificativa; a re-execucao passou.
+  Status    : aberto.
+
+
+3. CHECKLISTS DE REVISAO
+==========================================================================================
+
+3.1 Itens APLICADOS (enforced) - com evidencia
+----------------------------------------------
+[x] Status checks obrigatorios na main (6):
+    Security audit, Lint, Tests & ratchet, Build & smoke, SonarCloud, Docker image gate.
+    Fonte: .quality-gate/policy.json:5-12 e API do GitHub (verificado em 2026-10-14).
+[x] strict = true: branch precisa estar atualizado com a main antes do merge (API, verificado).
+[ ] 0 revisoes obrigatorias (API, verificado). enforce_admins = false: o dono pode fazer merge
+    sem os checks (API, verificado). Nao e controle efetivo para um time de 1 pessoa.
+[x] Ratchet de cobertura e de lint (scripts/quality-gate.js check, quality-gate.yml:136-137):
+    - cobertura de lines, statements, functions e branches nao pode cair mais que 0,1 p.p.
+      (COVERAGE_EPSILON, quality-gate.js:9);
+    - erros de lint nao podem subir (baseline 0, scripts/baseline.json);
+    - arquivos com mais de 300 linhas nao podem subir (baseline 9, policy.json:14).
+    - baseline.json: lines 88,98 (atualizado em 2026-09-13). O README declara 89,0%
+      (README.md:19). O baseline e o numero que vale.
+[x] npm audit --audit-level=high (quality-gate.yml:52): falha em vulnerabilidade alta ou critica.
+[x] pip-audit (quality-gate.yml:46): roda, mas via uvx sem versao fixada (ver 3.2).
+[x] SonarCloud gate com espera: -Dsonar.qualitygate.wait=true e timeout 300
+    (quality-gate.yml:197-198). Condicoes do Sonar way sobre codigo novo (fatos_verificados.md).
+    Ressalva: sonar-project.properties:8 exclui pipeline/src/escolio/tui/** e UI/src/**/*.test.*
+    da analise. A TUI nao e medida pelo Sonar.
+[~] Docker image gate: roda em todo PR, mas SAI COM SUCESSO SEM ANALISAR NADA.
+    - Nao ha Dockerfile no repositorio (Nao encontrado no repositorio).
+    - scripts/docker-gate.cjs:231-232 retorna status "skipped" ("no docker files detected").
+    - scripts/docker-gate.cjs:292: exitCode = 1 so se status = "failed". Logo o job passa.
+    - O script externo do policy.json:41 e um caminho Windows (D:\Dev\Scripts\seguranca\...ps1).
+      Um runner Linux nao alcanca esse caminho. Se um Dockerfile for criado, o gate ainda nao
+      funcionaria sem ajuste. (nao testado)
+[x] uv sync --locked em todos os jobs Python (quality-gate.yml:43, 75, 118, 167): falha se o
+    pipeline/uv.lock nao bater com o pyproject. (comportamento do uv; nao executado aqui)
+[x] Lint: ruff check src tests (quality-gate.yml:78-80) e eslint (UI, quality-gate.yml:84-86).
+    Erro de ruff gera codigo de saida diferente de zero e falha a etapa. (nao executado aqui)
+[x] Build & smoke: uv build, uv run escolio --help, npm run build (quality-gate.yml:168-179).
+[x] Testes: pytest com cobertura (quality-gate.yml:127), vitest com cobertura (:133), testes dos
+    scripts (:135).
+
+3.2 Itens que DEVEM ser validados (nao enforced ou com risco)
+-------------------------------------------------------------
+[ ] SEGREDOS NO REPOSITORIO
+    - Busca por padroes de chave (sk-, AIza, ghp_, blocos PEM) em git grep: sem resultado.
+    - NAO HA scanner de segredos no CI (busca por gitleaks, trufflehog e secret-scan em .github:
+      sem resultado).
+    - PROBLEMA: samples/manual validetion/new/ e versionado e contem documentos pessoais:
+      "Ricardo Andreotti - CV.pdf" e "Carta de Apresentacao.pdf" (git ls-files, verificado).
+      Tambem ha outros arquivos pessoais e de estudo no mesmo diretorio.
+    - Acao recomendada (nao executada): remover do indice e do historico (git filter-repo) e
+      acrescentar a pasta ao .gitignore. Decisao do dono.
+[ ] CRLF DO package-lock.json
+    - UI/package-lock.json tem 3.852 linhas e todas em CRLF no HEAD (verificado).
+    - npm e o Dependabot regravam em LF e o diff vira o arquivo inteiro (fatos_verificados.md).
+    - Nao existe .gitattributes na raiz (Nao encontrado no repositorio), entao nada impede a regravacao.
+[ ] uv.lock CONSISTENCIA
+    - --locked esta nos 4 jobs Python (ver 3.1). Porem o uv.lock tem entradas de torch para
+      dois indices (2.14.1+cpu e 2.11.0+cu128; pipeline/uv.lock:957-967). Validar que o CI
+      instala o build CPU (extra cpu) e nao o CUDA.
+    - uv e setup-uv estao sem versao fixada (CI usa setup-uv@v7).
+[ ] E2E PLAYWRIGHT FORA DO CI
+    - Nenhum workflow roda Playwright (busca por "playwright" em .github sem resultado).
+    - Ha 7 specs em UI/e2e (01-chat-rag ... 07-zero-state) e playwright.config.ts.
+    - Execucao manual em 2026-10-14, VPS ARM: 7/7 passaram em 36,7 s, 2 workers, Chromium headless
+      (fatos_verificados.md). Tambem 7/7 no PR #118.
+[ ] REVISAO HUMANA
+    - 0 revisoes obrigatorias e enforce_admins = false (3.1).
+    - .github/copilot-instructions.md define regras de revisao (cobertura por arquivo, sem any,
+      sem catch vazio, sem TODO sem issue, sem secrets). Nao e um check obrigatorio.
+    - .quality-gate/policy.json:github.copilotReview = true, mas nao ha mecanismo que bloqueie o
+      merge sem o review do Copilot.
+[ ] PULL REQUEST TEMPLATE
+    - Nao encontrado no repositorio: .github/pull_request_template.md (ls .github mostra apenas
+      FUNDING.yml, copilot-instructions.md, dependabot.yml e workflows/).
+[ ] REGRAS DO RUFF
+    - pyproject.toml:66 ignora B008, RUF012, BLE001 e TRY004. Com BLE001 ignorado, "except Exception"
+      nao e sinalizado pelo lint. A regra do Copilot (sem catch vazio) so existe no texto da regra.
+[ ] VERSOES DE ACTIONS
+    - Actions fixadas por tag, nao por SHA. Versoes mistas entre workflows:
+      checkout@v4 e v7, setup-node@v4 e v7, setup-python@v5 e v7, setup-uv@v5 e v7,
+      download-artifact@v8, upload-artifact@v7 (grep em .github/workflows).
+    - desktop-release.yml usa v4/v5 e quality-gate.yml usa v7.
+[ ] RUNNER SELF-HOSTED E PRs
+    - quality-gate.yml roda em pull_request no runner self-hosted (ostg02), que tem disco de 96 GB
+      (94% usado em 2026-10-14) e 1 slot (fatos_verificados.md).
+    - O repositorio e privado. Se virar publico, PRs de fork executariam codigo no host. Validar
+      antes de qualquer abertura do repositorio.
+[ ] DEPENDABOT
+    - .github/dependabot.yml: atualizacao semanal para github-actions, pip (/pipeline) e npm (/UI).
+    - PRs do Dependabot nao recebem SONAR_TOKEN, entao o job SonarCloud falha neles. A pratica
+      observada e consolidar em um PR (#113, #118). (fatos_verificados.md)
+[ ] BRANCHES OBSOLETAS
+    - 8 branches remotas de PRs ja integrados ou fechados (1.3). Limpar.
+[ ] FALSO POSITIVO SEM REGISTRO
+    - A issue python:S2245 foi marcada como falso positivo no SonarCloud (PR #119). A justificativa
+      nao esta versionada no repositorio. Registrar em comentario de codigo ou em doc.
+
+Fim do arquivo 05.
