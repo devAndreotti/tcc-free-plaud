@@ -13,21 +13,25 @@ import { LABEL_PADDING, labelPriority, pickLabels, type LabelBox } from '../lib/
 
 export type Ctx = CanvasRenderingContext2D;
 
+// Fonte da interface (PR 147), para rótulos e pílula do foco
+const UI_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
 export function readPalette(el: Element) {
   const css = getComputedStyle(el);
   const v = (name: string) => css.getPropertyValue(name).trim();
   return {
-    edge: v('--border-color'),
-    node: v('--text-muted'),
-    folder: v('--accent-blue'),
-    label: v('--text-secondary'),
-    text: v('--text-primary'),
-    hover: v('--accent-blue-light'),
-    link: v('--accent-blue-light'),
-    focus: v('--accent-blue-light'),
-    bg: v('--bg-primary'),
-    tipBg: v('--tip-bg'),
-    tipFg: v('--tip-fg'),
+    edge: v('--ag-hairline'),
+    node: v('--ag-ink-muted'),
+    folder: v('--ag-accent'),
+    label: v('--ag-ink-2'),
+    text: v('--ag-ink'),
+    glow: v('--ag-glow'),
+    hover: v('--ag-accent'),
+    link: v('--ag-accent'),
+    focus: v('--ag-accent'),
+    bg: v('--ag-plane'),
+    tipBg: v('--ag-surface'),
+    tipFg: v('--ag-ink'),
     /** cores das pastas de 1º nível, na ordem de GRAPH_COLOR_TOKENS */
     groups: GRAPH_COLOR_TOKENS.map(v),
     /** opacidade da cor de pasta nas notas (--graph-note-alpha, por tema) */
@@ -155,7 +159,7 @@ export function drawLabels(
 ) {
   const base = ctx.globalAlpha;
   ctx.fillStyle = pal.label;
-  ctx.font = `${LABEL_FONT_PX / cam.scale}px sans-serif`;
+  ctx.font = `${LABEL_FONT_PX / cam.scale}px ${UI_FONT}`;
   ctx.textAlign = 'center';
 
   // Candidatos: quem passa pelas regras de zoom e seleção, com a caixa medida em tela
@@ -225,7 +229,7 @@ export function drawFocus(ctx: Ctx, chain: string[], nodes: SimNode[], pal: Pale
   }
 
   // Nomes das pastas do caminho, com contorno da cor do fundo para a linha não cortar a letra
-  ctx.font = `${11 * px}px sans-serif`;
+  ctx.font = `${11 * px}px ${UI_FONT}`;
   ctx.textAlign = 'center';
   ctx.lineJoin = 'round';
   ctx.lineWidth = 3 * px;
@@ -239,7 +243,7 @@ export function drawFocus(ctx: Ctx, chain: string[], nodes: SimNode[], pal: Pale
 
   // Nome da nota numa pílula acima dela, sem sair pelas bordas do painel
   const label = target.label.length > 42 ? `${target.label.slice(0, 41)}…` : target.label;
-  ctx.font = `600 ${12 * px}px sans-serif`;
+  ctx.font = `600 ${12 * px}px ${UI_FONT}`;
   const w = ctx.measureText(label).width + 16 * px;
   const h = 22 * px;
   const minX = (6 - cam.x) * px;

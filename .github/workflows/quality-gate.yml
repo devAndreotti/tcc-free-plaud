@@ -21,6 +21,7 @@ env:
 jobs:
   security:
     name: Security audit
+    if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
     runs-on: [self-hosted, linux, tcc]
     steps:
       - uses: actions/checkout@v7
@@ -53,6 +54,7 @@ jobs:
 
   lint:
     name: Lint
+    if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
     runs-on: [self-hosted, linux, tcc]
     steps:
       - uses: actions/checkout@v7
@@ -94,6 +96,7 @@ jobs:
 
   test:
     name: Tests & ratchet
+    if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
     runs-on: [self-hosted, linux, tcc]
     steps:
       - uses: actions/checkout@v7
@@ -150,6 +153,7 @@ jobs:
 
   build:
     name: Build & smoke
+    if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
     runs-on: [self-hosted, linux, tcc]
     steps:
       - uses: actions/checkout@v7
@@ -185,6 +189,7 @@ jobs:
 
   sonar:
     name: SonarCloud
+    if: (github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name) && !cancelled()
     runs-on: [self-hosted, linux, tcc]
     needs: test
     # A análise falha do lado do SonarCloud ("CE Task finished abnormally"), fora do nosso controle:
@@ -210,6 +215,7 @@ jobs:
 
   docker:
     name: Docker image gate
+    if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
     runs-on: [self-hosted, linux, tcc]
     steps:
       - uses: actions/checkout@v7
@@ -231,7 +237,7 @@ jobs:
     name: PR report
     runs-on: [self-hosted, linux, tcc]
     needs: [security, lint, test, build, sonar, docker]
-    if: always() && github.event_name == 'pull_request'
+    if: always() && github.event_name == 'pull_request' && github.repository == github.event.pull_request.head.repo.full_name
     permissions:
       contents: read
       pull-requests: write

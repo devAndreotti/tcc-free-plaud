@@ -366,16 +366,16 @@
 .force-graph__tooltip {
   position: absolute;
   transform: translate(-50%, -200%);
-  /* Vidro fosco (estilo do PR 147), sobre os tokens do tema: segue o claro e o escuro */
-  background: color-mix(in srgb, var(--bg-panel) 85%, transparent);
+  /* Vidro fosco do PR 147 (tokens --ag-*, como o tooltip do grafo no aiops) */
+  background: color-mix(in srgb, var(--ag-surface) 85%, transparent);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-md);
-  color: var(--text-primary);
+  border: 1px solid var(--ag-hairline);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  color: var(--ag-ink);
   font-size: 12px;
   font-weight: 500;
-  font-family: var(--font-family);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   padding: 4px 10px;
   border-radius: 10px;
   pointer-events: none;
@@ -5221,4 +5221,27 @@
   background: var(--bg-primary);
   color: var(--text-primary);
   font: inherit;
+}
+
+/* Paleta do dashboard do ai-ops-lab (PR 147). O canvas do grafo lê estes tokens em graphDraw.ts (readPalette). */
+.force-graph {
+  --ag-surface: #1a1a19;
+  --ag-plane: #0d0d0d;
+  --ag-ink: #ffffff;
+  --ag-ink-2: #c3c2b7;
+  --ag-ink-muted: #8f8d87;
+  --ag-hairline: #2c2c2a;
+  --ag-accent: #3987e5;
+  --ag-glow: rgba(57, 135, 229, 0.35);
+}
+
+:root[data-theme="light"] .force-graph {
+  --ag-surface: #ffffff;
+  --ag-plane: #f7f7f5;
+  --ag-ink: #0b0b0b;
+  --ag-ink-2: #52514e;
+  --ag-ink-muted: #898781;
+  --ag-hairline: #e2e0d8;
+  --ag-accent: #2a78d6;
+  --ag-glow: rgba(42, 120, 214, 0.35);
 }
