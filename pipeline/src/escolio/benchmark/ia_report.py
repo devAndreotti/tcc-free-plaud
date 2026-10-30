@@ -27,7 +27,8 @@ def _decimal(valor: float | None) -> str:
     return '—' if valor is None else f'{valor:.3f}'.replace('.', ',')
 
 
-def _linha_tabela(modo: str, resumo: BenchmarkStrategySummary) -> str:
+def linha_tabela(modo: str, resumo: BenchmarkStrategySummary) -> str:
+    """Uma linha da tabela por estratégia; reutilizada pelo relatório de modelos (model_compare)."""
     abstencao = resumo.abstention or {}
     ia = resumo.answer_metrics
     aceitas = motivos = p50 = p95 = '—'
@@ -66,8 +67,8 @@ def build_ia_report(extractive: BenchmarkComparisonResult, generativo: Benchmark
         *CABECALHO_TABELA,
     ]
     for estrategia in STRATEGIAS:
-        linhas.append(_linha_tabela('Extractive', extractive.corpus.summaries[estrategia]))
-        linhas.append(_linha_tabela('Generativo', corpus.summaries[estrategia]))
+        linhas.append(linha_tabela('Extractive', extractive.corpus.summaries[estrategia]))
+        linhas.append(linha_tabela('Generativo', corpus.summaries[estrategia]))
     linhas += [
         '',
         (

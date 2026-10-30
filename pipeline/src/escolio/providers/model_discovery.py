@@ -11,7 +11,7 @@ from escolio.app.config import Settings, get_settings
 from escolio.providers.answer import (
     INVALID_BASE_URL_ERROR,
     _default_base_url,
-    _is_http_base_url,
+    is_http_base_url,
 )
 
 ModelDiscoveryStatus = Literal['ok', 'not_applicable', 'offline', 'unauthorized', 'error']
@@ -258,7 +258,7 @@ def list_answer_models(
         return _not_applicable_result(resolved, started_at)
 
     base_url = _discovery_base_url(resolved)
-    if base_url is None or not _is_http_base_url(base_url):
+    if base_url is None or not is_http_base_url(base_url):
         return _invalid_base_url_result(resolved, base_url, started_at)
 
     if _default_openai_without_key(resolved):

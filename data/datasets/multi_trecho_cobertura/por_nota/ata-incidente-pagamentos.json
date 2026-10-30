@@ -1,0 +1,113 @@
+{
+  "dataset_name": "multi-trecho-cobertura-ata-incidente-pagamentos",
+  "samples": [
+    {
+      "sample_id": "mt-nota-04",
+      "question": "Quanto tempo durou a falha de cobrança por cartão, e para qual valor a ação de correção manda restaurar o timeout do gateway?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "47 minutos",
+        "8 segundos"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "47 minutos",
+          "8 segundos"
+        ]
+      },
+      "expected_ref": "Ações",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-05",
+      "question": "Quanto tempo durou a falha de cobrança por cartão, e a partir de qual p99 o novo alerta deve disparar?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "47 minutos",
+        "2 segundos"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "47 minutos",
+          "2 segundos"
+        ]
+      },
+      "expected_ref": "Resumo",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-06",
+      "question": "Em que horário disparou o alerta de latência do gateway, e qual runbook recebe o passo de rollback?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "14h12",
+        "PAY-RB-07"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "14h12",
+          "PAY-RB-07"
+        ]
+      },
+      "expected_ref": "Linha do tempo",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-04",
+      "question": "Qual runbook de pagamentos recebe o passo de rollback, e qual é o nome do cookie de sessão na decisão de OIDC?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "PAY-RB-07",
+        "sid_escolio"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "PAY-RB-07"
+        ],
+        "decisao-autenticacao-oidc": [
+          "sid_escolio"
+        ]
+      },
+      "expected_ref": "Ações",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-05",
+      "question": "Para qual valor o timeout do gateway deve voltar, e qual arquivo do exercício de Parquet precisa ser convertido?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "8 segundos",
+        "vendas_2024.csv"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "8 segundos"
+        ],
+        "aula-particionamento-parquet": [
+          "vendas_2024.csv"
+        ]
+      },
+      "expected_ref": "Ações",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-06",
+      "question": "Quanto tempo durou a falha nas cobranças por cartão, e qual laboratório de redes precisa ser entregue?",
+      "expected_note_id": "ata-incidente-pagamentos",
+      "expected_terms": [
+        "47 minutos",
+        "Lab 3"
+      ],
+      "expected_terms_por_nota": {
+        "ata-incidente-pagamentos": [
+          "47 minutos"
+        ],
+        "aula-tcp-congestionamento": [
+          "Lab 3"
+        ]
+      },
+      "expected_ref": "Resumo",
+      "category": "inferida"
+    }
+  ]
+}

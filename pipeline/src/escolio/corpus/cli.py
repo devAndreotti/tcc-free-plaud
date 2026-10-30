@@ -22,6 +22,7 @@ from escolio.providers.embed import (
     get_embedder,
     validate_runtime_embedding_model,
 )
+from escolio.retrieval.rerank import reranker_from_settings
 from escolio.storage.sqlite import init_sqlite
 from escolio.storage.vector import LocalVectorStore
 
@@ -212,6 +213,7 @@ def ask(
             top_k=top_k or settings.retrieval_top_k,
             include_debug=debug,
             source_root=root,
+            reranker=reranker_from_settings(settings),
             answer_provider=get_answer_provider(
                 settings.answer_provider,
                 model=settings.answer_model,

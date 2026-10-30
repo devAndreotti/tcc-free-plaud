@@ -3,168 +3,56 @@
  *
  * Desenha o grafo de src/lib/vaultGraph.ts. A câmera se ajusta ao grafo enquanto o usuário
  * não arrasta nem dá zoom. Canvas em pixels físicos (DPR) e desenho em pixels lógicos.
+ * Desenho em components/graphDraw.ts; seleção por clique em lib/graphSelection.ts.
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
-import type { GraphMode, MarkdownNode, VaultLink } from '../lib/vaultGraph';
+import { useEffect, useRef, useCallback, useState, useMemo, useId } from 'react';
+import type { GraphMode, MarkdownNode, VaultLink, Camera, SimEdge, SimNode } from '../lib/vaultGraph';
 import {
   GRAPH_FOCUS_EVENT,
   buildGraph,
   fitCamera,
-  nodeRadius,
   pathToRoot,
   tick,
-  type Camera,
-  type SimEdge,
-  type SimNode,
+  visibleLinks,
 } from '../lib/vaultGraph';
+import {
+  arrowDirection,
+  folderSubtreeIds,
+  frameCamera,
+  hitTest,
+  isClick,
+  lerpCamera,
+  nearestInDirection,
+  nearestToPoint,
+  neighborIds,
+  selectionAnnouncement,
+  selectionSet,
+  type ArrowDirection,
+} from '../lib/graphSelection';
+import { legendEntries, topFolderOf } from '../lib/graphColors';
+import { entryAt, prefersReducedMotion, projectNodes, shouldAnimateEntry } from '../lib/graphMotion';
+import { drawEdges, drawFocus, drawLabels, drawNodes, readPalette, tooltipDetail, type Palette } from './graphDraw';
 import { GraphIcon } from './Icons';
+import GraphNoLinksHint from './GraphNoLinksHint';
+import GraphLegend from './GraphLegend';
 
-interface Tooltip  { label: string; x: number; y: number }
+interface Tooltip  { label: string; detail: string; x: number; y: number }
 
 const MAX_ITER = 300;
+// Com movimento reduzido: ticks por quadro antes de devolver o controle à página (~30 ms com 740 nós)
+const REDUCED_BATCH_TICKS = 12;
+// Quadros de uma transição de câmera (enquadrar uma pasta): ~240 ms a 60 Hz
+const GLIDE_FRAMES = 14;
 
-// Cores vêm dos tokens do tema (index.css); o fundo é o do próprio painel.
-function themeColors(el: Element) {
-  const css = getComputedStyle(el);
-  const v = (name: string) => css.getPropertyValue(name).trim();
-  return {
-    edge: v('--border-color'),
-    node: v('--text-muted'),
-    folder: v('--accent-blue'),
-    label: v('--text-secondary'),
-    hover: v('--accent-blue-light'),
-    link: v('--accent-blue-light'),
-    focus: v('--accent-blue-light'),
-    bg: v('--bg-primary'),
-    tipBg: v('--tip-bg'),
-    tipFg: v('--tip-fg'),
-  };
-}
+// Lista fixa: um array novo a cada render reconstruiria o grafo a cada render
+const NO_LINKS: VaultLink[] = [];
 
-type Colors = ReturnType<typeof themeColors>;
-type Ctx = CanvasRenderingContext2D;
-
-// ─── Desenho de um frame (funções internas, fora do componente) ──────────────
-
-function nodeColor(n: SimNode, colors: Colors, hoveredId: string | null): string {
-  if (n.id === hoveredId) return colors.hover;
-  if (n.kind === 'folder') return colors.folder;
-  return colors.node;
-}
-
-function drawEdges(ctx: Ctx, nodes: SimNode[], edges: SimEdge[], colors: Colors, cam: Camera) {
-  const map = new Map(nodes.map((n) => [n.id, n]));
-  const stroke = (isLink: boolean) => {
-    ctx.beginPath();
-    for (const e of edges) {
-      if ((e.kind === 'link') !== isLink) continue;
-      const a = map.get(e.source), b = map.get(e.target);
-      if (!a || !b) continue;
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-    }
-    ctx.stroke();
-  };
-  // Árvore em cinza; ligações [[...]] por cima, um pouco mais grossas e em azul claro transparente
-  ctx.strokeStyle = colors.edge;
-  ctx.lineWidth   = 0.8 / cam.scale;
-  stroke(false);
-
-  const alpha = ctx.globalAlpha;
-  ctx.strokeStyle = colors.link;
-  ctx.lineWidth   = 1.2 / cam.scale;
-  ctx.globalAlpha = alpha * 0.35;
-  stroke(true);
-  ctx.globalAlpha = alpha;
-}
-
-function drawNodes(ctx: Ctx, nodes: SimNode[], colors: Colors, hoveredId: string | null) {
-  for (const n of nodes) {
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, nodeRadius(n), 0, Math.PI * 2);
-    ctx.fillStyle = nodeColor(n, colors, hoveredId);
-    ctx.fill();
-  }
-}
-
-// Rótulos das pastas só com zoom suficiente para não se sobreporem (1º nível antes dos demais);
-// as notas ganham nome com mais zoom ainda, como no grafo do Obsidian (no modo Links só há notas).
-const NOTE_LABEL_SCALE = 1.6;
-
-function drawLabels(ctx: Ctx, nodes: SimNode[], colors: Colors, cam: Camera) {
-  ctx.fillStyle = colors.label;
-  ctx.font = `${11 / cam.scale}px sans-serif`;
-  ctx.textAlign = 'center';
-  for (const n of nodes) {
-    if (n.kind === 'folder' && n.depth === 0) continue;
-    const minScale = n.kind === 'note' ? NOTE_LABEL_SCALE : n.depth === 1 ? 0.45 : 1.2;
-    if (cam.scale < minScale) continue;
-    ctx.fillText(n.label, n.x, n.y - (nodeRadius(n) + 4) / cam.scale);
-  }
-}
-
-// Nota em foco (hover numa fonte do chat) e o caminho de pastas até a raiz. Tamanhos em px de
-// tela (÷ scale) para o destaque aparecer em qualquer zoom; viewW prende a pílula no painel.
-function drawFocus(ctx: Ctx, chain: string[], nodes: SimNode[], colors: Colors, cam: Camera, viewW: number) {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const path = chain.map((id) => byId.get(id)).filter((n): n is SimNode => n !== undefined);
-  const [target] = path;
-  if (!target) return;
-  const px = 1 / cam.scale;
-  const radius = (n: SimNode) => Math.max(nodeRadius(n), (n === target ? 6 : 4) * px);
-
-  ctx.strokeStyle = colors.focus;
-  ctx.lineWidth = 2 * px;
-  ctx.beginPath();
-  path.forEach((n, i) => (i === 0 ? ctx.moveTo(n.x, n.y) : ctx.lineTo(n.x, n.y)));
-  ctx.stroke();
-
-  ctx.fillStyle = colors.focus;
-  ctx.globalAlpha = 0.25;
-  ctx.beginPath();
-  ctx.arc(target.x, target.y, 14 * px, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-  for (const n of path) {
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, radius(n), 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Nomes das pastas do caminho, com contorno da cor do fundo para a linha não cortar a letra
-  ctx.font = `${11 * px}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = 3 * px;
-  ctx.strokeStyle = colors.bg;
-  for (const n of path.slice(1)) {
-    if (n.depth === 0) continue; // a raiz não tem nome
-    const y = n.y - radius(n) - 5 * px;
-    ctx.strokeText(n.label, n.x, y);
-    ctx.fillText(n.label, n.x, y);
-  }
-
-  // Nome da nota numa pílula acima dela, sem sair pelas bordas do painel
-  const label = target.label.length > 42 ? `${target.label.slice(0, 41)}…` : target.label;
-  ctx.font = `600 ${12 * px}px sans-serif`;
-  const w = ctx.measureText(label).width + 16 * px;
-  const h = 22 * px;
-  const minX = (6 - cam.x) * px;
-  const maxX = (viewW - 6 - cam.x) * px - w;
-  const left = Math.max(minX, Math.min(maxX, target.x - w / 2));
-  const top = target.y - 18 * px - h;
-  ctx.fillStyle = colors.tipBg;
-  ctx.beginPath();
-  ctx.roundRect(left, top, w, h, 6 * px);
-  ctx.fill();
-  ctx.fillStyle = colors.tipFg;
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, left + w / 2, top + h / 2);
-  ctx.textBaseline = 'alphabetic';
-}
-
-// ─── Componente ──────────────────────────────────────────────────────────────
+// Texto de ajuda do canvas para leitores de tela (aria-describedby); as teclas valem com o foco no canvas
+const GRAPH_HELP =
+  'Teclado: setas movem a seleção para o nó vizinho na direção da seta; Enter abre a nota selecionada ou enquadra a pasta; ' +
+  'Home enquadra o grafo inteiro; Esc limpa a seleção; Tab sai do grafo. ' +
+  'Mouse: clique seleciona (nota abre, pasta enquadra), arraste move, scroll dá zoom, duplo clique enquadra.';
 
 interface ForceGraphProps {
   vaultNodes: MarkdownNode[];
@@ -172,24 +60,8 @@ interface ForceGraphProps {
   links?: VaultLink[];
   /** pastas, links ou ambos (padrão) */
   mode?: GraphMode;
-  /** Clique numa nota (sem arrastar) abre a nota; clique em pasta não faz nada */
+  /** Clique numa nota (sem arrastar) abre a nota; clique em pasta enquadra a pasta */
   onOpenNote?: (noteId: string) => void;
-}
-
-// Lista fixa: um array novo a cada render reconstruiria o grafo a cada render
-const NO_LINKS: VaultLink[] = [];
-
-// Deslocamento (px na tela) acima do qual o gesto é arrasto, não clique
-const CLICK_SLOP = 4;
-
-// Nó sob o ponto (coordenadas de mundo); a folga de 5 px na tela facilita o alvo
-function nodeAt(nodes: SimNode[], world: { x: number; y: number }, scale: number): SimNode | null {
-  for (const n of nodes) {
-    const r = nodeRadius(n) + 5 / scale;
-    const dx = n.x - world.x, dy = n.y - world.y;
-    if (dx * dx + dy * dy <= r * r) return n;
-  }
-  return null;
 }
 
 const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }: ForceGraphProps) => {
@@ -202,14 +74,20 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
   const dpr  = useRef(window.devicePixelRatio || 1);
 
   const camRef     = useRef<Camera>({ x: 0, y: 0, scale: 1 });
-  const autoFitRef = useRef(true); // desliga quando o usuário arrasta ou dá zoom
+  const autoFitRef = useRef(true); // desliga quando o usuário arrasta, dá zoom ou enquadra uma pasta
   const graphRef   = useRef<{ nodes: SimNode[]; edges: SimEdge[] }>({ nodes: [], edges: [] });
   const dragRef    = useRef({ active: false, startX: 0, startY: 0, camX: 0, camY: 0 });
   const hovered    = useRef<string | null>(null);
   const focused    = useRef<string | null>(null); // nota da fonte sob o mouse no chat
+  const selectedRef = useRef<string | null>(null); // nó selecionado por clique
   const panRef     = useRef<number>(0);
+  const entryStartRef = useRef<number | null>(null); // início da abertura (null = grafo já aberto)
+  const modeRef    = useRef<GraphMode>(mode);        // modo do último build (troca de modo reabre)
 
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
+  // Texto da região aria-live: "Selecionado: <nome>, N ligações" (vazio sem seleção)
+  const [announcement, setAnnouncement] = useState('');
+  const helpId = useId();
 
   // ── Desenha um frame ────────────────────────────────────────────────────
   const draw = useCallback(() => {
@@ -223,7 +101,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     const cam = camRef.current;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const colors = themeColors(canvas);
+    const pal: Palette = readPalette(canvas);
 
     ctx.save();
     ctx.scale(dpr.current, dpr.current);
@@ -232,15 +110,36 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
 
     // Com uma fonte em foco, o resto do grafo recua para o caminho dela aparecer
     const chain = focused.current ? pathToRoot(focused.current, nodes, edges) : [];
+    const sel = selectionSet(selectedRef.current, edges);
+    // Posições exibidas: a abertura radial do centro até a simulação (ver graphMotion.ts)
+    const shown = projectNodes(nodes, logW.current / 2, logH.current / 2, entryAt(entryStartRef.current, performance.now()));
     ctx.globalAlpha = chain.length > 0 ? 0.3 : 1;
-    drawEdges(ctx, nodes, edges, colors, cam);
-    drawNodes(ctx, nodes, colors, hovered.current);
-    drawLabels(ctx, nodes, colors, cam);
+    const hl = { hoveredId: hovered.current, selectedId: selectedRef.current, sel, scale: cam.scale };
+    drawEdges(ctx, shown, edges, pal, cam, sel);
+    drawNodes(ctx, shown, pal, hl);
+    drawLabels(ctx, shown, pal, cam, sel, hl.selectedId);
     ctx.globalAlpha = 1;
-    if (chain.length > 0) drawFocus(ctx, chain, nodes, colors, cam, logW.current);
+    if (chain.length > 0) drawFocus(ctx, chain, shown, pal, cam, logW.current);
 
     ctx.restore();
   }, []);
+
+  // ── Transição suave da câmera (quadros, não tempo: sem loop infinito quando rAF é síncrono) ──
+  const glideTo = useCallback((to: Camera) => {
+    autoFitRef.current = false;
+    cancelAnimationFrame(panRef.current);
+    const from = { ...camRef.current };
+    const reduce = prefersReducedMotion();
+    let frame = 0;
+    const step = () => {
+      frame += 1;
+      const t = reduce || frame >= GLIDE_FRAMES ? 1 : 1 - (1 - frame / GLIDE_FRAMES) ** 3;
+      camRef.current = lerpCamera(from, to, t);
+      draw();
+      if (t < 1) panRef.current = requestAnimationFrame(step);
+    };
+    step();
+  }, [draw]);
 
   // ── Nota fora da área visível (após zoom ou arrasto): a câmera desliza até ela, sem mudar o zoom
   const panIntoView = useCallback((n: SimNode) => {
@@ -290,12 +189,30 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     const cx = logW.current / 2;
     const cy = logH.current / 2;
 
+    // Com movimento reduzido não há quadros intermediários: a simulação roda em lotes (sem travar a
+    // página) e o grafo aparece já posicionado, uma única vez
+    if (prefersReducedMotion()) {
+      entryStartRef.current = null;
+      let left = iters;
+      const batch = () => {
+        const n = Math.min(left, REDUCED_BATCH_TICKS);
+        for (let i = 0; i < n; i++) tick(nodes, edges, cx, cy);
+        left -= n;
+        if (left > 0) animRef.current = requestAnimationFrame(batch);
+        else draw();
+      };
+      batch();
+      return;
+    }
+
     const loop = (i: number) => {
       if (i > 0) {
         tick(nodes, edges, cx, cy);
         draw();
         animRef.current = requestAnimationFrame(() => loop(i - 1));
       } else {
+        // Simulação terminada: a abertura de 600 ms já acabou (são centenas de quadros)
+        entryStartRef.current = null;
         draw();
       }
     };
@@ -305,8 +222,18 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
   // ── Reconstrói o grafo quando os nós do vault mudam ────────────────────
   const rebuild = useCallback(() => {
     if (logW.current === 0 || logH.current === 0) return;
+    const prevIds = new Set(graphRef.current.nodes.map((n) => n.id));
+    const modeChanged = modeRef.current !== mode;
+    modeRef.current = mode;
     graphRef.current = buildGraph(vaultNodes, logW.current, logH.current, graphRef.current.nodes, links, mode);
     autoFitRef.current = true;
+    const animate = shouldAnimateEntry(prevIds, graphRef.current.nodes.map((n) => n.id), modeChanged);
+    entryStartRef.current = animate ? performance.now() : null;
+    // Seleção que sumiu com o grafo (nota apagada, outro modo sem ela) não fica anunciada
+    if (selectedRef.current !== null && !graphRef.current.nodes.some((n) => n.id === selectedRef.current)) {
+      selectedRef.current = null;
+      setAnnouncement('');
+    }
     startLoop(MAX_ITER);
   }, [vaultNodes, links, mode, startLoop]);
 
@@ -352,22 +279,46 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     return { x: (cx - cam.x) / cam.scale, y: (cy - cam.y) / cam.scale };
   }, []);
 
+  // Nó sob o ponteiro (coordenadas da janela), ou null
+  const nodeUnder = useCallback((clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    // Acerta onde o nó está desenhado agora (durante a abertura ele ainda está perto do centro)
+    const shown = projectNodes(graphRef.current.nodes, logW.current / 2, logH.current / 2, entryAt(entryStartRef.current, performance.now()));
+    return hitTest(shown, toWorld(clientX - rect.left, clientY - rect.top), camRef.current.scale);
+  }, [toWorld]);
+
+  // ── Seleção: nó (ou null para limpar) e o anúncio para leitores de tela ──
+  const selectNode = useCallback((n: SimNode | null) => {
+    selectedRef.current = n?.id ?? null;
+    setAnnouncement(n ? selectionAnnouncement(n.label, neighborIds(n.id, graphRef.current.edges).size) : '');
+    draw();
+  }, [draw]);
+
+  // Enquadra a pasta e tudo abaixo dela (a câmera desliza até lá)
+  const frameFolder = useCallback((n: SimNode) => {
+    const { nodes, edges } = graphRef.current;
+    glideTo(frameCamera(nodes, folderSubtreeIds(n.id, edges), logW.current, logH.current));
+  }, [glideTo]);
+
   // ── Hover + pan ─────────────────────────────────────────────────────────
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect  = canvas.getBoundingClientRect();
-    const world = toWorld(e.clientX - rect.left, e.clientY - rect.top);
-    const { nodes } = graphRef.current;
+    const found = nodeUnder(e.clientX, e.clientY);
     const cam = camRef.current;
-
-    const found = nodeAt(nodes, world, cam.scale);
-    canvas.style.cursor = found?.kind === 'note' ? 'pointer' : '';
+    canvas.style.cursor = found ? 'pointer' : '';
 
     if (found) {
       if (hovered.current !== found.id) {
         hovered.current = found.id;
-        setTooltip({ label: found.label, x: found.x * cam.scale + cam.x, y: found.y * cam.scale + cam.y });
+        setTooltip({
+          label: found.label,
+          detail: tooltipDetail(found),
+          x: found.x * cam.scale + cam.x,
+          y: found.y * cam.scale + cam.y,
+        });
         draw();
       }
     } else if (hovered.current !== null) {
@@ -382,31 +333,94 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
       camRef.current.y = dragRef.current.camY + (e.clientY - dragRef.current.startY);
       draw();
     }
-  }, [toWorld, draw]);
+  }, [nodeUnder, draw]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, camX: camRef.current.x, camY: camRef.current.y };
   }, []);
 
+  // Soltar sem ter arrastado é clique: seleciona o nó (nota abre; pasta enquadra) ou limpa no vazio
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
     if (!drag.active) return; // soltou o botão vindo de fora do canvas
     drag.active = false;
-    if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) return;
+    if (!isClick({ x: drag.startX, y: drag.startY }, { x: e.clientX, y: e.clientY })) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const hit = nodeAt(graphRef.current.nodes, toWorld(e.clientX - rect.left, e.clientY - rect.top), camRef.current.scale);
-    if (hit?.kind === 'note') onOpenNote?.(hit.id);
-  }, [toWorld, onOpenNote]);
+    const hit = nodeUnder(e.clientX, e.clientY);
+    if (!hit) {
+      selectNode(null);
+      return;
+    }
+    selectNode(hit);
+    if (hit.kind === 'note') onOpenNote?.(hit.id);
+    else frameFolder(hit);
+  }, [nodeUnder, selectNode, frameFolder, onOpenNote]);
+
   const handleMouseLeave = useCallback(() => {
     dragRef.current.active = false;
     if (hovered.current !== null) { hovered.current = null; setTooltip(null); draw(); }
   }, [draw]);
 
+  // Volta a enquadrar o grafo inteiro (duplo clique e Home); cancela um deslize de câmera em curso
+  const fitAll = useCallback(() => {
+    cancelAnimationFrame(panRef.current);
+    autoFitRef.current = true;
+    draw();
+  }, [draw]);
+
+  // Seta: sem seleção, parte do nó mais perto do centro da tela; com seleção, vai ao vizinho na direção
+  const moveSelection = useCallback((dir: ArrowDirection) => {
+    const { nodes } = graphRef.current;
+    const cur = selectedRef.current;
+    const next = cur === null
+      ? nearestToPoint(nodes, toWorld(logW.current / 2, logH.current / 2))
+      : nearestInDirection(nodes, cur, dir);
+    if (!next) {
+      setAnnouncement('Nenhum nó nessa direção');
+      return;
+    }
+    selectNode(next);
+    // Com o grafo inteiro enquadrado o nó já está na tela; com zoom ou arrasto a câmera o acompanha
+    if (!autoFitRef.current) panIntoView(next);
+  }, [toWorld, selectNode, panIntoView]);
+
+  // Enter: nota abre; pasta é enquadrada (a mesma ação do clique)
+  const activateSelection = useCallback(() => {
+    const cur = graphRef.current.nodes.find((n) => n.id === selectedRef.current);
+    if (!cur) {
+      setAnnouncement('Nenhum nó selecionado: use as setas para escolher um');
+      return;
+    }
+    if (cur.kind === 'note') {
+      setAnnouncement(`Abrindo nota: ${cur.label}`);
+      onOpenNote?.(cur.id);
+    } else {
+      setAnnouncement(`Pasta enquadrada: ${cur.label}`);
+      frameFolder(cur);
+    }
+  }, [frameFolder, onOpenNote]);
+
+  // Teclado do canvas. Tab não é tratado: o navegador leva o foco para fora do grafo.
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
+    const dir = arrowDirection(e.key);
+    if (dir) {
+      e.preventDefault();
+      moveSelection(dir);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      activateSelection();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      fitAll();
+      setAnnouncement('Grafo inteiro enquadrado');
+    } else if (e.key === 'Escape' && selectedRef.current !== null) {
+      e.preventDefault();
+      selectNode(null);
+    }
+  }, [moveSelection, activateSelection, fitAll, selectNode]);
+
   // Duplo clique volta a enquadrar o grafo inteiro
-  const handleDoubleClick = useCallback(() => { autoFitRef.current = true; draw(); }, [draw]);
+  const handleDoubleClick = useCallback(() => fitAll(), [fitAll]);
 
   // ── Zoom com scroll ─────────────────────────────────────────────────────
   const handleWheel = useCallback((e: WheelEvent) => {
@@ -429,6 +443,10 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
   // Listener nativo e não passivo: o preventDefault do React é ignorado (ele registra wheel como passivo).
   // Com `empty`, o listener é religado quando o canvas aparece (ele não existe no estado vazio).
   const empty = vaultNodes.length === 0;
+  // Modo Links sem nenhuma ligação desenhável: aviso sobre o painel (as notas seguem soltas por baixo)
+  const linkCount = useMemo(() => visibleLinks(vaultNodes, links).length, [vaultNodes, links]);
+  // Legenda: pastas de 1º nível presentes no vault (a mesma cor que o desenho usa)
+  const legend = useMemo(() => legendEntries(vaultNodes.map((n) => topFolderOf(n.path))), [vaultNodes]);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
@@ -450,20 +468,30 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
       <canvas
         ref={canvasRef}
         className="force-graph__canvas"
+        tabIndex={0}
         onMouseMove={handleMouseMove}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
+        onKeyDown={handleKeyDown}
         onDoubleClick={handleDoubleClick}
-        aria-label="Visualização de grafo — arraste para mover, scroll para zoom, duplo clique para enquadrar"
+        aria-label="Visualização de grafo"
+        aria-describedby={helpId}
       />
+      <p id={helpId} className="sr-only">{GRAPH_HELP}</p>
+      {mode === 'links' && linkCount === 0 && <GraphNoLinksHint noteCount={vaultNodes.length} />}
+      {mode !== 'links' && legend.total > 0 && (
+        <GraphLegend entries={legend.shown} overflow={legend.overflow} total={legend.total} />
+      )}
+      <div className="sr-only" aria-live="polite">{announcement}</div>
       {tooltip && (
         <div
           className="force-graph__tooltip"
           style={{ left: tooltip.x, top: tooltip.y }}
           aria-hidden="true"
         >
-          {tooltip.label}
+          <span className="force-graph__tooltip-label">{tooltip.label}</span>
+          <span className="force-graph__tooltip-detail">{tooltip.detail}</span>
         </div>
       )}
     </div>

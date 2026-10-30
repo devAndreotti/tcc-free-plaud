@@ -1,0 +1,69 @@
+{
+  "dataset_name": "multi-trecho-ata-migracao-kafka",
+  "samples": [
+    {
+      "sample_id": "unica-01",
+      "question": "Qual é o replication factor do tópico de pedidos?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "replication factor 3"
+      ],
+      "expected_ref": "Decisões",
+      "category": "direta"
+    },
+    {
+      "sample_id": "unica-02",
+      "question": "Qual política de acks o producer vai usar?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "acks=all"
+      ],
+      "expected_ref": "Decisões",
+      "category": "direta"
+    },
+    {
+      "sample_id": "mt-nota-01",
+      "question": "Quantas partições terá o tópico de pedidos e qual é a janela do cutover?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "12 partições",
+        "22/03/2025"
+      ],
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-nota-08",
+      "question": "Qual é a chave de partição do pedido e qual feature flag permite o rollback do consumer?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "pedido_id",
+        "ORDERS_LEGACY_CONSUMER"
+      ],
+      "expected_ref": "Próximos passos",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-01",
+      "question": "Qual retenção o time definiu para o tópico pedidos-v2, e qual tamanho de arquivo a aula de Parquet recomenda?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "pedidos-v2",
+        "7 dias"
+      ],
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-06",
+      "question": "Qual é a garantia de envio do producer Kafka, e como a candidata tratou a race condition no resgate de cupom?",
+      "expected_note_id": "ata-migracao-kafka",
+      "expected_terms": [
+        "acks=all",
+        "idempotência"
+      ],
+      "expected_ref": "Decisões",
+      "category": "inferida"
+    }
+  ]
+}
