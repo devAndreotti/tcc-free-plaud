@@ -9,9 +9,9 @@ from escolio.app.cli_paths import compose_path
 from escolio.app.config import get_settings
 from escolio.app.paths import ensure_runtime_dirs
 from escolio.benchmark.cli_models import compare_models
+from escolio.benchmark.cli_report import faithfulness, report_ia
 from escolio.benchmark.compare_flags import (
     executar_compare_com_flags,
-    gravar_faithfulness,
     validar_flags_compare,
 )
 from escolio.benchmark.coverage_cli import coverage as coverage_command
@@ -20,12 +20,7 @@ from escolio.benchmark.datasets import (
     load_benchmark_dataset,
     load_benchmark_suite,
 )
-from escolio.benchmark.faithfulness import (
-    build_faithfulness_report,
-    make_openai_compatible_judge,
-)
 from escolio.benchmark.grounded import evaluate_grounded_answers
-from escolio.benchmark.ia_report import build_ia_report
 from escolio.benchmark.json_merge import mesclar_chaves_json
 from escolio.benchmark.reports import (
     export_benchmark_comparison_csv,
@@ -34,7 +29,6 @@ from escolio.benchmark.reports import (
     export_benchmark_json,
 )
 from escolio.benchmark.runners import (
-    BenchmarkComparisonResult,
     benchmark_compare_dir,
     compare_benchmark_suite,
     run_benchmark,
@@ -43,7 +37,6 @@ from escolio.benchmark.service import build_settings_snapshot
 from escolio.ingest.loaders import load_document
 from escolio.notes.structurer import structure_document
 from escolio.providers.answer import (
-    AnswerProviderError,
     AnswerProviderName,
     get_answer_provider,
 )
@@ -287,45 +280,5 @@ def compare(
 app.command("compare-models")(compare_models)
 
 
-@app.command("report-ia")
-def report_ia(
-    extractive_path: Path = typer.Option(..., '--extractive', help="JSON do compare com a resposta extrativa."),
-    generativo_path: Path = typer.Option(..., '--generativo', help="JSON do compare com o provider generativo."),
-    saida: Path = typer.Option(..., '--saida', help="Arquivo Markdown de saída."),
-) -> None:
-    """Monta o relatório em Markdown com a IA local contra o extractive."""
-    extractive = BenchmarkComparisonResult.model_validate_json(extractive_path.read_text(encoding='utf-8'))
-    generativo = BenchmarkComparisonResult.model_validate_json(generativo_path.read_text(encoding='utf-8'))
-    try:
-        markdown = build_ia_report(extractive, generativo)
-    except ValueError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from None
-    saida.parent.mkdir(parents=True, exist_ok=True)
-    saida.write_text(markdown, encoding='utf-8', newline='\n')
-    typer.echo(json.dumps({'ok': True, 'saida': str(saida)}, ensure_ascii=True, indent=2))
-
-
-@app.command("faithfulness")
-def faithfulness(
-    results_path: Path = typer.Option(..., '--results', help="JSON do compare com --registrar-respostas."),
-    judge_model: str = typer.Option(..., '--judge-model', help="Modelo juiz; use um modelo forte e rode offline."),
-    judge_base_url: str = typer.Option(..., '--judge-base-url', help="Base URL OpenAI-compatible do juiz."),
-    saida: Path = typer.Option(..., '--saida', help="Arquivo JSON de saída."),
-    judge_api_key: str | None = typer.Option(None, '--judge-api-key', help="Chave do juiz, se o endpoint exigir."),
-    timeout: int = typer.Option(120, '--timeout', min=1, help="Timeout por chamada ao juiz, em segundos."),
-    mesclar_em: Path | None = typer.Option(None, '--mesclar-em', help="JSON do compare onde gravar a chave faithfulness (além do --saida)."),
-    estrategia: str | None = typer.Option(None, '--estrategia', help="Estratégia do bloco faithfulness (padrão: a do chat, default_ask_strategy)."),
-) -> None:
-    """Faithfulness semântica com juiz LLM (offline; fora do gate do CI)."""
-    comparison = BenchmarkComparisonResult.model_validate_json(results_path.read_text(encoding='utf-8'))
-    try:
-        judge = make_openai_compatible_judge(judge_base_url, judge_model, api_key=judge_api_key, timeout=timeout)
-        report = build_faithfulness_report(comparison, judge, judge_model=judge_model, judge_base_url=judge_base_url)
-        payload = gravar_faithfulness(
-            report, comparison, saida=saida, mesclar_em=mesclar_em, estrategia=estrategia
-        )
-    except (ValueError, AnswerProviderError) as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from None
-    typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
+app.command("report-ia")(report_ia)
+app.command("faithfulness")(faithfulness)

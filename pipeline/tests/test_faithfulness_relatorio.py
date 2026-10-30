@@ -187,7 +187,7 @@ def test_cli_faithfulness_grava_relatorio_com_juiz_falso(monkeypatch, tmp_path: 
     resultados.write_text(_comparacao(_linhas_com_respostas()).model_dump_json(), encoding='utf-8')
     saida = tmp_path / 'faithfulness' / 'hybrid.json'
     monkeypatch.setattr(
-        'escolio.benchmark.cli.make_openai_compatible_judge',
+        'escolio.benchmark.cli_report.make_openai_compatible_judge',
         lambda *args, **kwargs: JuizFalso(palavras=('kafka',)),
     )
 
@@ -211,7 +211,7 @@ def test_cli_faithfulness_grava_relatorio_com_juiz_falso(monkeypatch, tmp_path: 
 def test_cli_faithfulness_recusa_json_sem_respostas(monkeypatch, tmp_path: Path) -> None:
     resultados = tmp_path / 'sem-respostas.json'
     resultados.write_text(_comparacao([_linha('q1', answered=True, answer=None)]).model_dump_json(), encoding='utf-8')
-    monkeypatch.setattr('escolio.benchmark.cli.make_openai_compatible_judge', lambda *args, **kwargs: JuizFalso())
+    monkeypatch.setattr('escolio.benchmark.cli_report.make_openai_compatible_judge', lambda *args, **kwargs: JuizFalso())
 
     result = runner.invoke(
         app,
