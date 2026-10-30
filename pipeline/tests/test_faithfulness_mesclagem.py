@@ -46,7 +46,7 @@ def comparacao(monkeypatch, tmp_path: Path) -> Path:
 
 def _faithfulness(monkeypatch, juiz: JuizFalso) -> None:
     monkeypatch.setattr(
-        'escolio.benchmark.cli.make_openai_compatible_judge',
+        'escolio.benchmark.cli_report.make_openai_compatible_judge',
         lambda base_url, model, api_key=None, timeout=120: juiz,
     )
 
