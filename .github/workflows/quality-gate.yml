@@ -203,6 +203,10 @@ jobs:
         with:
           name: coverage-report
           path: coverage/
+      # O coverage.xml traz o caminho absoluto do runner que rodou os testes. Se o scan cai em outro
+      # runner, o Sonar não resolve os arquivos e ignora a cobertura, e o gate reprova código novo.
+      - name: Tornar caminhos do coverage relativos
+        run: sed -i -E 's#<source>[^<]*pipeline/src</source>#<source>pipeline/src</source>#g' coverage/coverage.xml
       - name: SonarCloud scan and Quality Gate
         uses: SonarSource/sonarqube-scan-action@v8
         with:
