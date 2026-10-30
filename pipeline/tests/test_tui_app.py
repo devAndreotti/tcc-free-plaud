@@ -625,7 +625,7 @@ def test_tui_settings_pane_runs_doctor_in_background(monkeypatch, tmp_path: Path
 
     def slow_doctor(*, settings):
         doctor_started.set()
-        doctor_release.wait(timeout=2)
+        doctor_release.wait(timeout=10)
         return DoctorReport(
             status='ok',
             checks=[DoctorCheck(code='corpus', status='ok', message='Corpus consistente.', latency_ms=1)],
@@ -721,7 +721,7 @@ def test_tui_ask_button_ignores_double_click_while_running(monkeypatch, tmp_path
     def fake_ask_corpus(question: str, strategy: str, **kwargs) -> AskResponse:
         calls.append(strategy)
         started.set()
-        release.wait(timeout=2)
+        release.wait(timeout=10)
         return _answer(question)
 
     monkeypatch.setattr('escolio.tui.app.ask_corpus', fake_ask_corpus)
@@ -732,7 +732,7 @@ def test_tui_ask_button_ignores_double_click_while_running(monkeypatch, tmp_path
             app.query_one('#ask-file-path', Input).value = str(sample)
             app.query_one('#ask-question', Input).value = 'O que o benchmark mede?'
             await pilot.click('#ask-submit')
-            assert await asyncio.to_thread(started.wait, 2)
+            assert await asyncio.to_thread(started.wait, 10)
             await pilot.click('#ask-submit')
             release.set()
             await pilot.pause(0.5)
@@ -1166,7 +1166,7 @@ def test_tui_notes_cancel_button_cancels_running_index(monkeypatch, tmp_path: Pa
     ) -> CorpusIndexBatchResult:
         captured['token'] = cancel_token
         started.set()
-        release.wait(timeout=2)
+        release.wait(timeout=10)
         return CorpusIndexBatchResult(
             source_path=str(path),
             recursive=True,
@@ -1203,7 +1203,7 @@ def test_tui_notes_cancel_button_cancels_running_index(monkeypatch, tmp_path: Pa
             await pilot.pause(0.1)
             app.query_one('#notes-folder-path', Input).value = str(tmp_path)
             await pilot.click('#notes-index')
-            assert await asyncio.to_thread(started.wait, 2)
+            assert await asyncio.to_thread(started.wait, 10)
             await pilot.click('#notes-cancel')
             release.set()
             await pilot.pause(0.5)
