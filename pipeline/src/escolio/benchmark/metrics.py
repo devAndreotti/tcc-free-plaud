@@ -1,22 +1,12 @@
 import random
-import re
-import unicodedata
 from math import log2
 from statistics import fmean
 
-_TOKEN_PATTERN = re.compile(r'[0-9A-Za-zÀ-ÖØ-öø-ÿ]+')
-
-# Stopwords em forma normalizada (sem acento, minúsculas) para o cálculo de
-# fundamentação lexical focar em palavras de conteúdo, não em conectivos.
-_STOPWORDS_PT = frozenset(
-    {
-        'a', 'ao', 'aos', 'as', 'com', 'como', 'da', 'das', 'de', 'do', 'dos',
-        'e', 'em', 'entre', 'essa', 'esse', 'esta', 'este', 'eu', 'foi', 'isso',
-        'ja', 'la', 'mais', 'mas', 'me', 'na', 'nao', 'nas', 'no', 'nos', 'num',
-        'numa', 'o', 'os', 'ou', 'para', 'pela', 'pelo', 'por', 'que', 'se',
-        'sem', 'ser', 'seu', 'sua', 'tem', 'um', 'uma', 'umas', 'uns',
-    }
-)
+# Tokenização e fundamentação lexical vivem em escolio.text_tokens (sem dependência
+# da camada de benchmark). Os nomes abaixo são reexportados por compatibilidade.
+from escolio.text_tokens import STOPWORDS_PT as _STOPWORDS_PT  # noqa: F401
+from escolio.text_tokens import content_tokens as _content_tokens  # noqa: F401
+from escolio.text_tokens import lexical_groundedness  # noqa: F401
 
 
 def recall_at_k(relevant_hits: int, total_relevant: int) -> float:
@@ -53,40 +43,6 @@ def ndcg_at_k(ranks: list[int | None], k: int) -> float:
         return 0.0
     total = sum(1.0 / log2(rank + 1) for rank in ranks if rank is not None and rank <= k)
     return total / len(ranks)
-
-
-def _content_tokens(text: str) -> set[str]:
-    """Extrai tokens de conteúdo normalizados (sem acento, sem stopwords)."""
-    tokens: set[str] = set()
-    for raw in _TOKEN_PATTERN.findall(text):
-        folded = unicodedata.normalize('NFKD', raw).encode('ascii', 'ignore').decode('ascii')
-        normalized = re.sub(r'[^0-9a-z]+', '', folded.lower())
-        if len(normalized) < 2 or normalized in _STOPWORDS_PT:
-            continue
-        tokens.add(normalized)
-    return tokens
-
-
-def lexical_groundedness(answer: str, supporting_texts: list[str]) -> float:
-    """Proxy lexical de faithfulness: fração dos termos de conteúdo da resposta
-    que aparecem nos trechos citados.
-
-    Mede ancoragem, não correção: 1.0 indica que todo token informativo da
-    resposta tem origem nas evidências recuperadas; valores baixos sinalizam
-    afirmações sem suporte no acervo (possível alucinação). Resposta vazia
-    retorna 1.0 (não há afirmação a sustentar); evidência vazia com resposta
-    não vazia retorna 0.0.
-    """
-    answer_tokens = _content_tokens(answer)
-    if not answer_tokens:
-        return 1.0
-    support_tokens: set[str] = set()
-    for text in supporting_texts:
-        support_tokens |= _content_tokens(text)
-    if not support_tokens:
-        return 0.0
-    grounded = answer_tokens & support_tokens
-    return len(grounded) / len(answer_tokens)
 
 
 def abstention_metrics(

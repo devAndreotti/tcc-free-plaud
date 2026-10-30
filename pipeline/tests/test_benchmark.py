@@ -816,6 +816,74 @@ def test_run_benchmark_compare_service_exports_structured_payload(tmp_path: Path
     assert (settings.results_dir / 'benchmark_compare' / 'service-suite' / 'benchmark.sqlite3').exists()
 
 
+def test_run_benchmark_compare_service_emits_rerank_blocks_when_configured(monkeypatch, tmp_path: Path) -> None:
+    """Com `rerank_model`, o payload da UI traz baseline, reranker e cobertura; sem ele, nada disso."""
+    from benchmark_compare_fakes import FakeReranker
+
+    import escolio.benchmark.service as service_module
+
+    sample_file = tmp_path / 'benchmark.md'
+    sample_file.write_text(
+        '# Benchmark\n\nO benchmark mede recall, latencia e cobertura de citacoes para comparar retrieval.\n'
+        'A recuperacao vetorial usa embeddings persistidos no ChromaDB local.\n',
+        encoding='utf-8',
+    )
+    (tmp_path / 'dataset.json').write_text(
+        json.dumps(
+            {
+                'dataset_name': 'rerank-dataset',
+                'samples': [
+                    {
+                        'sample_id': 'unica-01',
+                        'question': 'O que o benchmark mede?',
+                        'expected_note_id': 'benchmark',
+                        'expected_terms': ['recall', 'latencia'],
+                    }
+                ],
+            }
+        ),
+        encoding='utf-8',
+    )
+    (tmp_path / 'suite.json').write_text(
+        json.dumps(
+            {
+                'suite_name': 'rerank-suite',
+                'cases': [{'case_id': 'case-1', 'document_path': 'benchmark.md', 'dataset_path': 'dataset.json'}],
+            }
+        ),
+        encoding='utf-8',
+    )
+
+    def make_settings(rerank_model: str) -> Settings:
+        return Settings(
+            workspace_dir=tmp_path,
+            data_dir=tmp_path / 'data',
+            notes_dir=tmp_path / 'data' / 'corpus' / 'notes',
+            datasets_dir=tmp_path / 'data' / 'datasets',
+            results_dir=tmp_path / 'data' / 'results',
+            sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
+            vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+            embedding_model='fake-hash',
+            embedding_device='cpu',
+            retrieval_top_k=4,
+            default_chunk_size=120,
+            default_chunk_overlap=30,
+            rerank_model=rerank_model,
+        )
+
+    sem = run_benchmark_compare('suite.json', runtime=FakeRuntime(), settings=make_settings(''))
+    assert 'reranked' not in sem and 'coverage' not in sem and 'baseline_ci' not in sem
+
+    monkeypatch.setattr(service_module, 'reranker_from_settings', lambda settings: FakeReranker())
+    com = run_benchmark_compare('suite.json', runtime=FakeRuntime(), settings=make_settings('fake-reranker'))
+    assert com['reranked']['model'] == 'fake-reranker'
+    assert set(com['reranked']['summaries']) == {'lexical', 'vector', 'hybrid'}
+    assert 'baseline_ci' in com and 'coverage' in com
+    # O mesmo conteúdo é gravado no JSON exportado, que é o que a UI e o `faithfulness --mesclar-em` leem.
+    exported = json.loads(Path(com['json_report_path']).read_text(encoding='utf-8'))
+    assert exported['reranked']['model'] == 'fake-reranker'
+
+
 
 def test_benchmark_compare_cli_executes_suite_and_exports_reports(monkeypatch, tmp_path: Path) -> None:
     settings = Settings(

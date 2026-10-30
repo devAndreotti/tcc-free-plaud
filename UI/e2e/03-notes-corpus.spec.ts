@@ -8,8 +8,8 @@ test.describe('Notes & Corpus Exploration E2E Flow', () => {
   });
 
   test('deve listar as notas indexadas no painel lateral ou aba de notas', async ({ page }) => {
-    // Procura botão ou aba de notas se disponível
-    const notesButton = page.locator('button:has-text("Notas"), [aria-label*="Notas"], [data-tab="notes"]').first();
+    // Botão exato do menu principal: `has-text("Notas")` casava antes com o botão da vault ("42 notas")
+    const notesButton = page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('button', { name: 'Notas', exact: true });
     if (await notesButton.isVisible()) {
       await notesButton.click();
       await expect(page.locator('text=Arquitetura do Escólio')).toBeVisible();

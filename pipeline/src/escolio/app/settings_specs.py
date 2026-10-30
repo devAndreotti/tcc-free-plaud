@@ -260,6 +260,14 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         value_type='int',
         placeholder='vazio = default do modelo',
     ),
+    SettingSpec(
+        key='extract_structure',
+        label='Extrair decisões e ações com LLM',
+        description='Usa o provider de resposta para extrair decisões, ações com responsável/prazo e tópicos das notas. Desligado mantém a estruturação determinística.',
+        group='LLM',
+        value_type='bool',
+        recommended=False,
+    ),
 )
 
 

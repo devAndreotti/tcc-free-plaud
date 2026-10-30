@@ -2,7 +2,9 @@ from pathlib import Path
 
 from escolio.app.config import Settings, get_settings
 from escolio.app.paths import ensure_runtime_dirs
+from escolio.benchmark.compare_flags import executar_compare_com_flags
 from escolio.benchmark.datasets import load_benchmark_suite
+from escolio.benchmark.json_merge import mesclar_chaves_json
 from escolio.benchmark.reports import (
     export_benchmark_comparison_csv,
     export_benchmark_comparison_json,
@@ -15,6 +17,7 @@ from escolio.benchmark.runners import (
 )
 from escolio.corpus.runtime import CorpusRuntime
 from escolio.providers.embed import get_embedder
+from escolio.retrieval.rerank import reranker_from_settings
 from escolio.storage.sqlite import init_sqlite
 from escolio.storage.vector import LocalVectorStore
 
@@ -69,8 +72,17 @@ def run_benchmark_compare(
             resolved_settings.embedding_model,
             device=resolved_settings.embedding_device,
         )
-        result = compare_benchmark_suite(
+        # Sem `rerank_model` nada muda: uma passada só, como antes. Com ele, a UI recebe baseline + reranker
+        # e a cobertura entre trechos (campos opcionais do painel de Benchmark).
+        rerank_model = resolved_settings.rerank_model.strip()
+        reranker = reranker_from_settings(resolved_settings)
+        result, extras = executar_compare_com_flags(
             suite,
+            comparar=compare_benchmark_suite,
+            reranker=reranker,
+            rerank_model=rerank_model or None,
+            com_baseline=reranker is not None,
+            ks=(3, 5, 10) if reranker is not None else None,
             workspace_dir=resolved_settings.workspace_dir,
             connection=connection,
             top_k=resolved_settings.retrieval_top_k,
@@ -83,6 +95,10 @@ def run_benchmark_compare(
         output_base = resolved_settings.results_dir / result.comparison_id
         json_path = export_benchmark_comparison_json(result, output_base.with_suffix('.json'))
         csv_path = export_benchmark_comparison_csv(result, output_base.with_suffix('.csv'))
-        return benchmark_comparison_payload(result, json_path, csv_path)
+        if extras:
+            mesclar_chaves_json(json_path, extras)
+        payload = benchmark_comparison_payload(result, json_path, csv_path)
+        payload.update(extras)
+        return payload
     finally:
         connection.close()

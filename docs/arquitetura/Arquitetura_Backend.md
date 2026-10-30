@@ -70,7 +70,13 @@ pipeline/
 ├── benchmark/
 │   ├── datasets.py
 │   ├── metrics.py
-│   ├── runners.py
+│   ├── runners.py          # fachada; a execução fica em run_single, run_corpus e compare
+│   ├── runner_models.py
+│   ├── query_scoring.py
+│   ├── summaries.py
+│   ├── run_single.py
+│   ├── run_corpus.py
+│   ├── compare.py
 │   └── reports.py
 ├── storage/
 │   ├── sqlite.py
@@ -182,6 +188,43 @@ como baseline persistente em disco, desacoplado da interface e encapsulado em `s
 Na evolução de corpus multi-documento, o SQLite também expõe leitura de `chunks` e `notes`
 persistidos para que o fluxo `corpus ask` consiga recuperar evidências do acervo inteiro sem
 depender de um único arquivo carregado em memória.
+
+### `corpus/`
+
+`corpus/service.py` é a fachada pública da indexação e manutenção do corpus. Os nomes exportados
+(`index_corpus_path`, `index_corpus_file`, `rebuild_corpus`, `get_corpus_status`, `reset_corpus`,
+`remove_corpus_root`, `benchmark_corpus_indexing`, `perf_benchmark_corpus`) continuam importáveis
+de `escolio.corpus.service`, que é onde CLI, TUI, testes e `monkeypatch` os referenciam.
+
+Os módulos internos são detalhe de implementação e seguem estas regras:
+
+- módulos extraídos não importam `service`: dependências que a fachada precisa trocar em teste
+  (`get_embedder`, `load_document`, `index_corpus_path`) chegam por parâmetro (`index_fn`,
+  `get_embedder_fn`, `loader`), e a fachada as resolve no momento da chamada;
+- nenhum arquivo passa de 300 linhas (`.quality-gate/policy.json`, `maxFileLines`).
+
+Estado atual da divisão:
+
+```text
+corpus/
+├── service.py          # fachada: index_corpus_path (ainda ~690 linhas) e wrappers
+├── status.py           # get_corpus_status
+├── maintenance.py      # reset_corpus, remove_corpus_root
+├── rebuild.py          # rebuild_corpus (recebe index_fn)
+├── index_file.py       # index_corpus_file e preparação de arquivo (recebe loader, get_embedder_fn)
+├── index_results.py    # progresso (ProgressCallback) e construtores de resultado
+├── index_commit.py     # commit em lote atomic/microbatch e detecção de note_id duplicado
+├── benchmark_support.py # helpers de benchmark: embedder contador, settings temporários, fixture, git, torch
+├── index_benchmark.py  # benchmark_corpus_indexing
+├── perf_benchmark.py   # perf_benchmark_corpus
+├── ask.py, answer_context.py   # perguntas com citação (fora desta divisão)
+└── cli.py, dropped.py, jobs.py, models.py, runtime.py, discovery.py, cancellation.py
+```
+
+O que ficou em `service.py` é `index_corpus_path`, a indexação de pastas com commit atômico ou
+microbatch, paralelismo e cancelamento. Ela usa um estado mutável compartilhado entre closures
+(`flush_pending`, `accept_prepared`) e três pontos de cancelamento. Separá-la exige transformar esse
+estado em objeto, mudança de comportamento sensível que deve ser feita em etapa própria.
 
 ## Banco vetorial
 
@@ -445,6 +488,17 @@ Quando há evidência validada, um provider OpenAI-compatible pode reescrever a 
 partir de contextos citáveis. O mesmo adaptador cobre Ollama, LM Studio e APIs remotas compatíveis
 com `/chat/completions`. A API key fica apenas em `.env` ou variável `ESCOLIO_ANSWER_API_KEY`;
 `user_settings.json` guarda somente provider, modelo, base URL, temperatura e timeout.
+
+Na organização interna do `corpus ask`, `escolio.corpus.ask` fica como fachada: mantém a API pública
+e os nomes que src e testes importam, e concentra `answer_corpus_with_citations` (orquestração das
+etapas). A implementação se divide em `ask_retrieval` (vocabulário do corpus, busca FTS e recuperação
+por estratégia), `ask_anchors` (rerank por âncora curta), `ask_claims` (claims, citações e
+limitações), `ask_grounding` (portões de evidência que recusam antes da IA), `ask_generation`
+(chamada ao provider e aceite pela validação) e `ask_validation` (checagem da resposta gerada).
+A dependência que os testes substituem por nome (`search_chunks_fts`, `validate_generated_answer`)
+continua sendo lida em `ask.py` no momento da chamada: os módulos recebem o callable por parâmetro
+(`search_rows`, `validate`), então o monkeypatch em `escolio.corpus.ask` segue efetivo. A divisão não
+muda comportamento: a suíte e uma comparação de respostas completas antes e depois passaram.
 
 Na evolução atual, `hybrid` combina:
 

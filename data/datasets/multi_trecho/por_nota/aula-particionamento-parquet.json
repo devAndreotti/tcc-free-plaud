@@ -1,0 +1,37 @@
+{
+  "dataset_name": "multi-trecho-aula-particionamento-parquet",
+  "samples": [
+    {
+      "sample_id": "unica-03",
+      "question": "Qual tamanho de arquivo o Heitor recomendou mirar no data lake?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "128 MB"
+      ],
+      "expected_ref": "Particionamento",
+      "category": "direta"
+    },
+    {
+      "sample_id": "mt-nota-02",
+      "question": "Qual é o tamanho alvo por arquivo e qual a data de entrega do exercício?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "128 MB",
+        "18/04/2025"
+      ],
+      "expected_ref": "Particionamento",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-08",
+      "question": "Qual solução de salting o Heitor sugere para data skew, e como o cache do catálogo trata chave quente?",
+      "expected_note_id": "aula-particionamento-parquet",
+      "expected_terms": [
+        "salting",
+        "sufixo aleatório"
+      ],
+      "expected_ref": "Data skew",
+      "category": "inferida"
+    }
+  ]
+}

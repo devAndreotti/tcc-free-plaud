@@ -1,0 +1,48 @@
+{
+  "dataset_name": "multi-trecho-decisao-autenticacao-oidc",
+  "samples": [
+    {
+      "sample_id": "unica-08",
+      "question": "Qual provedor de identidade foi adotado na decisão de autenticação?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "Keycloak"
+      ],
+      "expected_ref": "Decisão",
+      "category": "direta"
+    },
+    {
+      "sample_id": "mt-nota-07",
+      "question": "Qual a validade do access token e com que frequência é feito o backup da base do Keycloak?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "5 minutos",
+        "backup diário"
+      ],
+      "expected_ref": "Riscos",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-04",
+      "question": "Qual a validade do access token adotada, e quanto tempo durou o incidente de pagamentos de setembro?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "5 minutos",
+        "rotação"
+      ],
+      "expected_ref": "Decisão",
+      "category": "inferida"
+    },
+    {
+      "sample_id": "mt-notas-09",
+      "question": "Qual provedor de identidade foi escolhido, e como o cluster do Keycloak fica protegido contra falha?",
+      "expected_note_id": "decisao-autenticacao-oidc",
+      "expected_terms": [
+        "Keycloak",
+        "cluster com duas réplicas"
+      ],
+      "expected_ref": "Riscos",
+      "category": "inferida"
+    }
+  ]
+}

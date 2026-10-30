@@ -16,7 +16,7 @@ from escolio.app.settings_specs import (
 )
 from escolio.ingest.audio_capture import list_input_devices
 from escolio.providers import embed as embed_provider
-from escolio.providers.answer import _is_http_base_url
+from escolio.providers.answer import is_http_base_url
 from escolio.providers.audio_catalog import load_catalog
 from escolio.providers.voice_model_meta import ui_meta_for
 
@@ -139,7 +139,7 @@ def settings_catalog_payload(settings: Settings | None = None) -> list[dict[str,
 def parse_catalog_value(spec: SettingSpec, value: Any) -> Any:
     if value is None or (isinstance(value, str) and value.strip() == ''):
         return None
-    if spec.key == 'answer_base_url' and not _is_http_base_url(str(value).strip()):
+    if spec.key == 'answer_base_url' and not is_http_base_url(str(value).strip()):
         raise ValueError('URL do provedor de resposta precisa começar com http:// ou https://')
     if spec.value_type in {'string', 'path', 'secret'}:
         return str(value).strip()

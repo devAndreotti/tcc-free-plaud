@@ -11,18 +11,22 @@ from pydantic import BaseModel
 
 from escolio.app.config import Settings, get_settings
 
+# Reexportados: parsing mora em answer_parsing, mas o caminho antigo continua valendo.
+from escolio.providers.answer_parsing import (  # noqa: F401
+    EMPTY_ANSWER_ERROR,
+    REASONING_EMPTY_ANSWER_ERROR,
+    REASONING_KEYS,
+    AnswerProviderError,
+    _empty_answer_error_message,
+    _reasoning_text,
+    extract_answer_text,
+)
+
 AnswerProviderName = Literal['extractive', 'openai-compatible', 'ollama', 'lmstudio']
 ProviderTestStatus = Literal['ok', 'error', 'not_applicable']
 TEST_ANSWER_PROMPT = 'Responda somente: ok'
 INVALID_BASE_URL_ERROR = 'Provider base_url invalida. Use http:// ou https://.'
 NO_ANSWER_SENTINEL = 'NAO_ENCONTRADO: os dados recuperados nao sustentam resposta.'
-EMPTY_ANSWER_ERROR = 'Provider retornou resposta vazia.'
-REASONING_EMPTY_ANSWER_ERROR = (
-    'Provider gerou apenas raciocinio (reasoning) sem resposta final. '
-    'Modelos de reasoning gastam tokens pensando antes de responder: '
-    'aumente answer_timeout_seconds, suba answer_max_tokens, ou use um modelo instruct.'
-)
-REASONING_KEYS = ('reasoning', 'reasoning_content')
 GROUNDED_SYSTEM_PROMPT = (
     'Voce deve responder em portugues brasileiro usando exclusivamente os CONTEXTOS. '
     'Nao use conhecimento externo. Nao complete lacunas. '
@@ -35,8 +39,6 @@ GROUNDED_SYSTEM_PROMPT = (
 )
 
 
-class AnswerProviderError(RuntimeError):
-    """Falha operacional do provider de resposta generativa."""
 
 
 class AnswerProviderTestResult(BaseModel):
@@ -55,7 +57,7 @@ class AnswerProvider(Protocol):
         """Gera resposta a partir de contextos citaveis ja recuperados."""
 
 
-def _is_http_base_url(value: str) -> bool:
+def is_http_base_url(value: str) -> bool:
     try:
         parsed = urlparse(value)
     except ValueError:
@@ -81,45 +83,8 @@ def build_grounded_chat_messages(question: str, contexts: list[str]) -> list[dic
     ]
 
 
-def _reasoning_text(message: dict[str, object]) -> str:
-    """Texto de chain-of-thought emitido por modelos de reasoning, se houver."""
-    for key in REASONING_KEYS:
-        value = message.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return ''
 
-
-def _extract_answer_text(decoded: object) -> tuple[str, dict[str, object], object]:
-    """Extrai (content normalizado, message, finish_reason) de um payload chat/completions.
-
-    Levanta KeyError/IndexError/TypeError quando o payload nao tem o formato esperado,
-    para o chamador traduzir em 'payload invalido'. Trata content ausente ou null como
-    string vazia (modelos de reasoning costumam emitir content=null).
-    """
-    choice = decoded['choices'][0]  # type: ignore[index]
-    message = choice['message']
-    if not isinstance(message, dict):
-        raise TypeError('message do provider nao e um objeto')
-    content = message.get('content')
-    text = content.strip() if isinstance(content, str) else ''
-    finish_reason = choice.get('finish_reason') if isinstance(choice, dict) else None
-    return text, message, finish_reason
-
-
-def _empty_answer_error_message(message: dict[str, object], finish_reason: object) -> str:
-    """Mensagem acionavel quando content vem vazio.
-
-    Distingue o modelo de reasoning (so emitiu raciocinio, ou truncou em
-    finish_reason='length') do vazio puro. NUNCA usa o texto de reasoning como resposta:
-    ele e chain-of-thought, nao a resposta fundamentada nos contextos.
-    """
-    if _reasoning_text(message) or finish_reason == 'length':
-        return REASONING_EMPTY_ANSWER_ERROR
-    return EMPTY_ANSWER_ERROR
-
-
-def _transport_error(exc: Exception) -> AnswerProviderError:
+def transport_error(exc: Exception) -> AnswerProviderError:
     if isinstance(exc, HTTPError):
         return AnswerProviderError(f'Provider respondeu HTTP {exc.code}.')
     if isinstance(exc, URLError):
@@ -127,6 +92,12 @@ def _transport_error(exc: Exception) -> AnswerProviderError:
     if isinstance(exc, TimeoutError):
         return AnswerProviderError('Provider excedeu timeout.')
     return AnswerProviderError(INVALID_BASE_URL_ERROR)
+
+
+# Nomes privados anteriores, mantidos como alias para quem ainda importa com underscore.
+_is_http_base_url = is_http_base_url
+_extract_answer_text = extract_answer_text
+_transport_error = transport_error
 
 
 @dataclass
@@ -142,13 +113,22 @@ class OpenAICompatibleAnswerProvider:
     def _chat_request(self, question: str, contexts: list[str], *, stream: bool = False) -> Request:
         if not contexts:
             raise ValueError('Provider de resposta exige pelo menos um contexto citavel.')
-        if not _is_http_base_url(self.base_url):
+        return self._messages_request(build_grounded_chat_messages(question, contexts), stream=stream)
+
+    def _messages_request(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        stream: bool = False,
+        temperature: float | None = None,
+    ) -> Request:
+        if not is_http_base_url(self.base_url):
             raise AnswerProviderError(INVALID_BASE_URL_ERROR)
 
         payload: dict[str, object] = {
             'model': self.model,
-            'messages': build_grounded_chat_messages(question, contexts),
-            'temperature': self.temperature,
+            'messages': messages,
+            'temperature': self.temperature if temperature is None else temperature,
         }
         if stream:
             payload['stream'] = True
@@ -160,23 +140,38 @@ class OpenAICompatibleAnswerProvider:
         endpoint = f'{self.base_url.rstrip("/")}/chat/completions'
         return Request(endpoint, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
 
-    def answer(self, question: str, contexts: list[str]) -> str:
-        request = self._chat_request(question, contexts)
+    def complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float | None = None,
+    ) -> str:
+        """Chamada chat/completions genérica (sem prompt de resposta fundamentada).
+
+        Usada por tarefas auxiliares, como a extração estruturada de notas, para
+        reaproveitar o mesmo endpoint, chave e timeout do provider de resposta.
+        """
+        request = self._messages_request(messages, temperature=temperature)
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 body = response.read()
         except (URLError, TimeoutError, ValueError) as exc:
-            raise _transport_error(exc) from exc
+            raise transport_error(exc) from exc
 
         try:
             decoded = json.loads(body.decode('utf-8'))
-            answer, message, finish_reason = _extract_answer_text(decoded)
+            answer, message, finish_reason = extract_answer_text(decoded)
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise AnswerProviderError('Provider retornou payload invalido.') from exc
 
         if not answer:
             raise AnswerProviderError(_empty_answer_error_message(message, finish_reason))
         return answer
+
+    def answer(self, question: str, contexts: list[str]) -> str:
+        if not contexts:
+            raise ValueError('Provider de resposta exige pelo menos um contexto citavel.')
+        return self.complete(build_grounded_chat_messages(question, contexts))
 
     def answer_stream(self, question: str, contexts: list[str], on_delta: Callable[[str], None]) -> str:
         from escolio.providers.answer_stream import read_sse_answer  # evita ciclo
@@ -186,7 +181,7 @@ class OpenAICompatibleAnswerProvider:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 return read_sse_answer(response, on_delta)
         except (URLError, TimeoutError) as exc:
-            raise _transport_error(exc) from exc
+            raise transport_error(exc) from exc
 
 
 def _default_base_url(provider_name: AnswerProviderName, base_url: str | None) -> str:
@@ -236,7 +231,7 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
         )
 
     base_url = _default_base_url(resolved.answer_provider, resolved.answer_base_url)
-    if not _is_http_base_url(base_url):
+    if not is_http_base_url(base_url):
         return AnswerProviderTestResult(
             provider=resolved.answer_provider,
             model=resolved.answer_model,
@@ -289,7 +284,7 @@ def test_answer_provider(settings: Settings | None = None) -> AnswerProviderTest
 
     try:
         decoded = json.loads(body.decode('utf-8'))
-        content, message, finish_reason = _extract_answer_text(decoded)
+        content, message, finish_reason = extract_answer_text(decoded)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError):
         return result('error', 'Provider retornou payload invalido.')
 

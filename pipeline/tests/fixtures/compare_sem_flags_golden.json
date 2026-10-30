@@ -1,0 +1,1441 @@
+{
+  "answer_model": null,
+  "answer_provider": "extractive",
+  "cases": [
+    {
+      "case_id": "benchmark",
+      "dataset_path": "perguntas.json",
+      "document_path": "benchmark.md",
+      "hybrid": {
+        "benchmark_run_id": "<volatil>",
+        "chunk_size": 120,
+        "chunking_strategy": "fixed_char_window",
+        "dataset_name": "compare-flags",
+        "duration_ms": "<volatil>",
+        "embedding_model": "fake-hash",
+        "finished_at": "<volatil>",
+        "hybrid_config": {
+          "lexical_pool": 9,
+          "lexical_weight": 1.5,
+          "rank_constant": 60,
+          "vector_pool": 24,
+          "vector_weight": 1.0
+        },
+        "metrics": {
+          "avg_latency_ms": "<volatil>",
+          "latency_ms": "<volatil>",
+          "mrr": 0.6666666666666666,
+          "ndcg_at_10": 0.6666666666666666,
+          "ndcg_at_3": 0.6666666666666666,
+          "ndcg_at_5": 0.6666666666666666,
+          "query_count": 3,
+          "recall_at_10": 0.6666666666666666,
+          "recall_at_3": 0.6666666666666666,
+          "recall_at_5": 0.6666666666666666
+        },
+        "overlap": 30,
+        "queries": [
+          {
+            "answer": null,
+            "answered": null,
+            "category": null,
+            "contexts": null,
+            "discard_reason": null,
+            "expected_chunk_id": null,
+            "expected_note_id": "benchmark",
+            "expected_ref": null,
+            "generated": null,
+            "hit_at_k": 1,
+            "latency_ms": "<volatil>",
+            "question": "O que o benchmark mede?",
+            "question_latency_ms": "<volatil>",
+            "reciprocal_rank": 1.0,
+            "relevant_rank": 1,
+            "retrieved": [
+              {
+                "char_end": 120,
+                "char_start": 0,
+                "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+                "distance": 0.26753300428390503,
+                "matched_terms": [
+                  "benchmark",
+                  "mede"
+                ],
+                "note_id": "benchmark",
+                "rank": 1,
+                "score": 0.04098360655737705,
+                "term_coverage": 1.0
+              },
+              {
+                "char_end": 210,
+                "char_start": 90,
+                "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+                "distance": 0.6876524686813354,
+                "matched_terms": [],
+                "note_id": "benchmark",
+                "rank": 2,
+                "score": 0.016129032258064516,
+                "term_coverage": 0.0
+              },
+              {
+                "char_end": 300,
+                "char_start": 180,
+                "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+                "distance": 0.6876524686813354,
+                "matched_terms": [],
+                "note_id": "benchmark",
+                "rank": 3,
+                "score": 0.015873015873015872,
+                "term_coverage": 0.0
+              }
+            ],
+            "sample_id": "unica-1"
+          },
+          {
+            "answer": null,
+            "answered": null,
+            "category": null,
+            "contexts": null,
+            "discard_reason": null,
+            "expected_chunk_id": null,
+            "expected_note_id": "benchmark",
+            "expected_ref": null,
+            "generated": null,
+            "hit_at_k": 1,
+            "latency_ms": "<volatil>",
+            "question": "Qual o reranker usado?",
+            "question_latency_ms": "<volatil>",
+            "reciprocal_rank": 1.0,
+            "relevant_rank": 1,
+            "retrieved": [
+              {
+                "char_end": 300,
+                "char_start": 180,
+                "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+                "distance": 0.6095656156539917,
+                "matched_terms": [
+                  "reranker"
+                ],
+                "note_id": "benchmark",
+                "rank": 1,
+                "score": 0.04032258064516129,
+                "term_coverage": 0.5
+              },
+              {
+                "char_end": 210,
+                "char_start": 90,
+                "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+                "distance": 0.6876524686813354,
+                "matched_terms": [
+                  "reranker"
+                ],
+                "note_id": "benchmark",
+                "rank": 2,
+                "score": 0.04021516393442623,
+                "term_coverage": 0.5
+              },
+              {
+                "char_end": 120,
+                "char_start": 0,
+                "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+                "distance": 0.32387661933898926,
+                "matched_terms": [],
+                "note_id": "benchmark",
+                "rank": 3,
+                "score": 0.01639344262295082,
+                "term_coverage": 0.0
+              }
+            ],
+            "sample_id": "unica-2"
+          },
+          {
+            "answer": null,
+            "answered": null,
+            "category": null,
+            "contexts": null,
+            "discard_reason": null,
+            "expected_chunk_id": null,
+            "expected_note_id": "benchmark",
+            "expected_ref": null,
+            "generated": null,
+            "hit_at_k": 0,
+            "latency_ms": "<volatil>",
+            "question": "Qual banco e o reranker?",
+            "question_latency_ms": "<volatil>",
+            "reciprocal_rank": 0.0,
+            "relevant_rank": null,
+            "retrieved": [
+              {
+                "char_end": 210,
+                "char_start": 90,
+                "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+                "distance": 0.7638874650001526,
+                "matched_terms": [
+                  "reranker"
+                ],
+                "note_id": "benchmark",
+                "rank": 1,
+                "score": 0.04021516393442623,
+                "term_coverage": 0.5
+              },
+              {
+                "char_end": 300,
+                "char_start": 180,
+                "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+                "distance": 0.7048593163490295,
+                "matched_terms": [
+                  "reranker"
+                ],
+                "note_id": "benchmark",
+                "rank": 2,
+                "score": 0.040066564260112646,
+                "term_coverage": 0.5
+              },
+              {
+                "char_end": 120,
+                "char_start": 0,
+                "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+                "distance": 0.5527864098548889,
+                "matched_terms": [],
+                "note_id": "benchmark",
+                "rank": 3,
+                "score": 0.01639344262295082,
+                "term_coverage": 0.0
+              }
+            ],
+            "sample_id": "mt-nota-1"
+          }
+        ],
+        "retrieval_strategy": "hybrid",
+        "run_name": "compare-flags-suite-benchmark-hybrid",
+        "settings_snapshot": {
+          "answer_provider": "extractive",
+          "created_at": "<volatil>",
+          "default_ask_strategy": "hybrid",
+          "default_chunk_overlap": 120,
+          "default_chunk_size": 800,
+          "embedding_device": "cpu",
+          "embedding_model": "sentence-transformer:fake-hash",
+          "retrieval_top_k": 5
+        },
+        "started_at": "<volatil>",
+        "top_k": 3
+      },
+      "lexical": {
+        "benchmark_run_id": "<volatil>",
+        "chunk_size": 120,
+        "chunking_strategy": "fixed_char_window",
+        "dataset_name": "compare-flags",
+        "duration_ms": "<volatil>",
+        "embedding_model": "not-used",
+        "finished_at": "<volatil>",
+        "hybrid_config": null,
+        "metrics": {
+          "avg_latency_ms": "<volatil>",
+          "latency_ms": "<volatil>",
+          "mrr": 0.5,
+          "ndcg_at_10": 0.5436432511904858,
+          "ndcg_at_3": 0.5436432511904858,
+          "ndcg_at_5": 0.5436432511904858,
+          "query_count": 3,
+          "recall_at_10": 0.6666666666666666,
+          "recall_at_3": 0.6666666666666666,
+          "recall_at_5": 0.6666666666666666
+        },
+        "overlap": 30,
+        "queries": [
+          {
+            "answer": null,
+            "answered": null,
+            "category": null,
+            "contexts": null,
+            "discard_reason": null,
+            "expected_chunk_id": null,
+            "expected_note_id": "benchmark",
+            "expected_ref": null,
+            "generated": null,
+            "hit_at_k": 1,
+            "latency_ms": "<volatil>",
+            "question": "O que o benchmark mede?",
+            "question_latency_ms": "<volatil>",
+            "reciprocal_rank": 1.0,
+            "relevant_rank": 1,
+            "retrieved": [
+              {
+                "char_end": 120,
+                "char_start": 0,
+                "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+                "distance": null,
+                "matched_terms": [
+                  "benchmark",
+                  "mede"
+                ],
+                "note_id": "benchmark",
+                "rank": 1,
+                "score": 2.0,
+                "term_coverage": 1.0
+              }
+            ],
+            "sample_id": "unica-1"
+          },
+          {
+            "answer": null,
+            "answered": null,
+            "category": null,
+            "contexts": null,
+            "discard_reason": null,
+            "expected_chunk_id": null,
+            "expected_note_id": "benchmark",
+            "expected_ref": null,
+            "generated": null,
+            "hit_at_k": 1,
+            "latency_ms": "<volatil>",
+            "question": "Qual o reranker usado?",
+            "question_latency_ms": "<volatil>",
+            "reciprocal_rank": 0.5,
+            "relevant_rank": 2,
+            "retrieved": [
+              {
+                "char_end": 210,
+                "char_start": 90,
+                "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+                "distance": null,
+                "matched_terms": [
+                  "reranker"
+                ],
+                "note_id": "benchmark",
+                "rank": 1,
+                "score": 1.0,
+                "term_coverage": 0.5
+              },
+              {
+                "char_end": 300,
+                "char_start": 180,
+                "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+                "distance": null,
+                "matched_terms": [
+                  "reranker"
+                ],
+                "note_id": "benchmark",
+                "rank": 2,
+                "score": 1.0,
+                "term_coverage": 0.5
+              }
+            ],
+            "sample_id": "unica-2"
+          },
+          {
+            "answer": null,
+            "answered": null,
+            "category": null,
+            "contexts": null,
+            "discard_reason": null,
+            "expected_chunk_id": null,
+            "expected_note_id": "benchmark",
+            "expected_ref": null,
+            "generated": null,
+            "hit_at_k": 0,
+            "latency_ms": "<volatil>",
+            "question": "Qual banco e o reranker?",
+            "question_latency_ms": "<volatil>",
+            "reciprocal_rank": 0.0,
+            "relevant_rank": null,
+            "retrieved": [
+              {
+                "char_end": 210,
+                "char_start": 90,
+                "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+                "distance": null,
+                "matched_terms": [
+                  "reranker"
+                ],
+                "note_id": "benchmark",
+                "rank": 1,
+                "score": 1.0,
+                "term_coverage": 0.5
+              },
+              {
+                "char_end": 300,
+                "char_start": 180,
+                "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+                "distance": null,
+                "matched_terms": [
+                  "reranker"
+                ],
+                "note_id": "benchmark",
+                "rank": 2,
+                "score": 1.0,
+                "term_coverage": 0.5
+              }
+            ],
+            "sample_id": "mt-nota-1"
+          }
+        ],
+        "retrieval_strategy": "lexical",
+        "run_name": "compare-flags-suite-benchmark-lexical",
+        "settings_snapshot": {
+          "answer_provider": "extractive",
+          "created_at": "<volatil>",
+          "default_ask_strategy": "hybrid",
+          "default_chunk_overlap": 120,
+          "default_chunk_size": 800,
+          "embedding_device": "cpu",
+          "embedding_model": "sentence-transformer:fake-hash",
+          "retrieval_top_k": 5
+        },
+        "started_at": "<volatil>",
+        "top_k": 3
+      },
+      "note_id": "benchmark",
+      "note_title": "Benchmark",
+      "vector": {
+        "benchmark_run_id": "<volatil>",
+        "chunk_size": 120,
+        "chunking_strategy": "fixed_char_window",
+        "dataset_name": "compare-flags",
+        "duration_ms": "<volatil>",
+        "embedding_model": "fake-hash",
+        "finished_at": "<volatil>",
+        "hybrid_config": null,
+        "metrics": {
+          "avg_latency_ms": "<volatil>",
+          "latency_ms": "<volatil>",
+          "mrr": 0.5,
+          "ndcg_at_10": 0.5436432511904858,
+          "ndcg_at_3": 0.5436432511904858,
+          "ndcg_at_5": 0.5436432511904858,
+          "query_count": 3,
+          "recall_at_10": 0.6666666666666666,
+          "recall_at_3": 0.6666666666666666,
+          "recall_at_5": 0.6666666666666666
+        },
+        "overlap": 30,
+        "queries": [
+          {
+            "answer": null,
+            "answered": null,
+            "category": null,
+            "contexts": null,
+            "discard_reason": null,
+            "expected_chunk_id": null,
+            "expected_note_id": "benchmark",
+            "expected_ref": null,
+            "generated": null,
+            "hit_at_k": 1,
+            "latency_ms": "<volatil>",
+            "question": "O que o benchmark mede?",
+            "question_latency_ms": "<volatil>",
+            "reciprocal_rank": 1.0,
+            "relevant_rank": 1,
+            "retrieved": [
+              {
+                "char_end": 120,
+                "char_start": 0,
+                "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+                "distance": 0.26753300428390503,
+                "matched_terms": [
+                  "benchmark",
+                  "mede"
+                ],
+                "note_id": "benchmark",
+                "rank": 1,
+                "score": 0.7889340921461463,
+                "term_coverage": 1.0
+              },
+              {
+                "char_end": 210,
+                "char_start": 90,
+                "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+                "distance": 0.6876524686813354,
+                "matched_terms": [],
+                "note_id": "benchmark",
+                "rank": 2,
+                "score": 0.5925390556157336,
+                "term_coverage": 0.0
+              },
+              {
+                "char_end": 300,
+                "char_start": 180,
+                "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+                "distance": 0.6876524686813354,
+                "matched_terms": [],
+                "note_id": "benchmark",
+                "rank": 3,
+                "score": 0.5925390556157336,
+                "term_coverage": 0.0
+              }
+            ],
+            "sample_id": "unica-1"
+          },
+          {
+            "answer": null,
+            "answered": null,
+            "category": null,
+            "contexts": null,
+            "discard_reason": null,
+            "expected_chunk_id": null,
+            "expected_note_id": "benchmark",
+            "expected_ref": null,
+            "generated": null,
+            "hit_at_k": 1,
+            "latency_ms": "<volatil>",
+            "question": "Qual o reranker usado?",
+            "question_latency_ms": "<volatil>",
+            "reciprocal_rank": 0.5,
+            "relevant_rank": 2,
+            "retrieved": [
+              {
+                "char_end": 120,
+                "char_start": 0,
+                "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+                "distance": 0.32387661933898926,
+                "matched_terms": [],
+                "note_id": "benchmark",
+                "rank": 1,
+                "score": 0.7553573991655652,
+                "term_coverage": 0.0
+              },
+              {
+                "char_end": 300,
+                "char_start": 180,
+                "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+                "distance": 0.6095656156539917,
+                "matched_terms": [
+                  "reranker"
+                ],
+                "note_id": "benchmark",
+                "rank": 2,
+                "score": 0.6212856377362934,
+                "term_coverage": 0.5
+              },
+              {
+                "char_end": 347,
+                "char_start": 270,
+                "chunk_id": "benchmark::v1::ofs-000270-000347::418855fea7",
+                "distance": 0.6645898222923279,
+                "matched_terms": [],
+                "note_id": "benchmark",
+                "rank": 3,
+                "score": 0.6007485968062013,
+                "term_coverage": 0.0
+              }
+            ],
+            "sample_id": "unica-2"
+          },
+          {
+            "answer": null,
+            "answered": null,
+            "category": null,
+            "contexts": null,
+            "discard_reason": null,
+            "expected_chunk_id": null,
+            "expected_note_id": "benchmark",
+            "expected_ref": null,
+            "generated": null,
+            "hit_at_k": 0,
+            "latency_ms": "<volatil>",
+            "question": "Qual banco e o reranker?",
+            "question_latency_ms": "<volatil>",
+            "reciprocal_rank": 0.0,
+            "relevant_rank": null,
+            "retrieved": [
+              {
+                "char_end": 120,
+                "char_start": 0,
+                "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+                "distance": 0.5527864098548889,
+                "matched_terms": [],
+                "note_id": "benchmark",
+                "rank": 1,
+                "score": 0.6440035755422744,
+                "term_coverage": 0.0
+              },
+              {
+                "char_end": 347,
+                "char_start": 270,
+                "chunk_id": "benchmark::v1::ofs-000270-000347::418855fea7",
+                "distance": 0.6619383096694946,
+                "matched_terms": [],
+                "note_id": "benchmark",
+                "rank": 2,
+                "score": 0.6017070514481776,
+                "term_coverage": 0.0
+              },
+              {
+                "char_end": 300,
+                "char_start": 180,
+                "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+                "distance": 0.7048593163490295,
+                "matched_terms": [
+                  "reranker"
+                ],
+                "note_id": "benchmark",
+                "rank": 3,
+                "score": 0.5865586622956717,
+                "term_coverage": 0.5
+              }
+            ],
+            "sample_id": "mt-nota-1"
+          }
+        ],
+        "retrieval_strategy": "vector",
+        "run_name": "compare-flags-suite-benchmark-vector",
+        "settings_snapshot": {
+          "answer_provider": "extractive",
+          "created_at": "<volatil>",
+          "default_ask_strategy": "hybrid",
+          "default_chunk_overlap": 120,
+          "default_chunk_size": 800,
+          "embedding_device": "cpu",
+          "embedding_model": "sentence-transformer:fake-hash",
+          "retrieval_top_k": 5
+        },
+        "started_at": "<volatil>",
+        "top_k": 3
+      }
+    }
+  ],
+  "chunk_size": 120,
+  "comparison_id": "<volatil>",
+  "corpus": {
+    "negative_count": 1,
+    "note_count": 1,
+    "positive_count": 3,
+    "queries": {
+      "hybrid": [
+        {
+          "answer": null,
+          "answered": true,
+          "category": "direta",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": "benchmark",
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 1,
+          "latency_ms": "<volatil>",
+          "question": "O que o benchmark mede?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 1.0,
+          "relevant_rank": 1,
+          "retrieved": [
+            {
+              "char_end": 120,
+              "char_start": 0,
+              "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+              "distance": 2.0227617587459865,
+              "matched_terms": [
+                "benchmark",
+                "mede"
+              ],
+              "note_id": "benchmark",
+              "rank": 1,
+              "score": 0.04098360655737705,
+              "term_coverage": 1.0
+            },
+            {
+              "char_end": 210,
+              "char_start": 90,
+              "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+              "distance": 0.6876524686813354,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 2,
+              "score": 0.016129032258064516,
+              "term_coverage": 0.0
+            },
+            {
+              "char_end": 300,
+              "char_start": 180,
+              "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+              "distance": 0.6876524686813354,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 3,
+              "score": 0.015873015873015872,
+              "term_coverage": 0.0
+            },
+            {
+              "char_end": 347,
+              "char_start": 270,
+              "chunk_id": "benchmark::v1::ofs-000270-000347::418855fea7",
+              "distance": 0.7018575668334961,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 4,
+              "score": 0.015625,
+              "term_coverage": 0.0
+            }
+          ],
+          "sample_id": "unica-1"
+        },
+        {
+          "answer": null,
+          "answered": false,
+          "category": "direta",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": "benchmark",
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 1,
+          "latency_ms": "<volatil>",
+          "question": "Qual o reranker usado?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 0.5,
+          "relevant_rank": 2,
+          "retrieved": [
+            {
+              "char_end": 210,
+              "char_start": 90,
+              "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+              "distance": 9.814687714481814e-07,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 1,
+              "score": 0.040719196192490745,
+              "term_coverage": 0.5
+            },
+            {
+              "char_end": 300,
+              "char_start": 180,
+              "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+              "distance": 9.137380191693291e-07,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 2,
+              "score": 0.04058699101004759,
+              "term_coverage": 0.5
+            },
+            {
+              "char_end": 120,
+              "char_start": 0,
+              "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+              "distance": 0.32387661933898926,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 3,
+              "score": 0.015873015873015872,
+              "term_coverage": 0.0
+            },
+            {
+              "char_end": 347,
+              "char_start": 270,
+              "chunk_id": "benchmark::v1::ofs-000270-000347::418855fea7",
+              "distance": 0.6645898222923279,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 4,
+              "score": 0.015625,
+              "term_coverage": 0.0
+            }
+          ],
+          "sample_id": "unica-2"
+        },
+        {
+          "answer": null,
+          "answered": false,
+          "category": "inferida",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": "benchmark",
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 0,
+          "latency_ms": "<volatil>",
+          "question": "Qual banco e o reranker?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 0.0,
+          "relevant_rank": null,
+          "retrieved": [
+            {
+              "char_end": 210,
+              "char_start": 90,
+              "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+              "distance": 9.814687714481814e-07,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 1,
+              "score": 0.040719196192490745,
+              "term_coverage": 0.5
+            },
+            {
+              "char_end": 300,
+              "char_start": 180,
+              "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+              "distance": 9.137380191693291e-07,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 2,
+              "score": 0.04058699101004759,
+              "term_coverage": 0.5
+            },
+            {
+              "char_end": 120,
+              "char_start": 0,
+              "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+              "distance": 0.5527864098548889,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 3,
+              "score": 0.015873015873015872,
+              "term_coverage": 0.0
+            },
+            {
+              "char_end": 347,
+              "char_start": 270,
+              "chunk_id": "benchmark::v1::ofs-000270-000347::418855fea7",
+              "distance": 0.6619383096694946,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 4,
+              "score": 0.015625,
+              "term_coverage": 0.0
+            }
+          ],
+          "sample_id": "mt-nota-1"
+        },
+        {
+          "answer": null,
+          "answered": false,
+          "category": "negativa",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": null,
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 0,
+          "latency_ms": "<volatil>",
+          "question": "Qual a receita anual do refeitorio?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 0.0,
+          "relevant_rank": null,
+          "retrieved": [
+            {
+              "char_end": 347,
+              "char_start": 270,
+              "chunk_id": "benchmark::v1::ofs-000270-000347::418855fea7",
+              "distance": 0.29289329051971436,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 1,
+              "score": 0.01639344262295082,
+              "term_coverage": 0.0
+            }
+          ],
+          "sample_id": "neg-1"
+        }
+      ],
+      "lexical": [
+        {
+          "answer": null,
+          "answered": true,
+          "category": "direta",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": "benchmark",
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 1,
+          "latency_ms": "<volatil>",
+          "question": "O que o benchmark mede?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 1.0,
+          "relevant_rank": 1,
+          "retrieved": [
+            {
+              "char_end": 120,
+              "char_start": 0,
+              "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+              "distance": 2.0227617587459865,
+              "matched_terms": [
+                "benchmark",
+                "mede"
+              ],
+              "note_id": "benchmark",
+              "rank": 1,
+              "score": 3.0,
+              "term_coverage": 1.0
+            }
+          ],
+          "sample_id": "unica-1"
+        },
+        {
+          "answer": null,
+          "answered": false,
+          "category": "direta",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": "benchmark",
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 1,
+          "latency_ms": "<volatil>",
+          "question": "Qual o reranker usado?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 0.5,
+          "relevant_rank": 2,
+          "retrieved": [
+            {
+              "char_end": 210,
+              "char_start": 90,
+              "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+              "distance": 9.814687714481814e-07,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 1,
+              "score": 2.0,
+              "term_coverage": 0.5
+            },
+            {
+              "char_end": 300,
+              "char_start": 180,
+              "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+              "distance": 9.137380191693291e-07,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 2,
+              "score": 1.5,
+              "term_coverage": 0.5
+            }
+          ],
+          "sample_id": "unica-2"
+        },
+        {
+          "answer": null,
+          "answered": false,
+          "category": "inferida",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": "benchmark",
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 0,
+          "latency_ms": "<volatil>",
+          "question": "Qual banco e o reranker?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 0.0,
+          "relevant_rank": null,
+          "retrieved": [
+            {
+              "char_end": 210,
+              "char_start": 90,
+              "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+              "distance": 9.814687714481814e-07,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 1,
+              "score": 2.0,
+              "term_coverage": 0.5
+            },
+            {
+              "char_end": 300,
+              "char_start": 180,
+              "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+              "distance": 9.137380191693291e-07,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 2,
+              "score": 1.5,
+              "term_coverage": 0.5
+            }
+          ],
+          "sample_id": "mt-nota-1"
+        },
+        {
+          "answer": null,
+          "answered": false,
+          "category": "negativa",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": null,
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 0,
+          "latency_ms": "<volatil>",
+          "question": "Qual a receita anual do refeitorio?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 0.0,
+          "relevant_rank": null,
+          "retrieved": [],
+          "sample_id": "neg-1"
+        }
+      ],
+      "vector": [
+        {
+          "answer": null,
+          "answered": true,
+          "category": "direta",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": "benchmark",
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 1,
+          "latency_ms": "<volatil>",
+          "question": "O que o benchmark mede?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 1.0,
+          "relevant_rank": 1,
+          "retrieved": [
+            {
+              "char_end": 120,
+              "char_start": 0,
+              "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+              "distance": 0.26753300428390503,
+              "matched_terms": [
+                "benchmark",
+                "mede"
+              ],
+              "note_id": "benchmark",
+              "rank": 1,
+              "score": 0.7889340921461463,
+              "term_coverage": 1.0
+            },
+            {
+              "char_end": 210,
+              "char_start": 90,
+              "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+              "distance": 0.6876524686813354,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 2,
+              "score": 0.5925390556157336,
+              "term_coverage": 0.0
+            },
+            {
+              "char_end": 300,
+              "char_start": 180,
+              "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+              "distance": 0.6876524686813354,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 3,
+              "score": 0.5925390556157336,
+              "term_coverage": 0.0
+            },
+            {
+              "char_end": 347,
+              "char_start": 270,
+              "chunk_id": "benchmark::v1::ofs-000270-000347::418855fea7",
+              "distance": 0.7018575668334961,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 4,
+              "score": 0.5875932389927415,
+              "term_coverage": 0.0
+            }
+          ],
+          "sample_id": "unica-1"
+        },
+        {
+          "answer": null,
+          "answered": false,
+          "category": "direta",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": "benchmark",
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 1,
+          "latency_ms": "<volatil>",
+          "question": "Qual o reranker usado?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 1.0,
+          "relevant_rank": 1,
+          "retrieved": [
+            {
+              "char_end": 300,
+              "char_start": 180,
+              "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+              "distance": 0.6095656156539917,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 1,
+              "score": 0.6212856377362934,
+              "term_coverage": 0.5
+            },
+            {
+              "char_end": 210,
+              "char_start": 90,
+              "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+              "distance": 0.6876524686813354,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 2,
+              "score": 0.5925390556157336,
+              "term_coverage": 0.5
+            },
+            {
+              "char_end": 120,
+              "char_start": 0,
+              "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+              "distance": 0.32387661933898926,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 3,
+              "score": 0.7553573991655652,
+              "term_coverage": 0.0
+            },
+            {
+              "char_end": 347,
+              "char_start": 270,
+              "chunk_id": "benchmark::v1::ofs-000270-000347::418855fea7",
+              "distance": 0.6645898222923279,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 4,
+              "score": 0.6007485968062013,
+              "term_coverage": 0.0
+            }
+          ],
+          "sample_id": "unica-2"
+        },
+        {
+          "answer": null,
+          "answered": false,
+          "category": "inferida",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": "benchmark",
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 0,
+          "latency_ms": "<volatil>",
+          "question": "Qual banco e o reranker?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 0.0,
+          "relevant_rank": null,
+          "retrieved": [
+            {
+              "char_end": 300,
+              "char_start": 180,
+              "chunk_id": "benchmark::v1::ofs-000180-000300::a559d2a1ff",
+              "distance": 0.7048593163490295,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 1,
+              "score": 0.5865586622956717,
+              "term_coverage": 0.5
+            },
+            {
+              "char_end": 210,
+              "char_start": 90,
+              "chunk_id": "benchmark::v1::ofs-000090-000210::8af581ecd2",
+              "distance": 0.7638874650001526,
+              "matched_terms": [
+                "reranker"
+              ],
+              "note_id": "benchmark",
+              "rank": 2,
+              "score": 0.5669295915087834,
+              "term_coverage": 0.5
+            },
+            {
+              "char_end": 120,
+              "char_start": 0,
+              "chunk_id": "benchmark::v1::ofs-000000-000120::fcc6a419f4",
+              "distance": 0.5527864098548889,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 3,
+              "score": 0.6440035755422744,
+              "term_coverage": 0.0
+            },
+            {
+              "char_end": 347,
+              "char_start": 270,
+              "chunk_id": "benchmark::v1::ofs-000270-000347::418855fea7",
+              "distance": 0.6619383096694946,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 4,
+              "score": 0.6017070514481776,
+              "term_coverage": 0.0
+            }
+          ],
+          "sample_id": "mt-nota-1"
+        },
+        {
+          "answer": null,
+          "answered": false,
+          "category": "negativa",
+          "contexts": null,
+          "discard_reason": null,
+          "expected_chunk_id": null,
+          "expected_note_id": null,
+          "expected_ref": null,
+          "generated": false,
+          "hit_at_k": 0,
+          "latency_ms": "<volatil>",
+          "question": "Qual a receita anual do refeitorio?",
+          "question_latency_ms": "<volatil>",
+          "reciprocal_rank": 0.0,
+          "relevant_rank": null,
+          "retrieved": [
+            {
+              "char_end": 347,
+              "char_start": 270,
+              "chunk_id": "benchmark::v1::ofs-000270-000347::418855fea7",
+              "distance": 0.29289329051971436,
+              "matched_terms": [],
+              "note_id": "benchmark",
+              "rank": 1,
+              "score": 0.7734590374415372,
+              "term_coverage": 0.0
+            }
+          ],
+          "sample_id": "neg-1"
+        }
+      ]
+    },
+    "retrieval_depth": 10,
+    "summaries": {
+      "hybrid": {
+        "abstention": {
+          "accuracy": 0.5,
+          "answered_positive_rate": 0.3333333333333333,
+          "f1": 0.5,
+          "precision": 0.3333333333333333,
+          "recall": 1.0,
+          "support": 4.0
+        },
+        "answer_metrics": {
+          "accepted_count": 0,
+          "accepted_rate": null,
+          "answer_count": 1,
+          "discard_reasons": {},
+          "question_p50_ms": "<volatil>",
+          "question_p95_ms": "<volatil>"
+        },
+        "avg_query_latency_ms": "<volatil>",
+        "case_count": 1,
+        "duration_ms": "<volatil>",
+        "mrr": 0.5,
+        "mrr_ci": [
+          0.16666666666666666,
+          1.0
+        ],
+        "ndcg_at_10": 0.5436432511904858,
+        "p50_query_latency_ms": "<volatil>",
+        "p95_query_latency_ms": "<volatil>",
+        "query_count": 3,
+        "recall_at_10": 0.6666666666666666,
+        "recall_at_3": 0.6666666666666666,
+        "recall_at_5": 0.6666666666666666,
+        "recall_at_5_ci": [
+          0.3333333333333333,
+          1.0
+        ],
+        "strategy": "hybrid"
+      },
+      "lexical": {
+        "abstention": {
+          "accuracy": 0.5,
+          "answered_positive_rate": 0.3333333333333333,
+          "f1": 0.5,
+          "precision": 0.3333333333333333,
+          "recall": 1.0,
+          "support": 4.0
+        },
+        "answer_metrics": {
+          "accepted_count": 0,
+          "accepted_rate": null,
+          "answer_count": 1,
+          "discard_reasons": {},
+          "question_p50_ms": "<volatil>",
+          "question_p95_ms": "<volatil>"
+        },
+        "avg_query_latency_ms": "<volatil>",
+        "case_count": 1,
+        "duration_ms": "<volatil>",
+        "mrr": 0.5,
+        "mrr_ci": [
+          0.16666666666666666,
+          1.0
+        ],
+        "ndcg_at_10": 0.5436432511904858,
+        "p50_query_latency_ms": "<volatil>",
+        "p95_query_latency_ms": "<volatil>",
+        "query_count": 3,
+        "recall_at_10": 0.6666666666666666,
+        "recall_at_3": 0.6666666666666666,
+        "recall_at_5": 0.6666666666666666,
+        "recall_at_5_ci": [
+          0.3333333333333333,
+          1.0
+        ],
+        "strategy": "lexical"
+      },
+      "vector": {
+        "abstention": {
+          "accuracy": 0.5,
+          "answered_positive_rate": 0.3333333333333333,
+          "f1": 0.5,
+          "precision": 0.3333333333333333,
+          "recall": 1.0,
+          "support": 4.0
+        },
+        "answer_metrics": {
+          "accepted_count": 0,
+          "accepted_rate": null,
+          "answer_count": 1,
+          "discard_reasons": {},
+          "question_p50_ms": "<volatil>",
+          "question_p95_ms": "<volatil>"
+        },
+        "avg_query_latency_ms": "<volatil>",
+        "case_count": 1,
+        "duration_ms": "<volatil>",
+        "mrr": 0.6666666666666666,
+        "mrr_ci": [
+          0.3333333333333333,
+          1.0
+        ],
+        "ndcg_at_10": 0.6666666666666666,
+        "p50_query_latency_ms": "<volatil>",
+        "p95_query_latency_ms": "<volatil>",
+        "query_count": 3,
+        "recall_at_10": 0.6666666666666666,
+        "recall_at_3": 0.6666666666666666,
+        "recall_at_5": 0.6666666666666666,
+        "recall_at_5_ci": [
+          0.3333333333333333,
+          1.0
+        ],
+        "strategy": "vector"
+      }
+    }
+  },
+  "duration_ms": "<volatil>",
+  "embedding_model": "fake-hash",
+  "finished_at": "<volatil>",
+  "hybrid_config": {
+    "lexical_pool": 9,
+    "lexical_weight": 1.5,
+    "rank_constant": 60,
+    "vector_pool": 24,
+    "vector_weight": 1.0
+  },
+  "overlap": 30,
+  "settings_snapshot": {
+    "answer_provider": "extractive",
+    "created_at": "<volatil>",
+    "default_ask_strategy": "hybrid",
+    "default_chunk_overlap": 120,
+    "default_chunk_size": 800,
+    "embedding_device": "cpu",
+    "embedding_model": "sentence-transformer:fake-hash",
+    "retrieval_top_k": 5
+  },
+  "started_at": "<volatil>",
+  "suite_name": "compare-flags-suite",
+  "summaries": {
+    "hybrid": {
+      "abstention": null,
+      "answer_metrics": null,
+      "avg_query_latency_ms": "<volatil>",
+      "case_count": 1,
+      "duration_ms": "<volatil>",
+      "mrr": 0.6666666666666666,
+      "mrr_ci": [
+        0.3333333333333333,
+        1.0
+      ],
+      "ndcg_at_10": 0.6666666666666666,
+      "p50_query_latency_ms": "<volatil>",
+      "p95_query_latency_ms": "<volatil>",
+      "query_count": 3,
+      "recall_at_10": 0.6666666666666666,
+      "recall_at_3": 0.6666666666666666,
+      "recall_at_5": 0.6666666666666666,
+      "recall_at_5_ci": [
+        0.3333333333333333,
+        1.0
+      ],
+      "strategy": "hybrid"
+    },
+    "lexical": {
+      "abstention": null,
+      "answer_metrics": null,
+      "avg_query_latency_ms": "<volatil>",
+      "case_count": 1,
+      "duration_ms": "<volatil>",
+      "mrr": 0.5,
+      "mrr_ci": [
+        0.16666666666666666,
+        1.0
+      ],
+      "ndcg_at_10": 0.5436432511904858,
+      "p50_query_latency_ms": "<volatil>",
+      "p95_query_latency_ms": "<volatil>",
+      "query_count": 3,
+      "recall_at_10": 0.6666666666666666,
+      "recall_at_3": 0.6666666666666666,
+      "recall_at_5": 0.6666666666666666,
+      "recall_at_5_ci": [
+        0.3333333333333333,
+        1.0
+      ],
+      "strategy": "lexical"
+    },
+    "vector": {
+      "abstention": null,
+      "answer_metrics": null,
+      "avg_query_latency_ms": "<volatil>",
+      "case_count": 1,
+      "duration_ms": "<volatil>",
+      "mrr": 0.5,
+      "mrr_ci": [
+        0.16666666666666666,
+        1.0
+      ],
+      "ndcg_at_10": 0.5436432511904858,
+      "p50_query_latency_ms": "<volatil>",
+      "p95_query_latency_ms": "<volatil>",
+      "query_count": 3,
+      "recall_at_10": 0.6666666666666666,
+      "recall_at_3": 0.6666666666666666,
+      "recall_at_5": 0.6666666666666666,
+      "recall_at_5_ci": [
+        0.3333333333333333,
+        1.0
+      ],
+      "strategy": "vector"
+    }
+  },
+  "top_k": 3
+}
