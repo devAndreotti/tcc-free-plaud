@@ -29,7 +29,7 @@ function recorder() {
 
 const pal: Palette = {
   edge: '#333', node: '#888', folder: '#66f', label: '#aaa', text: '#fff', hover: '#f0f', link: '#0ff',
-  focus: '#0ff', bg: '#000', tipBg: '#111', tipFg: '#eee', noteAlpha: 0.75,
+  focus: '#0ff', bg: '#000', tipBg: '#111', tipFg: '#eee', glow: '#0ff3', noteAlpha: 0.75,
   groups: ['#g1', '#g2', '#g3', '#g4', '#g5', '#g6', '#g7', '#g8'],
 };
 const cam = { x: 0, y: 0, scale: 1 };
