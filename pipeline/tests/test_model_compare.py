@@ -243,10 +243,10 @@ def test_cli_compare_models_grava_um_json_por_modelo_e_o_relatorio(monkeypatch, 
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         embedding_model='sentence-transformer:fake-hash',
     )
-    monkeypatch.setattr('escolio.benchmark.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('escolio.benchmark.cli.get_embedder', lambda *args, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.benchmark.cli_models.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.benchmark.cli_models.get_embedder', lambda *args, **kwargs: FakeEmbedder())
     monkeypatch.setattr(
-        'escolio.benchmark.cli.get_answer_provider',
+        'escolio.benchmark.cli_models.get_answer_provider',
         lambda name, *, model, **kwargs: FakeAnswerProvider(model, reply=NO_ANSWER_SENTINEL),
     )
     suite_path = _suite(tmp_path)
@@ -275,13 +275,13 @@ def test_cli_compare_models_sai_com_erro_quando_todos_falham(monkeypatch, tmp_pa
         vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
         embedding_model='sentence-transformer:fake-hash',
     )
-    monkeypatch.setattr('escolio.benchmark.cli.get_settings', lambda: settings)
-    monkeypatch.setattr('escolio.benchmark.cli.get_embedder', lambda *args, **kwargs: FakeEmbedder())
+    monkeypatch.setattr('escolio.benchmark.cli_models.get_settings', lambda: settings)
+    monkeypatch.setattr('escolio.benchmark.cli_models.get_embedder', lambda *args, **kwargs: FakeEmbedder())
 
     def sem_provider(name, *, model, **kwargs):
         raise ValueError('sem provider')
 
-    monkeypatch.setattr('escolio.benchmark.cli.get_answer_provider', sem_provider)
+    monkeypatch.setattr('escolio.benchmark.cli_models.get_answer_provider', sem_provider)
     suite_path = _suite(tmp_path)
     saida = tmp_path / 'saida'
 
