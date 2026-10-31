@@ -238,6 +238,8 @@ def answer_corpus_with_citations(
     stage_timings.claim_build_ms = elapsed_ms(claim_started_at)
 
     answer = ' '.join(dict.fromkeys(claim.text for claim in claims))
+    cited_chunk_ids = {citation.chunk_id for citation in citations}
+    evidence_text = ' '.join(hit.chunk.chunk_text for hit in hits if hit.chunk.chunk_id in cited_chunk_ids)
     rejection = grounding_rejection(
         query_terms=query_terms,
         named_query_terms=named_query_terms,
@@ -245,6 +247,7 @@ def answer_corpus_with_citations(
         claims=claims,
         answer=answer,
         min_vector_term_coverage=min_vector_term_coverage,
+        evidence_text=evidence_text,
     )
     if rejection is not None:
         return _no_answer(rejection[0], _with_stale_limitations(rejection[1]), used_sources, rejected_hits=hits)

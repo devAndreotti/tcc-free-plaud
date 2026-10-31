@@ -63,8 +63,12 @@ def grounding_rejection(
     claims: list[AnswerClaim],
     answer: str,
     min_vector_term_coverage: float,
+    evidence_text: str = '',
 ) -> Rejection | None:
-    """Recusa quando os claims extraídos não são citáveis, não ancoram a pergunta ou não trazem os nomes citados nela."""
+    """Recusa quando os claims extraídos não são citáveis, não ancoram a pergunta ou não trazem os nomes citados nela.
+
+    `evidence_text` são os trechos citados inteiros; nomes da pergunta podem estar neles e não na frase extraída.
+    """
     if not claims or any(not claim.citations for claim in claims):
         return (
             'citation_validation_failed',
@@ -82,8 +86,11 @@ def grounding_rejection(
             ['As frases extraídas não mantiveram ancoragem textual suficiente com a pergunta.'],
         )
 
+    # Nome citado na pergunta pode estar no trecho citado sem estar na frase extraída (ex.: "em Curitiba"
+    # numa frase vizinha). O trecho citado é a evidência mostrada ao usuário, então conta.
     if strategy in {'vector', 'hybrid'} and named_query_terms:
-        _, named_coverage = match_terms_in_text(named_query_terms, grounded_text)
+        named_text = f'{grounded_text} {evidence_text}'
+        _, named_coverage = match_terms_in_text(named_query_terms, named_text)
         if named_coverage < 1.0:
             return ('missing_named_anchor', ['A resposta não sustentou os nomes citados na pergunta.'])
 
