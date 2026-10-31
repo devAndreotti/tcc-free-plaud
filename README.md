@@ -8,7 +8,7 @@ Sistema desktop local-first para captura multimodal, estruturacao automatica em 
 
 O projeto concluiu integralmente seu ciclo de desenvolvimento e validacao experimental (Sprints 00 a 09):
 
-- **Core RAG Hibrido Operacional:** Persistencia dupla em SQLite FTS5 (BM25) e ChromaDB (vetorial) com fusao Reciprocal Rank Fusion (RRF, $k=60$) e citacoes estritas por span (`start_char`, `end_char`) sem alucinacao.
+- **Core RAG Hibrido Operacional:** Persistencia dupla em SQLite FTS5 (BM25) e ChromaDB (vetorial) com fusao Reciprocal Rank Fusion (RRF, $k=60$) e citacoes estritas por span (`char_start`, `char_end`) e recusa quando a evidencia nao sustenta a resposta.
 - **Captura e Transcricao de Audio Local:** Ingestao direta de microfone com Voice Activity Detection (Silero VAD ONNX) e modelos locais Whisper (`faster-whisper`), com download assincrono e selecao de idioma/auto-deteccao pela UI.
 - **Compressao Vetorial TurboQuant:** Quantizacao escalar int8 em tempo de execucao, reduzindo consumo de memoria de embeddings densos em ~75%.
 - **Quad-Interface Unificada:** 4 interfaces funcionais compartilhando o mesmo runtime do corpus:
@@ -109,4 +109,5 @@ Escólio/
 - Arquitetura de Frontend: [`docs/arquitetura/Arquitetura_Frontend.md`](docs/arquitetura/Arquitetura_Frontend.md)
 - Stack Tecnologica e Bibliotecas: [`docs/arquitetura/TECNOLOGIAS_E_BIBLIOTECAS.md`](docs/arquitetura/TECNOLOGIAS_E_BIBLIOTECAS.md)
 - Experimento 15 (Calibracao RRF): [`docs/experimentos/15_calibracao_rrf_tcc.md`](docs/experimentos/15_calibracao_rrf_tcc.md)
+- Experimento 20 (Benchmark de recuperacao reproduzido, substitui o 15): [`docs/experimentos/20_benchmark_recuperacao_reproduzido.md`](docs/experimentos/20_benchmark_recuperacao_reproduzido.md)
 - Status das Sprints: [`Sprints/STATUS.md`](Sprints/STATUS.md)

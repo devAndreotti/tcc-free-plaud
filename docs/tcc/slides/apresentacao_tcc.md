@@ -45,7 +45,7 @@ style: |
   * Alucinação de modelos generativos sem ancoragem determinística em fontes.
 * **Proposta do Escólio:**
   * Arquitetura 100% local-first para ingestão, transcrição, indexação e RAG.
-  * Citação auditável com offsets de caracteres exatos e guardrail anti-alucinação.
+  * Citação auditável com offsets de caracteres exatos e checagens determinísticas contra respostas sem suporte.
 
 ---
 
@@ -84,7 +84,7 @@ style: |
   * Busca exata de palavras-chave, nomes de métodos, acrônimos e metadados estruturados.
 * **ChromaDB (Embeddings Densos):**
   * Recuperação semântica baseada em proximidade vetorial e intenção conceitual.
-* **Reciprocal Rank Fusion (RRF =60$):**
+* **Reciprocal Rank Fusion (RRF, $k=60$):**
   * Combinação de pontuações ordinais sem viés de normalização de escala:
   RRF\_Score(d) = \sum_{m \in M} \frac{w_m}{k + r_m(d)}
 
@@ -92,13 +92,13 @@ style: |
 
 ## 5. Resultados Experimentais (Benchmark)
 
-Avaliação empírica no corpus de validação real (16 consultas balanceadas):
+Avaliação empírica no corpus de validação (10 notas, 39 perguntas; Experimento 20, sem geração por LLM):
 
 | Estratégia de Recuperação | MRR | Recall@3 | Recall@5 | Latência Média |
 |:---|:---:|:---:|:---:|:---:|
-| **Léxica Pura (SQLite FTS5 BM25)** | 0.968 | 1.000 | 1.000 | **~26 ms** |
-| **Vetorial Pura (ChromaDB)** | 0.781 | 0.937 | 0.937 | ~937 ms |
-| **Híbrida RRF (k=60 - Padrão)** | **0.968** | **1.000** | **1.000** | ~893 ms |
+| **Léxica Pura (SQLite FTS5 BM25)** | 0.910 | 1.000 | 1.000 | **~1.2 ms** |
+| **Vetorial Pura (ChromaDB)** | 0.816 | 0.923 | 0.923 | ~69 ms |
+| **Híbrida RRF (k=60 - Padrão)** | **0.915** | **1.000** | **1.000** | ~69 ms |
 
 * *Conclusão:* A fusão híbrida mantém a precisão léxica máxima e cobre consultas conceituais sem perda de revocação.
 
@@ -107,8 +107,8 @@ Avaliação empírica no corpus de validação real (16 consultas balanceadas):
 ## 6. Demonstração Prática do Artefato
 
 * **CLI & TUI:**
-  * Diagnóstico de saúde do sistema (p.ps1 doctor).
-  * Indexação e benchmark reproduzível (p.ps1 bench compare).
+  * Diagnóstico de saúde do sistema (es.ps1 doctor).
+  * Indexação e benchmark reproduzível (es.ps1 bench compare).
 * **Desktop App (React 19 + PyWebView):**
   * Chat em tempo real com citações expansíveis e badges de relevância.
   * Grafo de Conhecimento interativo (ForceGraph 2D/3D).
@@ -123,7 +123,7 @@ Avaliação empírica no corpus de validação real (16 consultas balanceadas):
   * Citações auditáveis com spans determinísticos garantem confiabilidade acadêmica e profissional.
 * **Entregáveis do Projeto:**
   * Artigo e Monografia acadêmica em docs/tcc/texto/TCC.md.
-  * Pipeline aberto com harness de benchmark automatizado e suite de testes com 100% de aprovação.
+  * Pipeline aberto com harness de benchmark automatizado e suíte de testes automatizados, passando na última execução.
   * Aplicativo multiplataforma com instalador standalone e CLI portátil.
 
 ---
