@@ -35,9 +35,11 @@ from escolio.storage.vector import LocalVectorStore
 
 SHA = 'd' * 64
 
-# Digest do chunk_text e da nota de texto calculado no código anterior a esta mudança (HEAD 4e18932).
-# Os campos t_start/t_end são removidos antes do hash porque são novos e opcionais.
-TEXT_GOLDEN_SHA256 = '898afb564924befc2d3fcd503d4635eff39ca715e9e7ce7283e169b4518985e8'
+# Digest do chunk_text e da nota de texto. Os campos t_start/t_end são removidos antes do hash porque são
+# novos e opcionais. Sem note_id e com caminho relativo: o id e o caminho absoluto dependiam do drive e do
+# diretório de execução (C: x D:), o que fazia o golden variar por máquina. Valor conferido igual no código
+# de 4e18932 e no atual, rodando de dois diretórios diferentes.
+TEXT_GOLDEN_SHA256 = '3acd9cc8f9475b06618e265bbd6589dc18ba9e982800f9606dc8d9523cdf1772'
 
 
 class FakeEmbedder:
@@ -89,15 +91,14 @@ def _text_digest() -> str:
             dumped.pop('t_start')
             dumped.pop('t_end')
             payload.append(dumped)
-    doc = IngestedDocument(source_path=Path('/tmp/nota-de-teste.md'), source_type='md', raw_text=texts[1].strip())
-    note = structure_document(doc, hash_unrooted=True)
+    doc = IngestedDocument(source_path=Path('nota-de-teste.md'), source_type='md', raw_text=texts[1].strip())
+    note = structure_document(doc, hash_unrooted=False)
     payload.append(
         {
             'title': note.title,
             'summary': note.summary,
             'normalized_text': note.normalized_text,
             'content_hash': note.content_hash,
-            'note_id': note.note_id,
             'md': note.structured_markdown,
         }
     )
