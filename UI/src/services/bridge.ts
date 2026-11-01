@@ -199,6 +199,8 @@ export interface BackendSettings {
   answer_model: string;
   answer_base_url: string | null;
   answer_api_key_configured: boolean;
+  /** Provedores de nuvem (openai, openrouter, groq, gemini) que já têm chave no .env local. */
+  cloud_keys_configured?: Record<string, boolean>;
   local_env_path: string;
   default_ask_strategy: string;
   notes_count: number;
@@ -728,7 +730,7 @@ interface PythonApi {
   listAnswerModels?: (provider?: string | null, baseUrl?: string | null) => Promise<ModelDiscoveryResult>;
 
   /** Salva ou remove ESCOLIO_ANSWER_API_KEY em pipeline/.env. */
-  saveApiKey?: (apiKey: string) => Promise<SaveApiKeyResult>;
+  saveApiKey?: (apiKey: string, preset?: string | null) => Promise<SaveApiKeyResult>;
 
   /** Salva uma setting do catálogo canônico do backend. */
   saveBackendSetting?: (key: string, value: string | number | boolean | null) => Promise<{ ok: boolean }>;
@@ -1689,6 +1691,7 @@ export const bridge = {
       answer_model: mockAnswer.model,
       answer_base_url: null,
       answer_api_key_configured: false,
+      cloud_keys_configured: { openai: false, openrouter: false, groq: false, gemini: false },
       local_env_path: 'pipeline\\.env',
       default_ask_strategy: 'hybrid',
       notes_count: 0,
@@ -1987,11 +1990,11 @@ export const bridge = {
     };
   },
 
-  saveApiKey: async (apiKey: string): Promise<SaveApiKeyResult> => {
+  saveApiKey: async (apiKey: string, preset: string | null = null): Promise<SaveApiKeyResult> => {
     if ((await whenDesktopReady()) && window.pywebview?.api.saveApiKey) {
-      return window.pywebview.api.saveApiKey(apiKey);
+      return window.pywebview.api.saveApiKey(apiKey, preset);
     }
-    console.debug('[Bridge Mock] saveApiKey:', apiKey ? '<redacted>' : '<empty>');
+    console.debug('[Bridge Mock] saveApiKey:', preset ?? 'geral', apiKey ? '<redacted>' : '<empty>');
     return {
       ok: true,
       configured: apiKey.trim().length > 0,

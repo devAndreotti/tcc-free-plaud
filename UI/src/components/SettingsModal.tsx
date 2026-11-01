@@ -20,6 +20,7 @@ import Select from './Select';
 import VaultsTab from './VaultsTab';
 import { VaultGlyph } from './VaultGlyph';
 import { useVaults } from '../hooks/useVaults';
+import { AiSourcesPane } from './AiSourcesPane';
 import { checkLabel, groupChecks } from '../lib/doctorChecks';
 import {
   bridge,
@@ -72,7 +73,7 @@ export type SettingsTab = 'geral' | 'vaults' | 'ia' | 'voz' | 'avancado' | 'apar
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: 'geral', label: 'Geral' },
   { id: 'vaults', label: 'Vaults' },
-  { id: 'ia', label: 'IA' },
+  { id: 'ia', label: 'Fontes de IA' },
   { id: 'voz', label: 'Voz' },
   { id: 'avancado', label: 'Avançado' },
   { id: 'aparencia', label: 'Aparência' },
@@ -781,9 +782,22 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
             {currentTab ==='ia' && (
               <section className="settings-section" aria-labelledby="settings-ai">
                 <h3 id="settings-ai" className="settings-section__title">
-                  IA
+                  Fontes de IA
                 </h3>
-                <p className="settings-section__lede">Como a resposta é escrita a partir dos trechos das suas notas.</p>
+                <p className="settings-section__lede">
+                  Quem escreve a resposta a partir dos trechos das suas notas. A busca e a transcrição ficam sempre no seu computador.
+                </p>
+
+                <AiSourcesPane
+                  provider={draftProvider}
+                  baseUrl={draftBaseUrl}
+                  keysConfigured={backendSettings?.cloud_keys_configured ?? {}}
+                  onUse={(values) => setSettingDrafts((prev) => ({ ...prev, ...values }))}
+                  onKeySaved={async () => {
+                    setBackendSettings(await bridge.getBackendSettings());
+                    setToast({ tone: 'ok', text: 'Chave salva no .env local.' });
+                  }}
+                />
 
                 {iaCatalogRows
                   .filter((row) => isGenerative || row.key === 'answer_provider')
