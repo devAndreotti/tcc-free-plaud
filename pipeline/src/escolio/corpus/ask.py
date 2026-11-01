@@ -198,10 +198,10 @@ def answer_corpus_with_citations(
     if source_root and not note_ids:
         return _no_answer('source_root_without_notes', ['Nenhuma nota indexada está na pasta escolhida.'], [])
 
-    # Com IA, termo ausente do corpus pode ser paráfrase ("coordenar" para "responsável"): o span decide.
+    # Termo ausente do corpus pode ser paráfrase ("coordenar" para "responsável"). Com IA, a pergunta ganha
+    # uma segunda chance e só passa se o modelo tirar do trecho a informação pedida (ask_span).
     vocabulary = vocabulary_rejection(query_terms, corpus_vocabulary_stems(connection))
-    use_span_gate = supports_span_check(answer_provider)
-    if vocabulary is not None and not use_span_gate:
+    if vocabulary is not None and not supports_span_check(answer_provider):
         return _no_answer(vocabulary[0], vocabulary[1], [])
 
     retrieval_started_at = perf_counter()
@@ -238,14 +238,14 @@ def answer_corpus_with_citations(
         min_hybrid_term_coverage=min_hybrid_term_coverage,
     )
     verified = None
-    if rejection is None and use_span_gate:
+    if rejection is None and vocabulary is not None:
         rejection, verified = span_gate(answer_provider, question, hits, vocabulary)
     if rejection is not None:
         return _no_answer(rejection[0], _with_stale_limitations(rejection[1]), used_sources, rejected_hits=hits)
 
     claim_started_at = perf_counter()
     # Pergunta que o vocabulário recusaria só chega aqui com span verificado: o claim é a frase dele.
-    overridden = vocabulary is not None and verified is not None
+    overridden = verified is not None
     if overridden:
         claims = [claim_from_verified_span(verified, note_lookup)]
     else:
