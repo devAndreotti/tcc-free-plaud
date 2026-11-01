@@ -125,6 +125,19 @@ describe('vaults: seletor, criação e aba Vaults', () => {
     expect((screen.getByLabelText('Nome da vault') as HTMLInputElement).value).toBe('Culinária');
   });
 
+  it('vault: cartões mostram as pastas de origem e o último cartão cria uma vault nova', async () => {
+    vi.spyOn(bridge, 'listVaults').mockResolvedValue(LIST);
+    const user = userEvent.setup();
+
+    renderWithVaults(<VaultsTab onOpenQueue={() => {}} />);
+    const cards = await screen.findByRole('list', { name: 'Vaults cadastradas' });
+    expect(within(cards).getByRole('button', { name: /Obsidian/ }).textContent).toContain('Area de TI, Windows');
+    expect(within(cards).getByRole('button', { name: /Culinária/ }).textContent).toContain('Nenhuma pasta indexada');
+
+    await user.click(within(cards).getByRole('button', { name: 'Nova vault' }));
+    expect(await screen.findByRole('button', { name: 'Criar vault' })).toBeTruthy();
+  });
+
   it('vault: renomear salva ao sair do campo; ícone e cor valem na hora', async () => {
     vi.spyOn(bridge, 'listVaults').mockResolvedValue(LIST);
     const updateSpy = vi.spyOn(bridge, 'updateVault').mockResolvedValue({ ok: true });
