@@ -26,6 +26,9 @@ export const VAULT_COLOR_OPTIONS: { id: VaultColor; label: string }[] = [
   { id: 'slate', label: 'Ardósia' },
 ];
 
+/** Último trecho do caminho: "C:\Notas\Obsidian" → "Obsidian". */
+export const folderName = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString('pt-BR')} ${n === 1 ? one : many}`;
 
 /** "12 notas · 2 pastas": resumo da vault no seletor, na aba Vaults e na tela inicial. */
