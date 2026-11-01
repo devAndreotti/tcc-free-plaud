@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import { bridge, type DroppedFileEvent } from '../services/bridge';
 import { FileIcon, XIcon } from './Icons';
+import { Glyph, type GlyphName } from './ui/Glyph';
 import { notifyCorpusChanged } from '../hooks/useCorpusHealth';
+
+// Tipos que a Fila aceita soltar: áudio, PDF e texto.
+const DROP_TYPES: [GlyphName, string][] = [['wave', 'MP3'], ['notes', 'PDF'], ['list', 'MD']];
 
 /** Extensões de arquivo aceitas pela dropzone (áudio, PDF, texto). */
 const ACCEPTED_EXTENSIONS = ['.wav', '.mp3', '.m4a', '.ogg', '.pdf', '.txt', '.md'];
@@ -179,7 +183,14 @@ const Dropzone = ({ watchDirectory, onToast }: DropzoneProps) => {
       aria-label="Área de arrastar e soltar arquivos"
     >
       <div className="dropzone__head">
-        <FileIcon size={18} className="dropzone__icon" />
+        <span className="dropzone__types" aria-hidden="true">
+          {DROP_TYPES.map(([name, label]) => (
+            <span key={label} className="dropzone__type">
+              <Glyph name={name} size={16} />
+              <small>{label}</small>
+            </span>
+          ))}
+        </span>
         <p className="dropzone__hint">
           <b>Arraste áudios, PDFs ou textos aqui para indexar</b>
           <span>Cada arquivo entra no corpus sem ser copiado nem alterado.</span>

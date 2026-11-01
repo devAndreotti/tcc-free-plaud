@@ -157,6 +157,8 @@ export interface AudioJobSnapshot {
   status: 'recording' | 'queued' | 'transcribing' | 'completed' | 'failed' | 'cancelled' | string;
   source_path: string;
   samples_captured: number;
+  /** Volume do último trecho gravado (0 a 1); usado pelo teste de microfone. */
+  level?: number;
   error_code: string | null;
   message: string | null;
   result: AudioTranscriptionResult | null;

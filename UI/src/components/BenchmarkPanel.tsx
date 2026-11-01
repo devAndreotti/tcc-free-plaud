@@ -5,6 +5,7 @@ import { STRATEGY_ORDER, fmt2, fmt3, ms, nameOf, pct } from './benchmarkFormat';
 import BenchmarkAblation from './BenchmarkAblation';
 import BenchmarkCoverage from './BenchmarkCoverage';
 import BenchmarkFaithfulness from './BenchmarkFaithfulness';
+import BenchEmpty from './BenchEmpty';
 
 type Metric = 'mrr' | 'recall_at_3' | 'recall_at_5' | 'recall_at_10' | 'ndcg_at_10';
 const METRICS: { key: Metric; label: string }[] = [
@@ -392,20 +393,8 @@ const BenchmarkPanel = () => {
               <CopyPath format="CSV" path={result.csv_report_path} />
             </section>
           </>
-        ) : isRunning ? (
-          <div className="card queue__empty">
-            <div className="job__bar job__bar--indeterminate" role="status" aria-label="Rodando comparação" />
-            <p><b>Rodando lexical, vetorial e híbrida no mesmo conjunto de perguntas…</b></p>
-            <p>Cada documento da suite é indexado num corpus temporário antes das perguntas. Leva cerca de meio minuto.</p>
-          </div>
         ) : (
-          <div className="card queue__empty">
-            <p><b>Nenhum benchmark executado nesta sessão.</b></p>
-            <p>
-              Escolha uma suite.json com perguntas e as notas esperadas. A comparação roda lexical, vetorial e híbrida
-              com o mesmo top-k e grava os relatórios em JSON e CSV.
-            </p>
-          </div>
+          <BenchEmpty running={isRunning} />
         )}
       </div>
     </main>

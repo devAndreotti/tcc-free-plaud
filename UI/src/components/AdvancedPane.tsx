@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { SettingRow, SettingPreset } from '../services/bridge';
 import { Glyph, GlyphBadge, type GlyphName } from './ui/Glyph';
 import { GroupCard, SectionHead } from './ui/Controls';
+import { ChunkArt, HybridArt, VectorArt } from './AdvancedArt';
 
 // Grupos do catálogo (app/settings_specs.py) com nome, ícone e uma linha de apoio.
 const GROUPS: Record<string, { title: string; icon: GlyphName; desc: string }> = {
@@ -11,6 +12,10 @@ const GROUPS: Record<string, { title: string; icon: GlyphName; desc: string }> =
   Corpus: { title: 'Indexação', icon: 'layers', desc: 'Ritmo da Fila ao indexar pastas.' },
   LLM: { title: 'Resposta da IA', icon: 'stars', desc: 'Vale para Ollama, LM Studio e provedores na nuvem.' },
 };
+
+const ORDER = Object.keys(GROUPS);
+const groupOrder = (group: string) => (ORDER.includes(group) ? ORDER.indexOf(group) : ORDER.length);
+const valueOf = (catalog: SettingRow[], key: string) => catalog.find((row) => row.key === key)?.value;
 
 const PRESET_ICONS: [RegExp, GlyphName][] = [[/cpu/i, 'cpu'], [/gpu/i, 'gpu'], [/grande|large/i, 'layers'], [/tcc|reprodut/i, 'cap']];
 const presetIcon = (preset: SettingPreset): GlyphName => PRESET_ICONS.find(([re]) => re.test(`${preset.key} ${preset.label}`))?.[1] ?? 'boxes';
@@ -172,14 +177,22 @@ export const AdvancedPane = ({ presets, rows, catalog, hiddenKeys, applyingPrese
       <section className="settings-section" aria-label="Ajustes avançados">
         <h4 className="adv-sub">Ajustes</h4>
         <div className="ui-grid">
-          {Object.entries(groups).map(([group, groupRows], i) => {
-            const meta = GROUPS[group] ?? { title: group, icon: 'sliders' as GlyphName, desc: '' };
-            return (
-              <GroupCard key={group} icon={meta.icon} title={meta.title} desc={meta.desc} delay={200 + i * 60} className="adv-group">
-                {groupRows.map((row) => renderRow(row))}
-              </GroupCard>
-            );
-          })}
+          {Object.entries(groups)
+            .sort(([a], [b]) => groupOrder(a) - groupOrder(b))
+            .map(([group, groupRows], i) => {
+              const meta = GROUPS[group] ?? { title: group, icon: 'sliders' as GlyphName, desc: '' };
+              const art =
+                group === 'Retrieval' ? <HybridArt /> :
+                group === 'Embeddings' ? <VectorArt /> :
+                group === 'Chunks' ? <ChunkArt size={Number(valueOf(catalog, 'default_chunk_size') ?? 800)} overlap={Number(valueOf(catalog, 'default_chunk_overlap') ?? 120)} /> :
+                null;
+              return (
+                <GroupCard key={group} icon={meta.icon} title={meta.title} desc={meta.desc} delay={200 + i * 60} className={`adv-group${group === 'LLM' ? ' adv-group--wide' : ''}`}>
+                  {art}
+                  <div className="adv-group__rows">{groupRows.map((row) => renderRow(row))}</div>
+                </GroupCard>
+              );
+            })}
         </div>
       </section>
     </>

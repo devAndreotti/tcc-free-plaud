@@ -75,3 +75,30 @@ test('Fila: sem job mostra a arte; Indexar vira o job com a lista Agora e Fechar
   await job.getByRole('button', { name: 'Fechar' }).click();
   await expect(page.getByRole('heading', { name: 'Nada indexando agora' })).toBeVisible();
 });
+
+test('Benchmark vazio tem a arte e a explicação', async ({ page }) => {
+  await page.getByRole('button', { name: 'Benchmark', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Nenhum benchmark executado nesta sessão.' })).toBeVisible();
+  await expect(page.locator('.bench-art')).toBeVisible();
+});
+
+test('Fila: a área de soltar mostra os tipos aceitos (MP3, PDF, MD)', async ({ page }) => {
+  await page.getByRole('button', { name: 'Fila', exact: true }).click();
+  const drop = page.getByRole('region', { name: 'Área de arrastar e soltar arquivos' });
+  for (const type of ['MP3', 'PDF', 'MD']) await expect(drop.getByText(type, { exact: true })).toBeVisible();
+});
+
+test('Fontes de IA: configuração manual com o provedor em cartões', async ({ page }) => {
+  await openSettings(page, 'Fontes de IA');
+  const providers = page.getByRole('radiogroup', { name: 'Provedor de resposta' });
+  await expect(providers).toBeVisible();
+  await providers.getByRole('radio').nth(1).click();
+  await expect(providers.getByRole('radio').nth(1)).toHaveAttribute('aria-checked', 'true');
+});
+
+test('Voz: Testar microfone ouve e responde', async ({ page }) => {
+  await openSettings(page, 'Voz');
+  await page.getByRole('button', { name: 'Testar', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Ouvindo…' })).toBeVisible();
+  await expect(page.locator('.mic-test__msg')).toBeVisible({ timeout: 8000 });
+});
