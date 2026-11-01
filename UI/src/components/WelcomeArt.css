@@ -26,12 +26,11 @@
   transform-origin: center;
 }
 
-/* Movimento só quando o sistema e o app permitem: fios correm para a vault, alguns pontos piscam; vazia, o anel gira. */
-@media (prefers-reduced-motion: no-preference) {
-  :root:not([data-motion="reduce"]) .welcome-art__thread { animation: welcome-art-flow 2.4s linear infinite; }
-  :root:not([data-motion="reduce"]) .welcome-art__star { animation: welcome-art-twinkle 3.6s ease-in-out infinite; }
-  :root:not([data-motion="reduce"]) .welcome-art--empty .welcome-art__halo { animation: welcome-art-spin 60s linear infinite; }
-}
+/* Fios correm para a vault, alguns pontos piscam; vazia, o anel gira.
+   "Reduzir animações" (sistema ou Aparência) já zera tudo pela regra global do index.css. */
+.welcome-art__thread { animation: welcome-art-flow 2.4s linear infinite; }
+.welcome-art__star { animation: welcome-art-twinkle 3.6s ease-in-out infinite; }
+.welcome-art--empty .welcome-art__halo { animation: welcome-art-spin 60s linear infinite; }
 
 @keyframes welcome-art-flow {
   to { stroke-dashoffset: -12; }
