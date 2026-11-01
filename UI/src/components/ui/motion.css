@@ -189,3 +189,12 @@
 .ui-card__title { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); }
 .ui-card__desc { margin: 1px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); }
 .ui-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; align-items: stretch; }
+
+/* Pulinho do Stepper: duas classes iguais alternadas reiniciam a animação sem recriar o campo. */
+.bump-a { animation: ui-bump-a 0.32s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.bump-b { animation: ui-bump-b 0.32s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes ui-bump-a { from { opacity: 0.25; transform: translateY(-7px); } }
+@keyframes ui-bump-b { from { opacity: 0.25; transform: translateY(-7px); } }
+
+/* Chave com quique. */
+.switch .switch__track::after { transition: transform 0.32s cubic-bezier(0.3, 1.6, 0.5, 1), background-color 0.25s; }

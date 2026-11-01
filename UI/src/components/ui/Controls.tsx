@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Glyph, GlyphBadge, type GlyphName } from './Glyph';
 
 export interface SegOption<T extends string> {
@@ -39,8 +39,9 @@ export const Segmented = <T extends string>({ label, options, value, onChange, d
 
 interface StepperProps {
   label: string;
-  value: number;
-  onChange: (value: number) => void;
+  /** Texto do campo (rascunho); − e + somam o passo ao número dele. */
+  value: string;
+  onChange: (value: string) => void;
   step?: number;
   min?: number;
   max?: number;
@@ -54,30 +55,35 @@ const stepFor = (value: number) => {
   return 1;
 };
 
-/** Número com − e +; o valor dá um pulinho a cada mudança e aceita digitação. */
+/** Número com − e +: o valor dá um pulinho a cada clique e o campo aceita digitação normal. */
 export const Stepper = ({ label, value, onChange, step, min = 0, max, unit, disabled = false }: StepperProps) => {
-  const delta = step ?? stepFor(value);
-  const clamp = (next: number) => Math.min(max ?? Number.POSITIVE_INFINITY, Math.max(min, next));
+  const [flip, setFlip] = useState<boolean | null>(null);
+  const current = Number(value);
+  const number = Number.isFinite(current) ? current : min;
+  const delta = step ?? stepFor(number);
+  const nudge = (direction: 1 | -1) => {
+    const next = Math.min(max ?? Number.POSITIVE_INFINITY, Math.max(min, number + direction * delta));
+    setFlip((prev) => !prev);
+    onChange(String(next));
+  };
   return (
-    <div className="ui-stepper" role="group" aria-label={label}>
-      <button type="button" aria-label={`Diminuir ${label}`} disabled={disabled || value <= min} onClick={() => onChange(clamp(value - delta))}>
+    <div className="ui-stepper">
+      <button type="button" aria-label={`Diminuir ${label}`} disabled={disabled || number <= min} onClick={() => nudge(-1)}>
         <Glyph name="minus" size={14} strokeWidth={2} />
       </button>
       <input
-        key={value}
-        className="bump"
+        className={flip === null ? undefined : flip ? 'bump-a' : 'bump-b'}
         type="number"
         inputMode="numeric"
         aria-label={label}
         value={value}
+        min={min}
+        max={max}
         disabled={disabled}
-        onChange={(event) => {
-          const next = Number(event.target.value);
-          if (Number.isFinite(next)) onChange(clamp(next));
-        }}
+        onChange={(event) => onChange(event.target.value)}
       />
       {unit && <span className="ui-stepper__unit">{unit}</span>}
-      <button type="button" aria-label={`Aumentar ${label}`} disabled={disabled || (max !== undefined && value >= max)} onClick={() => onChange(clamp(value + delta))}>
+      <button type="button" aria-label={`Aumentar ${label}`} disabled={disabled || (max !== undefined && number >= max)} onClick={() => nudge(1)}>
         <Glyph name="plus" size={14} strokeWidth={2} />
       </button>
     </div>
@@ -86,7 +92,7 @@ export const Stepper = ({ label, value, onChange, step, min = 0, max, unit, disa
 
 interface SectionHeadProps {
   icon: GlyphName;
-  title: string;
+  title: ReactNode;
   lede?: ReactNode;
   id?: string;
   children?: ReactNode;
