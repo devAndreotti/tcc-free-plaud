@@ -168,10 +168,10 @@ class OpenAICompatibleAnswerProvider:
             raise AnswerProviderError(_empty_answer_error_message(message, finish_reason))
         return answer
 
-    def answer(self, question: str, contexts: list[str]) -> str:
+    def answer(self, question: str, contexts: list[str], temperature: float | None = None) -> str:
         if not contexts:
             raise ValueError('Provider de resposta exige pelo menos um contexto citavel.')
-        return self.complete(build_grounded_chat_messages(question, contexts))
+        return self.complete(build_grounded_chat_messages(question, contexts), temperature=temperature)
 
     def answer_stream(self, question: str, contexts: list[str], on_delta: Callable[[str], None]) -> str:
         from escolio.providers.answer_stream import read_sse_answer  # evita ciclo

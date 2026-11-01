@@ -1,5 +1,6 @@
 """Geração da resposta pelo provider: a resposta gerada só substitui a extrativa se passar na validação."""
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from time import perf_counter
@@ -58,6 +59,14 @@ def provider_identity(answer_provider: AnswerProvider | None) -> tuple[str | Non
     model_value = getattr(answer_provider, 'model', None) if answer_provider is not None else None
     return name, (str(model_value) if model_value is not None else None)
 
+RETRIES_WITHOUT_TEXT = 3
+
+
+def _has_text(answer: str) -> bool:
+    """Há texto além de marcadores de fonte como [1]?"""
+    return any(char.isalnum() for char in re.sub(r'\[[^\]]*\]', '', answer))
+
+
 
 def generate_answer(
     question: str,
@@ -100,6 +109,17 @@ def generate_answer(
         )
     stage_timings.provider_ms = elapsed_ms(provider_started_at)
     generated_answer = normalize_answer_markers(generated_answer)
+    # O modelo às vezes devolve só "[1]". Uma nova tentativa costuma sair com texto; sem ela, o usuário
+    # receberia o trecho inteiro do fallback extrativo.
+    # Temperatura 0.2 (padrão) repete "[1]" de forma determinística; 0.7 varia, então tenta até 3 vezes.
+    for _ in range(RETRIES_WITHOUT_TEXT):
+        if _has_text(generated_answer):
+            break
+        try:
+            generated_answer = provider.answer(question, answer_contexts, temperature=0.7)
+        except Exception:
+            break
+        generated_answer = normalize_answer_markers(generated_answer)
 
     validation_started_at = perf_counter()
     validation = validate(question, generated_answer, answer_contexts, claims)

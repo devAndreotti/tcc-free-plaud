@@ -121,3 +121,12 @@ def test_prompt_nao_traz_exemplo_copiavel_com_fato() -> None:
     prompt_text = messages[0]['content'] + messages[1]['content']
     assert 'Voce estudou' not in prompt_text
     assert 'VLAN' not in prompt_text
+
+
+def test_resposta_so_com_marcador_nao_tem_texto() -> None:
+    # O qchat às vezes devolve só "[1]": isso precisa disparar a nova tentativa de geração.
+    from escolio.corpus.ask_generation import _has_text
+
+    assert not _has_text('[1]')
+    assert not _has_text('[1] [2]')
+    assert _has_text('O orçamento foi de 350 mil reais [1].')
