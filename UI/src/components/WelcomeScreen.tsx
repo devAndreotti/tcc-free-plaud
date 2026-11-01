@@ -1,5 +1,6 @@
 import type { Vault } from '../services/bridge';
 import { VaultGlyph } from './VaultGlyph';
+import WelcomeArt from './WelcomeArt';
 
 interface WelcomeScreenProps {
   /** Vault ativa; null enquanto a lista de vaults não chegou. */
@@ -14,13 +15,15 @@ const WelcomeScreen = ({ vault = null, onOpenQueue }: WelcomeScreenProps) => {
   const empty = vault !== null && notes === 0;
   return (
     <div className="welcome" role="main" aria-label="Tela inicial">
-      {vault ? (
-        <span className="welcome__glyph">
-          <VaultGlyph icon={vault.icon} color={vault.color} size={28} />
-        </span>
-      ) : (
-        <span className="welcome__mark" aria-hidden="true">ES</span>
-      )}
+      <WelcomeArt color={vault?.color} empty={empty}>
+        {vault ? (
+          <span className="welcome__glyph">
+            <VaultGlyph icon={vault.icon} color={vault.color} size={28} />
+          </span>
+        ) : (
+          <span className="welcome__mark" aria-hidden="true">ES</span>
+        )}
+      </WelcomeArt>
       {vault && <span className="welcome__kicker">Vault ativa</span>}
       <h1 className="welcome__title">{vault ? vault.name : 'Pergunte ao seu vault'}</h1>
       <p className="welcome__lede">

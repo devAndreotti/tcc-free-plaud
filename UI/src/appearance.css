@@ -1,0 +1,108 @@
+/* Aparência (appearance.ts): atributos data-* no <html>. Sem atributo vale o padrão de index.css.
+   Os seletores começam em :root[data-…] para vencer as regras de uma classe do App.css
+   sem depender da ordem de carga dos arquivos. */
+
+/* ─── Cor de destaque ────────────────────────────────────────────────────────
+   Troca o trio de acento de index.css: preenchimento (botão com texto branco ≥ 4,5:1),
+   hover e cor de texto/ícone (≥ 4,5:1 sobre o fundo). No claro, texto = preenchimento. */
+:root[data-theme="dark"][data-accent="blue"]  { --accent-blue: #2563eb; --accent-blue-hover: #1d4ed8; --accent-blue-light: #60a5fa; }
+:root[data-theme="dark"][data-accent="green"] { --accent-blue: #15803d; --accent-blue-hover: #166534; --accent-blue-light: #4ade80; }
+:root[data-theme="dark"][data-accent="amber"] { --accent-blue: #b45309; --accent-blue-hover: #92400e; --accent-blue-light: #fbbf24; }
+:root[data-theme="dark"][data-accent="rose"]  { --accent-blue: #e11d48; --accent-blue-hover: #be123c; --accent-blue-light: #fb7185; }
+:root[data-theme="dark"][data-accent="cyan"]  { --accent-blue: #0e7490; --accent-blue-hover: #155e75; --accent-blue-light: #22d3ee; }
+
+:root[data-theme="light"][data-accent="blue"]  { --accent-blue: #1d4ed8; --accent-blue-hover: #1e40af; }
+:root[data-theme="light"][data-accent="green"] { --accent-blue: #137034; --accent-blue-hover: #0f5a2a; }
+:root[data-theme="light"][data-accent="amber"] { --accent-blue: #a14a08; --accent-blue-hover: #873e06; }
+:root[data-theme="light"][data-accent="rose"]  { --accent-blue: #be123c; --accent-blue-hover: #9f1239; }
+:root[data-theme="light"][data-accent="cyan"]  { --accent-blue: #0b6a84; --accent-blue-hover: #09566b; }
+
+/* Derivados. No escuro, --accent-soft e --mark já saem de --accent-blue-light (index.css);
+   as séries repetem a receita do violeta: escura, média e clara na mesma matiz. */
+:root[data-theme="dark"][data-accent] {
+  --series-1: color-mix(in srgb, var(--accent-blue) 55%, var(--bg-primary));
+  --series-2: color-mix(in srgb, var(--accent-blue) 60%, var(--accent-blue-light));
+  --series-3: color-mix(in srgb, var(--accent-blue-light) 70%, white);
+}
+
+:root[data-theme="light"][data-accent] {
+  --accent-blue-light: var(--accent-blue);
+  --accent-soft: color-mix(in srgb, var(--accent-blue) 9%, transparent);
+  --mark: color-mix(in srgb, var(--accent-blue) 15%, transparent);
+  --series-1: color-mix(in srgb, var(--accent-blue) 25%, white);
+  --series-2: color-mix(in srgb, var(--accent-blue) 60%, white);
+  --series-3: var(--accent-blue);
+}
+
+.appearance-swatches {
+  display: flex;
+  gap: 6px;
+}
+
+.appearance-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: currentColor;
+  background-clip: content-box;
+  cursor: pointer;
+}
+
+.appearance-swatch[aria-pressed="true"] {
+  border-color: currentColor;
+}
+
+/* ─── Tamanho do texto ───────────────────────────────────────────────────────
+   O CSS do app é todo em px, então a escala é zoom no <html> (WebView2/Chromium).
+   O zoom também multiplica vh/vw: as regras que usam a janela dividem por ele. */
+:root[data-text-size="90"] { --app-zoom: 0.9; }
+:root[data-text-size="110"] { --app-zoom: 1.1; }
+:root[data-text-size="125"] { --app-zoom: 1.25; }
+
+:root[data-text-size] {
+  zoom: var(--app-zoom);
+}
+
+:root[data-text-size] .app,
+:root[data-text-size] .sb {
+  height: calc(100vh / var(--app-zoom));
+}
+
+:root[data-text-size] .strategy__menu { max-width: min(440px, calc(100vw / var(--app-zoom) - 48px)); }
+:root[data-text-size] .answer__menu { max-width: calc(100vw / var(--app-zoom) - 48px); }
+
+:root[data-text-size] .modal {
+  width: min(520px, calc(100vw / var(--app-zoom) - 32px));
+  max-height: calc(100vh / var(--app-zoom) - 64px);
+}
+
+:root[data-text-size] .modal--wide {
+  width: min(1040px, calc(100vw / var(--app-zoom) - 32px));
+  height: min(740px, calc(100vh / var(--app-zoom) - 64px));
+}
+
+/* ─── Fonte das respostas: só o texto de leitura (respostas, trechos e notas) ─ */
+:root[data-reading-font="sans"] :is(.msg__answer, .msg__source-quote, .reader__title, .reader__body, .reader__chunk) {
+  --font-read: var(--font-family);
+}
+
+/* ─── Densidade compacta ─────────────────────────────────────────────────── */
+:root[data-density="compact"] .messages-area { padding: 16px 32px 8px; gap: var(--spacing-sm); }
+:root[data-density="compact"] .msg--user { margin-top: 4px; }
+:root[data-density="compact"] .msg--ai { margin-bottom: 8px; }
+:root[data-density="compact"] .msg__bubble { padding: 6px 12px; }
+:root[data-density="compact"] .msg__head { margin-bottom: 6px; }
+:root[data-density="compact"] .msg__answer { line-height: 1.55; }
+:root[data-density="compact"] .msg__sources { gap: 4px; margin-top: 10px; padding-top: 8px; }
+:root[data-density="compact"] .msg__source { padding: 6px 10px; }
+
+:root[data-density="compact"] .notes__group { margin-top: 4px; }
+:root[data-density="compact"] .notes__group-title { padding: 3px 8px; }
+:root[data-density="compact"] .notes__item { padding: 4px 8px; }
+
+:root[data-density="compact"] .sb__item { height: 32px; }
+:root[data-density="compact"] .sb--collapsed .sb__item { width: 32px; }
+
+:root[data-density="compact"] .settings-item { padding: 10px 14px; }

@@ -2432,7 +2432,6 @@
 .welcome__mark {
   width: 44px;
   height: 44px;
-  margin-bottom: 8px;
   border-radius: 12px;
   background: var(--accent-blue);
   color: #fff;
@@ -3464,6 +3463,7 @@
   border-radius: 6px;
   background: var(--tip-bg);
   color: var(--tip-fg);
+  border: 1px solid var(--tip-border);
   font: 500 12px/1 var(--font-family);
   white-space: nowrap;
   pointer-events: none;
@@ -3476,11 +3476,13 @@
 .sb__tip::before {
   content: '';
   position: absolute;
-  left: -3px;
+  left: -5px;
   top: 50%;
   width: 8px;
   height: 8px;
   background: var(--tip-bg);
+  border-left: 1px solid var(--tip-border);
+  border-bottom: 1px solid var(--tip-border);
   transform: translateY(-50%) rotate(45deg);
   border-radius: 1px;
 }
@@ -4995,7 +4997,7 @@
 .sb__vault-item .sb__vault-check { color: var(--accent-blue-light); }
 
 /* Tela inicial com a vault que vai responder; chip da vault no campo de pergunta */
-.welcome__glyph { margin-bottom: 4px; }
+.welcome__glyph { display: flex; }
 .welcome__glyph .vault-glyph { width: 56px; height: 56px; border-radius: 14px; }
 .welcome__kicker {
   font-size: 11.5px;
@@ -5078,34 +5080,38 @@
 .vault-dialog__error { margin: 0; color: var(--vault-rose); font-size: 13px; }
 .vault-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; }
 
-/* Aba Vaults das Configurações: lista à esquerda, detalhe da vault escolhida à direita */
-.vaults-tab__head { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
-.vaults-tab__head > div { flex: 1; min-width: 220px; }
+/* Aba Vaults das Configurações: vaults em cartões na largura toda, detalhe da escolhida abaixo (mais em VaultsTab.css) */
+.vaults-tab__head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
+.vaults-tab__head .settings-item__description { max-width: 640px; }
 .vaults-tab { container-type: inline-size; }
-.vaults-tab__body { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
-.vaults-tab__list { list-style: none; margin: 0; padding: 0; flex: 0 1 260px; display: flex; flex-direction: column; gap: 6px; }
-@container (max-width: 720px) {
-  .vaults-tab__list { flex-basis: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.vaults-tab__body { display: flex; flex-direction: column; gap: 16px; }
+.vaults-tab__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
 }
 .vaults-tab__row {
   width: 100%;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border: 1px solid var(--border-color-subtle);
-  border-radius: 12px;
-  background: transparent;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-panel);
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
 }
 .vaults-tab__row:hover { background: var(--bg-surface-hover); }
-.vaults-tab__row--on { border-color: var(--accent-blue-light); background: var(--accent-soft); }
-.vaults-tab__row .vault-glyph { width: 34px; height: 34px; border-radius: 9px; }
-.vaults-tab__row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
-.vaults-tab__row-text b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.vaults-tab__row-text small { font-size: 11px; color: var(--text-muted); }
+.vaults-tab__row--on { border-color: var(--accent-blue-light); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); }
+.vaults-tab__row .vault-glyph { width: 40px; height: 40px; border-radius: 10px; }
+.vaults-tab__row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.35; }
+.vaults-tab__row-text b { min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vaults-tab__row-text small { font-size: 11.5px; color: var(--text-muted); }
 .vaults-tab__badge {
   flex-shrink: 0;
   padding: 2px 8px;
@@ -5117,12 +5123,11 @@
 }
 .vaults-tab__badge--lg { padding: 5px 12px; font-size: 12px; }
 .vaults-tab__detail {
-  flex: 1 1 420px;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 18px;
+  padding: 18px 20px;
   border: 1px solid var(--border-color);
   border-radius: 14px;
   background: var(--bg-primary);
@@ -5130,7 +5135,7 @@
 .vaults-tab__detail .vault-dialog__field legend { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .vaults-tab__detail-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .vaults-tab__glyph .vault-glyph { width: 52px; height: 52px; border-radius: 13px; }
-.vaults-tab__name { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px; }
+.vaults-tab__name { flex: 1 1 240px; max-width: 440px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .vaults-tab__name label { font-size: 12px; color: var(--text-muted); }
 .vaults-tab__name input {
   height: 36px;

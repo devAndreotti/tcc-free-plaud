@@ -47,8 +47,10 @@
   --series-2: #7a65d8;
   --series-3: #b6a8fb;
 
-  --tip-bg: #ecebf2;
-  --tip-fg: #16151b;
+  /* Tooltip escuro no tema escuro: superfície elevada com borda, não um bloco claro */
+  --tip-bg: #2a2931;
+  --tip-fg: #ecebf2;
+  --tip-border: #3d3c47;
   --scrim: rgba(6, 6, 10, 0.58);
 
   /* Paleta do grafo: cada pasta de 1º nível ganha uma destas (hash do nome, lib/graphColors.ts) */
@@ -137,6 +139,7 @@
 
   --tip-bg: #19181e;
   --tip-fg: #ffffff;
+  --tip-border: #19181e;
   --scrim: rgba(22, 20, 32, 0.28);
 
   /* Paleta do grafo no tema claro: tons mais fundos para contrastar com o fundo claro */
@@ -244,10 +247,17 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Reduzir animações: segue o sistema, salvo quando a Aparência força (data-motion em appearance.ts). */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  :root:not([data-motion="never"]) *, :root:not([data-motion="never"]) *::before, :root:not([data-motion="never"]) *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+:root[data-motion="always"] *, :root[data-motion="always"] *::before, :root[data-motion="always"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
 }

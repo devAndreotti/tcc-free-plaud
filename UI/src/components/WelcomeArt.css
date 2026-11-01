@@ -1,0 +1,45 @@
+/* Arte da tela inicial: notas presas à vault por fios de citação, na cor da vault (--vault-color). */
+.welcome-art {
+  position: relative;
+  width: min(440px, 100%);
+  aspect-ratio: 440 / 200;
+  color: var(--vault-color, var(--accent-blue-light));
+}
+
+.welcome-art__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.welcome-art__center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.welcome-art__halo {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Fios correm para a vault, alguns pontos piscam; vazia, o anel gira.
+   "Reduzir animações" (sistema ou Aparência) já zera tudo pela regra global do index.css. */
+.welcome-art__thread { animation: welcome-art-flow 2.4s linear infinite; }
+.welcome-art__star { animation: welcome-art-twinkle 3.6s ease-in-out infinite; }
+.welcome-art--empty .welcome-art__halo { animation: welcome-art-spin 60s linear infinite; }
+
+@keyframes welcome-art-flow {
+  to { stroke-dashoffset: -12; }
+}
+
+@keyframes welcome-art-twinkle {
+  50% { opacity: 0.25; }
+}
+
+@keyframes welcome-art-spin {
+  to { transform: rotate(360deg); }
+}
