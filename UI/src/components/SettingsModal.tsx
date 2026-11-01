@@ -15,6 +15,7 @@ import {
   XCircleIcon,
   XIcon,
 } from './Icons';
+import AppearanceFields from './AppearanceFields';
 import MomentumRail from './MomentumRail';
 import Select from './Select';
 import VaultsTab from './VaultsTab';
@@ -1081,6 +1082,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                       />
                     </div>
                   </div>
+                  <AppearanceFields />
                 </section>
 
                 <div className="settings-divider" aria-hidden="true" />
