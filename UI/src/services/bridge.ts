@@ -1231,6 +1231,10 @@ const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobS
     batch_index: status === 'running' ? 1 : 2,
     batch_total: 2,
     message: status === 'running' ? 'Processando Introdução.md' : 'Indexação finalizada.',
+    recent_files: [
+      { source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Redes\\OSPF.md', status: 'success', chunks: 6 },
+      { source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Diário.md', status: 'unchanged', chunks: 0 },
+    ],
   },
   result: status === 'running' ? null : {
     ok: true,

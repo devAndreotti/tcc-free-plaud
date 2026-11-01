@@ -1,6 +1,7 @@
 /* Fila: cartão que vira job (canvas "Fila · vazia que vira job"). Movimento respeita "Reduzir animações" (index.css). */
 
 .queue-stage {
+  flex-shrink: 0; /* com overflow hidden, item flex encolheria abaixo do conteúdo e cortaria o job */
   overflow: hidden;
   border-radius: 16px;
   transition: border-color 0.5s, box-shadow 0.5s;
