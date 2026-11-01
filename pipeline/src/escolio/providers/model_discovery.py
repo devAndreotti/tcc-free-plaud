@@ -13,6 +13,7 @@ from escolio.providers.answer import (
     _default_base_url,
     is_http_base_url,
 )
+from escolio.providers.cloud_presets import is_chat_model
 
 ModelDiscoveryStatus = Literal['ok', 'not_applicable', 'offline', 'unauthorized', 'error']
 CACHE_TTL_SECONDS = 10.0
@@ -134,7 +135,8 @@ def _ollama_models(payload: object) -> list[ModelInfo]:
 def _openai_models(payload: object, provider: str) -> list[ModelInfo]:
     models: list[ModelInfo] = []
     for item in _model_items(payload, 'data'):
-        if not isinstance(item, dict) or not item.get('id'):
+        # A nuvem lista modelos de vetores, áudio e imagem junto: eles não escrevem a resposta.
+        if not isinstance(item, dict) or not item.get('id') or not is_chat_model(str(item['id'])):
             continue
         model_id = str(item['id'])
         details = {key: value for key, value in item.items() if key != 'id'}

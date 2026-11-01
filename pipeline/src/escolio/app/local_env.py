@@ -3,6 +3,7 @@ from pathlib import Path
 
 from escolio.app.config import Settings, get_settings
 from escolio.app.legacy import LEGACY_ENV_PREFIX
+from escolio.providers.cloud_presets import CLOUD_PRESETS
 
 ANSWER_API_KEY_ENV = 'ESCOLIO_ANSWER_API_KEY'
 LEGACY_ANSWER_API_KEY_ENV = LEGACY_ENV_PREFIX + 'ANSWER_API_KEY'
@@ -85,18 +86,31 @@ def _remove_legacy_answer_key_line(*, settings: Settings | None = None) -> None:
         upsert_local_env_value(LEGACY_ANSWER_API_KEY_ENV, None, settings=settings)
 
 
-def save_answer_api_key(api_key: str, *, settings: Settings | None = None) -> Path:
-    """Grava a chave como ESCOLIO_ANSWER_API_KEY e migra o .env (remove a linha FREE_PLAUD_ antiga)."""
+def save_answer_api_key(api_key: str, *, settings: Settings | None = None, preset: str | None = None) -> Path:
+    """Grava a chave como ESCOLIO_ANSWER_API_KEY (ou ESCOLIO_<PRESET>_API_KEY) e migra o .env antigo."""
+    if preset is not None and preset not in CLOUD_PRESETS:
+        raise ValueError(f'Provedor de nuvem desconhecido: {preset}')
+    env_name = CLOUD_PRESETS[preset].key_env if preset else ANSWER_API_KEY_ENV
     cleaned = api_key.strip()
-    path = upsert_local_env_value(ANSWER_API_KEY_ENV, cleaned or None, settings=settings)
-    _remove_legacy_answer_key_line(settings=settings)
-    os.environ.pop(LEGACY_ANSWER_API_KEY_ENV, None)
+    path = upsert_local_env_value(env_name, cleaned or None, settings=settings)
+    if not preset:
+        _remove_legacy_answer_key_line(settings=settings)
+        os.environ.pop(LEGACY_ANSWER_API_KEY_ENV, None)
     if cleaned:
-        os.environ[ANSWER_API_KEY_ENV] = cleaned
+        os.environ[env_name] = cleaned
     else:
-        os.environ.pop(ANSWER_API_KEY_ENV, None)
+        os.environ.pop(env_name, None)
     get_settings.cache_clear()
     return path
+
+
+def cloud_keys_configured(*, settings: Settings | None = None) -> dict[str, bool]:
+    """Quais provedores de nuvem já têm chave, sem expor a chave."""
+    path = local_env_path_for(settings)
+    return {
+        preset_id: bool(os.environ.get(preset.key_env) or _read_env_value(path, preset.key_env))
+        for preset_id, preset in CLOUD_PRESETS.items()
+    }
 
 
 def answer_api_key_is_configured(*, settings: Settings | None = None) -> bool:

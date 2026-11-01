@@ -184,7 +184,7 @@ Usar React + TypeScript, mas somente depois do núcleo experimental mínimo.
 
 ### Desktop
 
-Manter Tauri como alvo de produto, não como ponto de partida.
+Tauri foi descartado: o empacotamento desktop usa PyWebView (ver README).
 
 ## Lacunas ainda abertas
 
@@ -197,5 +197,4 @@ Manter Tauri como alvo de produto, não como ponto de partida.
 
 Para transformar esta arquitetura em trabalho executável, usar:
 
-- [`Plano_de_Arranque.md`](Plano_de_Arranque.md)
 - [`Metodologia_Akita_Git.md`](Metodologia_Akita_Git.md)

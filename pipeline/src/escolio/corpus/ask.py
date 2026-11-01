@@ -36,6 +36,12 @@ from escolio.corpus.ask_retrieval import (
     RetrievalStrategy,
     corpus_vocabulary_stems,
 )
+from escolio.corpus.ask_span import (
+    claim_from_verified_span,
+    final_extractive_answer,
+    span_gate,
+    supports_span_check,
+)
 from escolio.corpus.ask_validation import (  # noqa: F401 (GeneratedAnswerValidation reexportado)
     GeneratedAnswerValidation,
     validate_generated_answer,
@@ -192,9 +198,11 @@ def answer_corpus_with_citations(
     if source_root and not note_ids:
         return _no_answer('source_root_without_notes', ['Nenhuma nota indexada está na pasta escolhida.'], [])
 
-    rejection = vocabulary_rejection(query_terms, corpus_vocabulary_stems(connection))
-    if rejection is not None:
-        return _no_answer(rejection[0], rejection[1], [])
+    # Termo ausente do corpus pode ser paráfrase ("coordenar" para "responsável"). Com IA, a pergunta ganha
+    # uma segunda chance e só passa se o modelo tirar do trecho a informação pedida (ask_span).
+    vocabulary = vocabulary_rejection(query_terms, corpus_vocabulary_stems(connection))
+    if vocabulary is not None and not supports_span_check(answer_provider):
+        return _no_answer(vocabulary[0], vocabulary[1], [])
 
     retrieval_started_at = perf_counter()
     raw_hits, stale_vector_hits_count = retrieve_corpus_hits(
@@ -229,22 +237,33 @@ def answer_corpus_with_citations(
         min_vector_term_coverage=min_vector_term_coverage,
         min_hybrid_term_coverage=min_hybrid_term_coverage,
     )
+    verified = None
+    if rejection is None and vocabulary is not None:
+        rejection, verified = span_gate(answer_provider, question, hits, vocabulary)
     if rejection is not None:
         return _no_answer(rejection[0], _with_stale_limitations(rejection[1]), used_sources, rejected_hits=hits)
 
     claim_started_at = perf_counter()
-    claims = build_claims_for_answer(question, hits, query_terms, note_lookup, top_k=top_k, max_claims=max_claims)
+    # Pergunta que o vocabulário recusaria só chega aqui com span verificado: o claim é a frase dele.
+    overridden = verified is not None
+    if overridden:
+        claims = [claim_from_verified_span(verified, note_lookup)]
+    else:
+        claims = build_claims_for_answer(question, hits, query_terms, note_lookup, top_k=top_k, max_claims=max_claims)
     citations = _flatten_citations(claims)
     stage_timings.claim_build_ms = elapsed_ms(claim_started_at)
 
     answer = ' '.join(dict.fromkeys(claim.text for claim in claims))
-    rejection = grounding_rejection(
+    cited_chunk_ids = {citation.chunk_id for citation in citations}
+    evidence_text = ' '.join(hit.chunk.chunk_text for hit in hits if hit.chunk.chunk_id in cited_chunk_ids)
+    rejection = None if overridden else grounding_rejection(
         query_terms=query_terms,
         named_query_terms=named_query_terms,
         strategy=strategy,
         claims=claims,
         answer=answer,
         min_vector_term_coverage=min_vector_term_coverage,
+        evidence_text=evidence_text,
     )
     if rejection is not None:
         return _no_answer(rejection[0], _with_stale_limitations(rejection[1]), used_sources, rejected_hits=hits)
@@ -282,6 +301,8 @@ def answer_corpus_with_citations(
         answer, citations, cited_sources = generation.answer, generation.citations, generation.cited_sources
         limitations, generated, answer_sources = generation.limitations, generation.generated, generation.answer_sources
         discard_reason = generation.discard_reason
+    if not generated:
+        answer = final_extractive_answer(question, query_terms, answer, verified)
 
     return AskResponse(
         query=question,

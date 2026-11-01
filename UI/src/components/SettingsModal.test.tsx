@@ -267,7 +267,7 @@ describe('SettingsModal', () => {
     const user = userEvent.setup();
     renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
 
-    await user.click(screen.getByRole('button', { name: 'IA' }));
+    await user.click(screen.getByRole('button', { name: 'Fontes de IA' }));
     const model = await screen.findByRole('combobox', { name: 'Modelo de resposta' });
     expect(bridgeMock.listAnswerModels).toHaveBeenCalledWith({ provider: 'ollama', baseUrl: '' });
     // O modelo salvo não está instalado: continua na lista, com o aviso

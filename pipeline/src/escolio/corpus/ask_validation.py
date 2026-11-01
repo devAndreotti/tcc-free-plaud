@@ -154,8 +154,9 @@ def validate_generated_answer(
 
     # Sobreposição com os trechos entregues ao modelo, não só com o claim extraído: em nota
     # Markdown o claim costuma ser o título ("VLAN - [!note]") e derrubava respostas fiéis.
+    # Sem piso de tamanho: resposta curta alucinada ("Você estudou redes") também precisa de suporte.
     answer_terms = normalize_query_terms(cleaned_answer)
-    if len(answer_terms) >= 4:
+    if answer_terms:
         _, claim_coverage = match_terms_in_text(answer_terms, support_text)
         if claim_coverage < 0.35:
             return GeneratedAnswerValidation(

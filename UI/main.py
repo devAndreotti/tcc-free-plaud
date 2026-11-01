@@ -50,7 +50,13 @@ from escolio.app.vaults import (
 )
 from escolio.app.conversations import load_conversations, save_conversations
 from escolio.app.doctor import run_doctor
-from escolio.app.local_env import answer_api_key_is_configured, load_local_env, local_env_path_for, save_answer_api_key
+from escolio.app.local_env import (
+    answer_api_key_is_configured,
+    cloud_keys_configured,
+    load_local_env,
+    local_env_path_for,
+    save_answer_api_key,
+)
 from escolio.app.settings_catalog import save_catalog_setting, save_catalog_settings, settings_catalog_payload
 from escolio.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
 from escolio.benchmark.service import run_benchmark_compare
@@ -471,6 +477,7 @@ class Api:
             'answer_model': settings.answer_model,
             'answer_base_url': settings.answer_base_url,
             'answer_api_key_configured': answer_api_key_is_configured(settings=settings),
+            'cloud_keys_configured': cloud_keys_configured(settings=settings),
             'local_env_path': str(local_env_path_for(settings)),
             'default_ask_strategy': settings.default_ask_strategy,
             'notes_count': status.notes_count,
@@ -524,8 +531,9 @@ class Api:
     def listAnswerModels(self, provider: str | None = None, base_url: str | None = None) -> dict:  # NOSONAR - contrato publico do PyWebView consumido pelo front.
         return list_answer_models(self._answer_settings(provider, None, base_url)).model_dump(mode='json')
 
-    def saveApiKey(self, api_key: str) -> dict:
-        path = save_answer_api_key(api_key)
+    def saveApiKey(self, api_key: str, preset: str | None = None) -> dict:
+        path = save_answer_api_key(api_key, preset=preset or None)
+        self.runtime.clear()
         return {
             'ok': True,
             'configured': bool(api_key.strip()),

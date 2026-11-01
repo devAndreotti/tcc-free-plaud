@@ -185,7 +185,7 @@ O comando gera `UI/dist/AssistenteIA` e o pacote `AssistenteIA-windows-x64.zip` 
 ### O que fazer depois
 
 - Conferir a [arquitetura do backend](./docs/arquitetura/Arquitetura_Backend.md) antes de mexer no pipeline de busca
-- Ler o [experimento de calibração do RRF](./docs/experimentos/15_calibracao_rrf_tcc.md) para entender os limiares de abstenção
+- Ler o [benchmark de recuperação reproduzido](./docs/experimentos/20_benchmark_recuperacao_reproduzido.md) e o [experimento de abstenção e faithfulness com IA local](./docs/experimentos/21_abstencao_e_faithfulness_com_ia.md) (o [experimento 15](./docs/experimentos/15_calibracao_rrf_tcc.md) não é reproduzível)
 - Acompanhar o histórico em [`Sprints/STATUS.md`](./Sprints/STATUS.md)
 
 ---

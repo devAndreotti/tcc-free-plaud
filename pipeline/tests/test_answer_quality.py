@@ -1,3 +1,5 @@
+from escolio.corpus.ask_validation import validate_generated_answer
+from escolio.providers.answer import build_grounded_chat_messages
 from escolio.providers.answer_quality import (
     has_source_marker,
     is_echoed_question,
@@ -103,3 +105,28 @@ def test_marcador_so_conta_se_aponta_para_um_trecho_existente() -> None:
     assert has_source_marker('O prazo de entrega é de 15 dias úteis [1].', 1)
     assert not has_source_marker('O prazo de entrega é de 15 dias úteis [2].', 1)
     assert not has_source_marker('O prazo de entrega é de 15 dias úteis.', 1)
+
+
+def test_resposta_curta_sem_suporte_no_contexto_e_recusada() -> None:
+    # Respostas com 3 termos ou menos antes escapavam da checagem de sobreposição.
+    contexts = ['source_path: viagem.md\ntrecho:\nMarina apresentou um trabalho sobre testes de regressão em sistemas legados.']
+    result = validate_generated_answer('Quem apresentou um trabalho?', 'Voce estudou redes [1].', contexts, [])
+    assert result.action == 'fallback_extractive'
+    assert result.reason == 'low_claim_overlap'
+
+
+def test_prompt_nao_traz_exemplo_copiavel_com_fato() -> None:
+    # Um exemplo literal no prompt vazou para a resposta ("Voce estudou redes [1]" em todo caso).
+    messages = build_grounded_chat_messages('Quem apresentou?', ['trecho:\nMarina apresentou um trabalho.'])
+    prompt_text = messages[0]['content'] + messages[1]['content']
+    assert 'Voce estudou' not in prompt_text
+    assert 'VLAN' not in prompt_text
+
+
+def test_resposta_so_com_marcador_nao_tem_texto() -> None:
+    # O qchat às vezes devolve só "[1]": isso precisa disparar a nova tentativa de geração.
+    from escolio.corpus.ask_generation import _has_text
+
+    assert not _has_text('[1]')
+    assert not _has_text('[1] [2]')
+    assert _has_text('O orçamento foi de 350 mil reais [1].')

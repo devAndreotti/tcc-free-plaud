@@ -6,7 +6,7 @@ O objetivo desta primeira base é permitir evolução incremental do pipeline lo
 
 No estado atual, o backend já cobre:
 
-- ingestão local de `.txt`, `.md` e `.pdf`
+- ingestão local de `.txt`, `.md`, `.pdf` e áudio (`.wav`, `.mp3`, `.m4a`, `.ogg`)
 - estruturação inicial de notas em Markdown
 - CLI modular para inspeção, notas, retrieval, benchmark e storage
 - TUI textual para perguntar contra corpus indexado, operar notas/corpus e rodar benchmark

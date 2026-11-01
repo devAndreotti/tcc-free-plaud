@@ -23,6 +23,7 @@ from escolio.app.settings_sources import (  # noqa: F401 - reexportados para que
     UserSettingsSource,
     _read_user_settings,
 )
+from escolio.providers.cloud_presets import preset_for_base_url
 
 
 class Settings(BaseSettings):
@@ -74,6 +75,11 @@ class Settings(BaseSettings):
     answer_model: str = Field(default="qwen2.5:3b")
     answer_base_url: str | None = Field(default=None)
     answer_api_key: str | None = Field(default=None, exclude=True, repr=False)
+    # Uma chave por provedor de nuvem (providers/cloud_presets.py); vale a do preset cuja URL está em uso.
+    openai_api_key: str | None = Field(default=None, exclude=True, repr=False)
+    openrouter_api_key: str | None = Field(default=None, exclude=True, repr=False)
+    groq_api_key: str | None = Field(default=None, exclude=True, repr=False)
+    gemini_api_key: str | None = Field(default=None, exclude=True, repr=False)
     answer_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     answer_timeout_seconds: int = Field(default=60, ge=1, le=300)
     answer_max_tokens: int | None = Field(default=None, ge=1, le=131072)
@@ -124,6 +130,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 "default_chunk_overlap deve ser menor que default_chunk_size"
             )
+        return self
+
+    @model_validator(mode="after")
+    def use_cloud_preset_key(self) -> "Settings":
+        preset = preset_for_base_url(self.answer_base_url) if self.answer_provider == "openai-compatible" else None
+        key = getattr(self, preset.key_field) if preset else None
+        if key:
+            # __dict__: a chave do preset não conta como valor explícito de answer_api_key.
+            self.__dict__["answer_api_key"] = key
         return self
 
     @model_validator(mode="after")

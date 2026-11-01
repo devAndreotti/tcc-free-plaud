@@ -1,5 +1,7 @@
 # Experimento 15: Calibração de RRF e Avaliação Multi-Estratégia no AutoRAG
 
+> **Substituído pelo [Experimento 20](20_benchmark_recuperacao_reproduzido.md)** (medição de 2026-10-31, com comando reproduzível). Os números abaixo não foram reproduzidos e não devem ser citados sem nova medição.
+
 > **AVISO DE PROVENIÊNCIA NÃO VERIFICADA (verificado em 2026-10-25, código do commit `4e18932`).**
 >
 > - **Proveniência não verificada.** Nenhum script, config `autorag`, saída em `data/results`, teste ou notebook do repositório gera os números desta página. O único artefato é este arquivo, introduzido no commit `88e4fc8` (2026-09-08). Detalhes na seção "Verificação de proveniência" abaixo.

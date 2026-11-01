@@ -34,7 +34,7 @@ GROUNDED_SYSTEM_PROMPT = (
     'Se os CONTEXTOS nao responderem diretamente a PERGUNTA, responda exatamente: '
     f'{NO_ANSWER_SENTINEL} '
     'Responda a PERGUNTA em frases completas, com suas proprias palavras. Termine cada frase com o numero do CONTEXTO que a sustenta entre colchetes, e use mais de um CONTEXTO quando a PERGUNTA pedir mais de um assunto (uma frase por assunto), '
-    'por exemplo: O VLAN separa dominios de broadcast [1]. Nunca copie titulos, nomes de nota ou linhas de cabecalho. Nunca responda so com colchetes. '
+    'no formato "<fato da pergunta> [n]." (o numero do CONTEXTO, nunca um fato de exemplo). Nunca copie titulos, nomes de nota ou linhas de cabecalho. Nunca responda so com colchetes. '
     'Preserve numeros, nomes e termos tecnicos exatamente como aparecem.'
 )
 
@@ -77,7 +77,7 @@ def build_grounded_chat_messages(question: str, contexts: list[str]) -> list[dic
                 f'PERGUNTA:\n{question}\n\n'
                 'CONTEXTOS:\n'
                 + '\n\n'.join(contexts)
-                + "\n\nResponda curto e direto usando somente os CONTEXTOS. Lembrete: fale com quem pergunta usando voce (ex.: 'Voce estudou redes [1].'). Nao use eu nem verbos em primeira pessoa."
+                + "\n\nResponda curto e direto usando somente os CONTEXTOS. Lembrete: fale com quem pergunta usando voce, sem inventar sujeito, verbo ou fato que nao esteja nos CONTEXTOS. Nao use eu nem verbos em primeira pessoa."
             ),
         },
     ]
@@ -168,10 +168,10 @@ class OpenAICompatibleAnswerProvider:
             raise AnswerProviderError(_empty_answer_error_message(message, finish_reason))
         return answer
 
-    def answer(self, question: str, contexts: list[str]) -> str:
+    def answer(self, question: str, contexts: list[str], temperature: float | None = None) -> str:
         if not contexts:
             raise ValueError('Provider de resposta exige pelo menos um contexto citavel.')
-        return self.complete(build_grounded_chat_messages(question, contexts))
+        return self.complete(build_grounded_chat_messages(question, contexts), temperature=temperature)
 
     def answer_stream(self, question: str, contexts: list[str], on_delta: Callable[[str], None]) -> str:
         from escolio.providers.answer_stream import read_sse_answer  # evita ciclo
