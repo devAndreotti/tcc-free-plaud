@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { bridge, type ModelDiscoveryResult } from '../services/bridge';
+import MomentumRail from './MomentumRail';
 import { ProviderLogo } from './ProviderLogos';
 
 // Mesmas URLs de pipeline/src/escolio/providers/cloud_presets.py: a chave do preset vale quando a URL é a dele.
@@ -105,7 +106,7 @@ export const AiSourcesPane = ({ provider, baseUrl, keysConfigured, onUse, onKeyS
       </p>
 
       <h4 className="ai-sources__group">No seu computador</h4>
-      <div className="ai-sources__grid">
+      <MomentumRail className="ai-sources__rail" aria-label="Fontes de IA no seu computador">
         {LOCAL.map((source) => (
           <article key={source.id} className={`ai-card${isActive(source.id) ? ' ai-card--active' : ''}`}>
             <div className="ai-card__body">
@@ -129,14 +130,14 @@ export const AiSourcesPane = ({ provider, baseUrl, keysConfigured, onUse, onKeyS
             </div>
           </article>
         ))}
-      </div>
+      </MomentumRail>
 
       <h4 className="ai-sources__group">Na nuvem, com a sua chave</h4>
       <p className="ai-sources__note" role="note">
         Com um provedor na nuvem, a sua pergunta e os trechos recuperados vão para o serviço escolhido. As notas inteiras
         nunca saem, e a chave fica salva só neste computador.
       </p>
-      <div className="ai-sources__grid">
+      <MomentumRail className="ai-sources__rail" aria-label="Fontes de IA na nuvem">
         {CLOUD.map((cloud) => {
           const configured = Boolean(keysConfigured[cloud.id]);
           const open = openId === cloud.id;
@@ -224,7 +225,7 @@ export const AiSourcesPane = ({ provider, baseUrl, keysConfigured, onUse, onKeyS
             </article>
           );
         })}
-      </div>
+      </MomentumRail>
       <h4 className="ai-sources__group">Configuração manual</h4>
     </div>
   );

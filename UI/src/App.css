@@ -5254,7 +5254,10 @@
 .ai-sources__where--cloud { color: var(--warn); }
 .ai-sources__group { margin: 8px 0 0; font-size: 14px; font-weight: 600; color: var(--text-primary); }
 .ai-sources__note { margin: 0; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); background: color-mix(in srgb, var(--warn) 7%, transparent); font-size: 13px; line-height: 1.55; color: var(--text-primary); }
-.ai-sources__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+/* Uma linha com rolagem lateral, como os modelos de voz (MomentumRail: arrastar com inércia). */
+.ai-sources__rail { display: flex; gap: 12px; margin: 0 -16px; padding: 4px 16px 10px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.ai-sources__rail > .ai-card { flex: 0 0 280px; }
+.momentum-rail--dragging .ai-card { pointer-events: none; }
 .ai-card { display: flex; flex-direction: column; border-radius: var(--radius-lg); background: var(--bg-panel); border: 1px solid var(--border-color); overflow: hidden; }
 .ai-card--active { border-color: var(--series-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 18%, transparent); }
 .ai-card__body { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 16px; }
