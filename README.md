@@ -1,114 +1,248 @@
-# Escólio
+# 🧠 Escólio
 
-(antes chamado free-plaud)
+<p align="center">
+  <img alt="GitHub top language" src="https://img.shields.io/github/languages/top/devAndreotti/tcc-free-plaud?style=flat-square&labelColor=111827&color=22c55e">
+  <img alt="GitHub repo size" src="https://img.shields.io/github/repo-size/devAndreotti/tcc-free-plaud?style=flat-square&labelColor=111827&color=38bdf8">
+  <img alt="GitHub stars" src="https://img.shields.io/github/stars/devAndreotti/tcc-free-plaud?style=flat-square&labelColor=111827&color=f59e0b">
+  <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-eab308?style=flat-square&labelColor=111827">
+</p>
 
-Sistema desktop local-first para captura multimodal, estruturacao automatica em Markdown e recuperacao semantica de conhecimento pessoal em portugues brasileiro.
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776ab?style=flat-square&logo=python&logoColor=white">
+  <img alt="React" src="https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react&logoColor=111827">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white">
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-646cff?style=flat-square&logo=vite&logoColor=white">
+  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-FTS5-003B57?style=flat-square&logo=sqlite&logoColor=white">
+  <img alt="GitHub Actions" src="https://img.shields.io/badge/GitHub%20Actions-CI-2088FF?style=flat-square&logo=githubactions&logoColor=white">
+</p>
 
-## Status do Projeto
+<p align="left">
+  <strong>Transforme áudios, PDFs e anotações em conhecimento pesquisável, com resposta citada na fonte.</strong><br />
+  Sistema desktop local-first para captura, estruturação em Markdown e recuperação semântica de conhecimento pessoal em português brasileiro.
+</p>
 
-O projeto concluiu integralmente seu ciclo de desenvolvimento e validacao experimental (Sprints 00 a 09):
+![Banner do Escólio](./Banner.png)
 
-- **Core RAG Hibrido Operacional:** Persistencia dupla em SQLite FTS5 (BM25) e ChromaDB (vetorial) com fusao Reciprocal Rank Fusion (RRF, $k=60$) e citacoes estritas por span (`char_start`, `char_end`) e recusa quando a evidencia nao sustenta a resposta.
-- **Captura e Transcricao de Audio Local:** Ingestao direta de microfone com Voice Activity Detection (Silero VAD ONNX) e modelos locais Whisper (`faster-whisper`), com download assincrono e selecao de idioma/auto-deteccao pela UI.
-- **Compressao Vetorial TurboQuant:** Quantizacao escalar int8 em tempo de execucao, reduzindo consumo de memoria de embeddings densos em ~75%.
-- **Quad-Interface Unificada:** 4 interfaces funcionais compartilhando o mesmo runtime do corpus:
-  1. CLI Typer (`escolio.cli`, `es.ps1`)
-  2. Menu Terminal Numerado (Rich)
-  3. Textual TUI reativa (`escolio.tui.app`)
-  4. App Desktop Standalone (PyWebView + React 19 + TypeScript + Vite + Tailwind)
-- **Suite E2E & Ratchet de Cobertura:** Suíte completa de testes unitários e de integração com cobertura travada em **89.0%** no Quality Gate.
-- **Empacotamento Desktop Standalone:** Executavel Windows `.exe` standalone com Edge WebView2 gerado via PyInstaller.
+> Antes chamado **free-plaud**. O nome mudou, o objetivo continua o mesmo: guardar o que você aprendeu sem depender de disciplina manual para organizar.
 
-## Problema e Proposta
+---
 
-Profissionais e estudantes capturam informacao em audio, imagem, PDF e texto, mas perdem boa parte desse conhecimento porque transformar esse material em notas pesquisaveis exige disciplina manual alta demais.
+## Visão geral
 
-O `Escólio` implementa um pipeline privado e soberano que:
-1. Ingesta fontes textuais (PDF, TXT, MD), vaults Obsidian e gravacoes de audio do microfone.
-2. Estrutura o conteudo automaticamente em notas Markdown canonicas com frontmatter rico.
-3. Indexa e fatia em chunks com preservacao de offsets de caracteres para rastreabilidade de citacao.
-4. Recupera e responde a perguntas em pt-BR via fusao hibrida RRF com comprovacao de fonte obrigatoria (ou abstencao estruturada com `no_answer` quando a evidencia for insuficiente).
+**Escólio** é um pipeline privado que pega o material que você já produz e o transforma em notas que você consegue consultar depois.
 
-## Operacao Local Rapida
+O fluxo principal:
 
-A partir da raiz do projeto, use os comandos rapidos no PowerShell:
+1. **Captura** textos (`.txt`, `.md`, `.pdf`), vaults do Obsidian e gravações do microfone, com transcrição local via `faster-whisper`
+2. **Estruturação** do conteúdo em notas Markdown canônicas, com frontmatter
+3. **Indexação** em trechos (chunks) com offsets de caractere, gravados em SQLite FTS5 (BM25) e ChromaDB (vetorial)
+4. **Pergunta** respondida por busca híbrida com fusão RRF, sempre com a passagem de origem. Se não houver evidência suficiente, o sistema se abstém e não inventa resposta
 
-```powershell
-.\es.ps1 app      # Abre o App Desktop integrado (PyWebView + React 19)
-.\es.ps1 tui      # Abre a interface de terminal Textual
-.\es.ps1 menu     # Abre o menu interativo numerado no terminal
-.\es.ps1 doctor   # Executa diagnostico estruturado do ambiente local
-.\es.ps1 bench    # Executa a bateria de benchmark comparativo
-.\es.ps1 test     # Roda a suite de testes automatizados
-.\es.ps1 release  # Compila e gera o executavel standalone desktop (.exe e .zip)
+O foco é a rastreabilidade: cada resposta aponta para o trecho exato da nota que a sustenta.
+
+---
+
+## Demo
+
+<p align="center">
+  <img src="./demo.gif" alt="Demonstração do Escólio: banner, interface e pipeline" width="92%" />
+</p>
+
+<p align="center">
+  <img src="./photo.png" alt="Captura da interface do Escólio" width="92%" /><br />
+  <sub>Tela de perguntas: a resposta aponta para o trecho da nota que a sustenta.</sub>
+</p>
+
+---
+
+## Fluxo
+
+```mermaid
+flowchart LR
+    A["Áudio, PDF, MD e vault Obsidian"] --> B["Notas Markdown com frontmatter"]
+    B --> C["Chunks com offsets"]
+    C --> D["SQLite FTS5 (BM25)"]
+    C --> E["ChromaDB (vetorial)"]
+    D --> F["Fusão RRF"]
+    E --> F
+    F --> G["Resposta com citação ou abstenção"]
+
+    style A fill:#450a0a,color:#fff,stroke:#7f1d1d
+    style B fill:#7f1d1d,color:#fff,stroke:#7f1d1d
+    style C fill:#b91c1c,color:#fff,stroke:#7f1d1d
+    style D fill:#dc2626,color:#fff,stroke:#b91c1c
+    style E fill:#dc2626,color:#fff,stroke:#b91c1c
+    style F fill:#f97316,color:#111827,stroke:#ea580c
+    style G fill:#f59e0b,color:#111827,stroke:#d97706
+    linkStyle default stroke:#7f1d1d,stroke-width:2px
 ```
 
-No Linux / macOS / WSL (bash):
+---
+
+## Para quem é
+
+- Estudantes que acumulam aulas, PDFs e anotações e querem achar o que já estudaram
+- Profissionais que registram reuniões e atas e precisam consultar decisões antigas
+- Quem não quer enviar seus documentos para a nuvem por padrão
+- Quem estuda RAG local-first e quer um exemplo de pipeline com citação obrigatória e abstenção
+
+---
+
+## Stack
+
+- **Python 3.12 + uv** para o backend e o gerenciamento de dependências
+- **Typer** para a CLI e **Textual** para a interface de terminal (TUI)
+- **Pydantic** para configuração e contratos de dados
+- **SQLite FTS5** para busca lexical com BM25
+- **ChromaDB** para busca vetorial, com embedding padrão `chroma-default` e opcional `paraphrase-multilingual-MiniLM-L12-v2` via sentence-transformers
+- **faster-whisper** e **Silero VAD (ONNX)** para transcrição e detecção de voz
+- **React 19 + TypeScript + Vite** para a interface gráfica
+- **PyWebView** (Edge WebView2) para empacotar a interface como app desktop
+- **Vitest, Playwright e pytest** para testes; **Ruff** e **ESLint** para lint
+- **GitHub Actions** com quality gate, SonarCloud e release do `.exe` em tags `v*`
+
+---
+
+## Pré-requisitos
+
+*   [x] **Windows 10/11 com PowerShell** - o launcher `es.ps1` é o caminho principal (há `es` para Linux, macOS e WSL)
+*   [x] **Python 3.12** e **[uv](https://docs.astral.sh/uv/)** - gerenciam o ambiente do backend
+*   [x] **Node.js 22** e **npm** - compilam a interface React
+*   [x] **Microsoft Edge WebView2** - necessário para abrir o app desktop
+*   [ ] **Ollama** ou **LM Studio** (opcional) - para respostas com modelo local
+*   [ ] **Chave de API de um provedor compatível com OpenAI** (opcional) - só se você optar por esse provedor
+
+---
+
+## Configuração
+
+### 1. Dependências
+
+```powershell
+cd pipeline
+uv sync --extra cpu --extra audio
+cd ..\UI
+npm ci
+```
+
+Sem GPU NVIDIA, `--extra cpu` é o caminho certo. Para PyTorch com CUDA 12.8, use `--extra gpu-cu128` (os extras `cpu` e `gpu-cu128` são excludentes).
+
+### 2. Variáveis de ambiente
+
+Crie `pipeline/.env` (ele já está fora do Git). Todas as variáveis usam o prefixo `ESCOLIO_`. Valores antigos `FREE_PLAUD_*` continuam aceitos como fallback.
+
+| Variável | Descrição | Exemplo |
+|---|---|---|
+| `ESCOLIO_ANSWER_PROVIDER` | Quem escreve a resposta: `extractive` (padrão), `ollama`, `lmstudio` ou `openai-compatible` | `ollama` |
+| `ESCOLIO_ANSWER_MODEL` | Modelo usado pelo provedor escolhido | `qwen2.5:3b` |
+| `ESCOLIO_ANSWER_BASE_URL` | Endereço do provedor (opcional para Ollama e LM Studio) | `http://localhost:11434` |
+| `ESCOLIO_ANSWER_API_KEY` | Chave do provedor remoto (BYOK). Guarde só no `.env` local | `sua-chave` |
+| `ESCOLIO_EMBEDDING_MODEL` | `chroma-default` (padrão) ou `sentence-transformer:<modelo>` | `sentence-transformer:sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` |
+| `ESCOLIO_EMBEDDING_DEVICE` | Dispositivo do embedding: `cpu`, `cuda` ou `auto` | `cpu` |
+
+Sem nenhuma configuração, as respostas são **extrativas**: o texto sai das passagens encontradas, sem chamar modelo nenhum.
+
+### 3. Testar
+
+```powershell
+.\es.ps1 doctor
+.\es.ps1 test
+```
+
+`doctor` mostra o estado do ambiente (FTS5, modelo de embedding, provedor de resposta e áudio) antes de você indexar algo grande.
+
+---
+
+## Uso
+
+### Fluxo diário
+
+1. Abra o app com `.\es.ps1 app`
+2. Adicione a pasta ou os arquivos que quer consultar. Para indexar uma pasta pela linha de comando:
+   ```powershell
+   cd pipeline
+   uv run escolio corpus rebuild "D:\caminho\pasta" --recursive --yes
+   ```
+3. Faça a pergunta na aba de chat. A resposta traz as passagens de origem
+4. Se o sistema disser que não encontrou evidência, reformule a pergunta ou adicione a fonte que falta
+5. Para trabalhar no terminal, use `.\es.ps1 tui` ou `.\es.ps1 menu`
+
+### Exemplo
 
 ```bash
-./es app
-./es tui
-./es menu
-./es doctor
-./es bench
-./es test
-./es release
+cd pipeline
+uv run escolio corpus ask --question "Qual foi a decisão sobre o cache do catálogo?" --strategy hybrid --top-k 6
 ```
 
-Para desenvolvimento apenas do frontend com bridge mockada no navegador:
+### Gerar o executável
 
 ```powershell
-.\es.ps1 front
+.\es.ps1 release
 ```
 
-## Segredos e Provedores de Resposta
+O comando gera `UI/dist/AssistenteIA` e o pacote `AssistenteIA-windows-x64.zip` na raiz. A release automática no GitHub sai de uma tag `v*`.
 
-O `Escólio` foi desenhado para privacidade total:
-- **Embeddings e Transcricao de Voz:** 100% locais (Hugging Face, faster-whisper, Silero VAD, CUDA 12 ou CPU).
-- **Provedores de LLM para Resposta:** Apontam para provedores locais (Ollama, LM Studio) ou remotos compativeis com OpenAI.
+### O que fazer depois
 
-Chaves de API ficam salvas exclusivamente em `pipeline/.env` (fora do Git):
+- Conferir a [arquitetura do backend](./docs/arquitetura/Arquitetura_Backend.md) antes de mexer no pipeline de busca
+- Ler o [benchmark de recuperação reproduzido](./docs/experimentos/20_benchmark_recuperacao_reproduzido.md) e o [experimento de abstenção e faithfulness com IA local](./docs/experimentos/21_abstencao_e_faithfulness_com_ia.md) (o [experimento 15](./docs/experimentos/15_calibracao_rrf_tcc.md) não é reproduzível)
+- Acompanhar o histórico em [`Sprints/STATUS.md`](./Sprints/STATUS.md)
 
-```env
-ESCOLIO_ANSWER_API_KEY=sua-chave
-```
+---
 
-## Estrutura do Repositorio
+## Estrutura do projeto
 
 ```text
-Escólio/
-├── pipeline/src/escolio/   # Core do backend (Python 3.12 via uv)
-│   ├── app/                   # Configuracoes Pydantic, catalogo, doctor e audio service
-│   ├── ingest/                # Extratores PDF/TXT/MD, cleaner Obsidian, watcher e downloads
-│   ├── notes/                 # Estruturador canonico, normalizador pt-BR e repositorio
-│   ├── retrieval/             # Chunking por offsets, BM25 FTS5, vetorial e fusao RRF
-│   ├── providers/             # Adapters Whisper, Silero VAD, TurboQuant e LLMs
-│   ├── storage/               # SQLite FTS5 relacional e ChromaDB vetorial
-│   ├── corpus/                # CorpusRuntime unificado, ask engine e jobs de fila
-│   ├── benchmark/             # Avaliador experimental (MRR, Recall@k, latencia)
-│   └── tui/                   # Aplicacao reativa Textual (Ask, Notes, Benchmark, Settings)
-├── UI/                        # Frontend React 19 + TypeScript + PyWebView
-│   ├── src/components/        # Chat, Fila, Notes, Benchmark, Select, Modal de Settings
-│   ├── e2e/                   # Suite de testes Playwright end-to-end
-│   └── main.py                # Entrypoint desktop PyWebView (Edge WebView2)
-├── docs/                      # Especificacoes tecnicas, arquitetura, experimentos e monografia
-│   ├── spec-kit/              # Especificacoes e planos de execucao auditados
-│   ├── experimentos/          # Experimentos empiricos (15 calibracao RRF)
-│   └── tcc/                   # Monografia (docs/tcc/texto/TCC.md) e slides (docs/tcc/slides/)
-├── Sprints/                   # Historico documental detalhado (Sprints 00 a 09)
-├── es.ps1                     # Launcher canonico PowerShell
-└── es                         # Launcher bash para Unix/WSL
+tcc-free-plaud/
+├── pipeline/
+│   └── src/escolio/      # Backend Python 3.12
+│       ├── app/          # Configuração Pydantic, doctor e serviço de áudio
+│       ├── ingest/       # Extratores PDF/TXT/MD, cleaner do Obsidian, watcher e áudio
+│       ├── notes/        # Estruturação canônica e repositório de notas
+│       ├── retrieval/    # Chunking, BM25, busca vetorial e fusão RRF
+│       ├── providers/    # Whisper, Silero VAD, embeddings e provedores de resposta
+│       ├── storage/      # SQLite FTS5 e ChromaDB
+│       ├── corpus/       # Runtime do corpus, ask e jobs de indexação
+│       ├── benchmark/    # Avaliação experimental (MRR, Recall@k, latência)
+│       └── tui/          # Interface Textual
+├── UI/                   # Frontend React 19 + TypeScript + PyWebView
+│   ├── src/              # Componentes, contextos e serviços
+│   ├── e2e/              # Testes Playwright
+│   └── main.py           # Entrypoint do app desktop
+├── docs/                 # Arquitetura, experimentos, planejamento e monografia
+├── Sprints/              # Histórico das sprints
+├── scripts/              # Build do desktop e ferramentas da esteira
+├── .github/workflows/    # quality-gate.yml e desktop-release.yml
+├── es.ps1                # Launcher PowerShell
+├── es                    # Launcher bash (Linux, macOS, WSL)
+└── README.md
 ```
 
-## Documentacao Principal
+---
 
-- Monografia Academica do TCC: [`docs/tcc/texto/TCC.md`](docs/tcc/texto/TCC.md)
-- Slides da Apresentacao de Defesa: [`docs/tcc/slides/apresentacao_tcc.md`](docs/tcc/slides/apresentacao_tcc.md)
-- Arquitetura Geral do Sistema: [`docs/arquitetura/Arquitetura.md`](docs/arquitetura/Arquitetura.md)
-- Arquitetura de Backend: [`docs/arquitetura/Arquitetura_Backend.md`](docs/arquitetura/Arquitetura_Backend.md)
-- Arquitetura de Frontend: [`docs/arquitetura/Arquitetura_Frontend.md`](docs/arquitetura/Arquitetura_Frontend.md)
-- Stack Tecnologica e Bibliotecas: [`docs/arquitetura/TECNOLOGIAS_E_BIBLIOTECAS.md`](docs/arquitetura/TECNOLOGIAS_E_BIBLIOTECAS.md)
-- Experimento 15 (Calibracao RRF): [`docs/experimentos/15_calibracao_rrf_tcc.md`](docs/experimentos/15_calibracao_rrf_tcc.md)
-- Experimento 20 (Benchmark de recuperacao reproduzido, substitui o 15): [`docs/experimentos/20_benchmark_recuperacao_reproduzido.md`](docs/experimentos/20_benchmark_recuperacao_reproduzido.md)
-- Experimento 21 (Abstencao e faithfulness com IA local): [`docs/experimentos/21_abstencao_e_faithfulness_com_ia.md`](docs/experimentos/21_abstencao_e_faithfulness_com_ia.md)
-- Status das Sprints: [`Sprints/STATUS.md`](Sprints/STATUS.md)
+## Contribuindo
+
+Contribuições são bem-vindas!
+
+1. Faça um fork do repositório
+2. Crie uma branch: `git checkout -b feature/sua-feature`
+3. Rode `.\es.ps1 test` antes de commitar
+4. Commit suas alterações: `git commit -m "feat: minha contribuição"`
+5. Push da branch: `git push origin feature/sua-feature`
+6. Abra um Pull Request com um resumo das alterações
+
+Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `test:`, `chore:`.
+
+A esteira do PR roda Security audit, Lint, Tests & ratchet e Build & smoke, além de SonarCloud (informativo, não reprova o PR) e um relatório fixo no PR. O job de imagem Docker é pulado porque o projeto não tem Dockerfile.
+
+---
+
+## Licença
+
+Este projeto está sob a licença **MIT**. Veja o arquivo [LICENSE](./LICENSE) para detalhes.
+
+---
+
+<p align="center">
+  Desenvolvido com ☕ por <a href="https://github.com/devAndreotti">devAndreotti</a>
+</p>
