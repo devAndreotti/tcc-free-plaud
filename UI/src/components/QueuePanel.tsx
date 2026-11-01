@@ -6,234 +6,20 @@ import type { SettingsTab } from './SettingsModal';
 import { useQueueContext } from '../hooks/useQueueContext';
 import Dropzone, { type DropzoneToast } from './Dropzone';
 import ToastStack from './ToastStack';
-import JobFailures from './JobFailures';
 import IgnoredFiles from './IgnoredFiles';
+import QueueStage from './QueueStage';
 import { FolderIcon, LoaderIcon, PlayIcon } from './Icons';
 import { notifyCorpusChanged } from '../hooks/useCorpusHealth';
 
 interface QueuePanelProps {
   onOpenSettings?: (tab?: SettingsTab) => void;
+  /** Leva ao chat depois de indexar ("Perguntar à vault"). */
+  onAsk?: () => void;
 }
 
 const isActiveJob = (snapshot: IndexJobSnapshot | null) => snapshot?.status === 'running';
 
-const STEPS = [
-  { label: 'Descoberta', phases: ['discovering'] },
-  { label: 'Leitura', phases: ['loading', 'structuring'] },
-  { label: 'Modelo de busca semântica', phases: ['warmup', 'embedding'] },
-  { label: 'Gravação', phases: ['writing'] },
-  { label: 'Commit', phases: ['committed'] },
-];
-
-const STATUS: Record<string, { label: string; tone: string }> = {
-  running: { label: 'Em andamento', tone: 'accent' },
-  success: { label: 'Concluído', tone: 'ok' },
-  partial: { label: 'Parcial', tone: 'warn' },
-  failed: { label: 'Falhou', tone: 'err' },
-  cancelled: { label: 'Cancelado', tone: '' },
-};
-
-const num = (value: number, digits = 1) =>
-  value.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-
-const seconds = (ms: number) => `${num(ms / 1000)} s`;
-
-const clock = (iso: string | null | undefined) => {
-  if (!iso) return null;
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? null : date.toLocaleTimeString('pt-BR');
-};
-
-const stepIndex = (snapshot: IndexJobSnapshot) => {
-  const phase = snapshot.progress?.phase;
-  if (snapshot.status === 'success' || snapshot.status === 'partial' || phase === 'finished') return STEPS.length;
-  return STEPS.findIndex((step) => step.phases.includes(phase ?? ''));
-};
-
-const JobCard = ({ job, onCancel, busy, onOpenSettings, onIgnoredChanged }: {
-  job: IndexJobSnapshot;
-  onCancel: () => void;
-  busy: boolean;
-  onOpenSettings: QueuePanelProps['onOpenSettings'];
-  onIgnoredChanged: () => void;
-}) => {
-  const progress = job.progress;
-  const total = progress?.total_found ?? job.result?.total_found ?? 0;
-  const processed = progress?.processed_count ?? 0;
-  const percent = total > 0 ? Math.min(100, (processed / total) * 100) : 0;
-  const running = isActiveJob(job);
-  const status = STATUS[job.status] ?? { label: job.status, tone: '' };
-  const current = stepIndex(job);
-
-  const counts = [
-    { key: 'indexed', label: 'indexadas', value: progress?.indexed_count ?? job.result?.indexed_count ?? 0, color: 'var(--accent-blue)' },
-    { key: 'unchanged', label: 'inalteradas', value: progress?.unchanged_count ?? job.result?.unchanged_count ?? 0, color: 'color-mix(in srgb, var(--accent-blue-light) 38%, transparent)' },
-    { key: 'failed', label: 'com falha', value: progress?.failed_count ?? job.result?.failed_count ?? 0, color: 'var(--err)' },
-    { key: 'skipped', label: 'puladas', value: progress?.skipped_count ?? job.result?.skipped_count ?? 0, color: 'var(--text-muted)' },
-    { key: 'removed', label: 'removidas', value: job.result?.removed_count ?? 0, color: 'var(--text-muted)' },
-  ];
-
-  const timing = progress
-    ? [
-        { label: 'warmup', ms: progress.warmup_ms, color: 'var(--text-muted)' },
-        { label: 'modelo de busca semântica', ms: progress.embedding_ms, color: 'var(--accent-blue)' },
-        { label: 'gravação', ms: progress.writing_ms, color: 'color-mix(in srgb, var(--accent-blue) 55%, var(--text-muted))' },
-      ].filter((t) => t.ms > 0)
-    : [];
-  const timingTotal = timing.reduce((sum, t) => sum + t.ms, 0);
-  const started = clock(job.started_at);
-
-  return (
-    <article className="card job" aria-label="Job atual">
-      <div className="job__top">
-        <span className={`pill${status.tone ? ` pill--${status.tone}` : ''}`}>
-          <span className="pill__dot" />
-          {status.label}
-        </span>
-        <code className="job__path">{job.source_path}</code>
-        <span className="job__when">
-          {started && `iniciado ${started} · `}job <span className="mono">{job.job_id}</span>
-        </span>
-        {running && (
-          <button type="button" className="btn btn--sm job__cancel" onClick={onCancel} disabled={busy || job.cancel_requested}>
-            {job.cancel_requested ? 'Cancelando…' : 'Cancelar'}
-          </button>
-        )}
-      </div>
-
-      <ol className="job__steps" aria-label="Etapas">
-        {STEPS.map((step, i) => {
-          const state = stepState(i, current, running);
-          return (
-            <li key={step.label} className={`job__step job__step--${state}`} aria-current={state === 'active' ? 'step' : undefined}>
-              <span className="job__step-dot" aria-hidden="true" />
-              <b>{step.label}</b>
-              {state === 'active' && step.label === 'Modelo de busca semântica' && progress && progress.batch_total > 0 && (
-                <span className="mono">lote {progress.batch_index} de {progress.batch_total}</span>
-              )}
-              {state === 'done' && i === 0 && total > 0 && <span className="mono">{total} arquivos</span>}
-            </li>
-          );
-        })}
-      </ol>
-
-      <div className="job__progress">
-        <div className="job__big">
-          {processed.toLocaleString('pt-BR')}{' '}
-          <span>de {total.toLocaleString('pt-BR')} arquivos</span>
-        </div>
-        <span className="job__pct mono">{Math.round(percent)}%</span>
-      </div>
-      <div
-        className={`job__bar${running && percent === 0 ? ' job__bar--indeterminate' : ''}`}
-        role="progressbar"
-        aria-label="Progresso do job"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(percent)}
-      >
-        {total > 0 &&
-          counts.map((c) => (
-            <i key={c.key} style={{ width: `${(c.value / total) * 100}%`, background: c.color }} />
-          ))}
-      </div>
-      <div className="job__legend">
-        {counts.map((c) => (
-          <span key={c.key}>
-            <i style={{ background: c.color }} />
-            {c.label} <b className="mono">{c.value.toLocaleString('pt-BR')}</b>
-          </span>
-        ))}
-      </div>
-
-      {running && progress?.current_path && (
-        <div className="job__current mono">
-          <span className="msg__spinner" aria-hidden="true" />
-          {progress.current_path}
-        </div>
-      )}
-      {!running && (job.message || progress?.message) && <p className="job__message">{job.message ?? progress?.message}</p>}
-
-      <dl className="job__kpis">
-        <div>
-          <dt>Arquivos por segundo</dt>
-          <dd className="mono">{num(job.files_per_second)}</dd>
-        </div>
-        <div>
-          <dt>Trechos por segundo</dt>
-          <dd className="mono">{num(job.chunks_per_second)}</dd>
-        </div>
-        <div>
-          <dt>Tempo restante</dt>
-          <dd className="mono">{running && job.eta_seconds != null ? `~${job.eta_seconds} s` : '—'}</dd>
-        </div>
-        <div>
-          <dt>Modo de commit</dt>
-          <dd className="mono job__commit">
-            {commitModeText(progress)}
-          </dd>
-        </div>
-      </dl>
-
-      {timingTotal > 0 && (
-        <div className="job__timing">
-          <div className="job__timing-label">
-            <span>Tempo por etapa</span>
-            <span className="mono">{seconds(progress?.elapsed_ms ?? timingTotal)}</span>
-          </div>
-          <div className="job__tbar" role="img" aria-label={timing.map((t) => `${t.label} ${seconds(t.ms)}`).join(', ')}>
-            {timing.map((t) => (
-              <i key={t.label} style={{ width: `${(t.ms / timingTotal) * 100}%`, background: t.color }} />
-            ))}
-          </div>
-          <div className="job__legend">
-            {timing.map((t) => (
-              <span key={t.label}>
-                <i style={{ background: t.color }} />
-                {t.label} <b className="mono">{seconds(t.ms)}</b>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Falhas agrupadas pelo motivo, com abrir, tentar de novo e ignorar; novo job, lista nova. */}
-      <JobFailures
-        key={job.job_id}
-        errors={job.last_errors}
-        rootPath={job.source_path}
-        onOpenSettings={onOpenSettings}
-        onIgnoredChanged={onIgnoredChanged}
-      />
-    </article>
-  );
-};
-
-const stepState = (i: number, current: number, running: boolean) => {
-  if (i < current) return 'done';
-  return i === current && running ? 'active' : 'todo';
-};
-
-const commitModeText = (progress: IndexJobSnapshot['progress']) => {
-  if (!progress) return '—';
-  const { commit_mode_requested: requested, commit_mode_resolved: resolved } = progress;
-  if (requested === resolved || !resolved) return requested || '—';
-  return `${requested} → ${resolved}`;
-};
-
 const basename = (path: string) => path.split(/[\\/]/).findLast(Boolean) ?? path;
-
-const QueueIdle = ({ busy }: { busy: boolean }) => busy ? (
-  <div className="card queue__empty">
-    <div className="job__bar job__bar--indeterminate" role="status" aria-label="Preparando indexação" />
-    <p>Preparando o job de indexação…</p>
-  </div>
-) : (
-  <div className="card queue__empty">
-    <p><b>Nenhum job nesta sessão.</b></p>
-    <p>Escolha a pasta do vault e clique em Indexar. Notas que não mudaram desde a última vez são puladas pelo hash.</p>
-  </div>
-);
 
 const notesLabel = (count: number) => `${count} ${count === 1 ? 'nota' : 'notas'}`;
 
@@ -351,7 +137,7 @@ const CorpusRootsPanel = ({ roots, disabled, onReindex, onRemoved }: CorpusRoots
   );
 };
 
-const QueuePanel = ({ onOpenSettings }: QueuePanelProps) => {
+const QueuePanel = ({ onOpenSettings, onAsk }: QueuePanelProps) => {
   // Estado do job vive no QueueContext (acima deste componente), então
   // sobrevive à desmontagem de QueuePanel ao trocar de aba.
   const {
@@ -411,6 +197,8 @@ const QueuePanel = ({ onOpenSettings }: QueuePanelProps) => {
 
   // Fila da vault ativa: o título mostra o ícone e o nome dela.
   const active = useContext(VaultsContext)?.active ?? null;
+  // "Reindexar" do estado vazio: a pasta digitada ou a primeira do corpus.
+  const reindexTarget = folderPath || roots[0]?.root || '';
 
   return (
     <main className="main queue" id="queue-panel">
@@ -472,17 +260,19 @@ const QueuePanel = ({ onOpenSettings }: QueuePanelProps) => {
           onRemoved={() => setRootsVersion((version) => version + 1)}
         />
 
-        {job ? (
-          <JobCard
-            job={job}
-            onCancel={cancelJob}
-            busy={isBusy}
-            onOpenSettings={onOpenSettings}
-            onIgnoredChanged={() => setIgnoredVersion((version) => version + 1)}
-          />
-        ) : (
-          <QueueIdle busy={isBusy} />
-        )}
+        <QueueStage
+          job={job}
+          busy={isBusy}
+          vaultColor={active?.color}
+          canReindex={Boolean(reindexTarget)}
+          reindexLabel={reindexTarget ? `Reindexar ${basename(reindexTarget)}` : 'Reindexar'}
+          onReindex={() => reindexTarget && reindexRoot(reindexTarget)}
+          onChooseFolder={chooseFolder}
+          onCancel={cancelJob}
+          onAsk={onAsk}
+          onOpenSettings={onOpenSettings}
+          onIgnoredChanged={() => setIgnoredVersion((version) => version + 1)}
+        />
 
         <IgnoredFiles version={ignoredVersion} />
 

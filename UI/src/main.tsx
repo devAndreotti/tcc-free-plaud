@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import './appearance.css'
+import './components/ui/motion.css'
 import { applyTheme, readThemeChoice } from './theme'
 import { applyAppearance, readAppearance } from './appearance'
 

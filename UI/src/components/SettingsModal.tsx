@@ -1,5 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { readThemeChoice, saveThemeChoice, type ThemeChoice } from '../theme';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangleIcon,
@@ -8,11 +7,9 @@ import {
   ContrastIcon,
   DownloadIcon,
   MicIcon,
-  RefreshIcon,
   SlidersIcon,
   StarsIcon,
   VaultIcon,
-  XCircleIcon,
   XIcon,
 } from './Icons';
 import AppearanceFields from './AppearanceFields';
@@ -22,7 +19,11 @@ import VaultsTab from './VaultsTab';
 import { VaultGlyph } from './VaultGlyph';
 import { useVaults } from '../hooks/useVaults';
 import { AiSourcesPane } from './AiSourcesPane';
-import { checkLabel, groupChecks } from '../lib/doctorChecks';
+import { AdvancedLocked, AdvancedPane } from './AdvancedPane';
+import DoctorPanel from './DoctorPanel';
+import { Segmented, SectionHead, Stepper } from './ui/Controls';
+import { Glyph } from './ui/Glyph';
+import './settings-redesign.css';
 import {
   bridge,
   type BackendSettings,
@@ -80,8 +81,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: 'aparencia', label: 'Aparência' },
 ];
 
-// Avançado fica escondido: "Desbloquear avançado" libera a aba depois de alguns cliques, e a liberação fica gravada.
-const ADVANCED_UNLOCK_CLICKS = 5;
+// Avançado começa bloqueado: a aba explica o que tem dentro e libera depois da confirmação; a liberação fica gravada.
 const ADVANCED_UNLOCK_KEY = 'escolio.avancadoLiberado';
 
 function readAdvancedUnlocked(): boolean {
@@ -148,20 +148,13 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [voiceModels, setVoiceModels] = useState<VoiceModelInfo[]>([]);
   const [downloadJob, setDownloadJob] = useState<VoiceModelDownloadSnapshot | null>(null);
   const [downloadError, setDownloadError] = useState('');
-  const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice);
   const [advancedUnlocked, setAdvancedUnlocked] = useState(readAdvancedUnlocked);
-  const [advancedClicks, setAdvancedClicks] = useState(0);
-  // Sem a aba liberada, "Avançado" não aparece e nunca é o painel exibido.
-  const currentTab: SettingsTab = activeTab === 'avancado' && !advancedUnlocked ? 'geral' : activeTab;
+  const currentTab: SettingsTab = activeTab;
 
-  const handleAdvancedUnlockClick = () => {
-    if (advancedClicks + 1 < ADVANCED_UNLOCK_CLICKS) {
-      setAdvancedClicks(advancedClicks + 1);
-      return;
-    }
+  // Liberar o Avançado: a aba bloqueada explica o que tem dentro e o usuário confirma; fica gravado.
+  const handleUnlockAdvanced = () => {
     saveAdvancedUnlocked();
     setAdvancedUnlocked(true);
-    setAdvancedClicks(0);
   };
 
   // Esconde o Avançado de novo e apaga a liberação gravada.
@@ -172,9 +165,6 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
       // Sem storage não há liberação gravada para apagar.
     }
     setAdvancedUnlocked(false);
-    setAdvancedClicks(0);
-    // Sem isso, desbloquear de novo abriria direto a aba que ficou marcada como ativa.
-    if (activeTab === 'avancado') setActiveTab('geral');
   };
 
   const { active } = useVaults();
@@ -532,7 +522,14 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
         )}
       </div>
 
-      {options.length > 0 ? (
+      {options.length >= 2 && options.length <= 4 && !overrideOptions && options.every((option) => option.label.length <= 18 && !option.description) ? (
+        <Segmented
+          label={row.label}
+          value={draft}
+          options={options.map((option) => ({ value: option.value, label: option.label }))}
+          onChange={(value) => setSettingDrafts((prev) => ({ ...prev, [row.key]: value }))}
+        />
+      ) : options.length > 0 ? (
         <Select
           className="settings-control-wide"
           value={draft}
@@ -543,21 +540,27 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
           }
         />
       ) : row.value_type === 'bool' ? (
-        <Select
-          className="settings-control-wide"
-          value={settingDrafts[row.key] ?? 'false'}
-          options={[
-            { value: 'true', label: 'Sim' },
-            { value: 'false', label: 'Não' },
-          ]}
-          ariaLabel={row.label}
-          onChange={(value) =>
-            setSettingDrafts((prev) => ({ ...prev, [row.key]: value }))
-          }
+        <label className="switch settings-switch">
+          <input
+            type="checkbox"
+            checked={settingDrafts[row.key] === 'true'}
+            aria-label={row.label}
+            onChange={(event) => setSettingDrafts((prev) => ({ ...prev, [row.key]: event.target.checked ? 'true' : 'false' }))}
+          />
+          <span className="switch__track" aria-hidden="true" />
+          <span>{settingDrafts[row.key] === 'true' ? 'Sim' : 'Não'}</span>
+        </label>
+      ) : row.value_type === 'int' ? (
+        <Stepper
+          label={row.label}
+          value={settingDrafts[row.key] ?? ''}
+          min={row.min ?? 0}
+          max={row.max ?? undefined}
+          onChange={(value) => setSettingDrafts((prev) => ({ ...prev, [row.key]: value }))}
         />
       ) : (
         <input
-          type={row.value_type === 'int' || row.value_type === 'float' ? 'number' : 'text'}
+          type={row.value_type === 'float' ? 'number' : 'text'}
           className="vault-picker__input settings-control-wide"
           value={settingDrafts[row.key] ?? ''}
           placeholder={row.placeholder ?? ''}
@@ -578,7 +581,6 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   if (!isOpen) return null;
 
   const doctor = backendSettings?.doctor;
-  const doctorTotal = doctor ? doctor.ok_count + doctor.warning_count + doctor.error_count : 0;
   const audioRows = backendSettings?.settings_catalog.filter((row) => row.group === 'Áudio' && !row.secret) ?? [];
   const audioModelRow = audioRows.find((row) => row.key === 'audio_model') ?? null;
   const audioLanguageRow = audioRows.find((row) => row.key === 'audio_language') ?? null;
@@ -657,7 +659,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
         {/* Corpo do modal: navegação lateral + painel da aba ativa */}
         <div className="modal__body modal__body--settings">
           <nav className="settings-nav" aria-label="Categorias de configuração">
-            {SETTINGS_TABS.filter((tab) => tab.id !== 'avancado' || advancedUnlocked).map((tab) => (
+            {SETTINGS_TABS.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
@@ -673,121 +675,50 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                 {tab.id === 'geral' && (backendSettings?.doctor?.error_count ?? 0) > 0 && (
                   <span className="settings-nav__dot" aria-label="Diagnóstico com erro" />
                 )}
+                {tab.id === 'avancado' && !advancedUnlocked && (
+                  <span className="settings-nav__lock" aria-hidden="true">
+                    <Glyph name="lock" size={13} />
+                  </span>
+                )}
               </button>
             ))}
-            {!advancedUnlocked && (
-              <button type="button" className="settings-nav__item settings-nav__unlock" onClick={handleAdvancedUnlockClick}>
-                <span>
-                  {advancedClicks > 0
-                    ? `Desbloquear avançado (${advancedClicks}/${ADVANCED_UNLOCK_CLICKS})`
-                    : 'Desbloquear avançado'}
-                </span>
-              </button>
-            )}
-            {advancedUnlocked && (
-              <button type="button" className="settings-nav__item settings-nav__unlock" onClick={handleHideAdvanced}>
-                <span>Ocultar Avançado</span>
-              </button>
-            )}
           </nav>
 
           <div className="settings-panel">
-            {currentTab ==='geral' && (
-              <section className="settings-section" aria-labelledby="settings-doctor">
-                <h3 id="settings-doctor" className={`settings-section__title${active ? ' settings-section__title--vault' : ''}`}>
-                  {active ? (
-                    <>
-                      Diagnóstico da vault
-                      <VaultGlyph icon={active.icon} color={active.color} size={12} />
-                      <span>{active.name}</span>
-                    </>
-                  ) : (
-                    'Diagnóstico'
-                  )}
-                </h3>
-                {backendSettings && doctor ? (
-                  <>
-                    <div className={`doctor__summary doctor__summary--${doctor.status}`}>
-                      <span className="doctor__summary-icon" aria-hidden="true">
-                        {doctor.status === 'ok' ? (
-                          <CheckCircleIcon size={18} />
-                        ) : doctor.status === 'error' ? (
-                          <XCircleIcon size={18} />
-                        ) : (
-                          <AlertTriangleIcon size={18} />
-                        )}
-                      </span>
-                      <div>
-                        <b>
-                          {doctor.error_count > 0
-                            ? `${doctor.error_count} ${doctor.error_count === 1 ? 'verificação com erro' : 'verificações com erro'}`
-                            : doctor.warning_count > 0
-                              ? `${doctor.warning_count} ${doctor.warning_count === 1 ? 'aviso' : 'avisos'}`
-                              : 'Tudo certo'}
-                        </b>
-                        <span className="doctor__summary-meta">
-                          {doctorTotal} {doctorTotal === 1 ? 'verificação' : 'verificações'} · {doctor.latency_ms} ms
-                        </span>
-                      </div>
-                      <button type="button" className="btn" onClick={handleRerunDoctor} disabled={isRunningDoctor}>
-                        <RefreshIcon size={14} />
-                        {isRunningDoctor ? 'Verificando…' : 'Verificar de novo'}
-                      </button>
-                    </div>
-                    <dl className="doctor__stats">
-                      <div className="doctor__stat">
-                        <dt>Notas</dt>
-                        <dd className="mono">{backendSettings.notes_count.toLocaleString('pt-BR')}</dd>
-                      </div>
-                      <div className="doctor__stat">
-                        <dt>Trechos no SQLite</dt>
-                        <dd className="mono">{backendSettings.sqlite_chunks_count.toLocaleString('pt-BR')}</dd>
-                      </div>
-                      <div className="doctor__stat">
-                        <dt>Vetores no Chroma</dt>
-                        <dd className="mono">{backendSettings.vector_chunks_count.toLocaleString('pt-BR')}</dd>
-                      </div>
-                    </dl>
-                    {groupChecks(doctor.checks).map((group) => (
-                      <Fragment key={group.id}>
-                        <h4 className="doctor__group">{group.title}</h4>
-                        <ul className="doctor__checks">
-                          {group.checks.map((check) => (
-                            <li key={check.code} className={`doctor__check doctor__check--${check.status}`}>
-                              {check.status === 'ok' ? <CheckCircleIcon size={15} /> : check.status === 'warning' ? <AlertTriangleIcon size={15} /> : <XCircleIcon size={15} />}
-                              <div>
-                                <span className="doctor__label">{checkLabel(check.code)}</span>
-                                <span className="doctor__msg">{check.message}</span>
-                                {check.action && check.status !== 'ok' && <span className="doctor__action">{check.action}</span>}
-                              </div>
-                              <span className="doctor__meta mono">
-                                {check.latency_ms != null && check.latency_ms >= 100 ? `${check.code} · ${check.latency_ms} ms` : check.code}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </Fragment>
-                    ))}
-                  </>
-                ) : (
+            {currentTab === 'geral' &&
+              (backendSettings && doctor ? (
+                <DoctorPanel
+                  title={
+                    active ? (
+                      <>
+                        Diagnóstico da vault
+                        <VaultGlyph icon={active.icon} color={active.color} size={12} />
+                        <span>{active.name}</span>
+                      </>
+                    ) : (
+                      'Diagnóstico'
+                    )
+                  }
+                  doctor={doctor}
+                  stats={{ notes: backendSettings.notes_count, sqlite: backendSettings.sqlite_chunks_count, vectors: backendSettings.vector_chunks_count }}
+                  running={isRunningDoctor}
+                  onRerun={handleRerunDoctor}
+                />
+              ) : (
+                <section className="settings-section" aria-labelledby="settings-doctor">
+                  <SectionHead icon="pulse" id="settings-doctor" title="Diagnóstico" lede="Confere índice, IA e voz da vault ativa." />
                   <div className="settings-item settings-item--stacked" aria-label="Carregando diagnóstico">
                     <div className="skeleton-box skeleton-box--path" />
                     <div className="skeleton-box skeleton-box--meta" />
                   </div>
-                )}
-              </section>
-            )}
+                </section>
+              ))}
 
             {currentTab ==='vaults' && <VaultsTab onOpenQueue={() => onOpenQueue?.()} />}
 
             {currentTab ==='ia' && (
               <section className="settings-section" aria-labelledby="settings-ai">
-                <h3 id="settings-ai" className="settings-section__title">
-                  Fontes de IA
-                </h3>
-                <p className="settings-section__lede">
-                  Quem escreve a resposta a partir dos trechos das suas notas. A busca e a transcrição ficam sempre no seu computador.
-                </p>
+                <SectionHead icon="stars" id="settings-ai" title="Fontes de IA" lede="Quem escreve a resposta a partir dos trechos das suas notas. A busca e a transcrição ficam sempre no seu computador." />
 
                 <AiSourcesPane
                   provider={draftProvider}
@@ -812,7 +743,9 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   })}
 
                 {isGenerative ? (
-                    <div className="settings-item settings-item--stacked">
+                    <div
+                      className={`settings-item settings-item--stacked conn-card${isTestingProvider || isListingModels ? ' conn-card--testing' : discovered?.status === 'ok' ? ' conn-card--ok' : discovered ? ' conn-card--offline' : ''}`}
+                    >
                     <div className="settings-item__info">
                       <span className="settings-item__label">{needsApiKey ? 'API key' : 'Conexão'}</span>
                       <span className="settings-item__description">
@@ -822,6 +755,14 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                       </span>
                     </div>
 
+                    <svg key={discovered ? `${discovered.status}-${discovered.latency_ms}` : 'idle'} className="conn-art" viewBox="0 0 300 56" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <g className="conn-art__pc"><rect x="18" y="6" width="52" height="32" rx="5" /><path d="M34 50h20M44 38v12" /></g>
+                      <path className="conn-art__line" d="M80 22H220" />
+                      <circle className="conn-art__probe" cx="80" cy="22" r="4" />
+                      <g className="conn-art__x"><circle cx="150" cy="22" r="11" /><path d="M145 17l10 10M155 17l-10 10" /></g>
+                      <g className="conn-art__ok"><circle cx="150" cy="22" r="11" /><path d="M145 22l3.5 3.5L155 18" /></g>
+                      <g className="conn-art__srv"><rect x="230" y="4" width="52" height="16" rx="4" /><rect x="230" y="24" width="52" height="16" rx="4" /><path d="M238 12h.01M238 32h.01" /></g>
+                    </svg>
                     <div className="vault-picker" role="group" aria-label={needsApiKey ? 'Salvar API key local' : `Conexão com o ${providerLabel}`}>
                       {needsApiKey && (
                         <>
@@ -905,10 +846,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
 
             {currentTab ==='voz' && (
               <section className="settings-section" aria-labelledby="settings-voz">
-                <h3 id="settings-voz" className="settings-section__title">
-                  Voz
-                </h3>
-                <p className="settings-section__lede">Transcrição local da pergunta falada: nada sai do seu computador.</p>
+                <SectionHead icon="mic" id="settings-voz" title="Voz" lede="Transcrição local da pergunta falada: nada sai do seu computador." />
 
                 <div className="settings-item settings-item--stacked">
                   <div className="settings-item__info">
@@ -988,8 +926,10 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   )}
                 </div>
 
-                {audioLanguageRow && renderSettingRow(audioLanguageRow, audioLanguageOptions)}
-                {otherAudioRows.map((row) => renderSettingRow(row))}
+                <div className="ui-grid voz-grid">
+                  {audioLanguageRow && renderSettingRow(audioLanguageRow, audioLanguageOptions)}
+                  {otherAudioRows.map((row) => renderSettingRow(row))}
+                </div>
 
                 {vadModel && (
                   <div className="settings-item settings-item--stacked">
@@ -1003,94 +943,35 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
               </section>
             )}
 
-            {currentTab ==='avancado' && (
-              <>
-                <section className="settings-section" aria-labelledby="settings-presets">
-                  <h3 id="settings-presets" className="settings-section__title">
-                    Presets
-                  </h3>
-                  <p className="settings-section__lede">Combinações prontas de busca e indexação. Aplicar grava na hora.</p>
-                  {backendSettings?.settings_presets.map((preset) => (
-                    <div key={preset.key} className="settings-item settings-item--stacked">
-                      <div className="settings-item__info">
-                        <span className="settings-item__label">{preset.label}</span>
-                        <span className="settings-item__description">{preset.description}</span>
-                        <dl className="preset__values">
-                          {Object.entries(preset.values).filter(([key]) => !DESKTOP_HIDDEN_KEYS.includes(key)).map(([key, value]) => (
-                            <div key={key}>
-                              <dt>{catalogLabel(key)}</dt>
-                              <dd className="mono">{String(value)}</dd>
-                            </div>
-                          ))}
-                        </dl>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn--sm preset__apply"
-                        onClick={() => handleApplyPreset(preset.key)}
-                        disabled={Boolean(applyingPreset) || pendingChanges > 0}
-                        title={pendingChanges > 0 ? 'Salve ou descarte antes de aplicar' : undefined}
-                        aria-label={`Aplicar preset ${preset.label}`}
-                      >
-                        {applyingPreset === preset.key ? 'Aplicando…' : 'Aplicar'}
-                      </button>
-                    </div>
-                  ))}
-                </section>
-
-                <div className="settings-divider" aria-hidden="true" />
-
-                <section className="settings-section" aria-labelledby="settings-advanced">
-                  <h3 id="settings-advanced" className="settings-section__title">
-                    Avançado
-                  </h3>
-                  <p className="settings-section__lede">Ajustes finos de busca, trechos e indexação. Mude só se souber o efeito.</p>
-                  {advancedRows.map((row) => renderSettingRow(row))}
-                </section>
-              </>
-            )}
+            {currentTab === 'avancado' &&
+              (advancedUnlocked ? (
+                <AdvancedPane
+                  presets={backendSettings?.settings_presets ?? []}
+                  rows={advancedRows}
+                  catalog={backendSettings?.settings_catalog ?? []}
+                  hiddenKeys={DESKTOP_HIDDEN_KEYS}
+                  applyingPreset={applyingPreset}
+                  pendingChanges={pendingChanges}
+                  catalogLabel={catalogLabel}
+                  renderRow={(row) => renderSettingRow(row)}
+                  onApplyPreset={(key) => void handleApplyPreset(key)}
+                  onHide={handleHideAdvanced}
+                />
+              ) : (
+                <AdvancedLocked onUnlock={handleUnlockAdvanced} />
+              ))}
 
             {currentTab ==='aparencia' && (
               <>
                 <section className="settings-section" aria-labelledby="settings-appearance">
-                  <h3 id="settings-appearance" className="settings-section__title">
-                    Aparência
-                  </h3>
-
-                  <div className="settings-item">
-                    <div className="settings-item__info">
-                      <span className="settings-item__label">Tema</span>
-                      <span className="settings-item__description">
-                        Aparência visual do aplicativo
-                      </span>
-                    </div>
-                    <div className="settings-item__control">
-                      <Select
-                        id="select-theme"
-                        value={theme}
-                        onChange={(value) => {
-                          const choice = value as ThemeChoice;
-                          setTheme(choice);
-                          saveThemeChoice(choice);
-                        }}
-                        ariaLabel="Selecionar tema"
-                        options={[
-                          { value: 'dark', label: 'Escuro' },
-                          { value: 'light', label: 'Claro' },
-                          { value: 'system', label: 'Seguir o sistema' },
-                        ]}
-                      />
-                    </div>
-                  </div>
+                  <SectionHead icon="contrast" id="settings-appearance" title="Aparência" lede="Tema, cor, letra e movimento. Vale na hora, só neste computador." />
                   <AppearanceFields />
                 </section>
 
                 <div className="settings-divider" aria-hidden="true" />
 
                 <section className="settings-section" aria-labelledby="settings-about">
-                  <h3 id="settings-about" className="settings-section__title">
-                    Sobre
-                  </h3>
+                  <SectionHead icon="info" id="settings-about" title="Sobre" />
 
                   <div className="settings-item">
                     <div className="settings-item__info">

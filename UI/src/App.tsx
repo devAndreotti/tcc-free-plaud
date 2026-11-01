@@ -522,7 +522,7 @@ function AppContent() {
 
             {workspaceView === 'benchmark' && <BenchmarkPanel />}
 
-            {workspaceView === 'queue' && <QueuePanel onOpenSettings={openSettings} />}
+            {workspaceView === 'queue' && <QueuePanel onOpenSettings={openSettings} onAsk={() => navigate('chat')} />}
 
             {workspaceView === 'chat' && activeTab?.type === 'chat' && (
               <main

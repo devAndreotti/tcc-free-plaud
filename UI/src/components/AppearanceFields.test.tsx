@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import AppearanceFields from './AppearanceFields';
@@ -27,17 +27,28 @@ describe('AppearanceFields', () => {
     expect(readAppearance().accent).toBe('amber');
   });
 
-  it('troca tamanho do texto e densidade pelos selects', async () => {
+  it('troca tamanho do texto, densidade e tema pelos controles com indicador e miniaturas', async () => {
     const user = userEvent.setup();
     render(<AppearanceFields />);
 
-    await user.click(screen.getByRole('combobox', { name: 'Tamanho do texto' }));
-    await user.click(screen.getByRole('option', { name: '125%' }));
-    await user.click(screen.getByRole('combobox', { name: 'Densidade' }));
-    await user.click(screen.getByRole('option', { name: 'Compacta' }));
+    const size = screen.getByRole('radiogroup', { name: 'Tamanho do texto' });
+    await user.click(within(size).getByRole('radio', { name: '125%' }));
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Densidade' })).getByRole('radio', { name: 'Compacta' }));
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Tema' })).getByRole('radio', { name: 'Claro' }));
 
-    expect(screen.getByRole('combobox', { name: 'Tamanho do texto' }).textContent).toContain('125%');
-    expect(document.documentElement.dataset).toMatchObject({ textSize: '125', density: 'compact' });
+    expect(within(size).getByRole('radio', { name: '125%' }).getAttribute('aria-checked')).toBe('true');
+    expect(size.style.getPropertyValue('--i')).toBe('3');
+    expect(document.documentElement.dataset).toMatchObject({ textSize: '125', density: 'compact', theme: 'light' });
     expect(readAppearance()).toMatchObject({ textSize: '125', density: 'compact', accent: 'violet' });
+  });
+
+  it('Reduzir animações diz o que vale agora e grava a escolha', async () => {
+    const user = userEvent.setup();
+    render(<AppearanceFields />);
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Reduzir animações' })).getByRole('radio', { name: 'Sempre' }));
+
+    expect(screen.getByRole('status').textContent).toContain('Animações desligadas em todo o app.');
+    expect(document.documentElement.dataset.motion).toBe('always');
   });
 });

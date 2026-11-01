@@ -1,0 +1,216 @@
+/* Movimento e peças comuns do redesenho (canvas "Configurações — Escólio").
+   "Reduzir animações" já vale aqui: a regra global do index.css zera animações e transições
+   quando o sistema pede (salvo data-motion="never") ou quando a Aparência força (data-motion="always"). */
+
+.glyph-badge {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  color: var(--accent-blue-light);
+  background: var(--accent-soft);
+  transition: background-color 0.35s, color 0.35s;
+}
+.glyph-badge--ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.glyph-badge--err { color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }
+.glyph-badge--muted { color: var(--text-secondary); background: var(--bg-surface-hover); }
+
+/* Entrada em sequência: style={{ animationDelay }} escalona os cartões. */
+.rise { animation: ui-rise 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+@keyframes ui-rise { from { opacity: 0; transform: translateY(10px); } }
+
+.lift { transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s; }
+.lift:hover { border-color: color-mix(in srgb, var(--text-muted) 45%, var(--border-color)); transform: translateY(-2px); }
+
+.pop { animation: ui-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.25) both; }
+@keyframes ui-pop { from { opacity: 0; transform: translateY(8px) scale(0.96); } }
+
+/* Número que dá um pulinho: troque a key do elemento a cada valor novo. */
+.bump { display: inline-block; animation: ui-bump 0.32s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes ui-bump { from { opacity: 0.25; transform: translateY(-7px); } }
+
+.shake { animation: ui-shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+@keyframes ui-shake { 20%, 80% { transform: translateX(-3px); } 40%, 60% { transform: translateX(5px); } }
+
+.ui-spin { animation: ui-spin 1s linear infinite; }
+.ui-spin--slow { animation-duration: 2.2s; }
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+
+.ui-pulse { animation: ui-pulse 1.4s ease-in-out infinite; }
+@keyframes ui-pulse { 50% { opacity: 0.35; transform: scale(0.7); } }
+
+.ui-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid currentColor;
+  animation: ui-ringout 0.9s ease-out both;
+  pointer-events: none;
+}
+.ui-ring--late { animation-delay: 0.18s; }
+@keyframes ui-ringout { from { opacity: 0.75; transform: scale(1); } to { opacity: 0; transform: scale(1.8); } }
+
+/* Listras andando numa barra de progresso. */
+.ui-stripes {
+  background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 16%) 0 6px, transparent 6px 11px);
+  background-size: 22px 100%;
+  animation: ui-stripes 0.9s linear infinite;
+}
+@keyframes ui-stripes { to { background-position: 22px 0; } }
+
+/* Trilho tracejado que corre (etapa em andamento). */
+.ui-flow {
+  background-image: repeating-linear-gradient(90deg, var(--accent-blue-light) 0 7px, transparent 7px 14px);
+  background-size: 14px 100%;
+  animation: ui-flow 0.7s linear infinite;
+}
+@keyframes ui-flow { to { background-position: 28px 0; } }
+
+/* Região que abre e fecha com altura animada (grid 0fr ↔ 1fr). */
+.ui-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.6s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.4s ease;
+}
+.ui-collapse--open { grid-template-rows: 1fr; opacity: 1; }
+.ui-collapse > * { overflow: hidden; min-height: 0; }
+
+/* Seletor segmentado com indicador que desliza. --n = opções, --i = escolhida. */
+.ui-seg {
+  position: relative;
+  display: inline-grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  padding: 3px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+}
+.ui-seg__ind {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--n));
+  border-radius: 7px;
+  background: var(--accent-soft);
+  transform: translateX(calc(var(--i) * 100%));
+  transition: transform 0.34s cubic-bezier(0.3, 1.25, 0.4, 1), background-color 0.35s;
+}
+.ui-seg__opt {
+  position: relative;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 600 12.5px var(--font-family);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.22s;
+}
+.ui-seg__opt[aria-checked='true'] { color: var(--accent-blue-light); }
+.ui-seg__opt:disabled { cursor: not-allowed; opacity: 0.5; }
+
+/* Cartão selecionável (provedor, modelo, tema, fonte, densidade). */
+.ui-tile {
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  transition: border-color 0.25s, box-shadow 0.3s, background-color 0.25s, color 0.25s, transform 0.15s;
+}
+.ui-tile:hover { border-color: color-mix(in srgb, var(--text-muted) 45%, var(--border-color)); }
+.ui-tile[aria-checked='true'],
+.ui-tile--on {
+  border-color: var(--accent-blue-light);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue-light) 16%, transparent);
+  background: color-mix(in srgb, var(--accent-blue-light) 7%, transparent);
+  color: var(--text-primary);
+}
+.ui-tile:active,
+.ui-press:active { transform: scale(0.97); }
+
+/* Número com − e + (o valor dá um pulinho a cada mudança). */
+.ui-stepper {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+.ui-stepper button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.2s, background-color 0.2s;
+}
+.ui-stepper button:hover:not(:disabled) { color: var(--text-primary); background: var(--bg-surface-hover); }
+.ui-stepper button:disabled { opacity: 0.4; cursor: not-allowed; }
+.ui-stepper input {
+  width: 64px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: 500 13px var(--font-mono, ui-monospace, monospace);
+  text-align: center;
+  outline: none;
+  -moz-appearance: textfield;
+}
+.ui-stepper input::-webkit-outer-spin-button,
+.ui-stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ui-stepper__unit { padding-right: 2px; font-size: 11.5px; color: var(--text-muted); }
+
+/* Cabeçalho de seção com ícone. */
+.ui-head { display: flex; align-items: center; gap: 14px; }
+.ui-head__text { flex: 1; min-width: 0; }
+.ui-head__title { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-primary); }
+.ui-head__lede { margin: 2px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+
+/* Cartão de grupo com cabeçalho de ícone. */
+.ui-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-panel);
+}
+.ui-card__head { display: flex; align-items: center; gap: 12px; padding-bottom: 10px; }
+.ui-card__titles { flex: 1; min-width: 0; }
+.ui-card__title { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.ui-card__desc { margin: 1px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); }
+.ui-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; align-items: stretch; }
+
+/* Pulinho do Stepper: duas classes iguais alternadas reiniciam a animação sem recriar o campo. */
+.bump-a { animation: ui-bump-a 0.32s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.bump-b { animation: ui-bump-b 0.32s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes ui-bump-a { from { opacity: 0.25; transform: translateY(-7px); } }
+@keyframes ui-bump-b { from { opacity: 0.25; transform: translateY(-7px); } }
+
+/* Chave com quique. */
+.switch .switch__track::after { transition: transform 0.32s cubic-bezier(0.3, 1.6, 0.5, 1), background-color 0.25s; }
+
+/* Demais telas (Notas, Fila, Benchmark): cartões entram em sequência; botões respondem ao toque. */
+.main .page-scroll > .card,
+.main .page-scroll > section,
+.bench .card,
+.notes .card {
+  animation: ui-rise 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.main .page-scroll > :nth-child(2) { animation-delay: 50ms; }
+.main .page-scroll > :nth-child(3) { animation-delay: 100ms; }
+.main .page-scroll > :nth-child(4) { animation-delay: 150ms; }
+.main .page-scroll > :nth-child(n + 5) { animation-delay: 200ms; }
+.page-head h1 { animation: ui-rise 0.45s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+.btn:not(:disabled):active { transform: scale(0.97); }
+.btn:not(:disabled):hover { filter: brightness(1.08); }
+.btn { transition: transform 0.12s, filter 0.2s, background-color 0.25s, border-color 0.25s, color 0.2s, opacity 0.2s; }

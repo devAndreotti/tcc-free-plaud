@@ -109,12 +109,12 @@ const notasList = {
 // O modal lê a vault ativa pelo VaultsProvider, como no app.
 const renderModal = (ui: React.ReactNode) => render(<VaultsProvider>{ui}</VaultsProvider>);
 
-// Avançado começa escondido: 5 cliques em "Desbloquear avançado" liberam a aba.
+// Avançado começa bloqueado: abrir a aba, confirmar que entende o efeito e mostrar os ajustes.
 const abrirAvancado = async (user: ReturnType<typeof userEvent.setup>) => {
-  for (let clique = 0; clique < 5; clique += 1) {
-    await user.click(screen.getByRole('button', { name: /Desbloquear avançado/ }));
-  }
   await user.click(screen.getByRole('button', { name: 'Avançado' }));
+  await user.click(screen.getByRole('checkbox', { name: /Entendo que estes ajustes/ }));
+  await user.click(screen.getByRole('button', { name: 'Mostrar ajustes avançados' }));
+  await screen.findByRole('button', { name: 'Ocultar Avançado' }, { timeout: 3000 });
 };
 
 describe('SettingsModal: chave de API, remoção e rótulos do catálogo', () => {

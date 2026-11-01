@@ -55,6 +55,14 @@ class CorpusIndexBatchResult(BaseModel):
     skipped: list[CorpusSkippedPath] = Field(default_factory=list)
 
 
+class CorpusRecentFile(BaseModel):
+    """Um arquivo que a indexacao acabou de processar (lista "Agora" da Fila)."""
+
+    source_path: str
+    status: Literal['success', 'failed', 'cancelled', 'unchanged']
+    chunks: int = 0
+
+
 class CorpusIndexProgress(BaseModel):
     """Evento de progresso da indexacao de corpus."""
 
@@ -87,6 +95,7 @@ class CorpusIndexProgress(BaseModel):
     batch_index: int = 0
     batch_total: int = 0
     message: str | None = None
+    recent_files: list[CorpusRecentFile] = Field(default_factory=list)
 
 
 class CorpusStatusResult(BaseModel):

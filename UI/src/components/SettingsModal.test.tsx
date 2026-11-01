@@ -674,7 +674,7 @@ describe('SettingsModal', () => {
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
     bridgeMock.getBackendSettings.mockResolvedValue({
       ...backendSettings,
-      settings_presets: [{ key: 'cpu_rapido', label: 'CPU rápido', description: 'Busca local sem GPU.', values: { default_ask_strategy: 'lexical' } }],
+      settings_presets: [{ key: 'cpu_rapido', label: 'CPU rápido', description: 'Busca local sem GPU.', values: { default_ask_strategy: 'vector' } }],
     });
 
     renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
@@ -752,20 +752,36 @@ describe('SettingsModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('Ocultar Avançado tira a aba e a liberação gravada; desbloquear de novo não abre a aba sozinha', async () => {
+  it('Ocultar Avançado bloqueia a aba de novo e apaga a liberação; liberar pede a confirmação outra vez', async () => {
     const user = userEvent.setup();
     window.localStorage.setItem('escolio.avancadoLiberado', '1');
     renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="avancado" />);
 
     await user.click(await screen.findByRole('button', { name: 'Ocultar Avançado' }));
 
-    expect(screen.queryByRole('button', { name: 'Avançado' })).toBeNull();
     expect(window.localStorage.getItem('escolio.avancadoLiberado')).toBeNull();
-    expect(screen.getByRole('button', { name: /Geral/ }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('button', { name: 'Avançado' }).getAttribute('aria-current')).toBe('page');
+    const mostrar = screen.getByRole('button', { name: 'Mostrar ajustes avançados' });
+    expect(mostrar.hasAttribute('disabled')).toBe(true);
 
-    for (let i = 0; i < 5; i += 1) {
-      await user.click(screen.getByRole('button', { name: /Desbloquear avançado/ }));
-    }
-    expect(screen.getByRole('button', { name: /Geral/ }).getAttribute('aria-current')).toBe('page');
+    await user.click(screen.getByRole('checkbox', { name: /Entendo que estes ajustes/ }));
+    await user.click(mostrar);
+
+    expect(await screen.findByRole('button', { name: 'Ocultar Avançado' }, { timeout: 3000 })).toBeTruthy();
+    expect(window.localStorage.getItem('escolio.avancadoLiberado')).toBe('1');
+  });
+
+  it('preset com os mesmos valores já salvos aparece como Em uso, sem botão de aplicar', async () => {
+    window.localStorage.setItem('escolio.avancadoLiberado', '1');
+    const model = backendSettings.settings_catalog.find((row) => row.key === 'answer_model');
+    bridgeMock.getBackendSettings.mockResolvedValue({
+      ...backendSettings,
+      settings_presets: [{ key: 'tcc', label: 'TCC reprodutível', description: 'Igual ao salvo.', values: { answer_model: String(model?.value) } }],
+    });
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="avancado" />);
+
+    const card = await screen.findByRole('article', { name: 'TCC reprodutível' });
+    expect(within(card).getByText('Em uso')).toBeTruthy();
+    expect(within(card).queryByRole('button', { name: 'Aplicar preset TCC reprodutível' })).toBeNull();
   });
 });
