@@ -488,6 +488,27 @@ def test_index_corpus_path_emits_progress_events_for_directory(tmp_path: Path) -
     assert events[-1].skipped_count == 1
 
 
+def test_progress_events_carry_the_files_just_processed(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    for name in ('a.md', 'b.md', 'c.md'):
+        (root / name).write_text(f'# {name}\n\nTexto de {name}.\n', encoding='utf-8')
+    events = []
+
+    index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), progress=events.append)
+
+    assert events[0].recent_files == []
+    recent = events[-1].recent_files
+    assert sorted(Path(item.source_path).name for item in recent) == ['a.md', 'b.md', 'c.md']
+    assert all(item.status == 'success' and item.chunks > 0 for item in recent)
+
+    events.clear()
+    index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), progress=events.append)
+
+    assert {item.status for item in events[-1].recent_files} == {'unchanged'}
+
+
 def test_index_corpus_path_honors_cancel_token_before_processing(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     source = tmp_path / 'cancelavel.md'

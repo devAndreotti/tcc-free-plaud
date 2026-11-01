@@ -8,12 +8,32 @@ from escolio.corpus.models import (
     CorpusIndexBatchResult,
     CorpusIndexProgress,
     CorpusIndexResult,
+    CorpusRecentFile,
     ResolvedCorpusCommitMode,
 )
 from escolio.ingest.loaders import PDF_PARSE_FAILED
 from escolio.storage.vector import LocalVectorStore
 
 ProgressCallback = Callable[[CorpusIndexProgress], None]
+RECENT_FILES = 8
+
+
+def with_recent_files(progress: ProgressCallback | None, results: list[CorpusIndexResult]) -> ProgressCallback | None:
+    """Anexa a cada evento os últimos arquivos já processados, o mais novo primeiro.
+
+    A lista `results` é lida na hora de cada evento, então acompanha o que o indexador acrescenta nela.
+    """
+    if progress is None:
+        return None
+
+    def emit(event: CorpusIndexProgress) -> None:
+        recent = [
+            CorpusRecentFile(source_path=item.source_path, status=item.status, chunks=item.chunks_indexed)
+            for item in reversed(results[-RECENT_FILES:])
+        ]
+        progress(event.model_copy(update={'recent_files': recent}))
+
+    return emit
 
 
 def emit_progress(

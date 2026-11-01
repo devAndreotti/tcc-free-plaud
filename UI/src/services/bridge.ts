@@ -98,6 +98,14 @@ export interface IndexJobProgress {
   batch_index: number;
   batch_total: number;
   message: string | null;
+  /** Últimos arquivos já processados, o mais novo primeiro (lista "Agora" da Fila). */
+  recent_files?: IndexRecentFile[];
+}
+
+export interface IndexRecentFile {
+  source_path: string;
+  status: 'success' | 'failed' | 'cancelled' | 'unchanged' | string;
+  chunks: number;
 }
 
 export interface IndexJobFileError {

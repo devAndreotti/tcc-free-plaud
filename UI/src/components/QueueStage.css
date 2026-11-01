@@ -1,0 +1,191 @@
+/* Fila: cartão que vira job (canvas "Fila · vazia que vira job"). Movimento respeita "Reduzir animações" (index.css). */
+
+.queue-stage {
+  overflow: hidden;
+  border-radius: 16px;
+  transition: border-color 0.5s, box-shadow 0.5s;
+}
+.queue-stage--running {
+  border-color: color-mix(in srgb, var(--accent-blue-light) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue-light) 14%, transparent);
+}
+.queue-stage--done { border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+
+/* Estado vazio com arte */
+.queue-empty { display: flex; align-items: center; gap: 36px; padding: 28px 34px; }
+.queue-empty__art { flex: none; width: 360px; max-width: 42%; color: var(--vault-color, var(--accent-blue-light)); }
+.queue-empty__art svg { display: block; width: 100%; height: auto; }
+.queue-empty__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.queue-empty__text h2 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-primary); }
+.queue-empty__text p { margin: 0; max-width: 60ch; font-size: 13.5px; line-height: 1.55; color: var(--text-secondary); }
+.queue-empty__text p b { color: var(--text-primary); font-weight: 600; }
+.queue-empty__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.queue-empty__tips {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+.queue-empty__tips li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-color-subtle);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.queue-empty__tips svg { flex: none; color: var(--vault-color, var(--accent-blue-light)); }
+
+.queue-art__trail { stroke-dasharray: 2 7; animation: queue-trail 1.2s linear infinite; }
+@keyframes queue-trail { to { stroke-dashoffset: -18; } }
+.queue-art__star { fill-opacity: 0.4; animation: queue-star 3s ease-in-out infinite; }
+@keyframes queue-star { 50% { fill-opacity: 0.95; } }
+.queue-art__doc {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  opacity: 0;
+  animation: queue-fly 4.2s cubic-bezier(0.45, 0.05, 0.4, 1) infinite;
+}
+.queue-art__doc--2 { animation-delay: 1.4s; }
+.queue-art__doc--3 { animation-delay: 2.8s; }
+@keyframes queue-fly {
+  0% { opacity: 0; transform: translate(0, 0) rotate(-10deg); }
+  12% { opacity: 1; }
+  50% { transform: translate(96px, -62px) rotate(6deg); }
+  88% { opacity: 1; }
+  100% { opacity: 0; transform: translate(204px, -20px) rotate(14deg) scale(0.55); }
+}
+.queue-art--launch .queue-art__doc { animation-duration: 0.7s; }
+.queue-art--launch .queue-art__doc--2 { animation-delay: 0.12s; }
+.queue-art--launch .queue-art__doc--3 { animation-delay: 0.24s; }
+.queue-art--launch .queue-art__folder { transform-box: fill-box; transform-origin: 50% 100%; animation: queue-squeeze 0.5s ease-in-out infinite; }
+@keyframes queue-squeeze { 40% { transform: translateY(4px) scaleY(0.94); } }
+.queue-art__top { animation: queue-top 4.2s ease-in-out infinite; }
+@keyframes queue-top { 0%, 100% { fill-opacity: 0.2; } 50% { fill-opacity: 0.42; } }
+.queue-art__glow { transform-box: fill-box; transform-origin: 50% 50%; animation: queue-glow 4.2s ease-out infinite; }
+@keyframes queue-glow { 0%, 60% { opacity: 0; transform: scale(0.6); } 75% { opacity: 1; } 100% { opacity: 0; transform: scale(1.25); } }
+
+/* Job */
+.queue-stage .job { padding: 20px 22px 22px; }
+
+.queue-stage .job__steps { display: flex; align-items: flex-start; margin: 22px 0 24px; }
+.queue-stage .job__step {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 0;
+  text-align: center;
+  animation: ui-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+.queue-stage .job__step::before { display: none; }
+.queue-stage .job__rail {
+  position: absolute;
+  top: 22px;
+  right: calc(50% + 30px);
+  left: calc(-50% + 30px);
+  height: 3px;
+  border-radius: 2px;
+  background-color: var(--border-color);
+  transition: background-color 0.4s;
+}
+.queue-stage .job__rail--done { background-color: var(--accent-blue-light); }
+.queue-stage .job__rail.ui-flow { background-color: color-mix(in srgb, var(--accent-blue-light) 25%, transparent); }
+.queue-stage .job__station {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-placeholder);
+  transition: background-color 0.35s, border-color 0.35s, color 0.35s;
+}
+.queue-stage .job__step--active .job__station { border-color: var(--accent-blue-light); background: var(--accent-soft); color: var(--accent-blue-light); }
+.queue-stage .job__step--done .job__station { border-color: var(--accent-blue-light); background: var(--accent-blue-light); color: var(--bg-primary); }
+.queue-stage .job__orbit { position: absolute; inset: -6px; border-radius: 50%; border: 2px dashed var(--accent-blue-light); }
+.queue-stage .job__step b { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.queue-stage .job__step--done b,
+.queue-stage .job__step--active b { color: var(--text-primary); }
+.queue-stage .job__step span.mono { font-size: 11px; color: var(--text-muted); }
+
+.queue-stage .job__bar { position: relative; height: 10px; border-radius: 999px; }
+.queue-stage .job__bar i { transition: width 0.3s linear; }
+.job__bar-stripes { position: absolute; inset: 0 auto 0 0; transition: width 0.3s linear; pointer-events: none; }
+
+.job__done {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ok) 7%, transparent);
+}
+.job__done-badge {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+}
+.job__done-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 12.5px; color: var(--text-secondary); }
+.job__done-text strong { font-size: 14px; color: var(--text-primary); }
+
+.job__live { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; margin-top: 18px; }
+.job__feed {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color-subtle);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+}
+.job__feed header { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.job__feed header svg { color: var(--accent-blue-light); }
+.job__reading { margin-left: auto; min-width: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.job__feed ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.job__feed-item { display: flex; align-items: center; gap: 10px; color: var(--text-muted); animation: queue-feed-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.1) both; }
+@keyframes queue-feed-in { from { opacity: 0; transform: translateY(-12px); } }
+.job__feed-name { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job__feed-status { flex: none; padding: 1px 8px; border-radius: 999px; background: var(--bg-surface-hover); color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.job__feed-status--accent { background: var(--accent-soft); color: var(--accent-blue-light); }
+.job__feed-status--err { background: color-mix(in srgb, var(--err) 14%, transparent); color: var(--err); }
+.job__feed-chunks { flex: none; width: 78px; text-align: right; font-size: 11.5px; }
+.job__feed-empty { margin: 0; font-size: 12.5px; color: var(--text-muted); }
+
+.queue-stage .job__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; border: 0; }
+.queue-stage .job__kpis div,
+.queue-stage .job__kpis div + div {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color-subtle);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+}
+.queue-stage .job__kpis dt { display: flex; align-items: center; gap: 7px; }
+.queue-stage .job__kpis dt svg { color: var(--accent-blue-light); }
+.job__spark { display: block; width: 100%; height: 30px; margin-top: 4px; color: var(--accent-blue-light); }
+
+@media (max-width: 900px) {
+  .queue-empty { flex-direction: column; align-items: stretch; }
+  .queue-empty__art { max-width: 100%; width: 300px; align-self: center; }
+  .job__live { grid-template-columns: 1fr; }
+}
