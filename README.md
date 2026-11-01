@@ -110,4 +110,5 @@ Escólio/
 - Stack Tecnologica e Bibliotecas: [`docs/arquitetura/TECNOLOGIAS_E_BIBLIOTECAS.md`](docs/arquitetura/TECNOLOGIAS_E_BIBLIOTECAS.md)
 - Experimento 15 (Calibracao RRF): [`docs/experimentos/15_calibracao_rrf_tcc.md`](docs/experimentos/15_calibracao_rrf_tcc.md)
 - Experimento 20 (Benchmark de recuperacao reproduzido, substitui o 15): [`docs/experimentos/20_benchmark_recuperacao_reproduzido.md`](docs/experimentos/20_benchmark_recuperacao_reproduzido.md)
+- Experimento 21 (Abstencao e faithfulness com IA local): [`docs/experimentos/21_abstencao_e_faithfulness_com_ia.md`](docs/experimentos/21_abstencao_e_faithfulness_com_ia.md)
 - Status das Sprints: [`Sprints/STATUS.md`](Sprints/STATUS.md)

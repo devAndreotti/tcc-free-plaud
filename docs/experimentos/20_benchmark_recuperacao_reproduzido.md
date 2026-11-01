@@ -38,7 +38,7 @@ IC por bootstrap, como gerado pelo `benchmark compare`. A busca léxica e a híb
 
 ## Abstenção nas perguntas negativas
 
-Com o provider `extractive`, o benchmark marcou como respondidas **13 de 34** negativas em cada estratégia. A medição foi feita antes e depois das correções de validação deste ciclo, e o número não mudou. Esse valor é alto e contradiz a afirmação de que a regra de abstenção "separa" as negativas. Antes de usar qualquer número de abstenção no TCC, é preciso confirmar o que o campo `answered` mede no benchmark.
+Com o provider `extractive`, o benchmark marcou como respondidas **13 de 34** negativas em cada estratégia. A medição foi feita antes e depois das correções de validação deste ciclo, e o número não mudou. Esse valor é alto e contradiz a afirmação de que a regra de abstenção "separa" as negativas. O campo `answered` é a decisão do chat (`no_answer` falso), e no modo extrativo as negativas com palavras comuns do corpus ("cluster", "produção") passam. Com IA, a taxa cai para 6 de 34 (Experimento 21).
 
 ## Limitações
 
