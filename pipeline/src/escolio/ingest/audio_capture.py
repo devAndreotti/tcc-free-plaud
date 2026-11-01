@@ -57,6 +57,8 @@ class AudioCapture:
         self.queue: Queue = Queue(maxsize=queue_size)
         self.regions: list[SpeechRegion] = []
         self.samples_written = 0
+        # Volume do último trecho gravado (0 a 1), para o medidor do teste de microfone.
+        self.level = 0.0
         self.error: str | None = None
         self.error_code: str | None = None
         self._stop = Event()
@@ -140,6 +142,8 @@ class AudioCapture:
     def _append(self, output, samples: np.ndarray) -> None:
         output.writeframesraw((np.clip(samples, -1, 1) * 32767).astype("<i2").tobytes())
         self.samples_written += len(samples)
+        if len(samples):
+            self.level = float(min(1.0, np.sqrt(np.mean(np.square(samples))) * 5))
         self.regions.extend(self.detector.process(samples))
 
     def _close(self) -> None:

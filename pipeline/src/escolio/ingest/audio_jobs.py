@@ -20,6 +20,7 @@ class AudioJobSnapshot(BaseModel):
     status: str
     source_path: Path
     samples_captured: int = 0
+    level: float = 0.0
     error_code: str | None = None
     message: str | None = None
     result: TranscriptionResult | None = None
@@ -78,6 +79,7 @@ class AudioJobManager:
             snapshot = self._checked(job_id)
             if self._capture:
                 snapshot.samples_captured = self._capture.samples_written
+                snapshot.level = self._capture.level
                 if self._capture.error:
                     self._capture.cancel()
                     snapshot.status = "failed"

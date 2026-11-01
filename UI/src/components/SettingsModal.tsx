@@ -21,6 +21,7 @@ import { useVaults } from '../hooks/useVaults';
 import { AiSourcesPane } from './AiSourcesPane';
 import { AdvancedLocked, AdvancedPane } from './AdvancedPane';
 import DoctorPanel from './DoctorPanel';
+import MicTest from './MicTest';
 import { Segmented, SectionHead, Stepper } from './ui/Controls';
 import { Glyph } from './ui/Glyph';
 import './settings-redesign.css';
@@ -929,6 +930,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                 <div className="ui-grid voz-grid">
                   {audioLanguageRow && renderSettingRow(audioLanguageRow, audioLanguageOptions)}
                   {otherAudioRows.map((row) => renderSettingRow(row))}
+                  <MicTest />
                 </div>
 
                 {vadModel && (

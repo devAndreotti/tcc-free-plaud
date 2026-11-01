@@ -59,6 +59,8 @@ def test_capture_stops_flushes_and_closes_device(tmp_path, microphone):
         assert reader.getframerate() == 16000
         assert reader.getnchannels() == 1
     assert recording.samples_written == 16000
+    # Medidor do teste de microfone: sinal forte (amplitude 0,5) satura o nível em 1.
+    assert recording.level == pytest.approx(1.0)
     assert recording.regions[-1].end_sample == 16000
     assert microphone[0].closed
     with pytest.raises(AudioError):
