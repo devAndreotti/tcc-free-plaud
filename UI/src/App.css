@@ -3464,6 +3464,7 @@
   border-radius: 6px;
   background: var(--tip-bg);
   color: var(--tip-fg);
+  border: 1px solid var(--tip-border);
   font: 500 12px/1 var(--font-family);
   white-space: nowrap;
   pointer-events: none;
@@ -3476,11 +3477,13 @@
 .sb__tip::before {
   content: '';
   position: absolute;
-  left: -3px;
+  left: -5px;
   top: 50%;
   width: 8px;
   height: 8px;
   background: var(--tip-bg);
+  border-left: 1px solid var(--tip-border);
+  border-bottom: 1px solid var(--tip-border);
   transform: translateY(-50%) rotate(45deg);
   border-radius: 1px;
 }
