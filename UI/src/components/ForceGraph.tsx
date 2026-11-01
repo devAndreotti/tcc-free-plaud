@@ -48,6 +48,9 @@ const GLIDE_FRAMES = 14;
 // Lista fixa: um array novo a cada render reconstruiria o grafo a cada render
 const NO_LINKS: VaultLink[] = [];
 
+// Tamanho do texto (Aparência) é zoom CSS: getBoundingClientRect e clientX vêm com ele, o layout do canvas não
+const cssZoom = (rect: DOMRect, layoutWidth: number) => (rect.width > 0 && layoutWidth > 0 ? rect.width / layoutWidth : 1);
+
 // Texto de ajuda do canvas para leitores de tela (aria-describedby); as teclas valem com o foco no canvas
 const GRAPH_HELP =
   'Teclado: setas movem a seleção para o nó vizinho na direção da seta; Enter abre a nota selecionada ou enquadra a pasta; ' +
@@ -151,7 +154,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
 
     const from = { x: cam.x, y: cam.y };
     const to = { x: logW.current / 2 - n.x * cam.scale, y: logH.current / 2 - n.y * cam.scale };
-    const duration = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 240;
+    const duration = prefersReducedMotion() ? 0 : 240;
     const start = performance.now();
     const step = (now: number) => {
       const t = duration ? Math.min(1, (now - start) / duration) : 1;
@@ -248,7 +251,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
         if (width === 0 || height === 0) continue;
 
         const firstMeasure = logW.current === 0;
-        const d = window.devicePixelRatio || 1;
+        const d = (window.devicePixelRatio || 1) * cssZoom(canvas.getBoundingClientRect(), width); // nítido com zoom
         dpr.current    = d;
         logW.current   = width;
         logH.current   = height;
@@ -286,7 +289,8 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     const rect = canvas.getBoundingClientRect();
     // Acerta onde o nó está desenhado agora (durante a abertura ele ainda está perto do centro)
     const shown = projectNodes(graphRef.current.nodes, logW.current / 2, logH.current / 2, entryAt(entryStartRef.current, performance.now()));
-    return hitTest(shown, toWorld(clientX - rect.left, clientY - rect.top), camRef.current.scale);
+    const k = cssZoom(rect, logW.current);
+    return hitTest(shown, toWorld((clientX - rect.left) / k, (clientY - rect.top) / k), camRef.current.scale);
   }, [toWorld]);
 
   // ── Seleção: nó (ou null para limpar) e o anúncio para leitores de tela ──
@@ -329,8 +333,9 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
 
     if (dragRef.current.active) {
       autoFitRef.current = false;
-      camRef.current.x = dragRef.current.camX + (e.clientX - dragRef.current.startX);
-      camRef.current.y = dragRef.current.camY + (e.clientY - dragRef.current.startY);
+      const k = cssZoom(canvas.getBoundingClientRect(), logW.current);
+      camRef.current.x = dragRef.current.camX + (e.clientX - dragRef.current.startX) / k;
+      camRef.current.y = dragRef.current.camY + (e.clientY - dragRef.current.startY) / k;
       draw();
     }
   }, [nodeUnder, draw]);
@@ -429,8 +434,9 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     if (!canvas) return;
     autoFitRef.current = false;
     const rect   = canvas.getBoundingClientRect();
-    const mx     = e.clientX - rect.left;
-    const my     = e.clientY - rect.top;
+    const k      = cssZoom(rect, logW.current);
+    const mx     = (e.clientX - rect.left) / k;
+    const my     = (e.clientY - rect.top) / k;
     const cam    = camRef.current;
     const factor = e.deltaY < 0 ? 1.12 : 0.89;
     const ns     = Math.max(0.05, Math.min(5, cam.scale * factor));

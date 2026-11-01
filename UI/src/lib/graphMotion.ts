@@ -20,8 +20,10 @@ export function entryAt(startMs: number | null, nowMs: number): number {
   return easeOutCubic((nowMs - startMs) / ENTRY_MS);
 }
 
-/** Usuário pediu menos movimento no sistema operacional */
+/** Usuário pediu menos movimento: na Aparência (data-motion "always"/"never") ou, sem escolha, no sistema operacional */
 export function prefersReducedMotion(): boolean {
+  const forced = document.documentElement.dataset.motion;
+  if (forced) return forced === 'always';
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 

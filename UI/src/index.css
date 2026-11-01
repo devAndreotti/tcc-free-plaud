@@ -247,10 +247,17 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Reduzir animações: segue o sistema, salvo quando a Aparência força (data-motion em appearance.ts). */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  :root:not([data-motion="never"]) *, :root:not([data-motion="never"]) *::before, :root:not([data-motion="never"]) *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+:root[data-motion="always"] *, :root[data-motion="always"] *::before, :root[data-motion="always"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
 }
