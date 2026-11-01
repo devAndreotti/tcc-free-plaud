@@ -118,12 +118,14 @@ interface GroupCardProps {
   tone?: 'accent' | 'ok' | 'err' | 'muted';
   delay?: number;
   className?: string;
+  /** Falso quando o campo de dentro já tem o mesmo nome (evita dois elementos com o mesmo rótulo). */
+  region?: boolean;
   children: ReactNode;
 }
 
 /** Cartão de um grupo de ajustes: entra em sequência (delay em ms) e sobe ao passar o mouse. */
-export const GroupCard = ({ icon, title, desc, right, tone = 'accent', delay = 0, className = '', children }: GroupCardProps) => (
-  <section className={`ui-card rise lift ${className}`} style={{ animationDelay: `${delay}ms` }} aria-label={title}>
+export const GroupCard = ({ icon, title, desc, right, tone = 'accent', delay = 0, className = '', region = true, children }: GroupCardProps) => (
+  <section className={`ui-card rise lift ${className}`} style={{ animationDelay: `${delay}ms` }} aria-label={region ? title : undefined}>
     <header className="ui-card__head">
       <GlyphBadge name={icon} size={32} tone={tone} />
       <div className="ui-card__titles">

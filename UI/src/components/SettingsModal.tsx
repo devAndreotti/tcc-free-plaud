@@ -22,8 +22,8 @@ import { AiSourcesPane } from './AiSourcesPane';
 import { AdvancedLocked, AdvancedPane } from './AdvancedPane';
 import DoctorPanel from './DoctorPanel';
 import MicTest from './MicTest';
-import { Segmented, SectionHead, Stepper } from './ui/Controls';
-import { Glyph } from './ui/Glyph';
+import { GroupCard, Segmented, SectionHead, Stepper } from './ui/Controls';
+import { Glyph, type GlyphName } from './ui/Glyph';
 import './settings-redesign.css';
 import {
   bridge,
@@ -61,6 +61,8 @@ const PROVIDER_DEFAULT_URL: Record<string, string> = {
 };
 const PROVIDER_LABEL: Record<string, string> = { ollama: 'Ollama', lmstudio: 'LM Studio', 'openai-compatible': 'provedor' };
 // IA local: os modelos instalados aparecem sozinhos ao abrir a aba (remoto só lista no botão).
+const PROVIDER_ICON: Record<string, GlyphName> = { extractive: 'list', ollama: 'cube', lmstudio: 'server', 'openai-compatible': 'cloud' };
+const PROVIDER_HOST: Record<string, string> = { extractive: 'sem modelo', ollama: 'localhost:11434', lmstudio: 'localhost:1234', 'openai-compatible': 'URL + chave' };
 const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio']);
 
 // "3.1B · Q4_K_M · 2,3 GB" com o que o Ollama informa; o LM Studio não manda esses dados.
@@ -616,7 +618,11 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   if (modelOptions.length > 0 && draftModel && !modelOptions.some((option) => option.value === draftModel)) {
     modelOptions.push({ value: draftModel, label: draftModel, description: `Não está instalado no ${providerLabel}: escolha um da lista.` });
   }
-  const iaCatalogRows = backendSettings?.settings_catalog.filter((row) => IA_CATALOG_KEYS.includes(row.key) && !row.secret) ?? [];
+  const providerRow = backendSettings?.settings_catalog.find((row) => row.key === 'answer_provider') ?? null;
+  const modelRow = backendSettings?.settings_catalog.find((row) => row.key === 'answer_model') ?? null;
+  const urlRow = backendSettings?.settings_catalog.find((row) => row.key === 'answer_base_url') ?? null;
+  const providerRecommended = providerRow?.options.find((option) => option.value === String(providerRow.recommended))?.label;
+  const providerChoice = providerRow?.options.find((option) => option.value === draftProvider)?.description;
   const advancedRows = backendSettings?.settings_catalog.filter(
     (row) => !row.secret && row.group !== 'Áudio' && !IA_CATALOG_KEYS.includes(row.key) && !DESKTOP_HIDDEN_KEYS.includes(row.key)
   ) ?? [];
@@ -732,18 +738,52 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   }}
                 />
 
-                {iaCatalogRows
-                  .filter((row) => isGenerative || row.key === 'answer_provider')
-                  .map((row) => {
-                    // Modelo: lista do que está instalado no provedor; URL: o padrão do provedor escolhido.
-                    if (row.key === 'answer_model' && modelOptions.length > 0) return renderSettingRow(row, modelOptions);
-                    if (row.key === 'answer_base_url') {
-                      return renderSettingRow({ ...row, placeholder: PROVIDER_DEFAULT_URL[draftProvider] ?? row.placeholder });
-                    }
-                    return renderSettingRow(row);
-                  })}
-
+                <div className="ui-grid ai-manual">
+                  {providerRow && (
+                    <GroupCard
+                      icon="server"
+                      title="Provedor de resposta"
+                      desc="Quem transforma os trechos em resposta."
+                      right={providerRecommended && <span className="pill pill--accent">Recomendado: {providerRecommended}</span>}
+                    >
+                      <div className="ai-manual__tiles" role="radiogroup" aria-label={providerRow.label}>
+                        {providerRow.options.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={draftProvider === option.value}
+                            className="ai-manual__tile ui-tile"
+                            onClick={() => setSettingDrafts((prev) => ({ ...prev, answer_provider: option.value }))}
+                          >
+                            <span className="glyph-badge ai-manual__icon" aria-hidden="true">
+                              <Glyph name={PROVIDER_ICON[option.value] ?? 'server'} size={15} />
+                            </span>
+                            <span className="ai-manual__name">
+                              <strong>{option.label}</strong>
+                              <small className="mono">{PROVIDER_HOST[option.value] ?? ''}</small>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      {providerChoice && <p className="ai-manual__desc">{providerChoice}</p>}
+                    </GroupCard>
+                  )}
+                  {isGenerative && modelRow && (
+                    <GroupCard icon="cube" title="Modelo de resposta" desc="Modelo que escreve a resposta." delay={60} region={false}>
+                      {renderSettingRow(modelRow, modelOptions.length > 0 ? modelOptions : undefined)}
+                    </GroupCard>
+                  )}
+                  {isGenerative && urlRow && (
+                    <GroupCard icon="link" title="Endereço do servidor" desc="Vazio usa o padrão do provedor." delay={120} region={false}>
+                      {renderSettingRow({ ...urlRow, placeholder: PROVIDER_DEFAULT_URL[draftProvider] ?? urlRow.placeholder })}
+                      <button type="button" className="ai-manual__reset" onClick={() => setSettingDrafts((prev) => ({ ...prev, answer_base_url: '' }))}>
+                        Restaurar padrão
+                      </button>
+                    </GroupCard>
+                  )}
                 {isGenerative ? (
+                  <GroupCard icon="pulse" title="Conexão" desc={needsApiKey ? 'Com a sua chave de API.' : 'Sem chave: roda no seu computador.'} delay={180} className="ai-manual__conn">
                     <div
                       className={`settings-item settings-item--stacked conn-card${isTestingProvider || isListingModels ? ' conn-card--testing' : discovered?.status === 'ok' ? ' conn-card--ok' : discovered ? ' conn-card--offline' : ''}`}
                     >
@@ -841,7 +881,9 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                       </div>
                     )}
                   </div>
+                  </GroupCard>
                 ) : null}
+                </div>
               </section>
             )}
 

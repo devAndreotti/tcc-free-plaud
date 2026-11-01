@@ -10,6 +10,7 @@ const MicTest = () => {
   const [levels, setLevels] = useState<number[]>(() => Array(BARS).fill(0));
   const [state, setState] = useState<'idle' | 'listening' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [warn, setWarn] = useState(false);
   const job = useRef<string | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const peak = useRef(0);
@@ -31,6 +32,7 @@ const MicTest = () => {
 
   const start = async () => {
     setMessage('');
+    setWarn(false);
     setLevels(Array(BARS).fill(0));
     peak.current = 0;
     setState('listening');
@@ -45,6 +47,7 @@ const MicTest = () => {
         if (current.status === 'failed') {
           await release();
           setState('error');
+          setWarn(true);
           setMessage(current.message ?? 'O microfone falhou.');
           return;
         }
@@ -54,12 +57,14 @@ const MicTest = () => {
         if (Date.now() - started >= TEST_MS) {
           await release();
           setState('done');
+          setWarn(peak.current <= 0.04);
           setMessage(peak.current > 0.04 ? 'O microfone está captando sua voz.' : 'Nenhum som captado. Confira o microfone escolhido e o volume do Windows.');
         }
       }, 120);
     } catch (error) {
       await release();
       setState('error');
+      setWarn(true);
       setMessage(error instanceof Error ? error.message : 'Não foi possível abrir o microfone.');
     }
   };
@@ -85,7 +90,7 @@ const MicTest = () => {
         </button>
       </div>
       {message && (
-        <p key={message} className={`mic-test__msg pop${state === 'error' || (state === 'done' && peak.current <= 0.04) ? ' mic-test__msg--warn' : ''}`} role="status">
+        <p key={message} className={`mic-test__msg pop${warn ? ' mic-test__msg--warn' : ''}`} role="status">
           {message}
         </p>
       )}
