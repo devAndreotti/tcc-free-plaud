@@ -227,6 +227,27 @@
   color: var(--accent-blue-light);
 }
 .adv-art--stack { flex-direction: column; align-items: stretch; gap: 6px; }
+/* As três buscas lado a lado; a escolhida fica cheia e as outras recuam. */
+.adv-search { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.adv-search__kind {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  opacity: 0.5;
+  transition: opacity 0.25s, border-color 0.25s, background-color 0.25s;
+}
+.adv-search__kind svg { max-width: 100%; }
+.adv-search__kind b { font-size: 11.5px; font-weight: 600; color: var(--text-secondary); }
+.adv-search__kind.is-on { opacity: 1; border-color: color-mix(in srgb, currentColor 45%, transparent); background: var(--accent-soft); }
+.adv-search__kind.is-on b { color: var(--text-primary); }
+.adv-search__kind .adv-art__word { animation: none; }
+.adv-search__kind.is-on .adv-art__word { animation: adv-word 2.4s ease-in-out infinite; }
+@keyframes adv-word { 50% { fill-opacity: 0.35; } }
 .adv-art span { font-size: 11.5px; line-height: 1.45; color: var(--text-muted); }
 .adv-art svg { flex: none; }
 .adv-art__mix { animation: adv-mix 3s ease-in-out infinite; }

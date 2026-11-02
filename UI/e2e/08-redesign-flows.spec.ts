@@ -96,6 +96,55 @@ test('Fontes de IA: configuração manual com o provedor em cartões', async ({ 
   await expect(providers.getByRole('radio').nth(1)).toHaveAttribute('aria-checked', 'true');
 });
 
+test('Notas: com o menu lateral aberto e Mostrar trechos, o rótulo do trecho não fica cortado', async ({ page }) => {
+  // Regressão: o rótulo ficava fora da coluna de leitura, e a regra que o trazia para dentro olhava a janela, não o painel.
+  await page.getByRole('button', { name: 'Expandir menu' }).click();
+  await page.getByRole('button', { name: 'Notas', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Mostrar trechos' }).check({ force: true });
+
+  const label = page.locator('.reader__chunk-label').first();
+  await expect(label).toBeVisible();
+  const box = await label.boundingBox();
+  const pane = await page.locator('.nd__scroll').boundingBox();
+  expect(box && pane && box.x >= pane.x).toBeTruthy();
+});
+
+test('Avançado: a arte da Busca mostra lexical, vetorial e híbrida, com a estratégia escolhida em destaque', async ({ page }) => {
+  await openSettings(page, 'Avançado');
+  await page.getByRole('checkbox', { name: /Entendo que estes ajustes/ }).check();
+  await page.getByRole('button', { name: 'Mostrar ajustes avançados' }).click();
+
+  const kinds = page.locator('.adv-search__kind');
+  await expect(kinds).toHaveText(['Lexical', 'Vetorial', 'Híbrida'], { timeout: 5000 });
+  await expect(page.locator('.adv-search__kind.is-on')).toHaveText('Híbrida');
+});
+
+test('Tema: a arte da Fila e o grafo seguem a cor de destaque, não a da vault', async ({ page }) => {
+  await page.getByRole('button', { name: 'Abrir painel de grafos' }).click();
+  await page.getByRole('button', { name: 'Fila', exact: true }).click();
+  const art = page.locator('.queue-empty__art');
+  await expect(art).toBeVisible();
+
+  const colors = await page.evaluate(() => {
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-blue-light').trim();
+    // O grafo lê a paleta do próprio canvas (readPalette).
+    const panel = document.querySelector('.graph-panel canvas') as Element;
+    const probe = document.createElement('span');
+    probe.style.color = accent;
+    document.body.append(probe);
+    const expected = getComputedStyle(probe).color;
+    probe.remove();
+    return {
+      expected,
+      art: getComputedStyle(document.querySelector('.queue-empty__art') as Element).color,
+      graphAccent: getComputedStyle(panel).getPropertyValue('--ag-accent').trim(),
+      accent,
+    };
+  });
+  expect(colors.art).toBe(colors.expected);
+  expect(colors.graphAccent).toBe(colors.accent);
+});
+
 test('Voz: Testar microfone ouve e responde', async ({ page }) => {
   await openSettings(page, 'Voz');
   await page.getByRole('button', { name: 'Testar', exact: true }).click();

@@ -53,8 +53,9 @@
   --tip-border: #3d3c47;
   --scrim: rgba(6, 6, 10, 0.58);
 
-  /* Paleta do grafo: cada pasta de 1º nível ganha uma destas (hash do nome, lib/graphColors.ts) */
-  --graph-1: #7aa2f7;
+  /* Paleta do grafo: cada pasta de 1º nível ganha uma destas (hash do nome, lib/graphColors.ts).
+     A primeira segue o destaque do tema (Aparência). */
+  --graph-1: var(--accent-blue-light);
   --graph-2: #5ccf96;
   --graph-3: #e6b659;
   --graph-4: #e8957f;
@@ -143,7 +144,7 @@
   --scrim: rgba(22, 20, 32, 0.28);
 
   /* Paleta do grafo no tema claro: tons mais fundos para contrastar com o fundo claro */
-  --graph-1: #2f6fd1;
+  --graph-1: var(--accent-blue-light);
   --graph-2: #1d8f5a;
   --graph-3: #a8720c;
   --graph-4: #b4543f;

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { IndexJobSnapshot, VaultColor } from '../services/bridge';
+import type { IndexJobSnapshot } from '../services/bridge';
 import type { SettingsTab } from './SettingsModal';
 import IndexJobCard from './IndexJobCard';
 import { Glyph } from './ui/Glyph';
@@ -36,7 +36,6 @@ const QueueArt = ({ launch }: { launch: boolean }) => (
 interface QueueStageProps {
   job: IndexJobSnapshot | null;
   busy: boolean;
-  vaultColor?: VaultColor;
   canReindex: boolean;
   reindexLabel: string;
   onReindex: () => void;
@@ -51,7 +50,7 @@ interface QueueStageProps {
  * Cartão da Fila que se transforma: sem job mostra a arte; quando um job começa, a parte vazia
  * recolhe enquanto a do job abre. "Fechar" num job terminado volta para a arte.
  */
-const QueueStage = ({ job, busy, vaultColor, canReindex, reindexLabel, onReindex, onChooseFolder, onCancel, onAsk, onOpenSettings, onIgnoredChanged }: QueueStageProps) => {
+const QueueStage = ({ job, busy, canReindex, reindexLabel, onReindex, onChooseFolder, onCancel, onAsk, onOpenSettings, onIgnoredChanged }: QueueStageProps) => {
   const [closedJob, setClosedJob] = useState<string | null>(null);
   const running = job?.status === 'running';
   const showJob = Boolean(job) && (running || job?.job_id !== closedJob);
@@ -62,7 +61,7 @@ const QueueStage = ({ job, busy, vaultColor, canReindex, reindexLabel, onReindex
       <div className={`ui-collapse${showJob ? '' : ' ui-collapse--open'}`}>
         <div>
           <div className="queue-empty">
-            <div className={`queue-empty__art${vaultColor ? ` vault-glyph--${vaultColor}` : ''}`}>
+            <div className="queue-empty__art">
               <QueueArt launch={starting} />
             </div>
             <div className="queue-empty__text">

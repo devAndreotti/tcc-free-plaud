@@ -697,11 +697,11 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                 <DoctorPanel
                   title={
                     active ? (
-                      <>
+                      <span className="doctor-title">
                         Diagnóstico da vault
                         <VaultGlyph icon={active.icon} color={active.color} size={12} />
                         <span>{active.name}</span>
-                      </>
+                      </span>
                     ) : (
                       'Diagnóstico'
                     )
@@ -993,6 +993,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   presets={backendSettings?.settings_presets ?? []}
                   rows={advancedRows}
                   catalog={backendSettings?.settings_catalog ?? []}
+                  strategy={settingDrafts.default_ask_strategy}
                   hiddenKeys={DESKTOP_HIDDEN_KEYS}
                   applyingPreset={applyingPreset}
                   pendingChanges={pendingChanges}

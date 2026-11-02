@@ -288,8 +288,8 @@
   --ag-ink-2: #c3c2b7;
   --ag-ink-muted: #8f8d87;
   --ag-hairline: #2c2c2a;
-  --ag-accent: #3987e5;
-  --ag-glow: rgba(57, 135, 229, 0.35);
+  --ag-accent: var(--accent-blue-light);
+  --ag-glow: color-mix(in srgb, var(--accent-blue-light) 35%, transparent);
   background: var(--ag-plane);
 }
 
@@ -300,8 +300,8 @@
   --ag-ink-2: #52514e;
   --ag-ink-muted: #898781;
   --ag-hairline: #e2e0d8;
-  --ag-accent: #2a78d6;
-  --ag-glow: rgba(42, 120, 214, 0.35);
+  --ag-accent: var(--accent-blue-light);
+  --ag-glow: color-mix(in srgb, var(--accent-blue-light) 35%, transparent);
 }
 
 /* Canvas ocupa o espaço total */
@@ -1266,6 +1266,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* O espaço para os rótulos dos trechos depende do painel, não da janela: o menu e o grafo abertos o encolhem. */
+  container: reader / inline-size;
 }
 
 .reader {
@@ -1397,6 +1399,14 @@
 }
 
 /* Modo chunks: cada trecho indexado com faixa, tokens e sobreposição na margem */
+/* Título do Diagnóstico: o ícone da vault com folga dos dois lados. */
+.doctor-title {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 9px;
+}
+
 .reader__chunks {
   list-style: none;
   display: grid;
@@ -1443,7 +1453,8 @@
   color: var(--accent-blue-light);
 }
 
-@media (max-width: 1180px) {
+/* Coluna de leitura (680) + rótulo fora dela dos dois lados (140 + 16 + folga 24): abaixo disso, ele entra na coluna. */
+@container reader (max-width: 1040px) {
   .reader__chunk-label {
     position: static;
     display: block;
@@ -5599,8 +5610,8 @@
   --ag-ink-2: #c3c2b7;
   --ag-ink-muted: #8f8d87;
   --ag-hairline: #2c2c2a;
-  --ag-accent: #3987e5;
-  --ag-glow: rgba(57, 135, 229, 0.35);
+  --ag-accent: var(--accent-blue-light);
+  --ag-glow: color-mix(in srgb, var(--accent-blue-light) 35%, transparent);
 }
 
 :root[data-theme="light"] .force-graph {
@@ -5610,8 +5621,8 @@
   --ag-ink-2: #52514e;
   --ag-ink-muted: #898781;
   --ag-hairline: #e2e0d8;
-  --ag-accent: #2a78d6;
-  --ag-glow: rgba(42, 120, 214, 0.35);
+  --ag-accent: var(--accent-blue-light);
+  --ag-glow: color-mix(in srgb, var(--accent-blue-light) 35%, transparent);
 }
 
 /* Fontes de IA: cartões de provedor local e de nuvem (design "Fontes de IA — Escólio"). */

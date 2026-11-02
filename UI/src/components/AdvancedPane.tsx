@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { SettingRow, SettingPreset } from '../services/bridge';
 import { Glyph, GlyphBadge, type GlyphName } from './ui/Glyph';
 import { GroupCard, SectionHead } from './ui/Controls';
-import { ChunkArt, HybridArt, VectorArt } from './AdvancedArt';
+import { ChunkArt, SearchArt, VectorArt } from './AdvancedArt';
 
 // Grupos do catálogo (app/settings_specs.py) com nome, ícone e uma linha de apoio.
 const GROUPS: Record<string, { title: string; icon: GlyphName; desc: string }> = {
@@ -88,6 +88,8 @@ interface AdvancedPaneProps {
   presets: SettingPreset[];
   rows: SettingRow[];
   catalog: SettingRow[];
+  /** Estratégia escolhida no seletor, ainda não salva; o desenho da Busca acompanha. */
+  strategy?: string;
   hiddenKeys: string[];
   applyingPreset: string;
   pendingChanges: number;
@@ -104,7 +106,7 @@ const presetInUse = (preset: SettingPreset, catalog: SettingRow[]) =>
     return row ? String(row.value) === String(value) : false;
   });
 
-export const AdvancedPane = ({ presets, rows, catalog, hiddenKeys, applyingPreset, pendingChanges, catalogLabel, renderRow, onApplyPreset, onHide }: AdvancedPaneProps) => {
+export const AdvancedPane = ({ presets, rows, catalog, strategy, hiddenKeys, applyingPreset, pendingChanges, catalogLabel, renderRow, onApplyPreset, onHide }: AdvancedPaneProps) => {
   const groups = rows.reduce<Record<string, SettingRow[]>>((acc, row) => {
     (acc[row.group] ??= []).push(row);
     return acc;
@@ -182,7 +184,7 @@ export const AdvancedPane = ({ presets, rows, catalog, hiddenKeys, applyingPrese
             .map(([group, groupRows], i) => {
               const meta = GROUPS[group] ?? { title: group, icon: 'sliders' as GlyphName, desc: '' };
               const art =
-                group === 'Retrieval' ? <HybridArt /> :
+                group === 'Retrieval' ? <SearchArt strategy={strategy || String(valueOf(catalog, 'default_ask_strategy') ?? 'hybrid')} /> :
                 group === 'Embeddings' ? <VectorArt /> :
                 group === 'Chunks' ? <ChunkArt size={Number(valueOf(catalog, 'default_chunk_size') ?? 800)} overlap={Number(valueOf(catalog, 'default_chunk_overlap') ?? 120)} /> :
                 null;
