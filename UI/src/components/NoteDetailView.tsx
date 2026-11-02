@@ -23,7 +23,8 @@ interface NoteDetailViewProps {
 function renderInline(text: string): ReactNode[] {
   // A chave é a posição do trecho na linha: o texto é estático, não se reordena.
   let offset = 0;
-  return text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)\s]+\))/g).map((part) => {
+  // Limites no link: sem eles, uma linha longa de "[" custa quadrático e trava a interface (a nota pode vir de terceiros).
+  return text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]{1,300}\]\([^)\s]{1,2000}\))/g).map((part) => {
     const key = `i${offset}`;
     offset += part.length;
     if (part.startsWith('`') && part.endsWith('`') && part.length > 2) return <code key={key}>{part.slice(1, -1)}</code>;
@@ -200,6 +201,15 @@ function renderMarkdown(source: string, title: string): ReactNode[] {
 }
 
 /**
+ * Comentário HTML (<!-- ai-memory:start -->) não aparece em nenhum leitor de Markdown.
+ * Só até o último "-->": sem fecho, cada "<!--" varreria o resto do texto e a interface travaria.
+ */
+function stripHtmlComments(text: string): string {
+  const end = text.lastIndexOf('-->') + 3;
+  return text.slice(0, end).replace(/<!--[\s\S]*?-->/g, '') + text.slice(end);
+}
+
+/**
  * O backend guarda a nota como: frontmatter interno, "## Summary" (o começo do texto),
  * "## Normalized Text" (a nota inteira) e "## Raw Text" (a nota inteira de novo).
  * A leitura mostra só o texto normalizado; sem essa seção, o markdown sem o frontmatter interno.
@@ -210,8 +220,7 @@ function readableMarkdown(source: string): string {
   const start = body.search(/^## Normalized Text\s*$/m);
   const text = start < 0 ? body : body.slice(body.indexOf('\n', start) + 1);
   const end = start < 0 ? -1 : text.search(/^## Raw Text\s*$/m);
-  // Comentário HTML (<!-- ai-memory:start -->) não aparece em nenhum leitor de Markdown.
-  return (end < 0 ? text : text.slice(0, end)).replace(/<!--[\s\S]*?-->/g, '');
+  return stripHtmlComments(end < 0 ? text : text.slice(0, end));
 }
 
 export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, isReindexing = false, onReindex, onDelete, highlightChunkId = null }: NoteDetailViewProps) => {

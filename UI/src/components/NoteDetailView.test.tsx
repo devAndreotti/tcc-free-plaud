@@ -125,6 +125,23 @@ describe('NoteDetailView', () => {
     expect(within(body).getByText('| só uma linha com barra |').tagName).toBe('P');
   });
 
+  it.each([
+    ['colchetes sem fecho', '['.repeat(200_000)],
+    ['início de link sem fecho', '[x]('.repeat(50_000)],
+    ['comentário sem fecho', '<!--'.repeat(50_000)],
+  ])('nota hostil não trava a leitura: %s', (_nome, texto) => {
+    // Regressão: com regex quadrática, esses textos levavam dezenas de segundos na thread da interface.
+    const inicio = performance.now();
+    renderView({ detail: detail({ structured_markdown: texto }) });
+    expect(performance.now() - inicio).toBeLessThan(3000);
+    expect(document.querySelector('.reader__body')?.textContent?.length).toBeGreaterThan(0);
+  });
+
+  it('comentário HTML fechado sai mesmo com outro aberto sem fecho depois', () => {
+    renderView({ detail: detail({ structured_markdown: 'Antes <!-- some --> depois <!-- fica' }) });
+    expect(document.querySelector('.reader__body')?.textContent).toBe('Antes  depois <!-- fica');
+  });
+
   it('Ler e Trechos: os trechos ficam em cartões com tokens, faixa e sobreposição', async () => {
     const user = userEvent.setup();
     renderView();
