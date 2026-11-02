@@ -273,6 +273,7 @@ describe('MessageBubble com resposta estruturada', () => {
     expect(writeText).toHaveBeenCalledWith(
       'Primeira frase. [2] Segunda frase. [1]\n\nFontes:\n[1] Projetos/Arquitetura.md (100–180)\n[2] Projetos/Pipeline.md (200–280)'
     );
+    expect(await screen.findByText('Copiado')).toBeTruthy();
   });
 });
 
@@ -305,8 +306,12 @@ describe('MessageBubble - rodapé da resposta', () => {
       />
     );
 
-    expect(screen.getByText('IA descartada · mostramos o trecho')).toBeTruthy();
+    // O selo fica no cabeçalho; o motivo, num cartão abaixo da resposta.
+    expect(container.querySelector('.msg__head')?.textContent).toContain('IA descartada · mostramos o trecho');
     expect(screen.getByText('A IA citou algo que não está nos trechos')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Por que a IA foi descartada' }).textContent).toContain(
+      'O texto do qchat:latest não passou na conferência com os trechos.'
+    );
     expect(screen.getByText('Afirmação dos trechos.')).toBeTruthy();
     expect(screen.getByText('Detalhes técnicos')).toBeTruthy();
     const details = container.querySelector('details')?.textContent ?? '';
@@ -322,6 +327,19 @@ describe('MessageBubble - rodapé da resposta', () => {
     render(<MessageBubble message={answer({ answer_provider: 'ollama', generated: false, answer_discard_reason: 'motivo_novo' })} />);
 
     expect(screen.getByText('A IA não respondeu com texto a partir dos trechos.')).toBeTruthy();
+  });
+
+  it('IA que falhou (provider_error) diz que o modelo não respondeu, não que foi reprovada', () => {
+    render(
+      <MessageBubble
+        message={answer({ answer_provider: 'ollama', answer_model: 'qchat:latest', generated: false, answer_discard_reason: 'provider_error' })}
+      />
+    );
+
+    expect(screen.getByText('A IA falhou; mostramos o trecho')).toBeTruthy();
+    const notice = screen.getByRole('region', { name: 'Por que a IA foi descartada' }).textContent ?? '';
+    expect(notice).toContain('O qchat:latest não respondeu.');
+    expect(notice).not.toContain('conferência');
   });
 
   it('IA descartada por falta de [n] no texto: diz isso em português', () => {

@@ -11,6 +11,7 @@
   transition: background-color 0.35s, color 0.35s;
 }
 .glyph-badge--ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.glyph-badge--warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .glyph-badge--err { color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }
 .glyph-badge--muted { color: var(--text-secondary); background: var(--bg-surface-hover); }
 

@@ -1,7 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { AskCitation, AskResult, AskStage, AskStrategy } from '../services/bridge';
 import { focusNoteInGraph } from '../lib/vaultGraph';
-import { AlertTriangleIcon, CopyIcon, ExternalIcon, ListIcon, SearchIcon, SparkleIcon } from './Icons';
+import { ExternalIcon, SearchIcon } from './Icons';
+import { Glyph, GlyphBadge, type GlyphName } from './ui/Glyph';
 
 export type MessageRole = 'user' | 'assistant';
 
@@ -37,39 +38,54 @@ interface TypingIndicatorProps {
   partial?: string;
   /** Modelo que escreve a resposta, para o cabeçalho. */
   model?: string;
+  /** Provedor da resposta: com IA (diferente de extractive), a trilha já mostra a etapa de escrita. */
+  provider?: string | null;
 }
 
-export const TypingIndicator = ({ stage, partial = '', model }: TypingIndicatorProps) => {
-  if (stage !== 'writing') {
-    return (
-      <div className="msg msg--ai fade-in" role="status" aria-label="Buscando no vault">
-        <div className="msg__head">
-          <span className="msg__mark" aria-hidden="true">ES</span>
-          <span className="msg__searching">
-            <span className="msg__spinner" aria-hidden="true" />
-            <span>Buscando no vault…</span>
-          </span>
-        </div>
-      </div>
-    );
-  }
+type StepState = 'on' | 'done' | 'wait';
+
+const Step = ({ state, icon, children }: { state: StepState; icon: GlyphName; children: ReactNode }) => (
+  <li className={`msg__step is-${state}`}>
+    <span className="msg__step-dot" aria-hidden="true">
+      <Glyph name={state === 'done' ? 'check' : icon} size={12} strokeWidth={state === 'done' ? 2.2 : 1.75} />
+    </span>
+    <span>{children}</span>
+  </li>
+);
+
+/** Espera da resposta: as fases que o backend manda (retrieving → writing), sem etapas inventadas no meio. */
+export const TypingIndicator = ({ stage, partial = '', model, provider }: TypingIndicatorProps) => {
+  const writing = stage === 'writing';
+  const withAi = writing || Boolean(provider && provider !== 'extractive');
   const header = model ? `Escrevendo com ${model}…` : 'Escrevendo a resposta…';
   return (
-    <div className="msg msg--ai fade-in" role="status" aria-label={header}>
+    <div className="msg msg--ai fade-in" role="status" aria-label={writing ? header : 'Buscando no vault'}>
       <div className="msg__head">
         <span className="msg__mark" aria-hidden="true">ES</span>
-        <span className="msg__searching">
-          <span className="msg__spinner" aria-hidden="true" />
-          <span>{header}</span>
-        </span>
+        <ol className="msg__steps">
+          <Step state={writing ? 'done' : 'on'} icon="search">{writing ? 'Busca no vault' : 'Buscando no vault…'}</Step>
+          {withAi && (
+            <>
+              <li className={`msg__rail${writing ? '' : ' ui-flow'}`} aria-hidden="true" />
+              <Step state={writing ? 'on' : 'wait'} icon="stars">
+                {writing ? header : model ? `Escrever com ${model}` : 'Escrever a resposta'}
+              </Step>
+            </>
+          )}
+        </ol>
       </div>
-      {/* aria-live off: o texto muda a cada consulta; a resposta final é anunciada pelo histórico. */}
-      <div className="msg__answer" aria-live="off">
-        <div className="msg__draft">
-          <span className="msg__head-sub">rascunho, ainda sendo validado</span>
-          {renderFormattedContent(partial.trimStart(), <span className="msg__cursor" aria-hidden="true" />)}
+      {writing && (
+        // aria-live off: o texto muda a cada consulta; a resposta final é anunciada pelo histórico.
+        <div className="msg__draft rise" aria-live="off">
+          <span className="msg__draft-tag">
+            <span className="msg__draft-dot ui-pulse" aria-hidden="true" />
+            rascunho, ainda sendo validado
+          </span>
+          <div className="msg__answer">
+            {renderFormattedContent(partial.trimStart(), <span className="msg__cursor" aria-hidden="true" />)}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
@@ -140,11 +156,13 @@ function useSources(ask: AskResult) {
 
 const AnswerMeta = ({ ask, copyText }: { ask: AskResult; copyText?: string }) => {
   const [copied, setCopied] = useState(false);
-  const parts = [
-    ask.strategy ? STRATEGY_LABEL[ask.strategy] ?? ask.strategy : null,
-    ask.top_k ? `top-${ask.top_k}` : null,
-    ask.latency_ms ? `${ask.latency_ms} ms` : null,
-  ].filter(Boolean);
+  const parts = (
+    [
+      ['search', ask.strategy ? STRATEGY_LABEL[ask.strategy] ?? ask.strategy : null],
+      ['layers', ask.top_k ? `top-${ask.top_k}` : null],
+      ['clock', ask.latency_ms ? `${ask.latency_ms} ms` : null],
+    ] as Array<[GlyphName, string | null]>
+  ).filter((part): part is [GlyphName, string] => Boolean(part[1]));
 
   const copy = async () => {
     if (!copyText) return;
@@ -160,12 +178,19 @@ const AnswerMeta = ({ ask, copyText }: { ask: AskResult; copyText?: string }) =>
   if (parts.length === 0 && !copyText) return null;
   return (
     <div className="msg__meta mono">
-      {parts.map((part, i) => (
-        <span key={String(part)}>{i > 0 && <span className="msg__meta-sep">·</span>}{part}</span>
+      {parts.map(([icon, text]) => (
+        <span key={icon} className="msg__meta-item">
+          <Glyph name={icon} size={13} />
+          {text}
+        </span>
       ))}
       {copyText && (
-        <button type="button" className="msg__action" onClick={copy} aria-label="Copiar resposta com as fontes">
-          <CopyIcon size={14} />
+        <button type="button" className={`msg__action${copied ? ' is-copied' : ''}`} onClick={copy} aria-label="Copiar resposta com as fontes">
+          {copied ? (
+            <span className="msg__action-ok pop"><Glyph name="check" size={14} strokeWidth={2.2} /></span>
+          ) : (
+            <Glyph name="copy" size={14} />
+          )}
           <span>{copied ? 'Copiado' : 'Copiar'}</span>
         </button>
       )}
@@ -220,49 +245,67 @@ const DISCARD_TEXT = new Map<string, string>([
 // Limitações que vêm da tentativa do modelo (descarte, falha do provedor): vão para os detalhes técnicos.
 const MODEL_LIMITATION = /^(Resposta generativa ignorada|A IA falhou|A IA declarou|A IA respondeu com uma negativa)/;
 
-/** Quem escreveu a resposta, sempre visível: a IA, só os trechos, ou a IA que foi descartada. */
-const AnswerFooter = ({ ask }: { ask: AskResult }) => {
+/** A IA foi chamada mas o texto dela não aparece: a resposta veio dos trechos. */
+const isDiscarded = (ask: AskResult) => !ask.generated && Boolean(ask.answer_provider) && ask.answer_provider !== 'extractive';
+
+/** Quem escreveu a resposta, no cabeçalho: a IA, só os trechos, ou a IA que foi descartada. */
+const AnswerSeal = ({ ask }: { ask: AskResult }) => {
   if (ask.generated) {
     return (
-      <div className="msg__footer">
-        <span className="msg__seal msg__seal--ai">
-          <SparkleIcon size={13} />
-          Escrita pela IA · {ask.answer_model ?? 'IA'}
-        </span>
-      </div>
-    );
-  }
-  if (!ask.answer_provider || ask.answer_provider === 'extractive') {
-    return (
-      <div className="msg__footer">
-        <span className="msg__seal">
-          <ListIcon size={13} />
-          Só trechos · sem IA
-        </span>
-      </div>
-    );
-  }
-  const modelLimits = ask.limitations.filter((item) => MODEL_LIMITATION.test(item));
-  return (
-    <div className="msg__footer">
-      <span className="msg__seal msg__seal--warn">
-        <AlertTriangleIcon size={13} />
-        IA descartada · mostramos o trecho
+      <span className="msg__seal msg__seal--ai">
+        <Glyph name="stars" size={13} />
+        Escrita pela IA · {ask.answer_model ?? 'IA'}
       </span>
-      <p className="msg__discard-why">
-        {(ask.answer_discard_reason && DISCARD_TEXT.get(ask.answer_discard_reason)) ||
-          'A IA não respondeu com texto a partir dos trechos.'}
-      </p>
-      <details className="msg__details">
-        <summary>Detalhes técnicos</summary>
-        <div className="mono">
-          <div>{ask.answer_discard_reason ?? 'sem código'}</div>
-          {modelLimits.map((item) => (
-            <div key={item}>{item}</div>
-          ))}
-        </div>
-      </details>
-    </div>
+    );
+  }
+  if (!isDiscarded(ask)) {
+    return (
+      <span className="msg__seal">
+        <Glyph name="list" size={13} />
+        Só trechos · sem IA
+      </span>
+    );
+  }
+  return (
+    <span className="msg__seal msg__seal--warn">
+      <Glyph name="shield" size={13} />
+      IA descartada · mostramos o trecho
+    </span>
+  );
+};
+
+/** Por que o texto da IA ficou de fora: o motivo em português e, nos detalhes, o código e o que o backend anotou. */
+const DiscardNotice = ({ ask }: { ask: AskResult }) => {
+  const modelLimits = ask.limitations.filter((item) => MODEL_LIMITATION.test(item));
+  const model = ask.answer_model;
+  const lead =
+    ask.answer_discard_reason === 'provider_error'
+      ? model ? `O ${model} não respondeu.` : 'A IA não respondeu.'
+      : `O texto ${model ? `do ${model}` : 'da IA'} não passou na conferência com os trechos.`;
+  return (
+    <section className="msg__discard" aria-label="Por que a IA foi descartada">
+      <GlyphBadge name="shield" size={32} tone="warn" />
+      <div className="msg__discard-body">
+        <h4 className="msg__discard-why">
+          {(ask.answer_discard_reason && DISCARD_TEXT.get(ask.answer_discard_reason)) ||
+            'A IA não respondeu com texto a partir dos trechos.'}
+        </h4>
+        <p>{lead} A resposta acima são frases das suas notas, cada uma com a fonte.</p>
+        <details className="msg__details">
+          <summary>
+            <Glyph name="code" size={13} />
+            Detalhes técnicos
+            <Glyph name="chev" size={13} strokeWidth={2} className="msg__details-chev" />
+          </summary>
+          <div className="mono">
+            <div className="msg__details-code">{ask.answer_discard_reason ?? 'sem código'}</div>
+            {modelLimits.map((item) => (
+              <div key={item}>{item}</div>
+            ))}
+          </div>
+        </details>
+      </div>
+    </section>
   );
 };
 
@@ -317,6 +360,7 @@ const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?
             · a partir de {noteCount} {noteCount === 1 ? 'nota' : 'notas'}
           </span>
         )}
+        <AnswerSeal ask={ask} />
       </div>
 
       <div className="msg__answer">
@@ -342,6 +386,8 @@ const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?
           <span><i className="msg__legend-line msg__legend-line--dotted" />apoio parcial</span>
         </div>
       )}
+
+      {isDiscarded(ask) && <DiscardNotice ask={ask} />}
 
       {sources.length > 0 && (
         <ol className="msg__sources" aria-label="Fontes">
@@ -392,16 +438,15 @@ const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?
       )}
 
       {limits.length > 0 && (
-        <div className="msg__limits">
-          <AlertTriangleIcon size={15} />
+        <section className="msg__limits" aria-label={limits.length === 1 ? 'Limitação' : 'Limitações'}>
+          <GlyphBadge name="info" size={28} tone="muted" />
           <div>
             <b>{limits.length === 1 ? 'Limitação' : 'Limitações'}</b>
             {limits.map((item) => <p key={item}>{item}</p>)}
           </div>
-        </div>
+        </section>
       )}
 
-      <AnswerFooter ask={ask} />
       <AnswerMeta ask={ask} copyText={copyText} />
     </>
   );

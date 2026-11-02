@@ -54,6 +54,16 @@ describe('MessageBubble', () => {
     expect(screen.getByText('rascunho, ainda sendo validado')).toBeTruthy();
   });
 
+  it('indicador de digitação: com IA, a busca já mostra a etapa seguinte; só trechos não tem etapa de escrita', () => {
+    const withAi = render(<TypingIndicator stage="retrieving" model="qwen2.5:3b" provider="ollama" />);
+    expect(within(withAi.container).getByText('Escrever com qwen2.5:3b')).toBeTruthy();
+    expect(withAi.container.querySelector('.msg__rail.ui-flow')).toBeTruthy();
+
+    const extractive = render(<TypingIndicator stage="retrieving" model="qwen2.5:3b" provider="extractive" />);
+    expect(within(extractive.container).queryByText(/Escrever/)).toBeNull();
+    expect(extractive.container.querySelectorAll('.msg__step')).toHaveLength(1);
+  });
+
   it('indicador de digitação: sem modelo, diz que está escrevendo a resposta', () => {
     render(<TypingIndicator stage="writing" />);
     expect(screen.getByText('Escrevendo a resposta…')).toBeTruthy();

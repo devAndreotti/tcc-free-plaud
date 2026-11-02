@@ -544,7 +544,7 @@ function AppContent() {
                     ))}
 
                     {/* Indicador de digitação da aba ativa */}
-                    {isTyping && <TypingIndicator stage={activeProgress?.stage} partial={activeProgress?.partial} model={answerConfig?.model ?? undefined} />}
+                    {isTyping && <TypingIndicator stage={activeProgress?.stage} partial={activeProgress?.partial} model={answerConfig?.model ?? undefined} provider={answerConfig?.provider} />}
 
                     {/* Âncora de scroll para o final */}
                     <div ref={messagesEndRef} aria-hidden="true" />
