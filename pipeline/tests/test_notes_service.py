@@ -113,6 +113,19 @@ def test_get_note_detail_returns_markdown_and_chunks(tmp_path: Path) -> None:
     assert detail.chunks[0].snippet
 
 
+def test_get_note_detail_returns_whole_chunk_text(tmp_path: Path) -> None:
+    # Regressão: o snippet parava em 240 caracteres, e a tela de Trechos pulava o resto de cada trecho.
+    settings = _settings(tmp_path).model_copy(update={'default_chunk_size': 800, 'default_chunk_overlap': 120})
+    frase = 'Esta frase repete para encher um trecho inteiro da nota de teste. '
+    note_id = _index_fixture(settings, tmp_path / 'longa.md', f'# Longa\n\n{frase * 40}\n')
+
+    connection = connect_sqlite(settings.sqlite_path)
+    detail = get_note_detail(note_id, settings=settings, connection=connection)
+
+    assert len(detail.chunks[0].snippet) > 240
+    assert len(detail.chunks[0].snippet) >= detail.chunks[0].char_end - detail.chunks[0].char_start - 20
+
+
 def test_delete_note_removes_sqlite_and_chroma_records(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     note_id = _index_fixture(

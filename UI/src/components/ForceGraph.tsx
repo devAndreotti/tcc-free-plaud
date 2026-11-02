@@ -33,6 +33,8 @@ import {
 import { legendEntries, topFolderOf } from '../lib/graphColors';
 import { POP_MS, entryAt, popAt, prefersReducedMotion, projectNodes, ringPhase, shouldAnimateEntry } from '../lib/graphMotion';
 import { drawActive, drawEdges, drawFocus, drawLabels, drawNodes, readPalette, tooltipDetail, type Palette } from './graphDraw';
+import { NoteTitle } from './NoteTitle';
+import { subscribeNoteIcons } from '../lib/noteIcons';
 import { GraphIcon } from './Icons';
 import GraphNoLinksHint from './GraphNoLinksHint';
 import GraphLegend from './GraphLegend';
@@ -320,6 +322,9 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
     return () => mo.disconnect();
   }, [draw]);
 
+  // Os rótulos mudam com a opção de ícones em Aparência e quando os ícones terminam de carregar.
+  useEffect(() => subscribeNoteIcons(() => draw()), [draw]);
+
   // ── Coordenadas canvas → mundo ──────────────────────────────────────────
   const toWorld = useCallback((cx: number, cy: number) => {
     const cam = camRef.current;
@@ -544,7 +549,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
           style={{ left: tooltip.x, top: tooltip.y }}
           aria-hidden="true"
         >
-          <span className="force-graph__tooltip-label">{tooltip.label}</span>
+          <span className="force-graph__tooltip-label"><NoteTitle text={tooltip.label} /></span>
           <span className="force-graph__tooltip-detail">{tooltip.detail}</span>
         </div>
       )}

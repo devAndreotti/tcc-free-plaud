@@ -3,7 +3,7 @@ const TYPE_LABEL: Record<string, string> = {
   markdown: 'Markdown',
   pdf: 'PDF',
   txt: 'Texto',
-  audio: 'Áudio transcrito',
+  audio: 'Áudio',
 };
 
 export const typeLabel = (type: string | null | undefined) =>

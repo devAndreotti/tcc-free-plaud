@@ -3,6 +3,7 @@ import type { AskCitation, AskResult, AskStage, AskStrategy } from '../services/
 import { discardText } from '../lib/discardReasons';
 import { focusNoteInGraph } from '../lib/vaultGraph';
 import { ExternalIcon, SearchIcon } from './Icons';
+import { NoteTitle } from './NoteTitle';
 import { Glyph, GlyphBadge, type GlyphName } from './ui/Glyph';
 
 export type MessageRole = 'user' | 'assistant';
@@ -411,7 +412,7 @@ const StructuredAnswer = ({ ask, onOpenSource, during }: { ask: AskResult; onOpe
               <div className="msg__source-body">
                 <div className="msg__source-title">
                   <button type="button" className="msg__source-open" aria-label={`Abrir ${noteTitle(source)} no trecho citado`}>
-                    {noteTitle(source)}
+                    <NoteTitle text={noteTitle(source)} />
                     <ExternalIcon size={12} />
                   </button>
                 </div>
