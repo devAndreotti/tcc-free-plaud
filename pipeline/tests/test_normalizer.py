@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import pytest
@@ -54,6 +55,14 @@ def test_documento_com_ocr_fragmentado_e_reparado() -> None:
     assert '1. OBJETIVO' in lines
     # Numeral romano e sigla ficam inteiros mesmo em documento com OCR.
     assert 'ANEXO II — API REST' in lines
+
+
+def test_documento_ocr_com_sequencia_longa_de_espacos_nao_trava() -> None:
+    # Regressão: a limpeza de espaço antes de pontuação custava quadrático numa sequência longa.
+    texto = f'{OCR_DOC}a{" " * 300_000}b\n'
+    inicio = time.perf_counter()
+    assert normalize_text(texto).endswith('b')
+    assert time.perf_counter() - inicio < 3
 
 
 def test_duas_linhas_em_caixa_alta_nao_bastam_para_marcar_como_ocr() -> None:

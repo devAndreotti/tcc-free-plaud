@@ -193,5 +193,6 @@ def normalize_text(raw_text: str) -> str:
     normalized = re.sub(r'\n{3,}', '\n\n', normalized)
     if is_ocr:
         normalized = re.sub(r'(\d)[ \t]+\.[ \t]+(\d)', r'\1.\2', normalized)
-        normalized = re.sub(r'[ \t]+([,.;:!?/])', r'\1', normalized)
+        # O lookbehind só tenta no começo de cada sequência de espaços: sem ele, uma sequência longa custa quadrático.
+        normalized = re.sub(r'(?<![ \t])[ \t]+([,.;:!?/])', r'\1', normalized)
     return normalized.strip()
