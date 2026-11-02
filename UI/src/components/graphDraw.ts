@@ -55,10 +55,13 @@ export interface Highlight {
   selectedId: string | null;
   sel: Set<string> | null;
   scale: number;
+  /** Tamanho do nó neste quadro (nó recém-chegado cresce); sem isso, todos no tamanho normal. */
+  popOf?: (id: string) => number;
 }
 
 /** Linha do tooltip com a pasta: a própria (pasta) ou a que contém a nota; também em texto, não só cor. */
 export function tooltipDetail(n: SimNode): string {
+  if (n.pending) return 'Lida, aguardando gravação';
   if (n.kind === 'folder') return n.depth === 0 ? 'Raiz do vault' : `Pasta: ${n.folder}`;
   return n.folder ? `Pasta: ${n.folder}` : 'Na raiz do vault';
 }
@@ -113,8 +116,20 @@ export function drawNodes(ctx: Ctx, nodes: SimNode[], pal: Palette, hl: Highligh
   const base = ctx.globalAlpha;
   for (const n of nodes) {
     const dim = !hl.sel || hl.sel.has(n.id) ? 1 : DIM_ALPHA;
-    const r = nodeRadius(n);
+    const r = nodeRadius(n) * (hl.popOf?.(n.id) ?? 1);
     const color = nodeColor(n, pal, hl.hoveredId);
+    // Lido e ainda não gravado: só o contorno tracejado, na cor da pasta
+    if (n.pending) {
+      ctx.globalAlpha = base * dim;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r + 1 / hl.scale, 0, Math.PI * 2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.2 / hl.scale;
+      ctx.setLineDash([2.5 / hl.scale, 2.5 / hl.scale]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      continue;
+    }
     // Halo translúcido (estilo do PR 147) na cor do próprio nó: pastas e o nó sob o mouse
     if (n.kind === 'folder' || n.id === hl.hoveredId) {
       ctx.globalAlpha = base * HALO_ALPHA * dim;
@@ -139,6 +154,29 @@ export function drawNodes(ctx: Ctx, nodes: SimNode[], pal: Palette, hl: Highligh
   ctx.beginPath();
   ctx.arc(selected.x, selected.y, nodeRadius(selected) + 4 / hl.scale, 0, Math.PI * 2);
   ctx.stroke();
+}
+
+/**
+ * Arquivo em indexação: anel na cor de destaque e o nome ao lado. `phase` (0–1) faz o anel abrir e apagar;
+ * null (Reduzir animações) deixa o anel parado. Tamanhos em px de tela, para aparecer em qualquer zoom.
+ */
+export function drawActive(ctx: Ctx, node: SimNode, pal: Palette, scale: number, phase: number | null) {
+  const px = 1 / scale;
+  const base = ctx.globalAlpha;
+  const r = nodeRadius(node);
+  ctx.strokeStyle = pal.link;
+  ctx.lineWidth = 2 * px;
+  ctx.globalAlpha = base * (phase === null ? 0.9 : 0.9 * (1 - phase));
+  ctx.beginPath();
+  ctx.arc(node.x, node.y, r + (phase === null ? 6 : 3 + 12 * phase) * px, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = base;
+  ctx.font = `${LABEL_FONT_PX * px}px ${UI_FONT}`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.text;
+  ctx.fillText(node.label, node.x + r + 10 * px, node.y);
+  ctx.textBaseline = 'alphabetic';
 }
 
 // Rótulos das pastas só com zoom suficiente para não se sobreporem (1º nível antes dos demais);

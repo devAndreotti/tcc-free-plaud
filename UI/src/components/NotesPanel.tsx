@@ -3,6 +3,7 @@ import { FolderIcon, NoteIcon, PdfIcon, SearchIcon, WaveIcon } from './Icons';
 import { NoteDetailView } from './NoteDetailView';
 import { commonRoot, formatDate, relativeParts, typeLabel } from '../lib/notes';
 import { notifyCorpusChanged } from '../hooks/useCorpusHealth';
+import { CORPUS_CHANGED, CORPUS_PROGRESS_EVENT } from '../lib/corpusEvents';
 import {
   bridge,
   type NoteDeleteResult,
@@ -115,6 +116,17 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vinda da bridge (sistema externo).
     void loadNotes();
+  }, [loadNotes]);
+
+  // A lista acompanha a indexação: cada lote gravado e o fim do job. O skeleton só aparece com a lista vazia.
+  useEffect(() => {
+    const onCorpus = () => void loadNotes();
+    window.addEventListener(CORPUS_PROGRESS_EVENT, onCorpus);
+    window.addEventListener(CORPUS_CHANGED, onCorpus);
+    return () => {
+      window.removeEventListener(CORPUS_PROGRESS_EVENT, onCorpus);
+      window.removeEventListener(CORPUS_CHANGED, onCorpus);
+    };
   }, [loadNotes]);
 
   useEffect(() => {

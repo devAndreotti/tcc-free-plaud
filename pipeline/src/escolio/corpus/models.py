@@ -96,6 +96,8 @@ class CorpusIndexProgress(BaseModel):
     batch_total: int = 0
     message: str | None = None
     recent_files: list[CorpusRecentFile] = Field(default_factory=list)
+    # Arquivos já lidos que ainda não foram gravados no banco (o grafo os mostra tracejados).
+    pending_files: list[str] = Field(default_factory=list)
 
 
 class CorpusStatusResult(BaseModel):

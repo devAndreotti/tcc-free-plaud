@@ -10,6 +10,7 @@ import IgnoredFiles from './IgnoredFiles';
 import QueueStage from './QueueStage';
 import { FolderIcon, LoaderIcon, PlayIcon } from './Icons';
 import { notifyCorpusChanged } from '../hooks/useCorpusHealth';
+import { CORPUS_PROGRESS_EVENT } from '../lib/corpusEvents';
 
 interface QueuePanelProps {
   onOpenSettings?: (tab?: SettingsTab) => void;
@@ -186,6 +187,13 @@ const QueuePanel = ({ onOpenSettings, onAsk }: QueuePanelProps) => {
       active = false;
     };
   }, [rootsVersion, finishedJob]);
+
+  // Cada lote gravado muda a contagem de notas das pastas; a lista acompanha sem esperar o fim do job.
+  useEffect(() => {
+    const onProgress = () => setRootsVersion((version) => version + 1);
+    window.addEventListener(CORPUS_PROGRESS_EVENT, onProgress);
+    return () => window.removeEventListener(CORPUS_PROGRESS_EVENT, onProgress);
+  }, []);
 
   const reindexRoot = useCallback(
     (root: string) => {

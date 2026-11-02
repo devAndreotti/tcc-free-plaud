@@ -115,15 +115,20 @@ def _chunk_summary(chunk: Chunk) -> NoteChunkSummary:
     )
 
 
-def list_notes(*, settings: Settings | None = None, connection: sqlite3.Connection | None = None) -> list[NoteSummary]:
-    """Lista notas persistidas com metadados suficientes para auditoria visual."""
+def list_notes(
+    *,
+    settings: Settings | None = None,
+    connection: sqlite3.Connection | None = None,
+    since: str | None = None,
+) -> list[NoteSummary]:
+    """Lista notas persistidas com metadados suficientes para auditoria visual (com `since`, só as gravadas desde ele)."""
     resolved_settings = settings or get_settings()
     ensure_runtime_dirs(resolved_settings)
     with _managed_connection(resolved_settings, connection) as resolved_connection:
         counts = _chunk_counts(resolved_connection)
         return [
             _summary_from_note(note, chunk_count=counts.get(note.note_id, 0))
-            for note in get_all_notes(resolved_connection)
+            for note in get_all_notes(resolved_connection, since=since)
         ]
 
 

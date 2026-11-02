@@ -64,6 +64,14 @@ describe('MessageBubble', () => {
     expect(extractive.container.querySelectorAll('.msg__step')).toHaveLength(1);
   });
 
+  it('rascunho: os [n] que a IA já escreveu viram chips, sem o texto cru', () => {
+    const { container } = render(<TypingIndicator stage="writing" partial="Primeira frase. [1] Segunda frase. [2]" model="qchat" />);
+    const chips = [...container.querySelectorAll('.msg__ref--draft')].map((chip) => chip.textContent);
+    expect(chips).toEqual(['1', '2']);
+    expect(container.querySelector('.msg__answer')?.textContent).toBe('Primeira frase.1 Segunda frase.2');
+    expect(container.querySelectorAll('.msg__cursor')).toHaveLength(1);
+  });
+
   it('indicador de digitação: sem modelo, diz que está escrevendo a resposta', () => {
     render(<TypingIndicator stage="writing" />);
     expect(screen.getByText('Escrevendo a resposta…')).toBeTruthy();

@@ -277,6 +277,51 @@ describe('MessageBubble com resposta estruturada', () => {
   });
 });
 
+describe('MessageBubble - resposta dada durante a indexação', () => {
+  afterEach(() => cleanup());
+
+  const during = (over: Partial<AskResult> = {}): MessageData => ({
+    ...answer({ strategy: 'lexical', ...over }),
+    indexing: { jobId: 'j1', ready: 320, total: 632 },
+  });
+
+  it('com o job rodando, diz quanto já estava no corpus e ainda não oferece perguntar de novo', () => {
+    render(<MessageBubble message={during()} onRetry={vi.fn()} runningJobId="j1" />);
+
+    const notice = screen.getByRole('region', { name: 'Indexação em andamento' });
+    expect(notice.textContent).toContain('Respondida durante a indexação');
+    expect(notice.textContent).toContain('320 de 632 arquivos desta pasta já estavam no corpus');
+    expect(screen.queryByRole('button', { name: 'Perguntar de novo' })).toBeNull();
+  });
+
+  it('quando aquele job termina, Perguntar de novo repete a pergunta com a mesma estratégia', async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    const { rerender } = render(<MessageBubble message={during()} onRetry={onRetry} runningJobId="j1" />);
+
+    rerender(<MessageBubble message={during()} onRetry={onRetry} runningJobId={null} />);
+    expect(screen.getByRole('region', { name: 'Indexação terminada' }).textContent).toContain('Esta resposta usou 320 de 632 arquivos');
+    await user.click(screen.getByRole('button', { name: 'Perguntar de novo' }));
+
+    expect(onRetry).toHaveBeenCalledWith('Como funciona?', 'lexical');
+  });
+
+  it('outro job rodando não é o desta resposta: vale como terminado', () => {
+    render(<MessageBubble message={during()} onRetry={vi.fn()} runningJobId="j2" />);
+    expect(screen.getByRole('button', { name: 'Perguntar de novo' })).toBeTruthy();
+  });
+
+  it('"Não encontrei" durante a indexação também avisa: a nota pode só não ter entrado ainda', () => {
+    render(<MessageBubble message={during({ no_answer: true, status: 'no_answer', answer: null })} onRetry={vi.fn()} runningJobId="j1" />);
+    expect(screen.getByRole('region', { name: 'Indexação em andamento' })).toBeTruthy();
+  });
+
+  it('resposta dada sem job não mostra aviso nenhum', () => {
+    render(<MessageBubble message={answer({})} onRetry={vi.fn()} runningJobId="j1" />);
+    expect(screen.queryByRole('region', { name: /Indexação/ })).toBeNull();
+  });
+});
+
 describe('MessageBubble - rodapé da resposta', () => {
   afterEach(() => cleanup());
 

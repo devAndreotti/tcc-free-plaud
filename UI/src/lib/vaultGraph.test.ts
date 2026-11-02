@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MarkdownNode } from './vaultGraph';
-import { buildGraph, fitCamera, pathToRoot, tick, visibleLinks } from './vaultGraph';
+import { buildGraph, fitCamera, pathToRoot, pendingNodeId, tick, visibleLinks } from './vaultGraph';
 
 const note = (path: string): MarkdownNode => ({
   id: path,
@@ -59,6 +59,20 @@ describe('vaultGraph (regressão do grafo bagunçado)', () => {
     const grown = buildGraph([note('A/x.md'), note('B/y.md'), note('A/nova.md')], 400, 400, first.nodes);
     const fresh = grown.nodes.find((n) => n.id === 'A/nova.md')!;
     expect(Math.hypot(fresh.x - 330, fresh.y - 70)).toBeLessThanOrEqual(14.01);
+  });
+
+  it('arquivo pendente fica marcado e, gravado, a nota nasce exatamente onde o tracejado estava', () => {
+    const pendingNote = { ...note('A/nova.md'), id: pendingNodeId('A/nova.md'), pending: true };
+    const first = buildGraph([note('A/x.md'), pendingNote], 400, 400);
+    const pendente = first.nodes.find((n) => n.id === pendingNote.id)!;
+    expect(pendente.pending).toBe(true);
+    pendente.x = 321;
+    pendente.y = 123;
+
+    const gravada = buildGraph([note('A/x.md'), { ...note('A/nova.md'), id: 'nota-de-verdade' }], 400, 400, first.nodes);
+    const nota = gravada.nodes.find((n) => n.id === 'nota-de-verdade')!;
+    expect([nota.x, nota.y]).toEqual([321, 123]);
+    expect(nota.pending).toBeUndefined();
   });
 
   it('posições iniciais são determinísticas e nenhum nó nasce sobre outro', () => {

@@ -31,8 +31,8 @@ import {
   type ArrowDirection,
 } from '../lib/graphSelection';
 import { legendEntries, topFolderOf } from '../lib/graphColors';
-import { entryAt, prefersReducedMotion, projectNodes, shouldAnimateEntry } from '../lib/graphMotion';
-import { drawEdges, drawFocus, drawLabels, drawNodes, readPalette, tooltipDetail, type Palette } from './graphDraw';
+import { POP_MS, entryAt, popAt, prefersReducedMotion, projectNodes, ringPhase, shouldAnimateEntry } from '../lib/graphMotion';
+import { drawActive, drawEdges, drawFocus, drawLabels, drawNodes, readPalette, tooltipDetail, type Palette } from './graphDraw';
 import { GraphIcon } from './Icons';
 import GraphNoLinksHint from './GraphNoLinksHint';
 import GraphLegend from './GraphLegend';
@@ -65,9 +65,14 @@ interface ForceGraphProps {
   mode?: GraphMode;
   /** Clique numa nota (sem arrastar) abre a nota; clique em pasta enquadra a pasta */
   onOpenNote?: (noteId: string) => void;
+  /** Nó do arquivo que a indexação está lendo agora: ganha um anel pulsando e o nome ao lado */
+  activeId?: string | null;
 }
 
-const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }: ForceGraphProps) => {
+// Quadros do anel do arquivo em indexação: ~20 por segundo bastam, e o job pode durar minutos
+const RING_FRAME_MS = 50;
+
+const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, activeId = null }: ForceGraphProps) => {
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const animRef    = useRef<number>(0);
 
@@ -86,6 +91,8 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
   const panRef     = useRef<number>(0);
   const entryStartRef = useRef<number | null>(null); // início da abertura (null = grafo já aberto)
   const modeRef    = useRef<GraphMode>(mode);        // modo do último build (troca de modo reabre)
+  const activeRef  = useRef<string | null>(null);    // arquivo em indexação (anel pulsando)
+  const birthsRef  = useRef(new Map<string, number>()); // quando cada nó recém-chegado entrou (cresce por POP_MS)
 
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
   // Texto da região aria-live: "Selecionado: <nome>, N ligações" (vazio sem seleção)
@@ -117,10 +124,21 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     // Posições exibidas: a abertura radial do centro até a simulação (ver graphMotion.ts)
     const shown = projectNodes(nodes, logW.current / 2, logH.current / 2, entryAt(entryStartRef.current, performance.now()));
     ctx.globalAlpha = chain.length > 0 ? 0.3 : 1;
-    const hl = { hoveredId: hovered.current, selectedId: selectedRef.current, sel, scale: cam.scale };
+    const now = performance.now();
+    const births = birthsRef.current;
+    for (const [id, born] of births) if (now - born > POP_MS) births.delete(id);
+    const hl = {
+      hoveredId: hovered.current,
+      selectedId: selectedRef.current,
+      sel,
+      scale: cam.scale,
+      popOf: births.size > 0 ? (id: string) => popAt(births.get(id), now) : undefined,
+    };
     drawEdges(ctx, shown, edges, pal, cam, sel);
     drawNodes(ctx, shown, pal, hl);
     drawLabels(ctx, shown, pal, cam, sel, hl.selectedId);
+    const active = activeRef.current ? shown.find((n) => n.id === activeRef.current) : undefined;
+    if (active) drawActive(ctx, active, pal, cam.scale, prefersReducedMotion() ? null : ringPhase(now));
     ctx.globalAlpha = 1;
     if (chain.length > 0) drawFocus(ctx, chain, shown, pal, cam, logW.current);
 
@@ -232,6 +250,11 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     const animate = shouldAnimateEntry(prevIds, graphRef.current.nodes.map((n) => n.id), modeChanged);
     // Desenho novo (1ª carga, outro modo, outra vault) volta a enquadrar; o grafo que cresce mantém o zoom de quem mexeu.
     if (animate) autoFitRef.current = true;
+    // No grafo que cresce, só os nós que acabaram de entrar crescem; a abertura já anima o desenho inteiro.
+    if (!animate && !prefersReducedMotion()) {
+      const now = performance.now();
+      for (const n of graphRef.current.nodes) if (!prevIds.has(n.id)) birthsRef.current.set(n.id, now);
+    }
     entryStartRef.current = animate ? performance.now() : null;
     // Seleção que sumiu com o grafo (nota apagada, outro modo sem ela) não fica anunciada
     if (selectedRef.current !== null && !graphRef.current.nodes.some((n) => n.id === selectedRef.current)) {
@@ -240,6 +263,26 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     }
     startLoop(MAX_ITER);
   }, [vaultNodes, links, mode, startLoop]);
+
+  // ── Anel do arquivo em indexação: redesenha enquanto há arquivo; com movimento reduzido, um quadro parado basta ─
+  useEffect(() => {
+    activeRef.current = activeId;
+    if (!activeId || prefersReducedMotion()) {
+      draw();
+      return undefined;
+    }
+    let frame = 0;
+    let last = 0;
+    const pulse = (t: number) => {
+      if (t - last >= RING_FRAME_MS) {
+        last = t;
+        draw();
+      }
+      frame = requestAnimationFrame(pulse);
+    };
+    frame = requestAnimationFrame(pulse);
+    return () => cancelAnimationFrame(frame);
+  }, [activeId, draw]);
 
   // ── ResizeObserver: redimensiona o canvas; só monta o grafo na 1ª medida ─
   useEffect(() => {
@@ -358,6 +401,8 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
       return;
     }
     selectNode(hit);
+    // Pendente ainda não tem nota: selecionar já mostra o nome e a situação no tooltip.
+    if (hit.pending) return;
     if (hit.kind === 'note') onOpenNote?.(hit.id);
     else frameFolder(hit);
   }, [nodeUnder, selectNode, frameFolder, onOpenNote]);
@@ -397,7 +442,9 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
       setAnnouncement('Nenhum nó selecionado: use as setas para escolher um');
       return;
     }
-    if (cur.kind === 'note') {
+    if (cur.pending) {
+      setAnnouncement(`${cur.label}: lida, aguardando gravação`);
+    } else if (cur.kind === 'note') {
       setAnnouncement(`Abrindo nota: ${cur.label}`);
       onOpenNote?.(cur.id);
     } else {

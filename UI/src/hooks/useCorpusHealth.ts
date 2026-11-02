@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { CORPUS_CHANGED, CORPUS_PROGRESS_EVENT } from '../lib/corpusEvents';
 import { bridge } from '../services/bridge';
 
 export interface CorpusHealth {
@@ -8,8 +9,6 @@ export interface CorpusHealth {
   errorCount: number;
   warningCount: number;
 }
-
-const CORPUS_CHANGED = 'escolio:corpus-changed';
 
 /** Avisa quem mostra números do corpus (a sidebar) que algo foi indexado, reindexado ou apagado. */
 export function notifyCorpusChanged(): void {
@@ -25,6 +24,31 @@ export function useCorpusHealth(refreshKey: unknown): CorpusHealth | null {
     const onChange = () => setChanges((n) => n + 1);
     window.addEventListener(CORPUS_CHANGED, onChange);
     return () => window.removeEventListener(CORPUS_CHANGED, onChange);
+  }, []);
+
+  // Durante a indexação, só as contagens: o Doctor pesa e competiria com o job; o estado dele fica como está.
+  useEffect(() => {
+    let cancelled = false;
+    const onProgress = () => {
+      bridge
+        .getBackendSettings({ doctor: false })
+        .then((settings) => {
+          if (cancelled) return;
+          setHealth((prev) => prev && {
+            ...prev,
+            notes: settings.notes_count ?? prev.notes,
+            chunks: settings.sqlite_chunks_count ?? prev.chunks,
+          });
+        })
+        .catch(() => {
+          // Contagem ao vivo é opcional: o fim do job recarrega tudo.
+        });
+    };
+    window.addEventListener(CORPUS_PROGRESS_EVENT, onProgress);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(CORPUS_PROGRESS_EVENT, onProgress);
+    };
   }, []);
 
   useEffect(() => {

@@ -16,6 +16,7 @@ from escolio.benchmark.runners import (
     compare_benchmark_suite,
 )
 from escolio.corpus.runtime import CorpusRuntime
+from escolio.providers.answer import AnswerProvider, get_answer_provider
 from escolio.providers.embed import get_embedder
 from escolio.retrieval.rerank import reranker_from_settings
 from escolio.storage.sqlite import init_sqlite
@@ -46,6 +47,21 @@ def benchmark_comparison_payload(result: BenchmarkComparisonResult, json_path: P
     return payload
 
 
+def _answer_provider(settings: Settings) -> AnswerProvider | None:
+    """Mesmo provider da CLI (benchmark/cli.py) e do chat; o extrativo não é IA e fica como None."""
+    if settings.answer_provider == 'extractive':
+        return None
+    return get_answer_provider(
+        settings.answer_provider,
+        model=settings.answer_model,
+        base_url=settings.answer_base_url,
+        api_key=settings.answer_api_key,
+        temperature=settings.answer_temperature,
+        max_tokens=settings.answer_max_tokens,
+        timeout_seconds=settings.answer_timeout_seconds,
+    )
+
+
 def _resolve_suite_path(suite_path: Path, settings: Settings) -> Path:
     expanded = suite_path.expanduser()
     if expanded.is_absolute():
@@ -58,7 +74,11 @@ def run_benchmark_compare(
     *,
     runtime: CorpusRuntime | None = None,
     settings: Settings | None = None,
+    answer: bool = False,
 ) -> dict:
+    """Compara as estratégias na suite. Com `answer`, o chat responde com a IA das configurações (como a CLI com
+    --answer-provider) e o resumo traz `answer_metrics`: aceitas e motivos de descarte. Sem IA configurada, `answer`
+    não muda nada."""
     resolved_settings = settings or get_settings()
     ensure_runtime_dirs(resolved_settings)
     suite_file = _resolve_suite_path(Path(suite_path), resolved_settings)
@@ -91,6 +111,7 @@ def run_benchmark_compare(
             vector_store=vector_store,
             embedder=embedder,
             settings_snapshot=snapshot,
+            answer_provider=_answer_provider(resolved_settings) if answer else None,
         )
         output_base = resolved_settings.results_dir / result.comparison_id
         json_path = export_benchmark_comparison_json(result, output_base.with_suffix('.json'))

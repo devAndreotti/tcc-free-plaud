@@ -14,10 +14,11 @@ import GraphPanel from './components/GraphPanel';
 import NotesPanel from './components/NotesPanel';
 import BenchmarkPanel from './components/BenchmarkPanel';
 import QueuePanel from './components/QueuePanel';
-import { bridge, type AskResult, type AskStage, type AskStrategy, type BackendSettings, type CorpusRoot } from './services/bridge';
+import { bridge, type AskResult, type AskStage, type AskStrategy, type BackendSettings, type CorpusRoot, type IndexJobSnapshot } from './services/bridge';
 import { VaultsProvider } from './contexts/VaultsContext';
 import { useVaults } from './hooks/useVaults';
 import { QueueProvider } from './contexts/QueueContext';
+import { useQueueContext } from './hooks/useQueueContext';
 import { fromSavedConversations, toSavedConversations, type ConversationSnapshot } from './lib/conversations';
 
 // Gera ID único para mensagens e abas
@@ -30,6 +31,13 @@ const ASK_POLL_MS = 150;
 const WARM_INTERVAL_MS = 4 * 60 * 1000;
 // Prazo de uma pergunta em streaming: passa do limite de 300 s do provedor, então só estoura se o backend travar.
 const STREAM_DEADLINE_MS = 6 * 60 * 1000;
+
+/** Quanto da pasta em indexação já está no corpus (gravadas + inalteradas); sem job ou ainda sem total, nada a avisar. */
+const indexingSnapshot = (job: IndexJobSnapshot | null | undefined): MessageData['indexing'] => {
+  const progress = job?.status === 'running' ? job.progress : null;
+  if (!job || !progress || progress.total_found <= 0) return undefined;
+  return { jobId: job.job_id, ready: progress.committed_count + progress.unchanged_count, total: progress.total_found };
+};
 
 const isAskStrategy = (value: unknown): value is AskStrategy =>
   value === 'hybrid' || value === 'vector' || value === 'lexical';
@@ -123,6 +131,14 @@ const readStoredSourceRoot = (): string | null => {
 };
 
 function AppContent() {
+  // Job da Fila: a resposta dada com ele rodando diz quanto do corpus já estava lá.
+  const { job } = useQueueContext();
+  const jobRef = useRef(job);
+  useEffect(() => {
+    jobRef.current = job;
+  }, [job]);
+  const runningJobId = job?.status === 'running' ? job.job_id : null;
+
   // Conversas em memória; cada aba é de uma vault e mostra o ícone e a cor dela.
   const { vaults, active: activeVault, version: vaultVersion, select: selectVault } = useVaults();
   const vaultKey = activeVault ? activeVault.id : '';
@@ -406,6 +422,8 @@ function AppContent() {
       const run: AskRun = { stopped: false };
       askRunsRef.current[tabId] = run;
       updateTab(tabId, (c) => ({ ...c, tabTyping: { ...c.tabTyping, [tabId]: true } }));
+      // O corpus que esta pergunta enxerga: a busca roda agora, com o que o job já gravou.
+      const indexing = indexingSnapshot(jobRef.current);
       try {
         const ask = (await bridge.supportsAskStreaming())
           ? await streamAsk(tabId, run, text, askStrategy, askSourceRoot)
@@ -417,6 +435,7 @@ function AppContent() {
           content: ask.answer ?? '',
           timestamp: new Date(),
           ask,
+          indexing,
         });
       } catch (error) {
         if (run.stopped) return;
@@ -481,7 +500,6 @@ function AppContent() {
 
   return (
     <>
-      <QueueProvider>
         {/* Layout raiz: sidebar à esquerda + coluna de conteúdo à direita */}
         <div className="app" id="app-root">
           {/* Barra lateral esquerda */}
@@ -540,7 +558,7 @@ function AppContent() {
                     aria-live="polite"
                   >
                     {activeMessages.map((message) => (
-                      <MessageBubble key={message.id} message={message} onRetry={handleRetry} onOpenSource={handleOpenNote} />
+                      <MessageBubble key={message.id} message={message} onRetry={handleRetry} onOpenSource={handleOpenNote} runningJobId={runningJobId} />
                     ))}
 
                     {/* Indicador de digitação da aba ativa */}
@@ -589,7 +607,6 @@ function AppContent() {
           {/* Painel lateral de grafos — expande à direita do conteúdo */}
           <GraphPanel isOpen={isGraphPanelOpen} onToggle={handleToggleGraphPanel} onOpenNote={handleOpenNote} />
         </div>
-      </QueueProvider>
     </>
   );
 }
@@ -597,7 +614,9 @@ function AppContent() {
 function App() {
   return (
     <VaultsProvider>
-      <AppContent />
+      <QueueProvider>
+        <AppContent />
+      </QueueProvider>
     </VaultsProvider>
   );
 }

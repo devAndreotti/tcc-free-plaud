@@ -42,7 +42,7 @@ const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
   const isResizing = useRef(false);
 
   // Notas indexadas da vault ativa e as ligações entre elas; recarrega ao abrir o painel
-  const { nodes, links, refresh } = useCorpusGraph();
+  const { nodes, links, refresh, activeId, live } = useCorpusGraph();
   const [mode, setMode] = useState<GraphMode>(readStoredMode);
   const chooseMode = (next: GraphMode) => {
     setMode(next);
@@ -150,9 +150,22 @@ const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
         </button>
       </div>
 
+      {/* Indexação em andamento: o que está entrando no grafo agora (visual; o andamento é anunciado na Fila) */}
+      {live && (
+        <p className="graph-panel__live">
+          <span className="graph-panel__live-dot ui-pulse" aria-hidden="true" />
+          <span className="graph-panel__live-text">
+            Ao vivo
+            {live.current && ` · ${live.current}`}
+            {live.pending > 0 && ` · ${live.pending} aguardando gravação`}
+          </span>
+        </p>
+      )}
+
       {/* Corpo do painel — grafo de força interativo */}
       <div className="graph-panel__body">
-        <ForceGraph vaultNodes={nodes} links={links} mode={mode} onOpenNote={onOpenNote} />
+        {/* Fechado, o painel não desenha o anel: o job pode durar minutos */}
+        <ForceGraph vaultNodes={nodes} links={links} mode={mode} onOpenNote={onOpenNote} activeId={isOpen ? activeId : null} />
       </div>
     </aside>
   );
