@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +10,7 @@ const bridgeMock = vi.hoisted(() => ({
   saveApiKey: vi.fn(),
   indexVault: vi.fn(),
   applySettingsPreset: vi.fn(),
+  previewSettingsPreset: vi.fn(),
   testAnswerProvider: vi.fn(),
   saveBackendSetting: vi.fn(),
   saveBackendSettings: vi.fn(),
@@ -214,11 +216,107 @@ describe('SettingsModal', () => {
     });
   });
 
-  it('abre por padrão na aba Voz com os campos de transcrição', async () => {
+  it('abre por padrão no Diagnóstico, com a aba marcada', async () => {
     renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
 
-    expect(await screen.findByLabelText('Modelo de transcrição (voz)')).toBeTruthy();
-    expect(screen.queryByLabelText('Modelo de resposta')).toBeNull();
+    expect(await screen.findByText('Banco de notas (SQLite)')).toBeTruthy();
+    const ativa = screen.getByRole('navigation', { name: 'Categorias de configuração' }).querySelector('[aria-current="page"]');
+    expect(ativa?.textContent).toBe('Diagnóstico');
+    expect(screen.queryByLabelText('Modelo de transcrição (voz)')).toBeNull();
+  });
+
+  it('Tab no último elemento volta ao primeiro, e Shift+Tab no primeiro vai ao último', async () => {
+    const user = userEvent.setup();
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
+    await screen.findByLabelText('Modelo de transcrição (voz)');
+
+    const items = Array.from(
+      screen.getByRole('dialog').querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+      )
+    );
+    const first = items[0];
+    const last = items[items.length - 1];
+
+    act(() => last.focus());
+    await user.tab();
+    expect(document.activeElement).toBe(first);
+
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(last);
+  });
+
+  it('ao fechar, devolve o foco a quem abriu o modal', async () => {
+    const user = userEvent.setup();
+    const Harness = () => {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>Abrir ajustes</button>
+          <SettingsModal isOpen={open} onClose={() => setOpen(false)} initialTab="voz" />
+        </>
+      );
+    };
+    renderModal(<Harness />);
+
+    const opener = screen.getByRole('button', { name: 'Abrir ajustes' });
+    await user.click(opener);
+    await screen.findByRole('dialog');
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('Aplicar abre a prévia no cartão; Cancelar não aplica; o preset com embedding_model avisa que a vault mantém o modelo', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem('escolio.avancadoLiberado', '1');
+    const preset = { key: 'gpu_qualidade', label: 'GPU qualidade', description: 'Usa a GPU.', values: { default_ask_strategy: 'vector', embedding_model: 'bge-m3' } };
+    bridgeMock.getBackendSettings.mockResolvedValue({ ...backendSettings, settings_presets: [preset] });
+    bridgeMock.previewSettingsPreset.mockResolvedValue({
+      preset,
+      values: preset.values,
+      changes: {
+        default_ask_strategy: { before: 'hybrid', after: 'vector' },
+        embedding_model: { before: 'bge-m3-antigo', after: 'bge-m3' },
+      },
+    });
+    bridgeMock.applySettingsPreset.mockResolvedValue({ ok: true, preset, values: preset.values, changes: {} });
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="avancado" />);
+
+    const card = await screen.findByRole('article', { name: 'GPU qualidade' });
+    await user.click(within(card).getByRole('button', { name: 'Aplicar preset GPU qualidade' }));
+
+    expect(bridgeMock.previewSettingsPreset).toHaveBeenCalledWith('gpu_qualidade');
+    expect(bridgeMock.applySettingsPreset).not.toHaveBeenCalled();
+    expect(await within(card).findByText('bge-m3-antigo')).toBeTruthy();
+    expect(within(card).getByRole('note').textContent).toBe(
+      'O modelo de busca é fixo por vault: esta vault continua com o modelo atual. O novo vale para vaults criadas depois.'
+    );
+
+    await user.click(within(card).getByRole('button', { name: 'Cancelar' }));
+    expect(bridgeMock.applySettingsPreset).not.toHaveBeenCalled();
+    expect(within(card).getByRole('button', { name: 'Aplicar preset GPU qualidade' })).toBeTruthy();
+
+    await user.click(within(card).getByRole('button', { name: 'Aplicar preset GPU qualidade' }));
+    await user.click(await within(card).findByRole('button', { name: 'Aplicar' }));
+    expect(bridgeMock.applySettingsPreset).toHaveBeenCalledWith('gpu_qualidade');
+  });
+
+  it('se a prévia falhar, mostra a mensagem no cartão e não aplica', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem('escolio.avancadoLiberado', '1');
+    const preset = { key: 'cpu_rapido', label: 'CPU rápido', description: 'Sem GPU.', values: { default_ask_strategy: 'lexical' } };
+    bridgeMock.getBackendSettings.mockResolvedValue({ ...backendSettings, settings_presets: [preset] });
+    bridgeMock.previewSettingsPreset.mockRejectedValueOnce(new Error('preset sem valor válido'));
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="avancado" />);
+
+    const card = await screen.findByRole('article', { name: 'CPU rápido' });
+    await user.click(within(card).getByRole('button', { name: 'Aplicar preset CPU rápido' }));
+
+    expect((await within(card).findByRole('alert')).textContent).toContain('Não foi possível montar a prévia: preset sem valor válido');
+    expect(within(card).queryByRole('button', { name: 'Aplicar' })).toBeNull();
+    expect(bridgeMock.applySettingsPreset).not.toHaveBeenCalled();
   });
 
   it('na aba Vaults não há barra de salvar: a aba explica que as mudanças valem na hora', async () => {
@@ -251,7 +349,7 @@ describe('SettingsModal', () => {
       settings_catalog: [...backendSettings.settings_catalog, deviceRow],
     });
 
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
     expect(await screen.findByText('Usa a placa de vídeo NVIDIA (CUDA) se houver; senão, o processador.')).toBeTruthy();
     expect(screen.getAllByText('Recomendado: Auto').length).toBeGreaterThan(0);
 
@@ -265,7 +363,7 @@ describe('SettingsModal', () => {
 
   it('IA local: lista os modelos instalados ao abrir a aba e o campo Modelo vira lista', async () => {
     const user = userEvent.setup();
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
 
     await user.click(screen.getByRole('button', { name: 'Fontes de IA' }));
     const model = await screen.findByRole('combobox', { name: 'Modelo de resposta' });
@@ -371,7 +469,7 @@ describe('SettingsModal', () => {
       message: 'Modelo baixado e verificado.',
     });
 
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     await user.click(screen.getByRole('radio', { name: 'Moonshine Tiny' }));
@@ -439,7 +537,7 @@ describe('SettingsModal', () => {
       message: 'Modelo baixado e verificado.',
     });
 
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     // silero-vad nunca aparece como opcao de modelo de transcricao.
@@ -465,7 +563,7 @@ describe('SettingsModal', () => {
     const user = userEvent.setup();
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
 
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     // Com Whisper Small selecionado (default do draft), todo idioma esta habilitado.
@@ -488,7 +586,7 @@ describe('SettingsModal', () => {
     const user = userEvent.setup();
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
 
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
 
     // Draft comeca em "pt" (Whisper Small); trocar para Moonshine (so "en")
@@ -502,7 +600,7 @@ describe('SettingsModal', () => {
     const user = userEvent.setup();
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
 
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
     await screen.findByRole('radiogroup', { name: 'Modelo de transcrição (voz)' });
     expect(screen.queryByRole('region', { name: 'Alterações não salvas' })).toBeNull();
 
@@ -529,7 +627,7 @@ describe('SettingsModal', () => {
     };
     bridgeMock.saveBackendSettings.mockResolvedValue(saved);
 
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
     await user.click(await screen.findByRole('radio', { name: 'Moonshine Tiny' }));
     await user.click(screen.getByRole('button', { name: 'Salvar configurações do backend' }));
 
@@ -575,7 +673,7 @@ describe('SettingsModal', () => {
   it('regressão: clique no overlay fora do card chama onClose', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    renderModal(<SettingsModal isOpen onClose={onClose} />);
+    renderModal(<SettingsModal isOpen onClose={onClose} initialTab="voz" />);
 
     await user.click(screen.getByRole('button', { name: 'Fechar configurações clicando fora' }));
 
@@ -585,7 +683,7 @@ describe('SettingsModal', () => {
   it('regressão: clique dentro do card não chama onClose', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    renderModal(<SettingsModal isOpen onClose={onClose} />);
+    renderModal(<SettingsModal isOpen onClose={onClose} initialTab="voz" />);
 
     await user.click(screen.getByRole('dialog'));
 
@@ -594,7 +692,7 @@ describe('SettingsModal', () => {
 
   it('regressão: mousedown no card e click no overlay não chama onClose', async () => {
     const onClose = vi.fn();
-    renderModal(<SettingsModal isOpen onClose={onClose} />);
+    renderModal(<SettingsModal isOpen onClose={onClose} initialTab="voz" />);
 
     fireEvent.mouseDown(screen.getByRole('dialog'));
     fireEvent.click(screen.getByRole('dialog').parentElement as HTMLElement);
@@ -677,7 +775,7 @@ describe('SettingsModal', () => {
       settings_presets: [{ key: 'cpu_rapido', label: 'CPU rápido', description: 'Busca local sem GPU.', values: { default_ask_strategy: 'vector' } }],
     });
 
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
     await user.click(await screen.findByRole('radio', { name: 'Moonshine Tiny' }));
     await user.click(screen.getByRole('button', { name: 'Avançado' }));
 
@@ -708,7 +806,7 @@ describe('SettingsModal', () => {
     const user = userEvent.setup();
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
     const onClose = vi.fn();
-    renderModal(<SettingsModal isOpen onClose={onClose} />);
+    renderModal(<SettingsModal isOpen onClose={onClose} initialTab="voz" />);
     await user.click(await screen.findByRole('radio', { name: 'Moonshine Tiny' }));
 
     await user.keyboard('{Escape}');
@@ -731,7 +829,7 @@ describe('SettingsModal', () => {
     const user = userEvent.setup();
     bridgeMock.listVoiceModels.mockResolvedValue([whisperModel, moonshineModel]);
     const onClose = vi.fn();
-    renderModal(<SettingsModal isOpen onClose={onClose} />);
+    renderModal(<SettingsModal isOpen onClose={onClose} initialTab="voz" />);
     await user.click(await screen.findByRole('radio', { name: 'Moonshine Tiny' }));
     await user.keyboard('{Escape}');
 
@@ -744,7 +842,7 @@ describe('SettingsModal', () => {
   it('sem rascunho pendente, Esc fecha direto', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    renderModal(<SettingsModal isOpen onClose={onClose} />);
+    renderModal(<SettingsModal isOpen onClose={onClose} initialTab="voz" />);
     await screen.findByRole('combobox', { name: 'Idioma da transcrição' });
 
     await user.keyboard('{Escape}');

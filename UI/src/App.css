@@ -5838,3 +5838,129 @@
 .ai-card__consent { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.5; color: var(--text-primary); }
 .ai-card__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border-color-subtle); background: var(--bg-secondary); }
 .ai-card__inuse { display: inline-flex; align-items: center; min-height: 34px; padding: 0 12px; border-radius: var(--radius-md); font-size: 13px; font-weight: 600; color: var(--accent-blue-light); background: var(--accent-soft); }
+
+/* ── Busca nas conversas (ConversationSearch) ───────────────────────────── */
+.conv-search {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.conv-search__toggle {
+  justify-content: center;
+  padding: 0 12px;
+}
+
+.conv-search__popover {
+  position: fixed;
+  top: 44px;
+  right: 12px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+}
+
+.conv-search__input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+}
+
+.conv-search__empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.conv-search__results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.conv-search__hit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.conv-search__hit:hover,
+.conv-search__hit:focus-visible {
+  background: var(--bg-surface-hover);
+}
+
+.conv-search__tab {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.conv-search__snippet {
+  color: var(--text-secondary);
+}
+
+/* ── Aviso de rodapé com ação (AppToast) ────────────────────────────────── */
+.app-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  max-width: calc(100vw - 32px);
+  padding: 8px 10px 8px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  z-index: 50;
+}
+
+.app-toast--raised {
+  bottom: 64px;
+}
+
+.app-toast__message {
+  overflow-wrap: anywhere;
+}
+
+.app-toast__action {
+  padding: 2px 8px;
+  border: none;
+  background: transparent;
+  color: var(--accent-blue);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-toast__close {
+  flex-shrink: 0;
+}

@@ -31,7 +31,7 @@ test('Avançado: bloqueado explica, libera com confirmação e mostra presets e 
 });
 
 test('Geral: Verificar de novo roda o diagnóstico e volta com o resultado', async ({ page }) => {
-  await openSettings(page, 'Geral');
+  await openSettings(page, 'Diagnóstico');
   const again = page.getByRole('button', { name: 'Verificar de novo' });
   await expect(again).toBeVisible();
   await again.click();
@@ -98,7 +98,6 @@ test('Fontes de IA: configuração manual com o provedor em cartões', async ({ 
 
 test('Notas: com o menu lateral aberto, os dados de cada trecho ficam dentro do painel', async ({ page }) => {
   // Regressão: o rótulo do trecho ficava fora da coluna de leitura e cortava com o menu aberto.
-  await page.getByRole('button', { name: 'Expandir menu' }).click();
   await page.getByRole('button', { name: 'Notas', exact: true }).click();
   await page.getByRole('radio', { name: 'Trechos' }).click();
 
@@ -240,7 +239,47 @@ test('Notas: o primeiro carregamento mostra o esqueleto na lista e na leitura, e
 });
 
 test('Configurações: o Diagnóstico abre com o esqueleto e depois mostra as verificações', async ({ page }) => {
-  await openSettings(page, 'Geral');
+  await openSettings(page, 'Diagnóstico');
   await expect(page.locator('.doctor__summary')).toBeVisible({ timeout: 8000 });
   await expect(page.getByRole('status', { name: 'Carregando diagnóstico' })).toHaveCount(0);
+});
+
+test('Configurações: abre no Diagnóstico e o Tab não sai do modal', async ({ page }) => {
+  await page.getByRole('button', { name: 'Configurações' }).first().click();
+  await expect(page.getByRole('navigation', { name: 'Categorias de configuração' }).getByRole('button', { name: 'Diagnóstico', exact: true })).toHaveAttribute('aria-current', /.+/);
+  for (let i = 0; i < 40; i += 1) await page.keyboard.press('Tab');
+  const inside = await page.evaluate(() => {
+    const nav = document.querySelector('nav[aria-label="Categorias de configuração"]');
+    const modal = nav?.closest('[role="dialog"]') ?? nav?.parentElement?.parentElement;
+    return Boolean(modal && document.activeElement && modal.contains(document.activeElement));
+  });
+  expect(inside).toBe(true);
+});
+
+test('Avançado: aplicar preset mostra a prévia e o aviso do modelo, e cancelar não aplica', async ({ page }) => {
+  await openSettings(page, 'Avançado');
+  await page.getByRole('checkbox', { name: /Entendo que estes ajustes/ }).check();
+  await page.getByRole('button', { name: 'Mostrar ajustes avançados' }).click();
+  await page.getByRole('button', { name: 'Aplicar preset GPU qualidade' }).click();
+  await expect(page.getByText(/O modelo de busca é fixo por vault/)).toBeVisible({ timeout: 5000 });
+  const cancel = page.getByRole('button', { name: 'Cancelar' });
+  await expect(cancel).toBeVisible({ timeout: 5000 });
+  await cancel.click();
+  await expect(cancel).toHaveCount(0);
+});
+
+test('Barra lateral: abre em janela larga e recolhe sozinha em janela estreita', async ({ page }) => {
+  await expect(page.getByRole('button', { name: 'Recolher menu' })).toBeVisible();
+  await page.setViewportSize({ width: 850, height: 700 });
+  await expect(page.getByRole('button', { name: 'Expandir menu' })).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(page.getByRole('button', { name: 'Recolher menu' })).toBeVisible();
+});
+
+test('Conversas: a busca abre pelo cabeçalho e avisa quando não acha nada', async ({ page }) => {
+  await page.getByRole('button', { name: 'Buscar nas conversas' }).click();
+  await page.getByRole('searchbox', { name: 'Termo da busca' }).fill('termo-que-nao-existe');
+  await expect(page.getByText('Nada encontrado nas conversas abertas.')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByText('Nada encontrado nas conversas abertas.')).toHaveCount(0);
 });

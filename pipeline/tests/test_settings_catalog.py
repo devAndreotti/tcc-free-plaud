@@ -36,9 +36,9 @@ def test_settings_catalog_explains_core_numbers_and_groups(tmp_path: Path) -> No
     assert by_key['retrieval_top_k']['label'] == 'Trechos por pergunta'
     assert by_key['retrieval_top_k']['value'] == 4
     assert by_key['retrieval_top_k']['description'].startswith('Quantos trechos')
-    assert by_key['default_chunk_size']['label'] == 'Tamanho do trecho'
+    assert by_key['default_chunk_size']['label'] == 'Tamanho do trecho (caracteres)'
     assert by_key['default_chunk_size']['value'] == 800
-    assert by_key['default_chunk_overlap']['label'] == 'Sobreposição'
+    assert by_key['default_chunk_overlap']['label'] == 'Repetição entre trechos (caracteres)'
     assert by_key['default_chunk_overlap']['value'] == 120
     assert by_key['answer_api_key']['storage'] == 'local_env'
     assert by_key['answer_api_key']['secret'] is True
