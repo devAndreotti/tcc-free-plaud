@@ -229,8 +229,9 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote }
     const modeChanged = modeRef.current !== mode;
     modeRef.current = mode;
     graphRef.current = buildGraph(vaultNodes, logW.current, logH.current, graphRef.current.nodes, links, mode);
-    autoFitRef.current = true;
     const animate = shouldAnimateEntry(prevIds, graphRef.current.nodes.map((n) => n.id), modeChanged);
+    // Desenho novo (1ª carga, outro modo, outra vault) volta a enquadrar; o grafo que cresce mantém o zoom de quem mexeu.
+    if (animate) autoFitRef.current = true;
     entryStartRef.current = animate ? performance.now() : null;
     // Seleção que sumiu com o grafo (nota apagada, outro modo sem ela) não fica anunciada
     if (selectedRef.current !== null && !graphRef.current.nodes.some((n) => n.id === selectedRef.current)) {

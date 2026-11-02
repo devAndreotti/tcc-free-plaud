@@ -34,8 +34,10 @@ export function prefersReducedMotion(): boolean {
 export function shouldAnimateEntry(prevIds: Set<string>, nextIds: string[], modeChanged: boolean): boolean {
   if (nextIds.length === 0) return false;
   if (modeChanged || prevIds.size === 0) return true;
-  const fresh = nextIds.filter((id) => !prevIds.has(id)).length;
-  return fresh * 2 > nextIds.length;
+  // Reabre quando a maior parte do desenho anterior sumiu (outra vault); grafo que só cresce (indexação) não reabre.
+  const next = new Set(nextIds);
+  const gone = [...prevIds].filter((id) => !next.has(id)).length;
+  return gone * 2 > prevIds.size;
 }
 
 /** Posição exibida de cada nó: interpolação radial do centro (k = 0) até a simulação (k = 1). */

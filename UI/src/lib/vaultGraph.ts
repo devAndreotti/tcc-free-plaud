@@ -102,29 +102,32 @@ export function buildGraph(
   const cy = logH / 2;
   const kept = new Map(previous.map((n) => [n.id, n]));
   const slots = assignPaletteSlots(vaultNodes.map((n) => topFolderOf(n.path)));
-  // Posição nova: espiral de ângulo áureo pelo índice do nó (determinística, sem Math.random)
-  const place = (id: string, i: number): Pick<SimNode, 'x' | 'y' | 'vx' | 'vy'> => {
+  // Posição nova: espiral de ângulo áureo pelo índice do nó (determinística, sem Math.random).
+  // Com `near` (grafo que cresce durante a indexação), a nota nasce ao lado da sua pasta em vez de cruzar o desenho.
+  const place = (id: string, i: number, near?: SimNode): Pick<SimNode, 'x' | 'y' | 'vx' | 'vy'> => {
     const old = kept.get(id); // rescan do mesmo vault não embaralha o desenho
     if (old) return { x: old.x, y: old.y, vx: 0, vy: 0 };
     const angle = i * GOLDEN_ANGLE;
+    if (near) return { x: near.x + 14 * Math.cos(angle), y: near.y + 14 * Math.sin(angle), vx: 0, vy: 0 };
     const r = 8 * Math.sqrt(i);
     return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), vx: 0, vy: 0 };
   };
 
   const nodes: SimNode[] = [];
   const edges: SimEdge[] = [];
-  const folders = new Set<string>();
+  const folders = new Map<string, SimNode>();
 
   // Pasta pelo caminho completo: "A/Pessoas" e "B/Pessoas" são nós distintos.
   const ensureFolder = (dir: string): string => {
     const id = `dir:${dir}`;
     if (folders.has(dir)) return id;
-    folders.add(dir);
     const parts = dir ? dir.split('/') : [];
-    nodes.push({
+    const folder: SimNode = {
       id, label: parts.at(-1) ?? 'vault', kind: 'folder', depth: parts.length, folder: dir,
       ...colorFields(parts[0] ?? '', slots), degree: 0, ...place(id, nodes.length),
-    });
+    };
+    folders.set(dir, folder);
+    nodes.push(folder);
     if (dir) edges.push({ source: ensureFolder(parts.slice(0, -1).join('/')), target: id });
     return id;
   };
@@ -137,7 +140,7 @@ export function buildGraph(
     const depth = dir ? dir.split('/').length + 1 : 1;
     nodes.push({
       id: n.id, label: n.name, kind: 'note', depth, folder: dir, ...colorFields(topFolderOf(n.path), slots),
-      degree: 0, ...place(n.id, nodes.length),
+      degree: 0, ...place(n.id, nodes.length, kept.size > 0 && folderId ? folders.get(dir) : undefined),
     });
     if (folderId) edges.push({ source: folderId, target: n.id });
   }

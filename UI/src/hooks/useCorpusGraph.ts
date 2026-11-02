@@ -6,7 +6,7 @@
  * Junto vêm as ligações [[...]] entre essas notas (links), só as que apontam para notas do grafo.
  */
 
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { QueueContext } from '../contexts/QueueContextObject';
 import { bridge, type CorpusRoot, type NoteSummary } from '../services/bridge';
 import type { MarkdownNode, VaultLink } from '../lib/vaultGraph';
@@ -57,14 +57,20 @@ export function useCorpusGraph() {
   const job = useContext(QueueContext)?.job;
   // Id do job que acabou de terminar (status diferente de running); muda uma vez por job
   const jobDone = job && job.status !== 'running' ? job.job_id : null;
+  // Notas já gravadas pelo job em andamento: em micro-lotes cada lote gravado já responde no chat, então entra no grafo.
+  const committed = job?.status === 'running' ? job.progress?.committed_count ?? 0 : 0;
+  // Leitura mais recente: uma resposta lenta de um lote anterior não sobrescreve o grafo mais novo
+  const seq = useRef(0);
 
   const refresh = useCallback(async () => {
+    const mine = ++seq.current;
     try {
       const [notes, roots, noteLinks] = await Promise.all([
         bridge.listNotes?.() ?? [],
         bridge.listCorpusRoots?.() ?? [],
         readLinks(),
       ]);
+      if (mine !== seq.current) return;
       const built = buildCorpusNodes(notes, roots);
       // Link para nota fora do grafo (apagada, de outra vault) não vira aresta solta
       const ids = new Set(built.map((n) => n.id));
@@ -88,6 +94,11 @@ export function useCorpusGraph() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- job da Fila terminou (sistema externo).
     if (jobDone) void refresh();
   }, [jobDone, refresh]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- lote gravado no job da Fila (sistema externo).
+    if (committed > 0) void refresh();
+  }, [committed, refresh]);
 
   return { nodes, links, refresh };
 }
