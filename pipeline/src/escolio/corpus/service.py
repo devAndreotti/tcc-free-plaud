@@ -430,8 +430,9 @@ def index_corpus_path(
 
         pending_items: list[PendingCorpusIndex] = []
         results: list[CorpusIndexResult] = []
-        # Cada evento de progresso leva os últimos arquivos já processados (a lista "Agora" da Fila).
-        progress = with_recent_files(progress, results)
+        # Cada evento de progresso leva os últimos arquivos já processados (a lista "Agora" da Fila)
+        # e os lidos que ainda esperam gravação (tracejados no grafo).
+        progress = with_recent_files(progress, results, lambda: [str(item.source_path) for item in pending_items])
         indexed_count = 0
         unchanged_count = 0
         failed_count = 0

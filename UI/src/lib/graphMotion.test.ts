@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ENTRY_MS, easeOutCubic, entryAt, prefersReducedMotion, projectNodes, shouldAnimateEntry } from './graphMotion';
+import { ENTRY_MS, POP_MS, easeOutCubic, entryAt, popAt, prefersReducedMotion, projectNodes, ringPhase, shouldAnimateEntry } from './graphMotion';
 
 describe('easeOutCubic', () => {
   it('vai de 0 a 1, limitado nas bordas, e desacelera no fim', () => {
@@ -27,6 +27,25 @@ describe('entryAt: abertura de ENTRY_MS (600 ms)', () => {
 
   it('no meio do caminho do tempo, a fração é a do ease-out', () => {
     expect(entryAt(0, ENTRY_MS / 2)).toBeCloseTo(easeOutCubic(0.5));
+  });
+});
+
+describe('popAt: o nó recém-chegado cresce e assenta', () => {
+  it('sem nascimento marcado, tamanho normal', () => {
+    expect(popAt(undefined, 1000)).toBe(1);
+  });
+
+  it('nasce pequeno, passa um pouco do normal e termina no normal', () => {
+    expect(popAt(1000, 1000)).toBeCloseTo(0.2);
+    expect(popAt(1000, 1000 + POP_MS * 0.7)).toBeGreaterThan(1);
+    expect(popAt(1000, 1000 + POP_MS)).toBeCloseTo(1);
+    expect(popAt(1000, 1000 + POP_MS * 5)).toBeCloseTo(1);
+  });
+
+  it('ringPhase recomeça a cada volta e fica entre 0 e 1', () => {
+    expect(ringPhase(0)).toBe(0);
+    expect(ringPhase(700)).toBeCloseTo(0.5);
+    expect(ringPhase(1400)).toBe(0);
   });
 });
 

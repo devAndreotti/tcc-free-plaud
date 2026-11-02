@@ -79,6 +79,22 @@ def test_list_notes_returns_operational_summary(tmp_path: Path) -> None:
     assert summaries[0].chunk_count >= 1
 
 
+def test_list_notes_since_returns_only_versions_written_from_then(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    old_id = _index_fixture(settings, tmp_path / 'antiga.md', '# Antiga\n\nNota que já estava no corpus.\n')
+    connection = connect_sqlite(settings.sqlite_path)
+    connection.execute("UPDATE notes SET created_at = '2026-01-01T00:00:00+00:00' WHERE note_id = ?", (old_id,))
+    connection.commit()
+    new_id = _index_fixture(settings, tmp_path / 'nova.md', '# Nova\n\nNota gravada durante a indexação.\n')
+    since = next(n.created_at for n in list_notes(settings=settings, connection=connection) if n.note_id == new_id)
+
+    delta = list_notes(settings=settings, connection=connection, since=since)
+
+    # >= repete as do mesmo instante (quem pede mescla por note_id); a antiga não volta.
+    assert [n.note_id for n in delta] == [new_id]
+    assert len(list_notes(settings=settings, connection=connection)) == 2
+
+
 def test_get_note_detail_returns_markdown_and_chunks(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     note_id = _index_fixture(

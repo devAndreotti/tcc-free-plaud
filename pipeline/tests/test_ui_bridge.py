@@ -483,11 +483,12 @@ def test_desktop_api_saves_backend_setting(monkeypatch, tmp_path: Path) -> None:
 
 def test_desktop_api_exposes_notes_methods(monkeypatch) -> None:
     module = _load_ui_main(monkeypatch)
+    since_calls: list[str | None] = []
 
     monkeypatch.setattr(
         module,
         "list_notes",
-        lambda settings=None: [
+        lambda settings=None, since=None: since_calls.append(since) or [
             SimpleNamespace(
                 model_dump=lambda mode="json": {
                     "note_id": "nota-1",
@@ -545,6 +546,10 @@ def test_desktop_api_exposes_notes_methods(monkeypatch) -> None:
     api = module.Api()
 
     assert api.listNotes()[0]["note_id"] == "nota-1"
+    # O grafo pede só as notas gravadas desde a última leitura; texto vazio vale como "todas".
+    api.listNotes("2026-05-25T10:00:00+00:00")
+    api.listNotes("")
+    assert since_calls == [None, "2026-05-25T10:00:00+00:00", None]
     assert api.getNoteDetail("nota-1")["structured_markdown"] == "# Nota 1"
     assert api.deleteNote("nota-1", "APAGAR")["ok"] is True
     assert api.deleteNote("nota-1", "")["status"] == "confirmation_required"
@@ -575,12 +580,14 @@ def test_desktop_api_lists_note_links_from_active_vault(monkeypatch, tmp_path: P
 def test_desktop_api_runs_benchmark_compare(monkeypatch) -> None:
     module = _load_ui_main(monkeypatch)
     calls: list[str] = []
+    answers: list[bool] = []
 
     monkeypatch.setattr(
         module,
         "run_benchmark_compare",
-        lambda suite_path, runtime=None: (
+        lambda suite_path, runtime=None, answer=False: (
             calls.append(str(suite_path))
+            or answers.append(answer)
             or {
                 "ok": True,
                 "comparison_id": "cmp-ui",
@@ -603,8 +610,10 @@ def test_desktop_api_runs_benchmark_compare(monkeypatch) -> None:
     )
 
     result = module.Api().runBenchmarkCompare("suite.json")
+    module.Api().runBenchmarkCompare("suite.json", True)
 
-    assert calls == ["suite.json"]
+    assert calls == ["suite.json", "suite.json"]
+    assert answers == [False, True]
     assert result["ok"] is True
     assert result["comparison_id"] == "cmp-ui"
     assert result["json_report_path"].endswith("cmp-ui.json")

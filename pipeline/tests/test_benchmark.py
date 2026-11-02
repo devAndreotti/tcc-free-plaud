@@ -1021,3 +1021,44 @@ def test_benchmark_compare_cli_closes_sqlite_connection(monkeypatch, tmp_path: P
 
     assert result.exit_code == 0
     assert connection.closed is True
+
+
+def test_run_benchmark_compare_answer_uses_the_configured_ai(monkeypatch, tmp_path: Path) -> None:
+    """Benchmark do app com "Medir também a resposta da IA": o mesmo provider das configurações vai para o compare."""
+    from escolio.benchmark import service
+
+    class Parou(Exception):
+        pass
+
+    captured: list[object] = []
+
+    def fake_compare(suite, **kwargs):
+        captured.append(kwargs['answer_provider'])
+        raise Parou
+
+    monkeypatch.setattr(service, '_resolve_suite_path', lambda path, settings: path)
+    monkeypatch.setattr(service, 'load_benchmark_suite', lambda path: SimpleNamespace(suite_name='suite-ia'))
+    monkeypatch.setattr(service, 'executar_compare_com_flags', fake_compare)
+    monkeypatch.setattr(service, 'get_answer_provider', lambda name, **kwargs: ('IA', name, kwargs['model']))
+
+    def settings_for(provider: str) -> Settings:
+        return Settings(
+            workspace_dir=tmp_path,
+            data_dir=tmp_path / 'data',
+            results_dir=tmp_path / 'data' / 'results',
+            sqlite_path=tmp_path / 'data' / 'results' / 'escolio.sqlite3',
+            vector_store_dir=tmp_path / 'data' / 'results' / 'vector_store',
+            embedding_model='fake-hash',
+            embedding_device='cpu',
+            answer_provider=provider,
+            answer_model='qchat:latest',
+        )
+
+    for provider, answer in (('ollama', True), ('ollama', False), ('extractive', True)):
+        try:
+            service.run_benchmark_compare('suite.json', runtime=FakeRuntime(), settings=settings_for(provider), answer=answer)
+        except Parou:
+            pass
+
+    # Só com a opção ligada e uma IA de verdade (extrativo não é IA) o compare mede a resposta gerada.
+    assert captured == [('IA', 'ollama', 'qchat:latest'), None, None]

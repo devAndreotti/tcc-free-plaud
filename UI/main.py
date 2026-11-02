@@ -560,8 +560,9 @@ class Api:
             return {'ok': False, 'message': str(exc)}
         return {'ok': True}
 
-    def listNotes(self) -> list[dict]:
-        return [note.model_dump(mode='json') for note in list_notes()]
+    def listNotes(self, since: str | None = None) -> list[dict]:
+        """Notas indexadas; com `since`, só as gravadas desde aquele created_at (o grafo durante a indexação)."""
+        return [note.model_dump(mode='json') for note in list_notes(since=since or None)]
 
     def listNoteLinks(self) -> list[dict]:
         """Ligações [[...]] entre as notas indexadas da vault ativa (arestas do grafo)."""
@@ -588,8 +589,9 @@ class Api:
         result = reindex_note(note_id, runtime=self.runtime)
         return result.model_dump(mode='json')
 
-    def runBenchmarkCompare(self, suite_path: str) -> dict:
-        return run_benchmark_compare(Path(suite_path), runtime=self.runtime)
+    def runBenchmarkCompare(self, suite_path: str, answer: bool = False) -> dict:
+        """`answer`: mede também a resposta da IA das Fontes de IA (answer_metrics com os motivos de descarte)."""
+        return run_benchmark_compare(Path(suite_path), runtime=self.runtime, answer=bool(answer))
 
     def _native_dialog(self, dialog_type, **kwargs) -> str:
         """

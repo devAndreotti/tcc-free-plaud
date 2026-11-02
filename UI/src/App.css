@@ -233,6 +233,34 @@
   color: var(--bg-primary);
 }
 
+/* Indexação em andamento: arquivo atual e o que espera gravação, entre o cabeçalho e o grafo */
+.graph-panel__live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  margin: 0;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-color-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.graph-panel__live-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-blue-light);
+}
+
+.graph-panel__live-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Corpo do painel — ocupa todo o espaço restante para o canvas */
 .graph-panel__body {
   flex: 1;
@@ -1860,6 +1888,118 @@
   color: var(--text-secondary);
 }
 
+/* Opção de medir a resposta da IA, na linha de baixo do cartão da suite */
+.bench__with-answer {
+  flex-basis: 100%;
+  align-items: flex-start;
+  font-size: 13px;
+}
+
+.bench__with-answer small {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Resposta da IA: aceitas, tempos e os motivos de descarte */
+.bench__answers {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.bench__answers-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.bench__answers-title {
+  flex: 1;
+  min-width: 220px;
+}
+
+.bench__answers-title h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.bench__answers-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.bench__answers-kpis > div {
+  padding: 12px 14px;
+  border: 1px solid var(--border-color-subtle);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.bench__answers-kpis dd {
+  margin: 2px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.bench__answers-reasons h3 {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.bench__answers-reasons ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bench__reason {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px 36px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border-color-subtle);
+}
+
+.bench__reason-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.bench__reason-text code {
+  font-size: 11px;
+  color: var(--warn);
+  overflow-wrap: anywhere;
+}
+
+.bench__reason-text small {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.bench__reason b {
+  font-size: 13px;
+  text-align: right;
+}
+
+.bench__fill--warn {
+  background: var(--warn);
+}
+
 .bench__faith-list {
   display: flex;
   flex-direction: column;
@@ -2704,6 +2844,14 @@
   color: #fff;
 }
 
+/* No rascunho a fonte ainda não está validada: o chip é só o número, sem clique. */
+.msg__ref--draft,
+.msg__ref--draft:hover {
+  background: var(--accent-soft);
+  color: var(--accent-blue-light);
+  cursor: default;
+}
+
 .msg__legend {
   display: flex;
   gap: 18px;
@@ -2909,6 +3057,69 @@
   border-color: transparent;
   background: color-mix(in srgb, var(--warn) 14%, transparent);
   color: var(--warn);
+}
+
+/* Resposta dada com o job rodando: quanto do corpus já estava lá e, quando o job termina, Perguntar de novo. */
+.msg__during {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue-light) 40%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-blue-light) 6%, transparent);
+  transition: border-color 0.3s, background-color 0.3s;
+}
+
+.msg__during--done {
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+  background: color-mix(in srgb, var(--ok) 5%, transparent);
+}
+
+.msg__during-text {
+  min-width: 0;
+}
+
+.msg__during-text b {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.msg__during-text p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.msg__during-track {
+  display: block;
+  height: 4px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--bg-surface-hover);
+  overflow: hidden;
+}
+
+.msg__during-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-blue-light);
+  transition: width 0.6s cubic-bezier(0.2, 0.9, 0.3, 1), background-color 0.3s;
+}
+
+.msg__during--done .msg__during-fill { background: var(--ok); }
+
+.msg__during .msg__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
 }
 
 /* IA descartada: o motivo num cartão âmbar, com o código e as notas do backend recolhidos. */

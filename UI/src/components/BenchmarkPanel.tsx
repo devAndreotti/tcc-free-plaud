@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { bridge, type BenchmarkCompareResult, type BenchmarkStrategySummary } from '../services/bridge';
 import { CopyIcon, FolderIcon, RefreshIcon } from './Icons';
 import { STRATEGY_ORDER, fmt2, fmt3, ms, nameOf, pct } from './benchmarkFormat';
 import BenchmarkAblation from './BenchmarkAblation';
+import BenchmarkAnswers from './BenchmarkAnswers';
 import BenchmarkCoverage from './BenchmarkCoverage';
 import BenchmarkFaithfulness from './BenchmarkFaithfulness';
 import BenchEmpty from './BenchEmpty';
@@ -145,6 +146,25 @@ const BenchmarkPanel = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState('');
   const [scope, setScope] = useState<Scope>('corpus');
+  // Medir também a resposta da IA: só faz sentido com uma IA nas Fontes de IA.
+  const [answerSource, setAnswerSource] = useState<{ provider: string; model: string | null } | null>(null);
+  const [withAnswer, setWithAnswer] = useState(false);
+  const [ranModel, setRanModel] = useState<string | null>(null);
+  const hasAi = Boolean(answerSource && answerSource.provider !== 'extractive');
+
+  useEffect(() => {
+    let active = true;
+    Promise.resolve(bridge.getBackendSettings?.({ doctor: false }))
+      .then((settings) => {
+        if (active && settings) setAnswerSource({ provider: settings.answer_provider, model: settings.answer_model ?? null });
+      })
+      .catch(() => {
+        // Sem as configurações, a opção fica desligada e a comparação roda só com a busca.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const corpus = result?.corpus ?? null;
   const activeScope: Scope = corpus ? scope : 'notes';
@@ -186,7 +206,11 @@ const BenchmarkPanel = () => {
     setIsRunning(true);
     setStatus('');
     try {
-      const nextResult = await bridge.runBenchmarkCompare(resolvedSuite);
+      const measureAnswers = withAnswer && hasAi;
+      const nextResult = measureAnswers
+        ? await bridge.runBenchmarkCompare(resolvedSuite, { answer: true })
+        : await bridge.runBenchmarkCompare(resolvedSuite);
+      setRanModel(measureAnswers ? answerSource?.model ?? null : null);
       setResult(nextResult);
       setStatus(`Comparação ${nextResult.comparison_id} concluída.`);
     } catch (error) {
@@ -234,6 +258,19 @@ const BenchmarkPanel = () => {
             <FolderIcon size={15} />
             Selecionar suite
           </button>
+          {hasAi && (
+            <label className="switch bench__with-answer">
+              <input type="checkbox" checked={withAnswer} disabled={isRunning} onChange={(event) => setWithAnswer(event.target.checked)} />
+              <span className="switch__track" aria-hidden="true" />
+              <span>
+                Medir também a resposta da IA
+                <small>
+                  Usa {answerSource?.model ?? 'o modelo das Fontes de IA'}: cada pergunta passa pela IA, cerca de 3 s por pergunta e
+                  estratégia com a IA local.
+                </small>
+              </span>
+            </label>
+          )}
         </section>
 
         {status && <p className="queue__status" role="status">{status}</p>}
@@ -386,6 +423,8 @@ const BenchmarkPanel = () => {
                 )}
               </div>
             )}
+
+            {corpus && <BenchmarkAnswers summaries={corpus.summaries} model={ranModel} />}
 
             <section className="card" aria-label="Relatórios">
               <div className="card__head"><h2>Relatórios desta comparação</h2></div>

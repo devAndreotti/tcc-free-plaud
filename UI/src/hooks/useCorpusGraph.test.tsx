@@ -125,6 +125,90 @@ describe('useCorpusGraph', () => {
     expect(bridgeMock.listNotes).toHaveBeenCalledTimes(2);
   });
 
+  // Job rodando, com o provider relendo a variável a cada render (o job chega novo a cada consulta).
+  const withJob = (read: () => unknown) => ({ children }: { children: ReactNode }) => (
+    <QueueContext.Provider value={{ job: read() } as never}>{children}</QueueContext.Provider>
+  );
+  const running = (progress: object) => ({ job_id: 'j1', status: 'running', progress });
+
+  it('durante o job, cada lote pede só as notas novas e soma às que já estavam', async () => {
+    let job = running({ committed_count: 0 });
+    const { result, rerender } = renderHook(() => useCorpusGraph(), { wrapper: withJob(() => job) });
+    await waitFor(() => expect(result.current.nodes).toHaveLength(1));
+
+    bridgeMock.listNotes.mockResolvedValue([note({ note_id: 'b', title: 'B', created_at: '2026-10-18T12:05:00' })]);
+    job = running({ committed_count: 32 });
+    rerender();
+
+    await waitFor(() => expect(result.current.nodes.map((n) => n.id)).toEqual(['arq--1', 'b']));
+    expect(bridgeMock.listNotes).toHaveBeenLastCalledWith({ since: '2026-10-18T12:00:00' });
+  });
+
+  it('no fim do job a leitura é completa: é ela que tira do grafo o que foi apagado', async () => {
+    let job: { job_id: string; status: string; progress: object } = running({ committed_count: 32 });
+    const { result, rerender } = renderHook(() => useCorpusGraph(), { wrapper: withJob(() => job) });
+    await waitFor(() => expect(result.current.nodes).toHaveLength(1));
+
+    bridgeMock.listNotes.mockClear();
+    bridgeMock.listNotes.mockResolvedValue([]);
+    job = { job_id: 'j1', status: 'completed', progress: { committed_count: 40 } };
+    rerender();
+
+    await waitFor(() => expect(result.current.nodes).toHaveLength(0));
+    expect(bridgeMock.listNotes).toHaveBeenCalledWith();
+  });
+
+  it('arquivo lido e não gravado vira nó pendente, o arquivo atual é o ativo e a gravação tira o pendente', async () => {
+    const lida = 'C:\\Vault\\Projetos\\escolio\\Fila.md';
+    let job = running({ committed_count: 0, pending_files: [lida], current_path: lida });
+    const { result, rerender } = renderHook(() => useCorpusGraph(), { wrapper: withJob(() => job) });
+    await waitFor(() => expect(result.current.nodes).toHaveLength(2));
+
+    const pending = result.current.nodes.find((n) => n.pending);
+    expect(pending).toMatchObject({ id: 'pending:Projetos/escolio/Fila.md', name: 'Fila', path: 'Projetos/escolio/Fila.md' });
+    expect(result.current.activeId).toBe(pending?.id);
+    expect(result.current.live).toEqual({ current: 'Fila.md', pending: 1 });
+
+    bridgeMock.listNotes.mockResolvedValue([note({ note_id: 'fila', title: 'Fila', source_path: lida, created_at: '2026-10-18T12:05:00' })]);
+    job = running({ committed_count: 32, pending_files: [], current_path: lida });
+    rerender();
+
+    await waitFor(() => expect(result.current.nodes.map((n) => n.id)).toEqual(['arq--1', 'fila']));
+    expect(result.current.nodes.some((n) => n.pending)).toBe(false);
+    expect(result.current.activeId).toBe('fila');
+    expect(result.current.live).toEqual({ current: 'Fila.md', pending: 0 });
+  });
+
+  it('nota que já existe não ganha pendente repetido quando uma versão nova está a caminho', async () => {
+    const job = running({ committed_count: 0, pending_files: ['c:/vault/projetos/escolio/arquitetura.md'] });
+    const { result } = renderHook(() => useCorpusGraph(), { wrapper: withJob(() => job) });
+    // Antes da primeira leitura o arquivo aparece como pendente; com a nota carregada, fica só ela.
+    await waitFor(() => expect(result.current.nodes.map((n) => n.id)).toEqual(['arq--1']));
+    expect(result.current.nodes[0].pending).toBeUndefined();
+  });
+
+  it('consulta do job sem novidade não remonta o grafo (mesma lista de nós)', async () => {
+    let job = running({ committed_count: 0, pending_files: ['C:\\Vault\\Projetos\\a.md'], current_path: 'C:\\Vault\\Projetos' });
+    const { result, rerender } = renderHook(() => useCorpusGraph(), { wrapper: withJob(() => job) });
+    await waitFor(() => expect(result.current.nodes).toHaveLength(2));
+    const before = result.current.nodes;
+
+    job = running({ committed_count: 0, pending_files: ['C:\\Vault\\Projetos\\a.md'], current_path: 'C:\\Vault\\Projetos' });
+    rerender();
+
+    expect(result.current.nodes).toBe(before);
+    // Passo do job em cima da pasta inteira: não há arquivo para destacar nem nome para mostrar.
+    expect(result.current.activeId).toBeNull();
+    expect(result.current.live?.current).toBeNull();
+  });
+
+  it('sem job, nada de ao vivo', async () => {
+    const { result } = renderHook(() => useCorpusGraph());
+    await waitFor(() => expect(result.current.nodes).toHaveLength(1));
+    expect(result.current.live).toBeNull();
+    expect(result.current.activeId).toBeNull();
+  });
+
   it('uma leitura lenta de antes não sobrescreve a mais nova', async () => {
     const { result } = renderHook(() => useCorpusGraph());
     await waitFor(() => expect(result.current.nodes).toHaveLength(1));

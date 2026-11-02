@@ -15,7 +15,11 @@ export interface MarkdownNode {
   path: string; // caminho relativo à raiz do corpus
   size: number; // tamanho em bytes
   modified: string; // data de modificação em ISO 8601
+  pending?: boolean; // arquivo lido pela indexação e ainda não gravado no banco
 }
+
+/** Id do nó de um arquivo ainda não gravado: vem do caminho, porque o note_id só existe depois da gravação. */
+export const pendingNodeId = (path: string) => `pending:${path}`;
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
@@ -32,6 +36,7 @@ export interface SimNode {
   vx: number;
   vy: number;
   degree: number;
+  pending?: boolean; // desenhado tracejado até o lote ser gravado
 }
 
 /** Aresta: árvore (pasta ↔ filho, sem kind) ou ligação [[...]] entre duas notas (kind 'link'). */
@@ -104,8 +109,9 @@ export function buildGraph(
   const slots = assignPaletteSlots(vaultNodes.map((n) => topFolderOf(n.path)));
   // Posição nova: espiral de ângulo áureo pelo índice do nó (determinística, sem Math.random).
   // Com `near` (grafo que cresce durante a indexação), a nota nasce ao lado da sua pasta em vez de cruzar o desenho.
-  const place = (id: string, i: number, near?: SimNode): Pick<SimNode, 'x' | 'y' | 'vx' | 'vy'> => {
-    const old = kept.get(id); // rescan do mesmo vault não embaralha o desenho
+  // `was` é o id anterior do mesmo arquivo: a nota gravada nasce onde o pendente tracejado estava.
+  const place = (id: string, i: number, near?: SimNode, was?: string): Pick<SimNode, 'x' | 'y' | 'vx' | 'vy'> => {
+    const old = kept.get(id) ?? (was ? kept.get(was) : undefined); // rescan do mesmo vault não embaralha o desenho
     if (old) return { x: old.x, y: old.y, vx: 0, vy: 0 };
     const angle = i * GOLDEN_ANGLE;
     if (near) return { x: near.x + 14 * Math.cos(angle), y: near.y + 14 * Math.sin(angle), vx: 0, vy: 0 };
@@ -140,7 +146,8 @@ export function buildGraph(
     const depth = dir ? dir.split('/').length + 1 : 1;
     nodes.push({
       id: n.id, label: n.name, kind: 'note', depth, folder: dir, ...colorFields(topFolderOf(n.path), slots),
-      degree: 0, ...place(n.id, nodes.length, kept.size > 0 && folderId ? folders.get(dir) : undefined),
+      degree: 0, pending: n.pending,
+      ...place(n.id, nodes.length, kept.size > 0 && folderId ? folders.get(dir) : undefined, pendingNodeId(n.path)),
     });
     if (folderId) edges.push({ source: folderId, target: n.id });
   }

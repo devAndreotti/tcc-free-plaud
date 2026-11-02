@@ -40,6 +40,20 @@ export function shouldAnimateEntry(prevIds: Set<string>, nextIds: string[], mode
   return gone * 2 > prevIds.size;
 }
 
+/** Duração do crescimento de um nó que acabou de entrar no grafo. */
+export const POP_MS = 450;
+
+/** Tamanho do nó novo neste instante: nasce pequeno, passa um pouco do normal e assenta (1 = normal). */
+export function popAt(start: number | undefined, now: number): number {
+  if (start === undefined) return 1;
+  const t = Math.min(1, Math.max(0, (now - start) / POP_MS));
+  const back = 1 + 2.2 * (t - 1) ** 3 + 1.2 * (t - 1) ** 2;
+  return 0.2 + 0.8 * back;
+}
+
+/** Anel do arquivo em indexação: fase de 0 a 1 que recomeça a cada 1,4 s (0 = perto do nó e visível; 1 = longe e apagado). */
+export const ringPhase = (now: number) => (now % 1400) / 1400;
+
 /** Posição exibida de cada nó: interpolação radial do centro (k = 0) até a simulação (k = 1). */
 export function projectNodes<T extends { x: number; y: number }>(nodes: T[], cx: number, cy: number, k: number): T[] {
   if (k >= 1) return nodes;

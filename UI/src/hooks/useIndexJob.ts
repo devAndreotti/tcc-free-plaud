@@ -14,8 +14,9 @@
  * ──────────────────────────────────────────────────────────────
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { bridge, type IndexJobSnapshot } from '../services/bridge';
+import { notifyCorpusProgress } from '../lib/corpusEvents';
 import { notifyCorpusChanged } from './useCorpusHealth';
 import { VAULT_SWITCHED_EVENT } from '../contexts/VaultsContextObject';
 
@@ -42,10 +43,20 @@ export function useIndexJob(): QueueState {
   const [isBusy, setIsBusy] = useState(false);
   const [watcherActive, setWatcherActive] = useState(false);
 
+  // Notas já gravadas pelo job, na última consulta: quando sobe, um lote acabou de entrar no corpus.
+  const committedRef = useRef({ jobId: '', count: 0 });
+
   const refreshJob = useCallback(async (jobId: string) => {
     const latest = await bridge.getIndexJob(jobId);
     setJob(latest);
-    if (latest.status !== 'running') notifyCorpusChanged();
+    if (latest.status !== 'running') {
+      notifyCorpusChanged();
+      return;
+    }
+    const count = latest.progress?.committed_count ?? 0;
+    const before = committedRef.current.jobId === jobId ? committedRef.current.count : 0;
+    committedRef.current = { jobId, count };
+    if (count > before) notifyCorpusProgress();
   }, []);
 
   // Polling do job ativo — sobrevive à desmontagem de QueuePanel porque

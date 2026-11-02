@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { AskCitation, AskResult, AskStage, AskStrategy } from '../services/bridge';
+import { discardText } from '../lib/discardReasons';
 import { focusNoteInGraph } from '../lib/vaultGraph';
 import { ExternalIcon, SearchIcon } from './Icons';
 import { Glyph, GlyphBadge, type GlyphName } from './ui/Glyph';
@@ -15,6 +16,8 @@ export interface MessageData {
   ask?: AskResult;
   /** Pergunta que falhou: "Tentar de novo" a repete com a mesma estratégia. */
   retry?: { query: string; strategy: AskStrategy };
+  /** Resposta dada com um job da Fila rodando: quanto daquela pasta já estava no corpus naquele momento. */
+  indexing?: { jobId: string; ready: number; total: number };
 }
 
 interface MessageBubbleProps {
@@ -23,6 +26,8 @@ interface MessageBubbleProps {
   onRetry?: (query: string, strategy: AskStrategy) => void;
   /** Abre a nota da fonte no trecho citado (clique no card, ou Enter/Espaço com ele focado). */
   onOpenSource?: (noteId: string, chunkId: string) => void;
+  /** Job da Fila rodando agora: enquanto for o da resposta, o aviso diz "durante a indexação"; depois, oferece perguntar de novo. */
+  runningJobId?: string | null;
 }
 
 const STRATEGY_LABEL: Record<string, string> = {
@@ -82,7 +87,7 @@ export const TypingIndicator = ({ stage, partial = '', model, provider }: Typing
             rascunho, ainda sendo validado
           </span>
           <div className="msg__answer">
-            {renderFormattedContent(partial.trimStart(), <span className="msg__cursor" aria-hidden="true" />)}
+            {renderFormattedContent(partial.trimStart(), <span className="msg__cursor" aria-hidden="true" />, draftLine)}
           </div>
         </div>
       )}
@@ -111,12 +116,20 @@ function renderFormattedContent(text: string, tail: ReactNode = null, inline: (l
 }
 
 /** Corta o texto gerado nos marcadores [n]: `ref` é o índice da fonte; sem fonte, o marcador não aparece. */
-const splitRefs = (text: string, refOf: (n: number) => number): Array<string | { ref: number }> =>
-  text.split(/[ \t]*\[(\d+)\]/).flatMap((part, i): Array<string | { ref: number }> => {
+function splitRefs(text: string, refOf: (n: number) => number): Array<string | { ref: number }> {
+  return text.split(/[ \t]*\[(\d+)\]/).flatMap((part, i): Array<string | { ref: number }> => {
     if (i % 2 === 0) return part ? [part] : [];
     const ref = refOf(Number(part));
     return ref >= 0 ? [{ ref }] : [];
   });
+}
+
+/** Linha do rascunho: os [n] que a IA já escreveu viram chips (as fontes só ficam ligadas depois de validar). */
+function draftLine(line: string): ReactNode {
+  return splitRefs(line, (n) => n - 1).map((part, i) =>
+    typeof part === 'string' ? part : <span key={i} className="msg__ref msg__ref--draft">{part.ref + 1}</span>
+  );
+}
 
 const noteTitle = (citation: AskCitation) => {
   const raw = citation.source_path ?? citation.note_id;
@@ -227,21 +240,6 @@ const NoAnswer = ({ ask, onRetry }: { ask: AskResult; onRetry?: MessageBubblePro
   </div>
 );
 
-// Motivos do descarte da IA, em português (o código bruto fica nos detalhes técnicos).
-const DISCARD_TEXT = new Map<string, string>([
-  ['generated_no_answer_sentinel', 'A IA disse que os trechos não respondem'],
-  ['generated_generic_no_answer', 'A IA disse que os trechos não respondem'],
-  ['echoed_context_metadata', 'A IA repetiu o cabeçalho da nota'],
-  ['unsupported_number', 'A IA citou algo que não está nos trechos'],
-  ['unsupported_anchor', 'A IA citou algo que não está nos trechos'],
-  ['low_claim_overlap', 'A IA escreveu longe dos trechos'],
-  ['empty_generated_answer', 'A IA devolveu só [n], sem texto'],
-  ['no_source_marker', 'A IA escreveu sem citar nenhum trecho'],
-  ['echoed_title', 'A IA copiou um título em vez de responder'],
-  ['echoed_question', 'A IA repetiu a pergunta em vez de responder'],
-  ['provider_error', 'A IA falhou; mostramos o trecho'],
-]);
-
 // Limitações que vêm da tentativa do modelo (descarte, falha do provedor): vão para os detalhes técnicos.
 const MODEL_LIMITATION = /^(Resposta generativa ignorada|A IA falhou|A IA declarou|A IA respondeu com uma negativa)/;
 
@@ -286,10 +284,7 @@ const DiscardNotice = ({ ask }: { ask: AskResult }) => {
     <section className="msg__discard" aria-label="Por que a IA foi descartada">
       <GlyphBadge name="shield" size={32} tone="warn" />
       <div className="msg__discard-body">
-        <h4 className="msg__discard-why">
-          {(ask.answer_discard_reason && DISCARD_TEXT.get(ask.answer_discard_reason)) ||
-            'A IA não respondeu com texto a partir dos trechos.'}
-        </h4>
+        <h4 className="msg__discard-why">{discardText(ask.answer_discard_reason)}</h4>
         <p>{lead} A resposta acima são frases das suas notas, cada uma com a fonte.</p>
         <details className="msg__details">
           <summary>
@@ -309,7 +304,7 @@ const DiscardNotice = ({ ask }: { ask: AskResult }) => {
   );
 };
 
-const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?: MessageBubbleProps['onOpenSource'] }) => {
+const StructuredAnswer = ({ ask, onOpenSource, during }: { ask: AskResult; onOpenSource?: MessageBubbleProps['onOpenSource']; during?: ReactNode }) => {
   const { claims, sources, support } = useSources(ask);
   const limits = ask.limitations.filter((item) => !MODEL_LIMITATION.test(item));
   const [hl, setHl] = useState<number | null>(null);
@@ -387,6 +382,8 @@ const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?
         </div>
       )}
 
+      {during}
+
       {isDiscarded(ask) && <DiscardNotice ask={ask} />}
 
       {sources.length > 0 && (
@@ -452,7 +449,40 @@ const StructuredAnswer = ({ ask, onOpenSource }: { ask: AskResult; onOpenSource?
   );
 };
 
-const MessageBubble = ({ message, onRetry, onOpenSource }: MessageBubbleProps) => {
+/** A resposta veio com a indexação no meio: diz quanto já estava no corpus e, terminado o job, oferece perguntar de novo. */
+const DuringIndexing = ({ ask, indexing, running, onRetry }: {
+  ask: AskResult;
+  indexing: NonNullable<MessageData['indexing']>;
+  running: boolean;
+  onRetry?: MessageBubbleProps['onRetry'];
+}) => {
+  const { ready, total } = indexing;
+  const pct = total > 0 ? Math.min(100, (ready / total) * 100) : 0;
+  return (
+    <section className={`msg__during${running ? '' : ' msg__during--done'}`} aria-label={running ? 'Indexação em andamento' : 'Indexação terminada'}>
+      <GlyphBadge name={running ? 'layers' : 'checkCircle'} size={32} tone={running ? 'accent' : 'ok'} />
+      <div className="msg__during-text">
+        <b>{running ? 'Respondida durante a indexação' : 'A indexação terminou'}</b>
+        <p>
+          {running
+            ? `${ready} de ${total} arquivos desta pasta já estavam no corpus. A resposta pode mudar quando o resto entrar.`
+            : `Esta resposta usou ${ready} de ${total} arquivos. Pergunte de novo para buscar no corpus completo.`}
+        </p>
+        <span className="msg__during-track" aria-hidden="true">
+          <span className="msg__during-fill" style={{ width: `${running ? pct : 100}%` }} />
+        </span>
+      </div>
+      {!running && onRetry && (
+        <button type="button" className="msg__btn pop" onClick={() => onRetry(ask.query, ask.strategy === 'lexical' || ask.strategy === 'vector' ? ask.strategy : 'hybrid')}>
+          <Glyph name="refresh" size={14} />
+          Perguntar de novo
+        </button>
+      )}
+    </section>
+  );
+};
+
+const MessageBubble = ({ message, onRetry, onOpenSource, runningJobId = null }: MessageBubbleProps) => {
   if (message.role === 'user') {
     return (
       <article className="msg msg--user fade-in" aria-label="Sua pergunta">
@@ -461,7 +491,10 @@ const MessageBubble = ({ message, onRetry, onOpenSource }: MessageBubbleProps) =
     );
   }
 
-  const { ask, retry } = message;
+  const { ask, retry, indexing } = message;
+  const during = ask && indexing
+    ? <DuringIndexing ask={ask} indexing={indexing} running={indexing.jobId === runningJobId} onRetry={onRetry} />
+    : null;
   return (
     <article className="msg msg--ai fade-in" aria-label="Resposta">
       {ask?.no_answer ? (
@@ -471,10 +504,11 @@ const MessageBubble = ({ message, onRetry, onOpenSource }: MessageBubbleProps) =
             <b>Sem resposta</b>
           </div>
           <NoAnswer ask={ask} onRetry={onRetry} />
+          {during}
           <AnswerMeta ask={ask} />
         </>
       ) : ask ? (
-        <StructuredAnswer ask={ask} onOpenSource={onOpenSource} />
+        <StructuredAnswer ask={ask} onOpenSource={onOpenSource} during={during} />
       ) : (
         <>
           <div className="msg__head">

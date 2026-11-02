@@ -18,10 +18,14 @@ ProgressCallback = Callable[[CorpusIndexProgress], None]
 RECENT_FILES = 8
 
 
-def with_recent_files(progress: ProgressCallback | None, results: list[CorpusIndexResult]) -> ProgressCallback | None:
-    """Anexa a cada evento os últimos arquivos já processados, o mais novo primeiro.
+def with_recent_files(
+    progress: ProgressCallback | None,
+    results: list[CorpusIndexResult],
+    pending_files: Callable[[], list[str]] | None = None,
+) -> ProgressCallback | None:
+    """Anexa a cada evento os últimos arquivos já processados, o mais novo primeiro, e os lidos ainda não gravados.
 
-    A lista `results` é lida na hora de cada evento, então acompanha o que o indexador acrescenta nela.
+    A lista `results` e `pending_files()` são lidos na hora de cada evento, então acompanham o indexador.
     """
     if progress is None:
         return None
@@ -31,7 +35,8 @@ def with_recent_files(progress: ProgressCallback | None, results: list[CorpusInd
             CorpusRecentFile(source_path=item.source_path, status=item.status, chunks=item.chunks_indexed)
             for item in reversed(results[-RECENT_FILES:])
         ]
-        progress(event.model_copy(update={'recent_files': recent}))
+        pending = pending_files() if pending_files is not None else []
+        progress(event.model_copy(update={'recent_files': recent, 'pending_files': pending}))
 
     return emit
 

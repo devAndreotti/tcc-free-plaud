@@ -100,6 +100,8 @@ export interface IndexJobProgress {
   message: string | null;
   /** Últimos arquivos já processados, o mais novo primeiro (lista "Agora" da Fila). */
   recent_files?: IndexRecentFile[];
+  /** Arquivos já lidos que ainda não foram gravados no banco (tracejados no grafo). */
+  pending_files?: string[];
 }
 
 export interface IndexRecentFile {
@@ -381,6 +383,19 @@ export interface BenchmarkSettingsSnapshot {
   created_at?: string;
 }
 
+/** Resposta do chat sobre as perguntas do corpus (benchmark/runner_models.py: BenchmarkAnswerMetrics). */
+export interface BenchmarkAnswerMetrics {
+  /** Respostas com status `answer`: o denominador da taxa de aceite. */
+  answer_count: number;
+  accepted_count: number;
+  /** null quando o benchmark rodou sem IA. */
+  accepted_rate?: number | null;
+  /** Código do motivo → quantidade, incluindo as negativas que a validação trocou por abstenção. */
+  discard_reasons: Record<string, number>;
+  question_p50_ms: number;
+  question_p95_ms: number;
+}
+
 export interface BenchmarkStrategySummary {
   strategy: string;
   case_count: number;
@@ -399,6 +414,8 @@ export interface BenchmarkStrategySummary {
   recall_at_5_ci?: [number, number] | null;
   /** Só na passada no corpus (benchmark/metrics.py: abstention_metrics + answered_positive_rate). */
   abstention?: Record<'accuracy' | 'precision' | 'recall' | 'f1' | 'support' | 'answered_positive_rate', number> | null;
+  /** Só na passada no corpus; com IA, traz as aceitas e os motivos de descarte. */
+  answer_metrics?: BenchmarkAnswerMetrics | null;
 }
 
 /** Todas as notas da suite num corpus só, buscadas como o chat busca (runners.py: BenchmarkCorpusResult). */
@@ -755,7 +772,7 @@ interface PythonApi {
   saveConversations?: (payload: SavedConversations) => Promise<{ ok: boolean; message?: string }>;
 
   /** Lista notas indexadas no corpus. */
-  listNotes?: () => Promise<NoteSummary[]>;
+  listNotes?: (since?: string) => Promise<NoteSummary[]>;
 
   /** Ligações [[...]] entre as notas indexadas (arestas do grafo). */
   listNoteLinks?: () => Promise<NoteLink[]>;
@@ -789,7 +806,7 @@ interface PythonApi {
   selectBenchmarkSuite?: () => Promise<string>;
 
   /** Executa benchmark compare e exporta JSON/CSV com snapshot de settings. */
-  runBenchmarkCompare?: (suitePath: string) => Promise<BenchmarkCompareResult>;
+  runBenchmarkCompare?: (suitePath: string, answer?: boolean) => Promise<BenchmarkCompareResult>;
 }
 
 declare global {
@@ -1206,43 +1223,83 @@ export const MOCK_BENCHMARK_RESULT_FULL: BenchmarkCompareResult = {
   },
 };
 
+// Modo navegador, com "Medir também a resposta da IA": números da rodada qchat_antes_onda3 do experimento 17.
+const MOCK_ANSWER_METRICS: Record<string, BenchmarkAnswerMetrics> = {
+  hybrid: { answer_count: 38, accepted_count: 37, accepted_rate: 37 / 38, discard_reasons: { generated_no_answer_sentinel: 13, unsupported_anchor: 1 }, question_p50_ms: 3127, question_p95_ms: 3903.8 },
+  vector: { answer_count: 38, accepted_count: 36, accepted_rate: 36 / 38, discard_reasons: { generated_no_answer_sentinel: 13, unsupported_anchor: 1, unsupported_number: 1 }, question_p50_ms: 3099, question_p95_ms: 4077.2 },
+  lexical: { answer_count: 39, accepted_count: 36, accepted_rate: 36 / 39, discard_reasons: { echoed_context_metadata: 1, generated_no_answer_sentinel: 13, unsupported_anchor: 2 }, question_p50_ms: 3157, question_p95_ms: 3838.6 },
+};
+
+const mockBenchmarkWithAnswers = (): BenchmarkCompareResult => {
+  const corpus = MOCK_BENCHMARK_RESULT.corpus;
+  if (!corpus) return MOCK_BENCHMARK_RESULT;
+  const summaries = Object.fromEntries(
+    Object.entries(corpus.summaries).map(([key, summary]) => [key, { ...summary, answer_metrics: MOCK_ANSWER_METRICS[key] ?? null }])
+  );
+  return { ...MOCK_BENCHMARK_RESULT, corpus: { ...corpus, summaries } };
+};
+
 let mockJobPolls = 0;
 
-const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobSnapshot => ({
+// Modo navegador: o job de exemplo lê 2 arquivos por consulta e grava o lote anterior, como os micro-lotes do backend.
+// O grafo, a barra lateral e a lista de notas crescem com as notas gravadas aqui.
+const MOCK_LIVE_FILES = ['Busca híbrida', 'Fila', 'Grafo', 'Benchmark', 'Voz', 'Aparência'].map(
+  (name) => `D:\\Notas\\Obsidian\\Ao vivo\\${name}.md`
+);
+let mockLiveCommitted = 0;
+
+const mockLiveNotes = (): NoteSummary[] =>
+  MOCK_LIVE_FILES.slice(0, mockLiveCommitted).map((path, i) => ({
+    note_id: `ao-vivo-${i + 1}`,
+    title: path.split('\\').at(-1)?.replace(/\.md$/, '') ?? path,
+    source_type: 'md',
+    source_path: path,
+    created_at: new Date().toISOString(),
+    tags: ['md'],
+    chunk_count: 3,
+  }));
+
+const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobSnapshot => {
+  const running = status === 'running';
+  const processed = running ? Math.min(MOCK_LIVE_FILES.length, mockJobPolls * 2) : MOCK_LIVE_FILES.length;
+  const committed = running ? Math.max(0, processed - 2) : MOCK_LIVE_FILES.length;
+  mockLiveCommitted = Math.max(mockLiveCommitted, committed);
+  return {
   job_id: 'idx-mock',
   status,
   source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)',
   started_at: new Date().toISOString(),
-  finished_at: status === 'running' ? null : new Date().toISOString(),
+  finished_at: running ? null : new Date().toISOString(),
   progress: {
-    phase: status === 'running' ? 'embedding' : status,
-    current_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Introdução.md',
-    total_found: 5,
-    processed_count: status === 'running' ? 2 : 5,
-    indexed_count: status === 'running' ? 1 : 5,
+    phase: running ? 'embedding' : status,
+    current_path: running && processed > 0 ? MOCK_LIVE_FILES[processed - 1] : 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Introdução.md',
+    total_found: MOCK_LIVE_FILES.length,
+    processed_count: processed,
+    indexed_count: committed,
     unchanged_count: 0,
     failed_count: 0,
     skipped_count: 0,
-    elapsed_ms: status === 'running' ? 1200 : 2400,
+    elapsed_ms: running ? 1200 : 2400,
     warmup_ms: 120,
     embedding_ms: 480,
     writing_ms: 200,
-    committed_count: status === 'running' ? 1 : 5,
+    committed_count: committed,
     commit_mode_requested: 'auto',
     commit_mode_resolved: 'microbatch',
-    batch_index: status === 'running' ? 1 : 2,
+    batch_index: running ? 1 : 2,
     batch_total: 2,
-    message: status === 'running' ? 'Processando Introdução.md' : 'Indexação finalizada.',
+    message: running ? 'Processando Introdução.md' : 'Indexação finalizada.',
     recent_files: [
       { source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Redes\\OSPF.md', status: 'success', chunks: 6 },
       { source_path: 'C:\\Users\\usuario\\Documents\\Vault (mock)\\Diário.md', status: 'unchanged', chunks: 0 },
     ],
+    pending_files: running ? MOCK_LIVE_FILES.slice(committed, processed) : [],
   },
   result: status === 'running' ? null : {
     ok: true,
     status: 'success',
-    total_found: 5,
-    indexed_count: 5,
+    total_found: MOCK_LIVE_FILES.length,
+    indexed_count: MOCK_LIVE_FILES.length,
     unchanged_count: 0,
     removed_count: 0,
     failed_count: 0,
@@ -1263,7 +1320,8 @@ const mockIndexJob = (status: IndexJobSnapshot['status'] = 'running'): IndexJobS
   files_per_second: 2.08,
   chunks_per_second: 8.33,
   eta_seconds: status === 'running' ? 2 : 0,
-});
+  };
+};
 
 const mockAudioJob = (status: AudioJobSnapshot['status'] = 'recording'): AudioJobSnapshot => ({
   job_id: 'audio-mock',
@@ -1708,9 +1766,9 @@ export const bridge = {
       cloud_keys_configured: { openai: false, openrouter: false, groq: false, gemini: false },
       local_env_path: 'pipeline\\.env',
       default_ask_strategy: 'hybrid',
-      notes_count: 0,
-      sqlite_chunks_count: 0,
-      vector_chunks_count: 0,
+      notes_count: mockLiveCommitted,
+      sqlite_chunks_count: mockLiveCommitted * 3,
+      vector_chunks_count: mockLiveCommitted * 3,
       settings_presets: [
         {
           key: 'cpu_rapido',
@@ -2064,23 +2122,28 @@ export const bridge = {
       // Backend sem o método devolve lista vazia, sem pastas inventadas.
       return window.pywebview?.api.listCorpusRoots ? window.pywebview.api.listCorpusRoots() : [];
     }
-    return MOCK_CORPUS_ROOTS.map((root) => ({ ...root }));
+    // Os arquivos do job de exemplo ficam dentro da primeira pasta (D:\Notas\Obsidian).
+    return MOCK_CORPUS_ROOTS.map((root, i) => ({ ...root, notes_count: i === 0 ? root.notes_count + mockLiveCommitted : root.notes_count }));
   },
 
-  listNotes: async (): Promise<NoteSummary[]> => {
+  /** Notas indexadas; com `since` (um created_at já visto), só as gravadas desde ele. */
+  listNotes: async (options?: { since?: string }): Promise<NoteSummary[]> => {
     if ((await whenDesktopReady()) && window.pywebview?.api.listNotes) {
-      return window.pywebview.api.listNotes();
+      return options?.since ? window.pywebview.api.listNotes(options.since) : window.pywebview.api.listNotes();
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
-    return MOCK_NOTES.map((note) => ({
-      note_id: note.note_id,
-      title: note.title,
-      source_type: note.source_type,
-      source_path: note.source_path,
-      created_at: note.created_at,
-      tags: note.tags,
-      chunk_count: note.chunk_count,
-    }));
+    return [
+      ...MOCK_NOTES.map((note) => ({
+        note_id: note.note_id,
+        title: note.title,
+        source_type: note.source_type,
+        source_path: note.source_path,
+        created_at: note.created_at,
+        tags: note.tags,
+        chunk_count: note.chunk_count,
+      })),
+      ...mockLiveNotes(),
+    ];
   },
 
   listNoteLinks: async (): Promise<NoteLink[]> => {
@@ -2182,7 +2245,14 @@ export const bridge = {
     if ((await whenDesktopReady()) && window.pywebview?.api.listVaults) {
       return window.pywebview.api.listVaults();
     }
-    return { active: mockActiveVaultId, vaults: MOCK_VAULTS.map((vault) => ({ ...vault })) };
+    return {
+      active: mockActiveVaultId,
+      // As notas que o job de exemplo já gravou contam na vault ativa, como no backend.
+      vaults: MOCK_VAULTS.map((vault) => ({
+        ...vault,
+        note_count: vault.id === mockActiveVaultId ? (vault.note_count ?? 0) + mockLiveCommitted : vault.note_count,
+      })),
+    };
   },
 
   createVault: async (name: string, icon: VaultIconId, color: VaultColor, folders: string[]): Promise<VaultMutationResult> => {
@@ -2276,13 +2346,14 @@ export const bridge = {
     return 'data\\datasets\\suite-mock.json';
   },
 
-  runBenchmarkCompare: async (suitePath: string): Promise<BenchmarkCompareResult> => {
+  /** Com `answer`, mede também a resposta da IA das Fontes de IA (answer_metrics nos resumos do corpus). */
+  runBenchmarkCompare: async (suitePath: string, options?: { answer?: boolean }): Promise<BenchmarkCompareResult> => {
     if ((await whenDesktopReady()) && window.pywebview?.api.runBenchmarkCompare) {
-      return window.pywebview.api.runBenchmarkCompare(suitePath);
+      return window.pywebview.api.runBenchmarkCompare(suitePath, Boolean(options?.answer));
     }
     console.debug(`[Bridge Mock] runBenchmarkCompare: ${suitePath}`);
     await new Promise((resolve) => setTimeout(resolve, 600));
-    return MOCK_BENCHMARK_RESULT;
+    return options?.answer ? mockBenchmarkWithAnswers() : MOCK_BENCHMARK_RESULT;
   },
 
   /** Indica se o app está rodando dentro do PyWebView (desktop) */

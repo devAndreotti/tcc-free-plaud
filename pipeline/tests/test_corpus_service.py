@@ -509,6 +509,24 @@ def test_progress_events_carry_the_files_just_processed(tmp_path: Path) -> None:
     assert {item.status for item in events[-1].recent_files} == {'unchanged'}
 
 
+def test_progress_events_carry_the_files_read_but_not_yet_committed(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    root = tmp_path / 'corpus'
+    root.mkdir()
+    for name in ('a.md', 'b.md', 'c.md'):
+        (root / name).write_text(f'# {name}\n\nTexto de {name}.\n', encoding='utf-8')
+    events = []
+
+    index_corpus_path(root, settings=settings, embedder=FakeEmbedder(), progress=events.append)
+
+    # Modo atômico: os três ficam esperando até o commit do fim; depois dele, nada pendente.
+    waiting = [event.pending_files for event in events if event.pending_files]
+    assert sorted(Path(path).name for path in waiting[-1]) == ['a.md', 'b.md', 'c.md']
+    assert all(event.committed_count == 0 for event in events if event.pending_files)
+    assert events[-1].pending_files == []
+    assert events[-1].committed_count == 3
+
+
 def test_index_corpus_path_honors_cancel_token_before_processing(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     source = tmp_path / 'cancelavel.md'

@@ -12,6 +12,7 @@ import {
   type VaultMutationResult,
   type VaultPatch,
 } from '../services/bridge';
+import { CORPUS_PROGRESS_EVENT } from '../lib/corpusEvents';
 import { VAULT_SWITCHED_EVENT, VaultsContext, type VaultsState } from './VaultsContextObject';
 
 export const CORPUS_CHANGED_EVENT = 'escolio:corpus-changed';
@@ -41,7 +42,12 @@ export function VaultsProvider({ children }: Readonly<{ children: ReactNode }>) 
     // Indexar ou remover pastas muda as contagens (notas e pastas) mostradas no seletor e na aba Vaults.
     const onCorpusChanged = () => void refresh();
     window.addEventListener(CORPUS_CHANGED_EVENT, onCorpusChanged);
-    return () => window.removeEventListener(CORPUS_CHANGED_EVENT, onCorpusChanged);
+    // Cada lote gravado pelo job da Fila já muda as contagens.
+    window.addEventListener(CORPUS_PROGRESS_EVENT, onCorpusChanged);
+    return () => {
+      window.removeEventListener(CORPUS_CHANGED_EVENT, onCorpusChanged);
+      window.removeEventListener(CORPUS_PROGRESS_EVENT, onCorpusChanged);
+    };
   }, [refresh]);
 
   const announceSwitch = useCallback(() => {
