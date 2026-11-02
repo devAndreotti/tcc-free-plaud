@@ -102,3 +102,33 @@ test('Voz: Testar microfone ouve e responde', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Ouvindo…' })).toBeVisible();
   await expect(page.locator('.mic-test__msg')).toBeVisible({ timeout: 8000 });
 });
+
+test('Chat com IA: a espera mostra as etapas reais e a resposta descartada mostra motivo, detalhes e Copiar', async ({ page }) => {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: /^Como responder/ }).click();
+  await page.getByRole('button', { name: /qwen2\.5:3b/ }).click();
+  const input = page.locator('textarea').first();
+
+  // Modo navegador: pergunta com "descart" volta com a IA descartada (unsupported_anchor).
+  await input.fill('Por que a IA foi descartada aqui?');
+  await input.press('Enter');
+  const waiting = page.getByRole('status', { name: 'Buscando no vault' });
+  await expect(waiting).toBeVisible();
+  await expect(waiting.getByText('Escrever com qwen2.5:3b')).toBeVisible();
+
+  const notice = page.getByRole('region', { name: 'Por que a IA foi descartada' });
+  await expect(notice).toContainText('A IA citou algo que não está nos trechos', { timeout: 8000 });
+  await expect(page.getByText('IA descartada · mostramos o trecho')).toBeVisible();
+  await notice.getByText('Detalhes técnicos').click();
+  await expect(notice.getByText('unsupported_anchor')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Limitação' })).toContainText('único trecho');
+  await page.getByRole('button', { name: 'Copiar resposta com as fontes' }).last().click();
+  await expect(page.getByText('Copiado')).toBeVisible();
+
+  // Sem "descart": a IA escreve o rascunho e a resposta sai assinada por ela.
+  await input.fill('Como a reindexação decide se uma nota mudou?');
+  await input.press('Enter');
+  await expect(page.getByText('Escrevendo com qwen2.5:3b…')).toBeVisible({ timeout: 8000 });
+  await expect(page.getByText('rascunho, ainda sendo validado')).toBeVisible();
+  await expect(page.getByText('Escrita pela IA · qwen2.5:3b')).toBeVisible({ timeout: 8000 });
+});
