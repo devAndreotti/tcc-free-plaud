@@ -23,6 +23,8 @@
 .ap-font--serif { font-family: 'Source Serif 4', Georgia, serif; }
 .ap-font--sans { font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; }
 
+.ap-noteicons { display: flex; flex-direction: column; gap: 3px; font: 500 13px/1.4 var(--font-family); color: var(--text-primary); white-space: nowrap; }
+
 .ap .appearance-swatches { gap: 10px; }
 .ap .appearance-swatch {
   width: 38px;

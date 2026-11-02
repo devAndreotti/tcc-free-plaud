@@ -99,8 +99,8 @@
 :root[data-density="compact"] .msg__source { padding: 6px 10px; }
 
 :root[data-density="compact"] .notes__group { margin-top: 4px; }
-:root[data-density="compact"] .notes__group-title { padding: 3px 8px; }
-:root[data-density="compact"] .notes__item { padding: 4px 8px; }
+:root[data-density="compact"] .notes__group-title { height: 24px; }
+:root[data-density="compact"] .notes__item { padding: 4px 8px 4px 22px; }
 
 :root[data-density="compact"] .sb__item { height: 32px; }
 :root[data-density="compact"] .sb--collapsed .sb__item { width: 32px; }

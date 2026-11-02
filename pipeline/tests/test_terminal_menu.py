@@ -48,11 +48,11 @@ def test_terminal_settings_menu_uses_human_catalog(monkeypatch, tmp_path: Path) 
     assert result.exit_code == 0
     assert 'Simples' in result.stdout
     assert 'Avancado' in result.stdout
-    assert 'Provedor de resposta' in result.stdout
+    assert 'Quem escreve a resposta' in result.stdout
     assert 'Modelo de resposta' in result.stdout
     assert 'Trechos por pergunta' in result.stdout
-    assert 'Tamanho do trecho' in result.stdout
-    assert 'Sobreposição' in result.stdout
+    assert 'Tamanho do trecho (caracteres)' in result.stdout
+    assert 'Repetição entre trechos (caracteres)' in result.stdout
     assert 'answer_api_key' in result.stdout
     get_settings.cache_clear()
 

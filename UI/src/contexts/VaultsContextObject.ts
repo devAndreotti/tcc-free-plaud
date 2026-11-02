@@ -3,6 +3,8 @@ import type { Vault, VaultColor, VaultIconId, VaultMutationResult, VaultPatch } 
 
 export interface VaultsState {
   vaults: Vault[];
+  /** Falso só até a primeira leitura terminar, com sucesso ou não. */
+  loaded?: boolean;
   active: Vault | null;
   /** Sobe a cada troca de vault: telas com estado próprio remontam por ele. */
   version: number;

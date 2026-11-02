@@ -1,4 +1,4 @@
-// Aparência além do tema: cor de destaque, tamanho do texto, fonte das respostas, densidade e animações.
+// Aparência além do tema: cor de destaque, tamanho do texto, fonte das respostas, densidade, animações e ícones nos títulos.
 // Cada opção vira um atributo data-* no <html> (dataset.textSize → data-text-size); appearance.css faz o resto.
 // O padrão não grava atributo, então sem escolha o app fica exatamente como era.
 
@@ -8,6 +8,7 @@ const OPTIONS = {
   readingFont: ['serif', 'sans'],
   density: ['comfortable', 'compact'],
   motion: ['system', 'always', 'never'],
+  noteIcons: ['svg', 'original', 'none'],
 } as const;
 
 export type Appearance = { [K in keyof typeof OPTIONS]: (typeof OPTIONS)[K][number] };
@@ -18,6 +19,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   readingFont: 'serif',
   density: 'comfortable',
   motion: 'system',
+  noteIcons: 'svg',
 };
 
 const STORAGE_KEY = 'escolio:appearance';

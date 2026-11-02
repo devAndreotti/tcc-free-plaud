@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useVaults } from '../hooks/useVaults';
+import { Sk, SkLines } from './ui/Loading';
 import { folderName, vaultMeta } from '../lib/vaultVisuals';
 import VaultDetail, { type Report } from './VaultDetail';
 import VaultDialog from './VaultDialog';
@@ -13,7 +14,7 @@ interface VaultsTabProps {
 
 /** Aba Vaults das Configurações: vaults em cartões na largura toda, detalhe da escolhida logo abaixo. */
 const VaultsTab = ({ onOpenQueue }: VaultsTabProps) => {
-  const { vaults, active } = useVaults();
+  const { vaults, active, loaded } = useVaults();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState('');
@@ -39,6 +40,9 @@ const VaultsTab = ({ onOpenQueue }: VaultsTabProps) => {
 
       <div className="vaults-tab__body">
         <ul className="vaults-tab__list" aria-label="Vaults cadastradas">
+          {loaded === false && vaults.length === 0 && [0, 1].map((key) => (
+            <li key={key} className="load-wait load-row" style={{ padding: 12 }} aria-hidden="true"><Sk w={34} h={34} r={10} /><SkLines widths={['44%', '66%']} gap={6} /></li>
+          ))}
           {vaults.map((vault) => {
             const isSelected = vault.id === selected?.id;
             const paths = vault.roots?.map((root) => root.root) ?? vault.folders;

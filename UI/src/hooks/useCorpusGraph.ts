@@ -92,6 +92,7 @@ export function useCorpusGraph() {
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   const [roots, setRoots] = useState<CorpusRoot[]>([]);
   const [noteLinks, setNoteLinks] = useState<VaultLink[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const job = useContext(QueueContext)?.job;
   const running = job?.status === 'running';
   // Id do job que acabou de terminar (status diferente de running); muda uma vez por job
@@ -122,6 +123,8 @@ export function useCorpusGraph() {
       setNoteLinks(listedLinks);
     } catch {
       // Mantém o grafo anterior: uma falha de leitura não deve apagar o desenho
+    } finally {
+      if (mine === seq.current) setLoaded(true);
     }
   }, []);
 
@@ -172,5 +175,5 @@ export function useCorpusGraph() {
     return { current: /\.[^.]+$/.test(file) ? file : null, pending: pendingNodes.length };
   }, [running, currentPath, pendingNodes]);
 
-  return { nodes, links, refresh, activeId, live };
+  return { nodes, links, refresh, activeId, live, loaded };
 }

@@ -31,7 +31,7 @@ test('Avançado: bloqueado explica, libera com confirmação e mostra presets e 
 });
 
 test('Geral: Verificar de novo roda o diagnóstico e volta com o resultado', async ({ page }) => {
-  await openSettings(page, 'Geral');
+  await openSettings(page, 'Diagnóstico');
   const again = page.getByRole('button', { name: 'Verificar de novo' });
   await expect(again).toBeVisible();
   await again.click();
@@ -96,17 +96,49 @@ test('Fontes de IA: configuração manual com o provedor em cartões', async ({ 
   await expect(providers.getByRole('radio').nth(1)).toHaveAttribute('aria-checked', 'true');
 });
 
-test('Notas: com o menu lateral aberto e Mostrar trechos, o rótulo do trecho não fica cortado', async ({ page }) => {
-  // Regressão: o rótulo ficava fora da coluna de leitura, e a regra que o trazia para dentro olhava a janela, não o painel.
-  await page.getByRole('button', { name: 'Expandir menu' }).click();
+test('Notas: com o menu lateral aberto, os dados de cada trecho ficam dentro do painel', async ({ page }) => {
+  // Regressão: o rótulo do trecho ficava fora da coluna de leitura e cortava com o menu aberto.
   await page.getByRole('button', { name: 'Notas', exact: true }).click();
-  await page.getByRole('checkbox', { name: 'Mostrar trechos' }).check({ force: true });
+  await page.getByRole('radio', { name: 'Trechos' }).click();
 
-  const label = page.locator('.reader__chunk-label').first();
-  await expect(label).toBeVisible();
-  const box = await label.boundingBox();
+  const head = page.locator('.reader__chunk-head').first();
+  await expect(head).toBeVisible();
+  const box = await head.boundingBox();
   const pane = await page.locator('.nd__scroll').boundingBox();
-  expect(box && pane && box.x >= pane.x).toBeTruthy();
+  expect(box && pane && box.x >= pane.x && box.x + box.width <= pane.x + pane.width).toBeTruthy();
+  await expect(page.getByRole('region', { name: 'Mapa dos trechos' })).toBeVisible();
+});
+
+test('Notas: recolher pasta esconde as notas, e a busca as traz de volta', async ({ page }) => {
+  await page.getByRole('button', { name: 'Notas', exact: true }).click();
+  const folder = page.getByRole('button', { name: /Estudos \/ Redes/ });
+  await expect(page.getByRole('button', { name: /VLAN/ })).toBeVisible();
+
+  await folder.click();
+  await expect(folder).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('button', { name: /VLAN/ })).toHaveCount(0);
+
+  await page.getByRole('textbox', { name: 'Filtrar notas' }).fill('vlan');
+  await expect(page.getByRole('button', { name: /VLAN/ })).toBeVisible();
+});
+
+test('Aparência: o emoji do título vira ícone do app, some ou volta ao original', async ({ page }) => {
+  await page.getByRole('button', { name: 'Notas', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Filtrar notas' }).fill('saúde');
+  const title = page.locator('.notes__item-title').first();
+  await expect(title.locator('svg.note-icon')).toBeVisible();
+  await expect(page.locator('.notes__group-name').first().locator('svg.note-icon')).toBeVisible();
+
+  await openSettings(page, 'Aparência');
+  const icons = page.getByRole('radiogroup', { name: 'Ícones nos títulos' });
+  await expect(icons.getByRole('radio', { name: /Ícone do app/ })).toHaveAttribute('aria-checked', 'true');
+  await icons.getByRole('radio', { name: /Sem ícone/ }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-note-icons', 'none');
+  await expect(title).toHaveText('Saúde');
+  await expect(title.locator('svg')).toHaveCount(0);
+
+  await icons.getByRole('radio', { name: /Emoji original/ }).click();
+  await expect(title).toHaveText('❤️ Saúde');
 });
 
 test('Avançado: a arte da Busca mostra lexical, vetorial e híbrida, com a estratégia escolhida em destaque', async ({ page }) => {
@@ -124,6 +156,8 @@ test('Tema: a arte da Fila e o grafo seguem a cor de destaque, não a da vault',
   await page.getByRole('button', { name: 'Fila', exact: true }).click();
   const art = page.locator('.queue-empty__art');
   await expect(art).toBeVisible();
+  // O canvas só monta depois que a lista de notas carrega.
+  await expect(page.locator('.graph-panel canvas')).toBeVisible();
 
   const colors = await page.evaluate(() => {
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-blue-light').trim();
@@ -180,4 +214,72 @@ test('Chat com IA: a espera mostra as etapas reais e a resposta descartada mostr
   await expect(page.getByText('Escrevendo com qwen2.5:3b…')).toBeVisible({ timeout: 8000 });
   await expect(page.getByText('rascunho, ainda sendo validado')).toBeVisible();
   await expect(page.getByText('Escrita pela IA · qwen2.5:3b')).toBeVisible({ timeout: 8000 });
+});
+
+test('Grafo: enquanto carrega nunca diz que a vault está vazia', async ({ page }) => {
+  // Regressão: o painel mostrava "Nenhuma nota indexada" até a lista de notas chegar.
+  await page.evaluate(() => {
+    const w = window as unknown as { sawEmpty: boolean };
+    w.sawEmpty = false;
+    new MutationObserver(() => {
+      if (document.body.textContent?.includes('Nenhuma nota indexada nesta vault')) w.sawEmpty = true;
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await page.getByRole('button', { name: 'Abrir painel de grafos' }).click();
+  await expect(page.locator('.graph-panel canvas')).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { sawEmpty: boolean }).sawEmpty)).toBe(false);
+});
+
+test('Notas: o primeiro carregamento mostra o esqueleto na lista e na leitura, e o dado troca no lugar', async ({ page }) => {
+  await page.getByRole('button', { name: 'Notas', exact: true }).click();
+  await expect(page.locator('.notes__items .skeleton-box').first()).toBeAttached();
+  await expect(page.getByRole('status', { name: 'Abrindo nota' })).toBeAttached();
+  await expect(page.locator('.reader__title')).toBeVisible();
+  await expect(page.locator('.notes .skeleton-box')).toHaveCount(0);
+});
+
+test('Configurações: o Diagnóstico abre com o esqueleto e depois mostra as verificações', async ({ page }) => {
+  await openSettings(page, 'Diagnóstico');
+  await expect(page.locator('.doctor__summary')).toBeVisible({ timeout: 8000 });
+  await expect(page.getByRole('status', { name: 'Carregando diagnóstico' })).toHaveCount(0);
+});
+
+test('Configurações: abre no Diagnóstico e o Tab não sai do modal', async ({ page }) => {
+  await page.getByRole('button', { name: 'Configurações' }).first().click();
+  await expect(page.getByRole('navigation', { name: 'Categorias de configuração' }).getByRole('button', { name: 'Diagnóstico', exact: true })).toHaveAttribute('aria-current', /.+/);
+  for (let i = 0; i < 40; i += 1) await page.keyboard.press('Tab');
+  const inside = await page.evaluate(() => {
+    const nav = document.querySelector('nav[aria-label="Categorias de configuração"]');
+    const modal = nav?.closest('[role="dialog"]') ?? nav?.parentElement?.parentElement;
+    return Boolean(modal && document.activeElement && modal.contains(document.activeElement));
+  });
+  expect(inside).toBe(true);
+});
+
+test('Avançado: aplicar preset mostra a prévia e o aviso do modelo, e cancelar não aplica', async ({ page }) => {
+  await openSettings(page, 'Avançado');
+  await page.getByRole('checkbox', { name: /Entendo que estes ajustes/ }).check();
+  await page.getByRole('button', { name: 'Mostrar ajustes avançados' }).click();
+  await page.getByRole('button', { name: 'Aplicar preset GPU qualidade' }).click();
+  await expect(page.getByText(/O modelo de busca é fixo por vault/)).toBeVisible({ timeout: 5000 });
+  const cancel = page.getByRole('button', { name: 'Cancelar' });
+  await expect(cancel).toBeVisible({ timeout: 5000 });
+  await cancel.click();
+  await expect(cancel).toHaveCount(0);
+});
+
+test('Barra lateral: abre em janela larga e recolhe sozinha em janela estreita', async ({ page }) => {
+  await expect(page.getByRole('button', { name: 'Recolher menu' })).toBeVisible();
+  await page.setViewportSize({ width: 850, height: 700 });
+  await expect(page.getByRole('button', { name: 'Expandir menu' })).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(page.getByRole('button', { name: 'Recolher menu' })).toBeVisible();
+});
+
+test('Conversas: a busca abre pelo cabeçalho e avisa quando não acha nada', async ({ page }) => {
+  await page.getByRole('button', { name: 'Buscar nas conversas' }).click();
+  await page.getByRole('searchbox', { name: 'Termo da busca' }).fill('termo-que-nao-existe');
+  await expect(page.getByText('Nada encontrado nas conversas abertas.')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByText('Nada encontrado nas conversas abertas.')).toHaveCount(0);
 });

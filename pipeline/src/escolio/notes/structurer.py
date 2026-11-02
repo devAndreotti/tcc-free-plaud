@@ -6,7 +6,11 @@ from pathlib import Path
 from escolio.ingest.models import IngestedDocument
 from escolio.notes.markdown import render_note_markdown
 from escolio.notes.metadata import build_note_id
-from escolio.notes.normalizer import normalize_text, repair_ocr_summary_text
+from escolio.notes.normalizer import (
+    looks_like_fragmented_ocr,
+    normalize_text,
+    repair_ocr_summary_text,
+)
 from escolio.notes.readable import strip_frontmatter
 from escolio.notes.schemas import Note
 from escolio.retrieval.chunking import build_segment_text
@@ -508,19 +512,20 @@ def structure_document(
     etapa de estruturação assistida por LLM.
     """
     # Áudio com segmentos usa o texto canônico dos segmentos, para os offsets do chunking por fala baterem.
+    is_ocr = False
     if document.segments:
         normalized_text = build_segment_text(document.segments)
     else:
-        normalized_text = normalize_text(
-            document.cleaned_text
-            if document.cleaned_text is not None
-            else document.raw_text
-        )
+        source_text = document.cleaned_text if document.cleaned_text is not None else document.raw_text
+        normalized_text = normalize_text(source_text)
+        is_ocr = looks_like_fragmented_ocr(source_text)
     body_text, has_frontmatter = strip_frontmatter(normalized_text)
     lines = body_text.splitlines()
     fallback_title = _humanize_fallback_title(document.source_path.stem)
     title_index, title = _choose_title(lines, fallback_title, document.source_type, has_frontmatter)
-    summary = repair_ocr_summary_text(_extract_summary(lines, title_index, title))
+    summary = _extract_summary(lines, title_index, title)
+    if is_ocr:
+        summary = repair_ocr_summary_text(summary)
     note = Note(
         note_id=build_note_id(document.source_path, root_path=source_root, hash_unrooted=hash_unrooted),
         source_type=document.source_type,
