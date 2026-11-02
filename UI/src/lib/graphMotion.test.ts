@@ -49,6 +49,10 @@ describe('shouldAnimateEntry: quando reabrir o grafo', () => {
     expect(shouldAnimateEntry(new Set(ids), [...ids, 'e'], false)).toBe(false);
   });
 
+  it('regressao: o grafo que cresce durante a indexação não reabre, mesmo com mais nós novos que antigos', () => {
+    expect(shouldAnimateEntry(new Set(ids), [...ids, 'e', 'f', 'g', 'h', 'i', 'j'], false)).toBe(false);
+  });
+
   it('trocar de vault (maioria dos nós é nova) reabre', () => {
     expect(shouldAnimateEntry(new Set(ids), ['x', 'y', 'z', 'a'], false)).toBe(true);
   });

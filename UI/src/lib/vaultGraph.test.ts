@@ -50,6 +50,17 @@ describe('vaultGraph (regressão do grafo bagunçado)', () => {
     }
   });
 
+  it('regressao: nota que chega durante a indexação nasce ao lado da sua pasta, não no centro', () => {
+    const first = buildGraph([note('A/x.md'), note('B/y.md')], 400, 400);
+    // A pasta A já foi para longe do centro (a física espalha o desenho)
+    const folderA = first.nodes.find((n) => n.id === 'dir:A')!;
+    folderA.x = 330;
+    folderA.y = 70;
+    const grown = buildGraph([note('A/x.md'), note('B/y.md'), note('A/nova.md')], 400, 400, first.nodes);
+    const fresh = grown.nodes.find((n) => n.id === 'A/nova.md')!;
+    expect(Math.hypot(fresh.x - 330, fresh.y - 70)).toBeLessThanOrEqual(14.01);
+  });
+
   it('posições iniciais são determinísticas e nenhum nó nasce sobre outro', () => {
     const vault = [note('A/x.md'), note('A/y.md'), note('B/z.md'), note('raiz.md')];
     const a = buildGraph(vault, 400, 400).nodes;

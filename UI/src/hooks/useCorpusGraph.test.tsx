@@ -103,6 +103,46 @@ describe('useCorpusGraph', () => {
     await waitFor(() => expect(bridgeMock.listNotes).toHaveBeenCalledTimes(2));
   });
 
+  it('regressao: durante a indexação, cada lote gravado (committed_count sobe) já entra no grafo', async () => {
+    let job: { job_id: string; status: string; progress: { committed_count: number } } = {
+      job_id: 'j1', status: 'running', progress: { committed_count: 0 },
+    };
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueueContext.Provider value={{ job } as never}>{children}</QueueContext.Provider>
+    );
+    const { result, rerender } = renderHook(() => useCorpusGraph(), { wrapper });
+    await waitFor(() => expect(bridgeMock.listNotes).toHaveBeenCalledTimes(1));
+
+    // Outro poll do mesmo lote não relê o corpus
+    job = { ...job, progress: { committed_count: 0 } };
+    rerender();
+    expect(bridgeMock.listNotes).toHaveBeenCalledTimes(1);
+
+    bridgeMock.listNotes.mockResolvedValue([note(), note({ note_id: 'b', title: 'B' })]);
+    job = { ...job, progress: { committed_count: 32 } };
+    rerender();
+    await waitFor(() => expect(result.current.nodes).toHaveLength(2));
+    expect(bridgeMock.listNotes).toHaveBeenCalledTimes(2);
+  });
+
+  it('uma leitura lenta de antes não sobrescreve a mais nova', async () => {
+    const { result } = renderHook(() => useCorpusGraph());
+    await waitFor(() => expect(result.current.nodes).toHaveLength(1));
+
+    let releaseOld: (value: ReturnType<typeof note>[]) => void = () => {};
+    bridgeMock.listNotes.mockReturnValueOnce(new Promise((resolve) => { releaseOld = resolve; }) as never);
+    bridgeMock.listNotes.mockResolvedValueOnce([note(), note({ note_id: 'b', title: 'B' })]);
+    let old: Promise<void> = Promise.resolve();
+    await act(async () => {
+      old = result.current.refresh();
+      await result.current.refresh();
+    });
+    expect(result.current.nodes).toHaveLength(2);
+
+    await act(async () => { releaseOld([]); await old; });
+    expect(result.current.nodes).toHaveLength(2);
+  });
+
   it('ligações só entram no grafo quando as duas pontas são notas listadas', async () => {
     bridgeMock.listNotes.mockResolvedValue([note(), note({ note_id: 'b', title: 'B' })]);
     bridgeMock.listNoteLinks.mockResolvedValue([
