@@ -94,15 +94,91 @@ describe('NoteDetailView', () => {
     expect(screen.getByRole('navigation', { name: 'Local no vault' }).textContent).toContain('reunioes2025ata.md');
   });
 
-  it('mostra os chunks com a sobreposição entre eles', async () => {
+  it('lê tabela e link do Markdown, sem comentário HTML e sem link que não seja http', () => {
+    const texto = [
+      '<!-- ai-memory:start -->',
+      'Veja o [site](https://exemplo.com) e o [local](file:///c/segredo).',
+      '',
+      '| Situação | Ferramenta |',
+      '|---|---|',
+      '| salvar `nota` | write |',
+      '| a \\| b | query |',
+      '',
+      '| só uma linha com barra |',
+    ].join('\n');
+    renderView({ detail: detail({ structured_markdown: texto }) });
+    const body = document.querySelector('.reader__body') as HTMLElement;
+
+    expect(body.textContent).not.toContain('ai-memory:start');
+    const site = within(body).getByRole('link', { name: 'site' });
+    expect(site.getAttribute('href')).toBe('https://exemplo.com');
+    expect(site.getAttribute('target')).toBe('_blank');
+    expect(within(body).queryByRole('link', { name: 'local' })).toBeNull();
+    expect(body.textContent).toContain('local');
+
+    const table = within(body).getByRole('table');
+    expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Situação', 'Ferramenta']);
+    expect(within(table).getAllByRole('row')).toHaveLength(3);
+    expect(within(table).getByText('nota').tagName).toBe('CODE');
+    expect(within(table).getByText('a | b')).toBeTruthy();
+    // Linha com | sem a régua abaixo não é tabela.
+    expect(within(body).getByText('| só uma linha com barra |').tagName).toBe('P');
+  });
+
+  it('Ler e Trechos: os trechos ficam em cartões com tokens, faixa e sobreposição', async () => {
     const user = userEvent.setup();
     renderView();
 
-    await user.click(screen.getByRole('checkbox', { name: 'Mostrar trechos' }));
+    expect(screen.getByRole('radio', { name: 'Ler' }).getAttribute('aria-checked')).toBe('true');
+    await user.click(screen.getByRole('radio', { name: 'Trechos' }));
 
     const list = screen.getByRole('list', { name: 'Trechos indexados' });
-    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
-    expect(within(list).getByText(/120 sobrepostos/)).toBeTruthy();
+    const cards = within(list).getAllByRole('listitem');
+    expect(cards).toHaveLength(2);
+    expect(within(cards[1]).getByText('#1')).toBeTruthy();
+    expect(within(cards[1]).getByText('80 tok')).toBeTruthy();
+    expect(within(cards[1]).getByText('680–1.200')).toBeTruthy();
+    expect(within(cards[1]).getByText(/120 sobrepostos/)).toBeTruthy();
+    expect(within(cards[0]).queryByText(/sobrepostos/)).toBeNull();
+
+    await user.click(screen.getByRole('radio', { name: 'Ler' }));
+    expect(screen.queryByRole('list', { name: 'Trechos indexados' })).toBeNull();
+  });
+
+  it('o mapa mostra onde cada trecho cai na nota e leva até o cartão', async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderView();
+    await user.click(screen.getByRole('radio', { name: 'Trechos' }));
+
+    const map = screen.getByRole('region', { name: 'Mapa dos trechos' });
+    expect(within(map).getByText('1.200 caracteres')).toBeTruthy();
+    const segundo = within(map).getByRole('button', { name: 'Ir para o trecho 1' });
+    // 680..1200 de 1200 caracteres
+    expect(segundo.style.left).toBe('56.67%');
+    expect(segundo.style.width).toBe('43.33%');
+
+    await user.click(segundo);
+    const card = screen.getByText('Segundo trecho').closest('li') as HTMLElement;
+    expect(card.classList.contains('is-active')).toBe(true);
+    expect(scrollIntoView.mock.contexts).toContain(card);
+  });
+
+  it('nota sem trechos: avisa, sem mapa', async () => {
+    const user = userEvent.setup();
+    renderView({ detail: detail({ chunks: [], chunk_count: 0 }) });
+    await user.click(screen.getByRole('radio', { name: 'Trechos' }));
+
+    expect(screen.getByText('Esta nota ainda não tem trechos indexados.')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Mapa dos trechos' })).toBeNull();
+  });
+
+  it('Reindexar mostra o andamento', () => {
+    renderView({ isReindexing: true, isMutating: true });
+    const button = screen.getByRole('button', { name: 'Reindexando…' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.querySelector('.ui-spin')).toBeTruthy();
   });
 
   it('copia o caminho e apaga só depois de confirmar', async () => {
@@ -159,7 +235,7 @@ describe('NoteDetailView', () => {
     expect(cited.classList.contains('reader__chunk--cited')).toBe(true);
     expect(within(cited).getByText('trecho citado')).toBeTruthy();
     expect(within(list).getByText('Primeiro trecho').closest('li')?.classList.contains('reader__chunk--cited')).toBe(false);
-    expect((screen.getByRole('checkbox', { name: 'Mostrar trechos' }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Trechos' }).getAttribute('aria-checked')).toBe('true');
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
   });

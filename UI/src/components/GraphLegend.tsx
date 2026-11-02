@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { LegendEntry } from '../lib/graphColors';
+import { NoteTitle } from './NoteTitle';
 
 // Legenda discreta das pastas de 1º nível: fechada por padrão, abre pelo botão do canto do painel
 interface GraphLegendProps {
@@ -25,7 +26,7 @@ const GraphLegend = ({ entries, overflow, total }: GraphLegendProps) => {
           {entries.map((e) => (
             <li key={e.name} className="force-graph__legend-item">
               <span className="force-graph__swatch" style={{ background: `var(${e.token})` }} aria-hidden="true" />
-              <span className="force-graph__legend-name">{e.name}</span>
+              <span className="force-graph__legend-name"><NoteTitle text={e.name} /></span>
             </li>
           ))}
           {overflow > 0 && <li className="force-graph__legend-more">{`+${overflow} ${overflow === 1 ? 'pasta' : 'pastas'}`}</li>}

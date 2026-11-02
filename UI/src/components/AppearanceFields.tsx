@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { readAppearance, saveAppearance, type Appearance } from '../appearance';
 import { readThemeChoice, saveThemeChoice, type ThemeChoice } from '../theme';
+import type { NoteIconsMode } from '../lib/noteIcons';
+import { NoteTitle } from './NoteTitle';
 import { GroupCard, Segmented } from './ui/Controls';
 import './AppearanceFields.css';
 
@@ -13,6 +15,13 @@ const ACCENTS: Record<Appearance['accent'], { label: string; swatch: string }> =
   rose: { label: 'Rosa', swatch: '#f43f5e' },
   cyan: { label: 'Ciano', swatch: '#06b6d4' },
 };
+
+const NOTE_ICON_OPTIONS: { value: NoteIconsMode; label: string }[] = [
+  { value: 'svg', label: 'Ícone do app' },
+  { value: 'original', label: 'Emoji original' },
+  { value: 'none', label: 'Sem ícone' },
+];
+const NOTE_ICON_SAMPLES = ['❤️ Saúde', '🧠 Estudos'];
 
 const prefersReducedMotion = () => {
   try {
@@ -175,7 +184,26 @@ const AppearanceFields = () => {
         />
       </GroupCard>
 
-      <GroupCard icon="stars" title="Prévia ao vivo" desc="Cada escolha acima muda esta prévia na hora." className="ap--wide" delay={280}>
+      <GroupCard icon="notes" title="Ícones nos títulos" desc="Emojis nos títulos das notas, nas fontes do chat e no grafo. O texto dentro das notas não muda." className="ap--wide" delay={280}>
+        <Tiles<NoteIconsMode>
+          label="Ícones nos títulos"
+          value={appearance.noteIcons}
+          onChange={(noteIcons) => update({ noteIcons })}
+          options={NOTE_ICON_OPTIONS.map(({ value, label }) => ({
+            value,
+            label,
+            art: (
+              <span className="ap-noteicons">
+                {NOTE_ICON_SAMPLES.map((sample) => (
+                  <span key={sample}><NoteTitle text={sample} mode={value} /></span>
+                ))}
+              </span>
+            ),
+          }))}
+        />
+      </GroupCard>
+
+      <GroupCard icon="stars" title="Prévia ao vivo" desc="Cada escolha acima muda esta prévia na hora." className="ap--wide" delay={320}>
         <div className="ap-preview" aria-label="Prévia da aparência">
           <div className="ap-preview__q">O que a busca híbrida faz?</div>
           <div className="ap-preview__a">

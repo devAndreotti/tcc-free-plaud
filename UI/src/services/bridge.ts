@@ -1052,6 +1052,7 @@ const MOCK_VAULT_NOTES: NoteDetail[] = [
   mockVaultNote('zustand--66ff', 'Zustand', 'Estudos\\Front\\Zustand.md'),
   mockVaultNote('diario-29--77aa', 'Segunda-feira, 29 de Junho', 'Diário\\2026-06-29.md'),
   mockVaultNote('diario-30--88bb', 'Terça-feira, 30 de Junho', 'Diário\\2026-06-30.md'),
+  mockVaultNote('saude--99cc', '❤️ Saúde', 'Estudos\\🧠 Mente\\❤️ Saúde.md'),
 ];
 
 // Ligações [[...]] entre as notas de exemplo do modo navegador (aba Links do grafo)
