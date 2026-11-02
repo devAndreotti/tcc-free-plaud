@@ -77,8 +77,11 @@ const modelDescription = (details: Record<string, unknown>) => {
 
 export type SettingsTab = 'geral' | 'vaults' | 'ia' | 'voz' | 'avancado' | 'aparencia';
 
+// Elementos que recebem foco com Tab; o contêiner do modal (tabIndex -1) fica de fora.
+const FOCUSABLE_SELECTOR = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'geral', label: 'Geral' },
+  { id: 'geral', label: 'Diagnóstico' },
   { id: 'vaults', label: 'Vaults' },
   { id: 'ia', label: 'Fontes de IA' },
   { id: 'voz', label: 'Voz' },
@@ -148,7 +151,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [isTestingProvider, setIsTestingProvider] = useState(false);
   const [isListingModels, setIsListingModels] = useState(false);
   const [modelDiscovery, setModelDiscovery] = useState<ModelDiscoveryResult | null>(null);
-  const [activeTab, setActiveTab] = useState<SettingsTab>('voz');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('geral');
   const [toast, setToast] = useState<Toast | null>(null);
   const [voiceModels, setVoiceModels] = useState<VoiceModelInfo[]>([]);
   const [voiceLoaded, setVoiceLoaded] = useState(false);
@@ -203,9 +206,38 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, requestClose]);
 
-  // Foca o modal quando abre (acessibilidade)
+  // Foca o modal quando abre (acessibilidade) e devolve o foco a quem abriu ao fechar.
   useEffect(() => {
-    if (isOpen) modalRef.current?.focus();
+    if (!isOpen) return undefined;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    modalRef.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [isOpen]);
+
+  // Tab e Shift+Tab circulam dentro do modal: no último vai ao primeiro, no primeiro vai ao último.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const handleTab = (e: KeyboardEvent) => {
+      const modal = modalRef.current;
+      if (e.key !== 'Tab' || !modal) return;
+      const items = Array.from(modal.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      const inside = active instanceof Node && modal.contains(active);
+      if (e.shiftKey && (!inside || active === first || active === modal)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (!inside || active === last)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleTab);
+    return () => document.removeEventListener('keydown', handleTab);
   }, [isOpen]);
 
   const [isRunningDoctor, setIsRunningDoctor] = useState(false);
