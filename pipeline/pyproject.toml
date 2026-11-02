@@ -26,7 +26,7 @@ audio = [
   "filelock>=3.18,<5",
   "faster-whisper>=1.2.1,<2",
   "sherpa-onnx==1.13.8",
-  "sherpa-onnx-core==1.13.8",
+  "sherpa-onnx-core==2.0.1",
 ]
 desktop = [
   "pywebview>=5.0",
