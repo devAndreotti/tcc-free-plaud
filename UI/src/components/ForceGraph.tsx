@@ -34,6 +34,7 @@ import { legendEntries, topFolderOf } from '../lib/graphColors';
 import { POP_MS, entryAt, popAt, prefersReducedMotion, projectNodes, ringPhase, shouldAnimateEntry } from '../lib/graphMotion';
 import { drawActive, drawEdges, drawFocus, drawLabels, drawNodes, readPalette, tooltipDetail, type Palette } from './graphDraw';
 import { NoteTitle } from './NoteTitle';
+import { GraphGhost } from './ui/Loading';
 import { subscribeNoteIcons } from '../lib/noteIcons';
 import { GraphIcon } from './Icons';
 import GraphNoLinksHint from './GraphNoLinksHint';
@@ -60,6 +61,8 @@ const GRAPH_HELP =
   'Mouse: clique seleciona (nota abre, pasta enquadra), arraste move, scroll dá zoom, duplo clique enquadra.';
 
 interface ForceGraphProps {
+  /** Primeira leitura em andamento: mostra o fantasma, não o aviso de vazio. */
+  loading?: boolean;
   vaultNodes: MarkdownNode[];
   /** Ligações [[...]] entre notas (arestas de link), usadas nos modos links e ambos */
   links?: VaultLink[];
@@ -74,7 +77,7 @@ interface ForceGraphProps {
 // Quadros do anel do arquivo em indexação: ~20 por segundo bastam, e o job pode durar minutos
 const RING_FRAME_MS = 50;
 
-const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, activeId = null }: ForceGraphProps) => {
+const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, activeId = null, loading = false }: ForceGraphProps) => {
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const animRef    = useRef<number>(0);
 
@@ -514,6 +517,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
   }, [handleWheel, empty]);
 
   if (vaultNodes.length === 0) {
+    if (loading) return <GraphGhost />;
     return (
       <div className="force-graph force-graph--empty">
         <GraphIcon size={20} />

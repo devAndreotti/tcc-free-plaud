@@ -5250,11 +5250,12 @@
    ============================================================ */
 .skeleton-box {
   border-radius: var(--radius-sm);
+  /* Derivado do texto do tema: mantém o contraste sobre qualquer fundo, nos dois temas. */
   background: linear-gradient(
     90deg,
-    var(--bg-surface) 25%,
-    var(--bg-surface-hover) 50%,
-    var(--bg-surface) 75%
+    color-mix(in srgb, var(--text-primary) 11%, transparent) 25%,
+    color-mix(in srgb, var(--text-primary) 20%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 11%, transparent) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;

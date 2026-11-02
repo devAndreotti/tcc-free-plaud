@@ -4,6 +4,7 @@ import { ChevronRightIcon, CopyIcon, MoreIcon, RefreshIcon, TrashIcon } from './
 import { NoteChunks } from './NoteChunks';
 import { NoteTitle } from './NoteTitle';
 import { Segmented } from './ui/Controls';
+import { Sk, SkLines } from './ui/Loading';
 import { formatDate, typeLabel } from '../lib/notes';
 
 interface NoteDetailViewProps {
@@ -222,6 +223,20 @@ function readableMarkdown(source: string): string {
   const end = start < 0 ? -1 : text.search(/^## Raw Text\s*$/m);
   return stripHtmlComments(end < 0 ? text : text.slice(0, end));
 }
+
+/** Nota abrindo: a barra e a leitura no lugar, com o tamanho da nota real. */
+export const NoteDetailSkeleton = () => (
+  <div className="load-wait" role="status" aria-label="Abrindo nota" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div className="nd__bar"><div className="nd__crumbs"><Sk w={200} /></div><Sk w={130} h={32} r={9} /><Sk w={96} h={32} r={9} /></div>
+    <div className="nd__scroll">
+      <div className="reader">
+        <Sk w="62%" h={30} r={8} />
+        <div className="reader__meta">{[70, 64, 74, 130].map((w) => <Sk key={w} w={w} h={22} r={11} />)}</div>
+        <SkLines widths={['92%', '84%', '96%', '60%', '40%', '90%', '74%']} h={13} gap={11} />
+      </div>
+    </div>
+  </div>
+);
 
 export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, isReindexing = false, onReindex, onDelete, highlightChunkId = null }: NoteDetailViewProps) => {
   const chunks = detail.chunks ?? [];

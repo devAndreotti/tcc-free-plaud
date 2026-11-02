@@ -20,6 +20,7 @@ import {
 import type { SettingsTab } from './SettingsModal';
 import { useQueueContext } from '../hooks/useQueueContext';
 import { useVaults } from '../hooks/useVaults';
+import { Sk, SkLines } from './ui/Loading';
 import { vaultMeta } from '../lib/vaultVisuals';
 import VaultDialog from './VaultDialog';
 import { VaultGlyph } from './VaultGlyph';
@@ -70,7 +71,8 @@ const plural = (n: number, one: string, many: string) => `${n.toLocaleString('pt
 const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const { job, watcherActive, folderPath } = useQueueContext();
-  const { vaults, active, select } = useVaults();
+  const { vaults, active, select, loaded } = useVaults();
+  const vaultsLoading = loaded === false && !active;
   const [menuOpen, setMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const switchRef = useRef<HTMLDivElement>(null);
@@ -166,8 +168,17 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
             </span>
           )}
           <span className="sb__vault-text">
-            <span className="sb__vault-name">{active?.name ?? 'Carregando vaults…'}</span>
-            {active && <span className="sb__vault-meta mono">{vaultMeta(active)}</span>}
+            {vaultsLoading ? (
+              <>
+                <span className="sr-only">Carregando vaults…</span>
+                <span className="load-wait"><SkLines widths={[90, 120]} gap={6} /></span>
+              </>
+            ) : (
+              <>
+                <span className="sb__vault-name">{active?.name ?? 'Nenhuma vault'}</span>
+                {active && <span className="sb__vault-meta mono">{vaultMeta(active)}</span>}
+              </>
+            )}
           </span>
           <ChevronsUpDownIcon size={16} className="sb__vault-chevron" />
           <span className="sb__tip">{active?.name ?? 'Vault'}<small>trocar vault</small></span>
@@ -301,6 +312,7 @@ const Sidebar = ({ activeView, onNavigate, onOpenSettings, healthKey }: SidebarP
             {plural(health.notes, 'nota', 'notas')} · {plural(health.chunks, 'trecho', 'trechos')}
           </span>
         )}
+        {!health && <span className="sb__health-sub load-wait"><Sk w="80%" h={9} /></span>}
         {vaultName && (
           <span className="sb__health-vault">
             <FolderIcon size={14} />

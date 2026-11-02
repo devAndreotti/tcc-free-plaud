@@ -1,3 +1,4 @@
+import { Sk } from './ui/Loading';
 import './BenchEmpty.css';
 
 // Três colunas (palavras, significado, híbrida) que crescem; perguntas descem do conjunto até elas.
@@ -35,6 +36,24 @@ interface BenchEmptyProps {
 }
 
 /** Benchmark sem resultado ainda (ou rodando): arte no acento, título e o que a comparação faz. */
+const skTable = (cols: number) => (
+  <div className="load-wait" style={{ display: 'grid', gridTemplateColumns: `1.4fr repeat(${cols - 1}, 1fr)`, gap: '16px 14px', padding: '6px 2px 10px' }}>
+    {Array.from({ length: cols * 4 }, (_, i) => <Sk key={i} w={i % cols ? '60%' : '80%'} />)}
+  </div>
+);
+
+/** Enquanto a comparação roda: cada card já mostra o que vem. */
+export const BenchLoading = () => (
+  <div role="status" aria-label="Rodando a comparação" style={{ display: 'contents' }}>
+    {(['Resultado por estratégia', 'Recall@k', 'Responder ou se abster', 'Relatórios desta comparação'] as const).map((title, i) => (
+      <section key={title} className="card rise" style={{ animationDelay: `${i * 60}ms` }}>
+        <div className="card__head"><h2>{title}</h2></div>
+        {i === 3 ? <div className="load-wait load-row" style={{ padding: '4px 2px 10px' }}><Sk w={140} h={30} r={8} /><Sk w={140} h={30} r={8} /></div> : skTable(i === 1 ? 4 : 6)}
+      </section>
+    ))}
+  </div>
+);
+
 const BenchEmpty = ({ running }: BenchEmptyProps) => (
   <div className="card bench-empty" role={running ? 'status' : undefined}>
     <BenchArt running={running} />

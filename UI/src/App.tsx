@@ -140,7 +140,7 @@ function AppContent() {
   const runningJobId = job?.status === 'running' ? job.job_id : null;
 
   // Conversas em memória; cada aba é de uma vault e mostra o ícone e a cor dela.
-  const { vaults, active: activeVault, version: vaultVersion, select: selectVault } = useVaults();
+  const { vaults, active: activeVault, version: vaultVersion, select: selectVault, loaded: vaultsLoaded } = useVaults();
   const vaultKey = activeVault ? activeVault.id : '';
   const vaultIds = vaults.map((vault) => vault.id);
   const vaultsKey = `${vaultKey}|${vaultIds.join('|')}`;
@@ -568,7 +568,7 @@ function AppContent() {
                     <div ref={messagesEndRef} aria-hidden="true" />
                   </div>
                 ) : (
-                  <WelcomeScreen vault={activeVault} onOpenQueue={() => navigate('queue')} />
+                  <WelcomeScreen vault={activeVault} loading={vaultsLoaded === false && !activeVault} onOpenQueue={() => navigate('queue')} />
                 )}
               </main>
             )}

@@ -42,7 +42,7 @@ const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
   const isResizing = useRef(false);
 
   // Notas indexadas da vault ativa e as ligações entre elas; recarrega ao abrir o painel
-  const { nodes, links, refresh, activeId, live } = useCorpusGraph();
+  const { nodes, links, refresh, activeId, live, loaded } = useCorpusGraph();
   const [mode, setMode] = useState<GraphMode>(readStoredMode);
   const chooseMode = (next: GraphMode) => {
     setMode(next);
@@ -165,7 +165,7 @@ const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
       {/* Corpo do painel — grafo de força interativo */}
       <div className="graph-panel__body">
         {/* Fechado, o painel não desenha o anel: o job pode durar minutos */}
-        <ForceGraph vaultNodes={nodes} links={links} mode={mode} onOpenNote={onOpenNote} activeId={isOpen ? activeId : null} />
+        <ForceGraph vaultNodes={nodes} links={links} mode={mode} onOpenNote={onOpenNote} activeId={isOpen ? activeId : null} loading={!loaded} />
       </div>
     </aside>
   );
