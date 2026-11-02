@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
+import { Sk, SkLines } from './ui/Loading';
 import { VaultsContext } from '../contexts/VaultsContextObject';
 import { VaultGlyph } from './VaultGlyph';
 import { bridge, type CorpusRoot, type IndexJobSnapshot } from '../services/bridge';
@@ -26,13 +27,14 @@ const notesLabel = (count: number) => `${count} ${count === 1 ? 'nota' : 'notas'
 
 interface CorpusRootsPanelProps {
   roots: CorpusRoot[];
+  loading?: boolean;
   disabled: boolean;
   onReindex: (root: string) => void;
   onRemoved: () => void;
 }
 
 // Pastas indexadas no corpus único. Remover tira as notas do SQLite e do Chroma; não apaga arquivos do disco.
-const CorpusRootsPanel = ({ roots, disabled, onReindex, onRemoved }: CorpusRootsPanelProps) => {
+const CorpusRootsPanel = ({ roots, loading = false, disabled, onReindex, onRemoved }: CorpusRootsPanelProps) => {
   const [removing, setRemoving] = useState<string | null>(null);
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
@@ -67,10 +69,12 @@ const CorpusRootsPanel = ({ roots, disabled, onReindex, onRemoved }: CorpusRoots
     <section className="card queue__roots" aria-label="Pastas no corpus">
       <div className="card__head">
         <h2>
-          Pastas no corpus <span className="card__count">{roots.length}</span>
+          Pastas no corpus {!loading && <span className="card__count">{roots.length}</span>}
         </h2>
       </div>
-      {roots.length === 0 ? (
+      {loading ? (
+        <div className="load-wait load-row" aria-label="Carregando pastas" role="status"><Sk w={16} h={16} r={4} /><SkLines widths={['72%', '34%']} gap={6} /></div>
+      ) : roots.length === 0 ? (
         <p className="queue__roots-empty">Nenhuma pasta indexada ainda.</p>
       ) : (
         <ul className="queue__root-list">
@@ -169,6 +173,7 @@ const QueuePanel = ({ onOpenSettings, onAsk }: QueuePanelProps) => {
 
   const [roots, setRoots] = useState<CorpusRoot[]>([]);
   const [rootsVersion, setRootsVersion] = useState(0);
+  const [rootsLoaded, setRootsLoaded] = useState(false);
   const [ignoredVersion, setIgnoredVersion] = useState(0);
   // Chave do job que acabou: muda quando um job termina e então recarrega as pastas.
   const finishedJob = job && job.status !== 'running' ? `${job.job_id}:${job.status}` : '';
@@ -177,10 +182,10 @@ const QueuePanel = ({ onOpenSettings, onAsk }: QueuePanelProps) => {
     let active = true;
     bridge.listCorpusRoots().then(
       (list) => {
-        if (active) setRoots(list);
+        if (active) { setRoots(list); setRootsLoaded(true); }
       },
       () => {
-        if (active) setRoots([]);
+        if (active) { setRoots([]); setRootsLoaded(true); }
       },
     );
     return () => {
@@ -263,6 +268,7 @@ const QueuePanel = ({ onOpenSettings, onAsk }: QueuePanelProps) => {
 
         <CorpusRootsPanel
           roots={roots}
+          loading={!rootsLoaded}
           disabled={isBusy || running}
           onReindex={reindexRoot}
           onRemoved={() => setRootsVersion((version) => version + 1)}

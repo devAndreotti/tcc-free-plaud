@@ -216,3 +216,31 @@ test('Chat com IA: a espera mostra as etapas reais e a resposta descartada mostr
   await expect(page.getByText('rascunho, ainda sendo validado')).toBeVisible();
   await expect(page.getByText('Escrita pela IA · qwen2.5:3b')).toBeVisible({ timeout: 8000 });
 });
+
+test('Grafo: enquanto carrega nunca diz que a vault está vazia', async ({ page }) => {
+  // Regressão: o painel mostrava "Nenhuma nota indexada" até a lista de notas chegar.
+  await page.evaluate(() => {
+    const w = window as unknown as { sawEmpty: boolean };
+    w.sawEmpty = false;
+    new MutationObserver(() => {
+      if (document.body.textContent?.includes('Nenhuma nota indexada nesta vault')) w.sawEmpty = true;
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await page.getByRole('button', { name: 'Abrir painel de grafos' }).click();
+  await expect(page.locator('.graph-panel canvas')).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { sawEmpty: boolean }).sawEmpty)).toBe(false);
+});
+
+test('Notas: o primeiro carregamento mostra o esqueleto na lista e na leitura, e o dado troca no lugar', async ({ page }) => {
+  await page.getByRole('button', { name: 'Notas', exact: true }).click();
+  await expect(page.locator('.notes__items .skeleton-box').first()).toBeAttached();
+  await expect(page.getByRole('status', { name: 'Abrindo nota' })).toBeAttached();
+  await expect(page.locator('.reader__title')).toBeVisible();
+  await expect(page.locator('.notes .skeleton-box')).toHaveCount(0);
+});
+
+test('Configurações: o Diagnóstico abre com o esqueleto e depois mostra as verificações', async ({ page }) => {
+  await openSettings(page, 'Geral');
+  await expect(page.locator('.doctor__summary')).toBeVisible({ timeout: 8000 });
+  await expect(page.getByRole('status', { name: 'Carregando diagnóstico' })).toHaveCount(0);
+});

@@ -27,11 +27,14 @@ const failed = (err: unknown): VaultMutationResult => ({
 export function VaultsProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [list, setList] = useState<VaultList>(EMPTY_LIST);
   const [version, setVersion] = useState(0);
+  const [loaded, setLoaded] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       setList(await bridge.listVaults());
+      setLoaded(true);
     } catch (err) {
+      setLoaded(true);
       console.error('[vaults] Erro ao listar vaults:', err);
     }
   }, []);
@@ -126,13 +129,14 @@ export function VaultsProvider({ children }: Readonly<{ children: ReactNode }>) 
       vaults: list.vaults,
       active: list.vaults.find((vault) => vault.id === list.active) ?? null,
       version,
+      loaded,
       refresh,
       select,
       create,
       update,
       remove,
     }),
-    [list, version, refresh, select, create, update, remove]
+    [list, version, loaded, refresh, select, create, update, remove]
   );
 
   return <VaultsContext.Provider value={value}>{children}</VaultsContext.Provider>;

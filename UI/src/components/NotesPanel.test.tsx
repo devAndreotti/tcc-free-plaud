@@ -202,7 +202,7 @@ describe('NotesPanel', () => {
     resolveList([noteSummary]);
 
     expect((await screen.findAllByText('Nota alpha')).length).toBeGreaterThan(0);
-    expect(document.querySelectorAll('.skeleton-box').length).toBe(0);
+    expect(document.querySelectorAll('.notes__items .skeleton-box').length).toBe(0);
   });
 
   it('reusa o cache ao remontar, sem mostrar skeleton, e revalida em segundo plano', async () => {
@@ -222,7 +222,7 @@ describe('NotesPanel', () => {
 
     // Mostra o cache imediatamente - sem skeleton, sem tela vazia.
     expect(screen.getByText('Nota alpha')).toBeTruthy();
-    expect(document.querySelectorAll('.skeleton-box').length).toBe(0);
+    expect(document.querySelectorAll('.notes__items .skeleton-box').length).toBe(0);
     expect(bridgeMock.listNotes).toHaveBeenCalledTimes(1);
 
     resolveSecond([noteSummary]);

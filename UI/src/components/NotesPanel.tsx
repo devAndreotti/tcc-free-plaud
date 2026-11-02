@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronRightIcon, NoteIcon, PdfIcon, SearchIcon, WaveIcon } from './Icons';
-import { NoteDetailView } from './NoteDetailView';
+import { NoteDetailSkeleton, NoteDetailView } from './NoteDetailView';
+import { Sk } from './ui/Loading';
 import { NoteTitle } from './NoteTitle';
 import { commonRoot, formatDate, relativeParts, typeLabel } from '../lib/notes';
 import { stripEmoji } from '../lib/noteIcons';
@@ -64,6 +65,10 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
   const [isReindexing, setIsReindexing] = useState(false);
   const [status, setStatus] = useState('');
   const [closedFolders, setClosedFolders] = useState(closedFoldersCache);
+  // Com cache a lista já vem pronta: sem animação ao voltar para a aba.
+  const [firstLoad] = useState(notesCache === null);
+  const [slowId, setSlowId] = useState<string | null>(null);
+  const [failedId, setFailedId] = useState<string | null>(null);
   const term = query.trim().toLowerCase();
   const isFiltering = Boolean(term) || typeFilter !== 'all';
 
@@ -172,6 +177,7 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
       } catch (error) {
         if (!cancelled) {
           setDetail(null);
+          setFailedId(activeId);
           setStatus(error instanceof Error ? error.message : 'Falha ao abrir nota.');
         }
       } finally {
@@ -184,6 +190,15 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
       cancelled = true;
     };
   }, [activeId]);
+
+  // Trocar de nota: até 150 ms a nota anterior continua na tela, para resposta rápida não piscar.
+  const opening = Boolean(activeId) && detail?.note_id !== activeId && failedId !== activeId;
+  useEffect(() => {
+    if (!opening) return undefined;
+    const timer = window.setTimeout(() => setSlowId(activeId), 150);
+    return () => window.clearTimeout(timer);
+  }, [opening, activeId]);
+  const showDetailSkeleton = showSkeleton || (opening && (!detail || slowId === activeId));
 
   const handleDelete = async () => {
     if (!detail) return;
@@ -232,7 +247,7 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
         <div className="notes__top">
           <div className="notes__head">
             <h1>Notas</h1>
-            <span className="mono">{countLabel}</span>
+            {showSkeleton ? <Sk w={70} h={11} /> : <span className="mono">{countLabel}</span>}
           </div>
 
           <label className="notes__search">
@@ -264,7 +279,7 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
 
         <div className="notes__items" aria-label="Notas">
           {showSkeleton ? (
-            <div aria-hidden="true">
+            <div className="load-wait" aria-hidden="true">
               {[0, 1, 2, 3, 4].map((key) => (
                 <div key={key} className="notes__item notes__item--skeleton">
                   <span className="skeleton-box skeleton-box--icon" />
@@ -276,7 +291,7 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
               ))}
             </div>
           ) : (
-            <>
+            <div className={firstLoad ? 'load-on' : undefined}>
               {groups.map(([folder, items]) => {
                 // A busca abre tudo: nota encontrada não fica escondida em pasta recolhida.
                 const open = Boolean(term) || !closedFolders.has(folder);
@@ -323,13 +338,15 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
                   <button type="button" className="btn btn--sm" onClick={clearFilters}>Limpar filtros</button>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </section>
 
       <section className="notes__detail" aria-label="Detalhe da nota">
-        {detail ? (
+        {showDetailSkeleton ? (
+          <NoteDetailSkeleton />
+        ) : detail ? (
           <NoteDetailView
             key={detail.note_id}
             detail={detail}
@@ -343,7 +360,7 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
           />
         ) : (
           <div className="notes__empty notes__empty--detail">
-            {isLoadingDetail ? 'Abrindo nota…' : 'Selecione uma nota para ler.'}
+            Selecione uma nota para ler.
           </div>
         )}
 
