@@ -271,7 +271,6 @@ const QueuePanel = ({ onOpenSettings, onAsk }: QueuePanelProps) => {
         <QueueStage
           job={job}
           busy={isBusy}
-          vaultColor={active?.color}
           canReindex={Boolean(reindexTarget)}
           reindexLabel={reindexTarget ? `Reindexar ${basename(reindexTarget)}` : 'Reindexar'}
           onReindex={() => reindexTarget && reindexRoot(reindexTarget)}

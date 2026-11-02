@@ -22,7 +22,7 @@ export function readPalette(el: Element) {
   return {
     edge: v('--ag-hairline'),
     node: v('--ag-ink-muted'),
-    folder: v('--ag-accent'),
+    folder: v('--accent-blue-light'), // raiz: segue o destaque do tema, como a 1ª cor da paleta
     label: v('--ag-ink-2'),
     text: v('--ag-ink'),
     glow: v('--ag-glow'),

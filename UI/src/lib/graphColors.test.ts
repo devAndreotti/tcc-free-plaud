@@ -124,6 +124,8 @@ describe('paleta do grafo em index.css', () => {
     if (!m) throw new Error(`token ${name} ausente`);
     return m[1];
   };
+  // A 1ª cor da paleta é o destaque do tema (var), então o hex dela vem de --accent-blue-light
+  const graphHex = (text: string, token: string) => tokenIn(text, token === GRAPH_COLOR_TOKENS[0] ? '--accent-blue-light' : token);
   const luminance = (hex: string) => {
     const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
       .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
@@ -141,7 +143,7 @@ describe('paleta do grafo em index.css', () => {
 
   for (const [theme, text] of Object.entries(themes)) {
     it(`tema ${theme}: as 8 cores são diferentes entre si e chegam a 3:1 no fundo do painel`, () => {
-      const colors = GRAPH_COLOR_TOKENS.map((t) => tokenIn(text, t));
+      const colors = GRAPH_COLOR_TOKENS.map((t) => graphHex(text, t));
       expect(new Set(colors).size).toBe(8);
       const bg = tokenIn(text, '--bg-primary');
       const panel = tokenIn(text, '--bg-panel');
@@ -170,15 +172,27 @@ describe('paleta do grafo em index.css', () => {
       const bg = tokenIn(text, '--bg-primary');
       const panel = tokenIn(text, '--bg-panel');
       for (const t of GRAPH_COLOR_TOKENS) {
-        const shown = blend(tokenIn(text, t), bg, alpha);
+        const shown = blend(graphHex(text, t), bg, alpha);
         expect(contrast(shown, bg)).toBeGreaterThanOrEqual(3);
-        expect(contrast(blend(tokenIn(text, t), panel, alpha), panel)).toBeGreaterThanOrEqual(3);
+        expect(contrast(blend(graphHex(text, t), panel, alpha), panel)).toBeGreaterThanOrEqual(3);
       }
     });
   }
+
+  // Regressão: a 1ª cor (raiz e pasta única) acompanha o destaque escolhido em Aparência, nos dois temas
+  it.each(Object.entries(themes))('tema %s: --graph-1 segue --accent-blue-light (destaque do tema)', (_, text) => {
+    expect(new RegExp(`${GRAPH_COLOR_TOKENS[0]}:\\s*var\\(--accent-blue-light\\)`).test(text)).toBe(true);
+  });
 });
 
 describe('assignPaletteSlots', () => {
+  it('regressao: pasta única fica na cor de destaque do tema (slot 0), qualquer que seja o nome', async () => {
+    const { assignPaletteSlots } = await import('./graphColors');
+    for (const name of ['Obsidian-Core', 'Notas', 'Culinária']) {
+      expect(assignPaletteSlots([name, name, '']).get(name)).toBe(0);
+    }
+  });
+
   it('não repete cor entre pastas enquanto couberem na paleta', async () => {
     const { assignPaletteSlots } = await import('./graphColors');
     const names = ['docs', 'Sprints', 'notas', 'UI', 'data', 'pipeline', 'src', 'tests'];

@@ -37,6 +37,8 @@ export function folderPaletteIndex(name: string): number {
  */
 export function assignPaletteSlots(groups: string[]): Map<string, number> {
   const names = [...new Set(groups.filter((g) => g !== ''))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  // Pasta única não tem de quem se distinguir: o grafo todo fica na cor de destaque do tema (slot 0).
+  if (names.length === 1) return new Map([[names[0], 0]]);
   const slots = new Map<string, number>();
   const taken = new Set<number>();
   for (const name of names) {

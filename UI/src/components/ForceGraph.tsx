@@ -316,7 +316,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
   // ── Redesenha quando o tema troca (as cores vêm dos tokens) ────────────
   useEffect(() => {
     const mo = new MutationObserver(() => draw());
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-accent'] });
     return () => mo.disconnect();
   }, [draw]);
 

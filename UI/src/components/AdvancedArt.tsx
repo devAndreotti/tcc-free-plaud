@@ -1,18 +1,67 @@
 // Desenhos dos grupos do Avançado (canvas "Avançado · presets e ajustes"), no acento do app.
 
-/** Busca: palavras (BM25) e significado (vetor) se cruzam na híbrida. */
-export const HybridArt = () => (
-  <div className="adv-art">
-    <svg width="118" height="56" viewBox="0 0 118 56" fill="none" aria-hidden="true" focusable="false">
-      <circle cx="42" cy="28" r="22" fill="currentColor" fillOpacity=".1" stroke="currentColor" strokeOpacity=".5" />
-      <circle cx="76" cy="28" r="22" fill="currentColor" fillOpacity=".1" stroke="currentColor" strokeOpacity=".5" />
-      <path className="adv-art__mix" d="M59 14.1a22 22 0 0 1 0 27.8a22 22 0 0 1 0-27.8Z" fill="currentColor" fillOpacity=".55" />
-      <text x="22" y="31" fontSize="8" fill="var(--text-secondary)" fontFamily="var(--font-family)">BM25</text>
-      <text x="80" y="31" fontSize="8" fill="var(--text-secondary)" fontFamily="var(--font-family)">vetor</text>
-    </svg>
-    <span>A híbrida junta a busca por palavras e a por significado e ordena tudo junto (RRF).</span>
-  </div>
+// Lexical: linhas de texto com as palavras exatas da pergunta acesas.
+const LexicalDrawing = () => (
+  <svg viewBox="0 0 96 56" width="96" height="56" fill="none" aria-hidden="true" focusable="false">
+    {[[8, 38, 46, 24], [8, 20, 34, 34, 60, 28], [8, 52, 66, 22]].map((row, y) =>
+      row.reduce<number[][]>((pairs, _, i) => (i % 2 ? pairs : [...pairs, [row[i], row[i + 1]]]), []).map(([x, width]) => (
+        <rect key={`${y}-${x}`} x={x} y={10 + y * 15} width={width} height="6" rx="3" fill="currentColor" fillOpacity=".22" />
+      ))
+    )}
+    <rect className="adv-art__word" x="46" y="8" width="24" height="10" rx="3" fill="currentColor" fillOpacity=".75" />
+    <rect className="adv-art__word" x="34" y="23" width="26" height="10" rx="3" fill="currentColor" fillOpacity=".75" />
+  </svg>
 );
+
+// Vetorial: a pergunta é um ponto, e os trechos de sentido parecido estão perto dela.
+const VectorDrawing = () => (
+  <svg viewBox="0 0 96 56" width="96" height="56" fill="none" aria-hidden="true" focusable="false">
+    {[[10, 12], [24, 44], [80, 10], [86, 42], [12, 34], [70, 48]].map(([x, y]) => (
+      <circle key={`${x}-${y}`} cx={x} cy={y} r="2.5" fill="currentColor" fillOpacity=".25" />
+    ))}
+    {[[36, 18], [62, 20], [56, 40]].map(([x, y]) => (
+      <g key={`${x}-${y}`}>
+        <path d={`M48 28L${x} ${y}`} stroke="currentColor" strokeOpacity=".55" strokeDasharray="2 2" />
+        <circle cx={x} cy={y} r="3.5" fill="currentColor" fillOpacity=".8" />
+      </g>
+    ))}
+    <circle className="adv-art__query" cx="48" cy="28" r="8" stroke="currentColor" strokeOpacity=".4" />
+    <circle cx="48" cy="28" r="3.5" fill="currentColor" />
+  </svg>
+);
+
+// Híbrida: palavras e significado se cruzam.
+const HybridDrawing = () => (
+  <svg viewBox="0 0 96 56" width="96" height="56" fill="none" aria-hidden="true" focusable="false">
+    <circle cx="35" cy="28" r="21" fill="currentColor" fillOpacity=".12" stroke="currentColor" strokeOpacity=".5" />
+    <circle cx="61" cy="28" r="21" fill="currentColor" fillOpacity=".12" stroke="currentColor" strokeOpacity=".5" />
+    <path className="adv-art__mix" d="M48 11.5a21 21 0 0 1 0 33a21 21 0 0 1 0-33Z" fill="currentColor" fillOpacity=".55" />
+  </svg>
+);
+
+const SEARCH_KINDS = [
+  { id: 'lexical', label: 'Lexical', Drawing: LexicalDrawing, text: 'A lexical procura as palavras exatas da pergunta (FTS5). É a mais rápida.' },
+  { id: 'vector', label: 'Vetorial', Drawing: VectorDrawing, text: 'A vetorial busca por significado: acha o trecho mesmo sem as palavras exatas.' },
+  { id: 'hybrid', label: 'Híbrida', Drawing: HybridDrawing, text: 'A híbrida junta a busca por palavras e a por significado e ordena tudo junto (RRF).' },
+];
+
+/** Busca: as três estratégias lado a lado, com a escolhida em destaque e explicada embaixo. */
+export const SearchArt = ({ strategy }: { strategy: string }) => {
+  const chosen = SEARCH_KINDS.find((kind) => kind.id === strategy) ?? SEARCH_KINDS[2];
+  return (
+    <div className="adv-art adv-art--stack">
+      <ul className="adv-search">
+        {SEARCH_KINDS.map(({ id, label, Drawing }) => (
+          <li key={id} className={`adv-search__kind${id === chosen.id ? ' is-on' : ''}`} aria-current={id === chosen.id || undefined}>
+            <Drawing />
+            <b>{label}</b>
+          </li>
+        ))}
+      </ul>
+      <span>{chosen.text}</span>
+    </div>
+  );
+};
 
 const DOTS = [[18, 22], [40, 64], [62, 30], [84, 72], [104, 18], [128, 56], [150, 76], [176, 24], [204, 66], [226, 34], [252, 74], [262, 16], [112, 84], [30, 80]];
 const NEAR = [[150, 46], [172, 58], [138, 32]];
