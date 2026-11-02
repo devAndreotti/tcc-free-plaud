@@ -10,11 +10,65 @@ import { nodeRadius } from '../lib/vaultGraph';
 import { DIM_ALPHA, edgeInSelection } from '../lib/graphSelection';
 import { GRAPH_COLOR_TOKENS } from '../lib/graphColors';
 import { LABEL_PADDING, labelPriority, pickLabels, type LabelBox } from '../lib/graphLabels';
+import { iconBody, notifyNoteIcons, readNoteIconsMode, titleParts, type TitlePart } from '../lib/noteIcons';
 
 export type Ctx = CanvasRenderingContext2D;
 
 // Fonte da interface (PR 147), para rótulos e pílula do foco
 const UI_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+// Largura do ícone de emoji no rótulo, em relação ao tamanho da fonte
+const ICON_EM = 1.1;
+
+const iconImages = new Map<string, HTMLImageElement>();
+
+/** Imagem do ícone na cor pedida (a raiz do SVG resolve o currentColor); null até carregar. */
+function iconImage(key: string, color: string): HTMLImageElement | null {
+  const body = iconBody(key);
+  if (!body) return null;
+  const id = `${key}|${color}`;
+  let image = iconImages.get(id);
+  if (!image) {
+    image = new Image();
+    image.onload = notifyNoteIcons;
+    image.src = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" color="${color}">${body}</svg>`)}`;
+    iconImages.set(id, image);
+  }
+  return image.complete && image.naturalWidth > 0 ? image : null;
+}
+
+/** Largura do título em unidades do contexto: texto medido mais o espaço de cada ícone. */
+function titleWidth(ctx: Ctx, parts: TitlePart[], size: number): number {
+  return parts.reduce((sum, part) => sum + (typeof part === 'string' ? ctx.measureText(part).width : size * ICON_EM), 0);
+}
+
+/**
+ * Escreve o título respeitando o textAlign e o textBaseline atuais. Título só de texto é um fillText normal;
+ * com ícones, cada parte vai em sequência. `halo` contorna o texto na cor de strokeStyle.
+ */
+function fillTitle(ctx: Ctx, parts: TitlePart[], x: number, y: number, size: number, halo = false) {
+  const [only] = parts;
+  if (parts.length === 1 && typeof only === 'string') {
+    if (halo) ctx.strokeText(only, x, y);
+    ctx.fillText(only, x, y);
+    return;
+  }
+  const align = ctx.textAlign;
+  let cursor = align === 'center' ? x - titleWidth(ctx, parts, size) / 2 : x;
+  ctx.textAlign = 'left';
+  for (const part of parts) {
+    if (typeof part === 'string') {
+      if (halo) ctx.strokeText(part, cursor, y);
+      ctx.fillText(part, cursor, y);
+      cursor += ctx.measureText(part).width;
+    } else {
+      const image = iconImage(part.key, String(ctx.fillStyle));
+      if (image) ctx.drawImage(image, cursor, ctx.textBaseline === 'middle' ? y - size / 2 : y - size * 0.86, size, size);
+      cursor += size * ICON_EM;
+    }
+  }
+  ctx.textAlign = align;
+}
 
 export function readPalette(el: Element) {
   const css = getComputedStyle(el);
@@ -175,7 +229,7 @@ export function drawActive(ctx: Ctx, node: SimNode, pal: Palette, scale: number,
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.text;
-  ctx.fillText(node.label, node.x + r + 10 * px, node.y);
+  fillTitle(ctx, titleParts(node.label, readNoteIconsMode()), node.x + r + 10 * px, node.y, LABEL_FONT_PX * px);
   ctx.textBaseline = 'alphabetic';
 }
 
@@ -196,12 +250,14 @@ export function drawLabels(
   selectedId: string | null = null,
 ) {
   const base = ctx.globalAlpha;
+  const size = LABEL_FONT_PX / cam.scale;
+  const mode = readNoteIconsMode();
   ctx.fillStyle = pal.label;
-  ctx.font = `${LABEL_FONT_PX / cam.scale}px ${UI_FONT}`;
+  ctx.font = `${size}px ${UI_FONT}`;
   ctx.textAlign = 'center';
 
   // Candidatos: quem passa pelas regras de zoom e seleção, com a caixa medida em tela
-  const candidates: { n: SimNode; boxes: LabelBox }[] = [];
+  const candidates: { n: SimNode; parts: TitlePart[]; boxes: LabelBox }[] = [];
   for (const n of nodes) {
     const inSel = sel?.has(n.id) ?? false;
     if (sel && !inSel) continue; // com seleção, só o nó e os vizinhos têm nome: o resto fica como fundo
@@ -210,14 +266,16 @@ export function drawLabels(
     if (!inSel && cam.scale < minScale) continue;
 
     // A fonte está em unidades de mundo (tamanho 11 ÷ scale): medir × scale dá px de tela
-    const m = ctx.measureText(n.label);
-    const width = m.width * cam.scale;
+    const parts = titleParts(n.label, mode);
+    const m = ctx.measureText(parts.filter((part) => typeof part === 'string').join(''));
+    const width = (m.width + parts.filter((part) => typeof part !== 'string').length * size * ICON_EM) * cam.scale;
     const ascent = (m.actualBoundingBoxAscent ?? LABEL_FONT_PX * 0.8 / cam.scale) * cam.scale;
     const descent = (m.actualBoundingBoxDescent ?? LABEL_FONT_PX * 0.2 / cam.scale) * cam.scale;
     const sx = n.x * cam.scale + cam.x;
     const baseline = n.y * cam.scale + cam.y - (nodeRadius(n) + 4); // mesma posição do desenho, em tela
     candidates.push({
       n,
+      parts,
       boxes: {
         id: n.id,
         priority: labelPriority(n, selectedId, inSel),
@@ -230,10 +288,10 @@ export function drawLabels(
   }
 
   const shown = pickLabels(candidates.map((c) => c.boxes));
-  for (const { n } of candidates) {
+  for (const { n, parts } of candidates) {
     if (!shown.has(n.id)) continue;
     ctx.globalAlpha = base;
-    ctx.fillText(n.label, n.x, n.y - (nodeRadius(n) + 4) / cam.scale);
+    fillTitle(ctx, parts, n.x, n.y - (nodeRadius(n) + 4) / cam.scale, size);
   }
   ctx.globalAlpha = base;
 }
@@ -246,6 +304,7 @@ export function drawFocus(ctx: Ctx, chain: string[], nodes: SimNode[], pal: Pale
   const [target] = path;
   if (!target) return;
   const px = 1 / cam.scale;
+  const mode = readNoteIconsMode();
   const radius = (n: SimNode) => Math.max(nodeRadius(n), (n === target ? 6 : 4) * px);
 
   ctx.strokeStyle = pal.focus;
@@ -274,15 +333,14 @@ export function drawFocus(ctx: Ctx, chain: string[], nodes: SimNode[], pal: Pale
   ctx.strokeStyle = pal.bg;
   for (const n of path.slice(1)) {
     if (n.depth === 0) continue; // a raiz não tem nome
-    const y = n.y - radius(n) - 5 * px;
-    ctx.strokeText(n.label, n.x, y);
-    ctx.fillText(n.label, n.x, y);
+    fillTitle(ctx, titleParts(n.label, mode), n.x, n.y - radius(n) - 5 * px, 11 * px, true);
   }
 
   // Nome da nota numa pílula acima dela, sem sair pelas bordas do painel
   const label = target.label.length > 42 ? `${target.label.slice(0, 41)}…` : target.label;
+  const labelParts = titleParts(label, mode);
   ctx.font = `600 ${12 * px}px ${UI_FONT}`;
-  const w = ctx.measureText(label).width + 16 * px;
+  const w = titleWidth(ctx, labelParts, 12 * px) + 16 * px;
   const h = 22 * px;
   const minX = (6 - cam.x) * px;
   const maxX = (viewW - 6 - cam.x) * px - w;
@@ -297,6 +355,6 @@ export function drawFocus(ctx: Ctx, chain: string[], nodes: SimNode[], pal: Pale
   ctx.stroke();
   ctx.fillStyle = pal.tipFg;
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, left + w / 2, top + h / 2);
+  fillTitle(ctx, labelParts, left + w / 2, top + h / 2, 12 * px);
   ctx.textBaseline = 'alphabetic';
 }

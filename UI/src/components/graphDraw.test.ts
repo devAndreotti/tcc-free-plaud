@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nodeRadius, type SimEdge, type SimNode } from '../lib/vaultGraph';
 import { DIM_ALPHA, selectionSet } from '../lib/graphSelection';
 import { drawEdges, drawLabels, drawNodes, tooltipDetail, type Highlight, type Palette } from './graphDraw';
@@ -294,5 +294,49 @@ describe('drawLabels: com seleção, só o selecionado e os vizinhos têm nome',
     const rec = recorder();
     drawLabels(rec.ctx as never, nodes, pal, { x: 0, y: 0, scale: 2 }, null);
     expect(rec.texts.every((t) => t.alpha === 1)).toBe(true);
+  });
+});
+
+describe('drawLabels: emoji no rótulo segue a opção de Aparência', () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.noteIcons;
+    vi.unstubAllGlobals();
+  });
+
+  const heart = { ...node('saude', 100, 100), label: '❤️ Saúde' };
+
+  it('sem ícone tira o emoji; original mantém', () => {
+    document.documentElement.dataset.noteIcons = 'none';
+    let rec = recorder();
+    drawLabels(rec.ctx as never, [heart], pal, { x: 0, y: 0, scale: 2 }, null);
+    expect(rec.texts.map((t) => t.text)).toEqual(['Saúde']);
+
+    document.documentElement.dataset.noteIcons = 'original';
+    rec = recorder();
+    drawLabels(rec.ctx as never, [heart], pal, { x: 0, y: 0, scale: 2 }, null);
+    expect(rec.texts.map((t) => t.text)).toEqual(['❤️ Saúde']);
+  });
+
+  it('ícone do app: desenha o SVG na cor do rótulo e o texto ao lado, sem mudar o alinhamento', () => {
+    class LoadedImage {
+      complete = true;
+      naturalWidth = 32;
+      src = '';
+      onload: (() => void) | null = null;
+    }
+    vi.stubGlobal('Image', LoadedImage);
+
+    const rec = recorder();
+    const images: { src: string; size: number }[] = [];
+    const ctx = { ...rec.ctx, drawImage(image: LoadedImage, _x: number, _y: number, size: number) { images.push({ src: image.src, size }); } };
+    // measureText e fillText leem o próprio objeto: reaponta para a cópia.
+    ctx.measureText = (text: string) => ({ width: text.length * 5, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 });
+    drawLabels(ctx as never, [heart], pal, { x: 0, y: 0, scale: 2 }, null);
+
+    expect(rec.texts.map((t) => t.text)).toEqual([' Saúde']);
+    expect(images).toHaveLength(1);
+    expect(images[0].size).toBe(5.5); // 11 px de tela com zoom 2
+    expect(decodeURIComponent(images[0].src)).toContain('color="#aaa"');
+    expect(ctx.textAlign).toBe('center');
   });
 });

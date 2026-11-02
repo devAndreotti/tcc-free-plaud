@@ -20,6 +20,8 @@ import { useVaults } from './hooks/useVaults';
 import { QueueProvider } from './contexts/QueueContext';
 import { useQueueContext } from './hooks/useQueueContext';
 import { fromSavedConversations, toSavedConversations, type ConversationSnapshot } from './lib/conversations';
+import { buildConversationMarkdown, conversationFileName } from './lib/conversationExport';
+import AppToast from './components/AppToast';
 
 // Gera ID único para mensagens e abas
 const generateId = () =>
@@ -31,6 +33,18 @@ const ASK_POLL_MS = 150;
 const WARM_INTERVAL_MS = 4 * 60 * 1000;
 // Prazo de uma pergunta em streaming: passa do limite de 300 s do provedor, então só estoura se o backend travar.
 const STREAM_DEADLINE_MS = 6 * 60 * 1000;
+// Tempo para desfazer o fechamento de uma aba, e de avisos como "Conversa exportada".
+const UNDO_MS = 8000;
+const NOTICE_MS = 4000;
+
+// Aba fechada com mensagens: guarda o que é preciso para desfazer o fechamento.
+interface ClosedTab {
+  tab: Tab;
+  index: number;
+  messages: MessageData[];
+  draft?: string;
+  wasActive: boolean;
+}
 
 /** Quanto da pasta em indexação já está no corpus (gravadas + inalteradas); sem job ou ainda sem total, nada a avisar. */
 const indexingSnapshot = (job: IndexJobSnapshot | null | undefined): MessageData['indexing'] => {
@@ -140,7 +154,7 @@ function AppContent() {
   const runningJobId = job?.status === 'running' ? job.job_id : null;
 
   // Conversas em memória; cada aba é de uma vault e mostra o ícone e a cor dela.
-  const { vaults, active: activeVault, version: vaultVersion, select: selectVault } = useVaults();
+  const { vaults, active: activeVault, version: vaultVersion, select: selectVault, loaded: vaultsLoaded } = useVaults();
   const vaultKey = activeVault ? activeVault.id : '';
   const vaultIds = vaults.map((vault) => vault.id);
   const vaultsKey = `${vaultKey}|${vaultIds.join('|')}`;
@@ -299,6 +313,11 @@ function AppContent() {
   const activeProgress = activeTabId ? askProgress[activeTabId] : undefined;
   // Rascunho de cada aba (o que foi digitado e ainda não foi enviado). Também fica fora do ChatState.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  // Aba fechada há pouco (desfazer por 8 s) e aviso de exportação.
+  const [closedTab, setClosedTab] = useState<ClosedTab | null>(null);
+  const [notice, setNotice] = useState<{ id: string; message: string; tone: 'ok' | 'erro' } | null>(null);
+  const dismissClosedTab = useCallback(() => setClosedTab(null), []);
+  const dismissNotice = useCallback(() => setNotice(null), []);
   // Pergunta em andamento de cada aba, para o botão Parar.
   const askRunsRef = useRef<Record<string, AskRun>>({});
 
@@ -324,6 +343,12 @@ function AppContent() {
   // Fecha uma aba; limpa seu estado (rascunho incluído) e ativa a vizinha
   const handleCloseTab = useCallback(
     (id: string) => {
+      // Aba com mensagens fica guardada por 8 s para "Desfazer"; aba vazia fecha sem aviso.
+      const messages = chat.tabMessages[id] ?? [];
+      const index = chat.tabs.findIndex((t) => t.id === id);
+      if (messages.length > 0 && index >= 0) {
+        setClosedTab({ tab: chat.tabs[index], index, messages, draft: drafts[id], wasActive: id === chat.activeTabId });
+      }
       setDrafts((prev) => withoutKey(prev, id));
       setChat((c) => {
         const tabMessages = withoutKey(c.tabMessages, id);
@@ -336,8 +361,24 @@ function AppContent() {
         return { ...c, tabs: next, activeTabId: newActive, tabMessages, tabTyping };
       });
     },
-    [setChat]
+    [chat, drafts, setChat]
   );
+
+  // Desfaz o fechamento: a aba volta à posição, com mensagens e rascunho, e o arquivo de conversas é gravado de novo.
+  const handleUndoClose = useCallback(() => {
+    if (!closedTab) return;
+    const { tab, index, messages, draft, wasActive } = closedTab;
+    setChat((c) => {
+      if (c.tabs.some((t) => t.id === tab.id)) return c;
+      const tabs = [...c.tabs];
+      tabs.splice(Math.min(index, tabs.length), 0, tab);
+      const activeTabId = wasActive || c.activeTabId === null ? tab.id : c.activeTabId;
+      return { ...c, tabs, tabMessages: { ...c.tabMessages, [tab.id]: messages }, activeTabId };
+    });
+    if (draft !== undefined) setDrafts((prev) => ({ ...prev, [tab.id]: draft }));
+    setClosedTab(null);
+    setWorkspaceView('chat');
+  }, [closedTab, setChat]);
 
   // Abre nova aba de chat na vault ativa e a torna ativa
   const handleNewTab = useCallback(() => {
@@ -350,6 +391,20 @@ function AppContent() {
     }));
     setWorkspaceView('chat');
   }, [vaultKey, setChat]);
+
+  // Exporta a aba ativa como Markdown: diálogo de salvar no desktop, download no navegador.
+  const handleExportTab = useCallback(async () => {
+    if (!activeTab) return;
+    const markdown = buildConversationMarkdown({ title: activeTab.label, messages: activeMessages, exportedAt: new Date() });
+    try {
+      const saved = await bridge.saveTextFile(conversationFileName(activeTab.label), markdown);
+      if (saved) setNotice({ id: generateId(), message: 'Conversa exportada', tone: 'ok' });
+    } catch (error) {
+      console.error('[App] Não foi possível exportar a conversa:', error);
+      const reason = error instanceof Error ? error.message : String(error);
+      setNotice({ id: generateId(), message: `Não foi possível exportar a conversa: ${reason}`, tone: 'erro' });
+    }
+  }, [activeTab, activeMessages]);
 
   // Anexa à conversa da aba (na vault dela, mesmo depois de trocar de vault)
   const appendMessage = useCallback((tabId: string, message: MessageData) => {
@@ -527,6 +582,9 @@ function AppContent() {
               onOpenQueue={openQueueFromSettings}
               isGraphPanelOpen={isGraphPanelOpen}
               onToggleGraphPanel={handleToggleGraphPanel}
+              tabMessages={tabMessages}
+              onExportTab={handleExportTab}
+              canExport={workspaceView === 'chat' && hasMessages}
             />
 
             {conversasIlegiveis && (
@@ -568,7 +626,7 @@ function AppContent() {
                     <div ref={messagesEndRef} aria-hidden="true" />
                   </div>
                 ) : (
-                  <WelcomeScreen vault={activeVault} onOpenQueue={() => navigate('queue')} />
+                  <WelcomeScreen vault={activeVault} loading={vaultsLoaded === false && !activeVault} onOpenQueue={() => navigate('queue')} />
                 )}
               </main>
             )}
@@ -607,6 +665,14 @@ function AppContent() {
           {/* Painel lateral de grafos — expande à direita do conteúdo */}
           <GraphPanel isOpen={isGraphPanelOpen} onToggle={handleToggleGraphPanel} onOpenNote={handleOpenNote} />
         </div>
+
+        {/* Avisos de rodapé: aba fechada (com Desfazer) e resultado da exportação, empilhados */}
+        {closedTab && (
+          <AppToast key={closedTab.tab.id} message="Conversa fechada" tone="ok" actionLabel="Desfazer" onAction={handleUndoClose} onDismiss={dismissClosedTab} durationMs={UNDO_MS} />
+        )}
+        {notice && (
+          <AppToast key={notice.id} message={notice.message} tone={notice.tone} raised={closedTab !== null} onDismiss={dismissNotice} durationMs={NOTICE_MS} />
+        )}
     </>
   );
 }

@@ -1,3 +1,4 @@
+import { Sk, SkLines } from './ui/Loading';
 import type { ReactNode } from 'react';
 import type { DoctorReport } from '../services/bridge';
 import { checkLabel, groupChecks } from '../lib/doctorChecks';
@@ -34,6 +35,26 @@ interface DoctorPanelProps {
   running: boolean;
   onRerun: () => void;
 }
+
+/** Diagnóstico antes de chegar: resumo, contagens e grupos já no lugar. */
+export const DoctorSkeleton = () => (
+  <div className="load-wait" role="status" aria-label="Carregando diagnóstico" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div className="ui-card rise load-row" style={{ padding: '14px 18px' }}><Sk w={52} h={52} r={26} /><SkLines widths={['34%', '52%']} /></div>
+    <div className="doctor__stats">
+      {[0, 1, 2].map((key) => (
+        <div key={key} className="doctor__stat rise load-row" style={{ animationDelay: `${60 + key * 50}ms` }}><Sk w={36} h={36} r={11} /><SkLines widths={['60%', '38%', '70%']} gap={6} /></div>
+      ))}
+    </div>
+    {[5, 2, 2].map((rows, group) => {
+      const key = `g${group}`;
+      return (
+        <div key={key} className="ui-card rise" style={{ padding: '14px 18px', animationDelay: `${160 + group * 60}ms` }}>
+          <SkLines widths={Array.from({ length: rows }, (_, i) => `${72 - i * 6}%`)} gap={12} />
+        </div>
+      );
+    })}
+  </div>
+);
 
 const DoctorPanel = ({ title, doctor, stats, running, onRerun }: DoctorPanelProps) => {
   const total = doctor.ok_count + doctor.warning_count + doctor.error_count;

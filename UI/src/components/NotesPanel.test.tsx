@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NotesPanel, { __resetNotesCacheForTests } from './NotesPanel';
@@ -72,10 +72,71 @@ describe('NotesPanel', () => {
     // O título do markdown não é repetido: já aparece como título da leitura.
     expect(screen.queryByText('# Nota alpha', { exact: false })).toBeNull();
 
-    await user.click(screen.getByLabelText('Mostrar trechos'));
+    await user.click(screen.getByRole('radio', { name: 'Trechos' }));
 
-    expect(screen.getByText('#0 · 4 tok')).toBeTruthy();
+    expect(screen.getByText('#0')).toBeTruthy();
+    expect(screen.getByText('4 tok')).toBeTruthy();
     expect(screen.getByRole('list', { name: 'Trechos indexados' })).toBeTruthy();
+  });
+
+  it('recolhe a pasta, mantém ao remontar, e a busca abre o que estiver recolhido', async () => {
+    const user = userEvent.setup();
+    const outra = { ...noteSummary, note_id: 'nota-beta', title: 'Nota beta', source_path: 'vault/Estudos/Redes/nota-beta.md' };
+    bridgeMock.listNotes.mockResolvedValue([noteSummary, outra]);
+    const first = render(<NotesPanel />);
+
+    const pasta = await screen.findByRole('button', { name: /Estudos \/ Redes/ });
+    expect(pasta.getAttribute('aria-expanded')).toBe('true');
+    expect(within(pasta).getByText('1')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Nota beta/ })).toBeTruthy();
+
+    await user.click(pasta);
+    expect(pasta.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: /Nota beta/ })).toBeNull();
+
+    first.unmount();
+    render(<NotesPanel />);
+    expect(screen.queryByRole('button', { name: /Nota beta/ })).toBeNull();
+
+    await user.type(screen.getByRole('textbox', { name: 'Filtrar notas' }), 'beta');
+    expect(screen.getByRole('button', { name: /Nota beta/ })).toBeTruthy();
+    expect(screen.getByText('1 encontrada')).toBeTruthy();
+  });
+
+  it('filtro sem resultado oferece limpar, e a contagem volta ao corpus', async () => {
+    const user = userEvent.setup();
+    render(<NotesPanel />);
+    await screen.findByText('Conteudo estruturado.');
+    expect(screen.getByText('1 no corpus')).toBeTruthy();
+
+    await user.type(screen.getByRole('textbox', { name: 'Filtrar notas' }), 'zzz');
+    expect(screen.getByText('Nenhuma nota com esse filtro.')).toBeTruthy();
+    expect(screen.getByText('0 encontradas')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Limpar filtros' }));
+    expect(screen.getByText('1 no corpus')).toBeTruthy();
+    expect(screen.getAllByText('Nota alpha').length).toBeGreaterThan(0);
+  });
+
+  it('título com emoji: vira ícone do app, some ou fica original, conforme a Aparência', async () => {
+    bridgeMock.listNotes.mockResolvedValue([{ ...noteSummary, title: '❤️ Saúde' }]);
+    bridgeMock.getNoteDetail.mockResolvedValue({ ...noteDetail, title: '❤️ Saúde' });
+    render(<NotesPanel />);
+
+    const titulo = await screen.findByRole('heading', { level: 1, name: /Saúde/ });
+    const item = document.querySelector('.notes__item-title') as HTMLElement;
+    await waitFor(() => expect(item.querySelector('svg.note-icon[aria-label="❤️"]')).toBeTruthy());
+    expect(item.textContent).toBe(' Saúde');
+    expect(titulo.querySelector('svg.note-icon')).toBeTruthy();
+
+    document.documentElement.dataset.noteIcons = 'none';
+    await waitFor(() => expect(item.textContent).toBe('Saúde'));
+    expect(item.querySelector('svg')).toBeNull();
+
+    document.documentElement.dataset.noteIcons = 'original';
+    await waitFor(() => expect(item.textContent).toBe('❤️ Saúde'));
+    delete document.documentElement.dataset.noteIcons;
+    await waitFor(() => expect(item.querySelector('svg.note-icon')).toBeTruthy());
   });
 
   it('mostra erro controlado quando listagem falha', async () => {
@@ -141,7 +202,7 @@ describe('NotesPanel', () => {
     resolveList([noteSummary]);
 
     expect((await screen.findAllByText('Nota alpha')).length).toBeGreaterThan(0);
-    expect(document.querySelectorAll('.skeleton-box').length).toBe(0);
+    expect(document.querySelectorAll('.notes__items .skeleton-box').length).toBe(0);
   });
 
   it('reusa o cache ao remontar, sem mostrar skeleton, e revalida em segundo plano', async () => {
@@ -161,7 +222,7 @@ describe('NotesPanel', () => {
 
     // Mostra o cache imediatamente - sem skeleton, sem tela vazia.
     expect(screen.getByText('Nota alpha')).toBeTruthy();
-    expect(document.querySelectorAll('.skeleton-box').length).toBe(0);
+    expect(document.querySelectorAll('.notes__items .skeleton-box').length).toBe(0);
     expect(bridgeMock.listNotes).toHaveBeenCalledTimes(1);
 
     resolveSecond([noteSummary]);

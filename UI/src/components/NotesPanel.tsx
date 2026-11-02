@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FolderIcon, NoteIcon, PdfIcon, SearchIcon, WaveIcon } from './Icons';
-import { NoteDetailView } from './NoteDetailView';
+import { ChevronRightIcon, NoteIcon, PdfIcon, SearchIcon, WaveIcon } from './Icons';
+import { NoteDetailSkeleton, NoteDetailView } from './NoteDetailView';
+import { Sk } from './ui/Loading';
+import { NoteTitle } from './NoteTitle';
 import { commonRoot, formatDate, relativeParts, typeLabel } from '../lib/notes';
+import { stripEmoji } from '../lib/noteIcons';
 import { notifyCorpusChanged } from '../hooks/useCorpusHealth';
 import { CORPUS_CHANGED, CORPUS_PROGRESS_EVENT } from '../lib/corpusEvents';
 import {
@@ -19,11 +22,17 @@ import {
 // ponytail: cache não sobrevive a fechar o processo - promover para
 // localStorage/Context se precisar persistir entre sessões do app.
 let notesCache: NoteSummary[] | null = null;
+// Pastas recolhidas: pelo mesmo motivo, sobrevivem à troca de aba.
+let closedFoldersCache = new Set<string>();
+const rememberClosedFolders = (folders: Set<string>) => {
+  closedFoldersCache = folders;
+};
 
 /** Exportado só para os testes resetarem o cache de módulo entre casos. */
 // eslint-disable-next-line react-refresh/only-export-components -- helper de teste, não um componente.
 export const __resetNotesCacheForTests = () => {
   notesCache = null;
+  closedFoldersCache = new Set();
 };
 
 // O backend confirma exclusão por texto; a UI pede a confirmação no próprio popover.
@@ -53,7 +62,15 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
+  const [isReindexing, setIsReindexing] = useState(false);
   const [status, setStatus] = useState('');
+  const [closedFolders, setClosedFolders] = useState(closedFoldersCache);
+  // Com cache a lista já vem pronta: sem animação ao voltar para a aba.
+  const [firstLoad] = useState(notesCache === null);
+  const [slowId, setSlowId] = useState<string | null>(null);
+  const [failedId, setFailedId] = useState<string | null>(null);
+  const term = query.trim().toLowerCase();
+  const isFiltering = Boolean(term) || typeFilter !== 'all';
 
   // Skeleton só no primeiro load real (sem cache) - com cache, a lista
   // aparece imediatamente e a revalidação acontece em silêncio.
@@ -66,7 +83,6 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
   );
 
   const groups = useMemo(() => {
-    const term = query.trim().toLowerCase();
     const filtered = notes.filter((note) => {
       if (typeFilter !== 'all' && note.source_type !== typeFilter) return false;
       if (!term) return true;
@@ -75,15 +91,31 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
     });
     const byFolder = new Map<string, NoteSummary[]>();
     filtered.forEach((note) => {
-      const folder = relativeParts(note.source_path, root).slice(0, -1).join('/') || ROOT_GROUP;
+      const folder = relativeParts(note.source_path, root).slice(0, -1).join(' / ') || ROOT_GROUP;
       byFolder.set(folder, [...(byFolder.get(folder) ?? []), note]);
     });
     return Array.from(byFolder.entries()).sort(([a], [b]) =>
       a === ROOT_GROUP ? -1 : b === ROOT_GROUP ? 1 : a.localeCompare(b, 'pt-BR')
     );
-  }, [notes, query, typeFilter, root]);
+  }, [notes, term, typeFilter, root]);
 
   const visibleCount = groups.reduce((sum, [, items]) => sum + items.length, 0);
+  const countLabel = isFiltering
+    ? `${visibleCount.toLocaleString('pt-BR')} ${visibleCount === 1 ? 'encontrada' : 'encontradas'}`
+    : `${notes.length.toLocaleString('pt-BR')} no corpus`;
+
+  const toggleFolder = (folder: string) => {
+    const next = new Set(closedFolders);
+    if (!next.delete(folder)) next.add(folder);
+    rememberClosedFolders(next);
+    setClosedFolders(next);
+  };
+
+  const clearFilters = () => {
+    setQuery('');
+    setTypeFilter('all');
+  };
+
   // Sem escolha do usuário, abre a primeira nota da lista como ela aparece na tela.
   const activeId = selectedId ?? groups[0]?.[1][0]?.note_id ?? null;
 
@@ -145,6 +177,7 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
       } catch (error) {
         if (!cancelled) {
           setDetail(null);
+          setFailedId(activeId);
           setStatus(error instanceof Error ? error.message : 'Falha ao abrir nota.');
         }
       } finally {
@@ -158,6 +191,15 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
     };
   }, [activeId]);
 
+  // Trocar de nota: até 150 ms a nota anterior continua na tela, para resposta rápida não piscar.
+  const opening = Boolean(activeId) && detail?.note_id !== activeId && failedId !== activeId;
+  useEffect(() => {
+    if (!opening) return undefined;
+    const timer = window.setTimeout(() => setSlowId(activeId), 150);
+    return () => window.clearTimeout(timer);
+  }, [opening, activeId]);
+  const showDetailSkeleton = showSkeleton || (opening && (!detail || slowId === activeId));
+
   const handleDelete = async () => {
     if (!detail) return;
     setIsMutating(true);
@@ -168,7 +210,7 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
         setStatus(result.message ?? 'Não foi possível remover a nota.');
         return;
       }
-      setStatus(`“${detail.title}” removida do corpus · ${result.deleted_vectors ?? 0} vetores apagados.`);
+      setStatus(`“${stripEmoji(detail.title)}” removida do corpus · ${result.deleted_vectors ?? 0} vetores apagados.`);
       setDetail(null);
       setSelectedId(null);
       notifyCorpusChanged();
@@ -183,6 +225,7 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
   const handleReindex = async () => {
     if (!detail) return;
     setIsMutating(true);
+    setIsReindexing(true);
     setStatus('Reindexando nota…');
     try {
       const result: NoteReindexResult = await bridge.reindexNote(detail.note_id);
@@ -194,46 +237,49 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
       setStatus(error instanceof Error ? error.message : 'Falha ao reindexar nota.');
     } finally {
       setIsMutating(false);
+      setIsReindexing(false);
     }
   };
 
   return (
     <main className="main notes" id="notes-panel">
       <section className="notes__list" aria-label="Notas indexadas">
-        <div className="notes__head">
-          <h1>Notas</h1>
-          <span className="mono">{notes.length.toLocaleString('pt-BR')} no corpus</span>
-        </div>
-
-        <label className="notes__search">
-          <SearchIcon size={15} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar título, pasta ou tag"
-            aria-label="Filtrar notas"
-          />
-        </label>
-
-        {types.length > 1 && (
-          <div className="notes__filters" role="group" aria-label="Filtrar por tipo">
-            {['all', ...types].map((type) => (
-              <button
-                key={type}
-                type="button"
-                className="notes__chip"
-                aria-pressed={typeFilter === type}
-                onClick={() => setTypeFilter(type)}
-              >
-                {type === 'all' ? 'Todas' : typeLabel(type)}
-              </button>
-            ))}
+        <div className="notes__top">
+          <div className="notes__head">
+            <h1>Notas</h1>
+            {showSkeleton ? <Sk w={70} h={11} /> : <span className="mono">{countLabel}</span>}
           </div>
-        )}
+
+          <label className="notes__search">
+            <SearchIcon size={15} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar título, pasta ou tag"
+              aria-label="Filtrar notas"
+            />
+          </label>
+
+          {types.length > 1 && (
+            <div className="notes__filters" role="group" aria-label="Filtrar por tipo">
+              {['all', ...types].map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className="notes__chip"
+                  aria-pressed={typeFilter === type}
+                  onClick={() => setTypeFilter(type)}
+                >
+                  {type === 'all' ? 'Todas' : typeLabel(type)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="notes__items" aria-label="Notas">
           {showSkeleton ? (
-            <div aria-hidden="true">
+            <div className="load-wait" aria-hidden="true">
               {[0, 1, 2, 3, 4].map((key) => (
                 <div key={key} className="notes__item notes__item--skeleton">
                   <span className="skeleton-box skeleton-box--icon" />
@@ -245,63 +291,76 @@ const NotesPanel = ({ initialNoteId = null, initialChunkId = null }: NotesPanelP
               ))}
             </div>
           ) : (
-            <>
-              {groups.map(([folder, items]) => (
-                <div key={folder} className="notes__group">
-                  <h2 className="notes__group-title mono">
-                    <FolderIcon size={12} />
-                    {folder}
-                  </h2>
-                  {items.map((note) => {
-                    const active = activeId === note.note_id;
-                    const date = formatDate(note.created_at, false);
-                    return (
-                      <button
-                        key={note.note_id ?? note.title}
-                        type="button"
-                        className={`notes__item${active ? ' notes__item--active' : ''}`}
-                        aria-current={active ? 'true' : undefined}
-                        onClick={() => setSelectedId(note.note_id)}
-                      >
-                        <TypeIcon type={note.source_type} />
-                        <span className="notes__item-body">
-                          <span className="notes__item-title">{note.title}</span>
-                          <span className="notes__item-meta">
-                            {note.chunk_count ?? 0} {note.chunk_count === 1 ? 'trecho' : 'trechos'}
-                            {date && ` · ${date}`}
+            <div className={firstLoad ? 'load-on' : undefined}>
+              {groups.map(([folder, items]) => {
+                // A busca abre tudo: nota encontrada não fica escondida em pasta recolhida.
+                const open = Boolean(term) || !closedFolders.has(folder);
+                return (
+                  <div key={folder} className="notes__group">
+                    <button type="button" className="notes__group-title" aria-expanded={open} onClick={() => toggleFolder(folder)}>
+                      <span className="notes__chev"><ChevronRightIcon size={13} /></span>
+                      <span className="notes__group-name"><NoteTitle text={folder} /></span>
+                      <span className="notes__group-count">{items.length}</span>
+                    </button>
+                    {open && items.map((note) => {
+                      const active = activeId === note.note_id;
+                      const date = formatDate(note.created_at, false);
+                      return (
+                        <button
+                          key={note.note_id ?? note.title}
+                          type="button"
+                          className={`notes__item${active ? ' notes__item--active' : ''}`}
+                          aria-current={active ? 'true' : undefined}
+                          onClick={() => setSelectedId(note.note_id)}
+                        >
+                          <TypeIcon type={note.source_type} />
+                          <span className="notes__item-body">
+                            <span className="notes__item-title"><NoteTitle text={note.title} /></span>
+                            <span className="notes__item-meta">
+                              {note.chunk_count ?? 0} {note.chunk_count === 1 ? 'trecho' : 'trechos'}
+                              {date && ` · ${date}`}
+                            </span>
                           </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
 
-              {!isLoadingList && visibleCount === 0 && (notes.length > 0 || !status) && (
-                <div className="notes__empty">
-                  {notes.length === 0 ? 'Nenhuma nota indexada ainda. Indexe uma pasta na Fila.' : 'Nenhuma nota com esse filtro.'}
+              {!isLoadingList && visibleCount === 0 && notes.length === 0 && !status && (
+                <div className="notes__empty">Nenhuma nota indexada ainda. Indexe uma pasta na Fila.</div>
+              )}
+              {visibleCount === 0 && notes.length > 0 && (
+                <div className="notes__noresults">
+                  <SearchIcon size={22} />
+                  <span>Nenhuma nota com esse filtro.</span>
+                  <button type="button" className="btn btn--sm" onClick={clearFilters}>Limpar filtros</button>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </section>
 
       <section className="notes__detail" aria-label="Detalhe da nota">
-        {detail ? (
+        {showDetailSkeleton ? (
+          <NoteDetailSkeleton />
+        ) : detail ? (
           <NoteDetailView
             key={detail.note_id}
             detail={detail}
             crumbs={relativeParts(detail.source_path, root)}
             isMutating={isMutating}
             isLoadingDetail={isLoadingDetail}
+            isReindexing={isReindexing}
             onReindex={handleReindex}
             onDelete={handleDelete}
             highlightChunkId={initialChunkId}
           />
         ) : (
           <div className="notes__empty notes__empty--detail">
-            {isLoadingDetail ? 'Abrindo nota…' : 'Selecione uma nota para ler.'}
+            Selecione uma nota para ler.
           </div>
         )}
 

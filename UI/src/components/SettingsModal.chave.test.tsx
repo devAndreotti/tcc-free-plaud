@@ -9,6 +9,7 @@ const bridgeMock = vi.hoisted(() => ({
   saveApiKey: vi.fn(),
   indexVault: vi.fn(),
   applySettingsPreset: vi.fn(),
+  previewSettingsPreset: vi.fn(),
   testAnswerProvider: vi.fn(),
   saveBackendSetting: vi.fn(),
   saveBackendSettings: vi.fn(),
@@ -245,7 +246,7 @@ describe('SettingsModal: chave de API, remoção e rótulos do catálogo', () =>
         },
       ],
     }));
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
 
     await abrirAvancado(user);
 
@@ -261,7 +262,7 @@ describe('SettingsModal: chave de API, remoção e rótulos do catálogo', () =>
     bridgeMock.getBackendSettings.mockResolvedValue(configuracoes({
       settings_catalog: [...catalogoPadrao, chaveSecreta, embedding, tamanhoTrecho],
     }));
-    renderModal(<SettingsModal isOpen onClose={vi.fn()} />);
+    renderModal(<SettingsModal isOpen onClose={vi.fn()} initialTab="voz" />);
 
     await abrirAvancado(user);
 

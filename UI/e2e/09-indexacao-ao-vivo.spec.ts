@@ -40,7 +40,6 @@ test('Grafo: cresce durante o job, mostra o arquivo atual e o que espera gravaç
 });
 
 test('Barra lateral: notas e trechos sobem durante o job, sem esperar ele terminar', async ({ page }) => {
-  await page.getByRole('button', { name: 'Expandir menu' }).click();
   await startIndexing(page);
   const job = page.getByRole('article', { name: 'Job atual' });
   await expect(job).toBeVisible({ timeout: 5000 });
@@ -53,7 +52,6 @@ test('Barra lateral: notas e trechos sobem durante o job, sem esperar ele termin
 });
 
 test('Seletor de vault e pastas da Fila: as contagens sobem durante o job', async ({ page }) => {
-  await page.getByRole('button', { name: 'Expandir menu' }).click();
   const vault = page.getByText(/4\d notas · \d+ pasta/).first();
   await expect(vault).toHaveText(/42 notas/);
   await startIndexing(page);

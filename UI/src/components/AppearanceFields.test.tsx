@@ -51,4 +51,22 @@ describe('AppearanceFields', () => {
     expect(screen.getByRole('status').textContent).toContain('Animações desligadas em todo o app.');
     expect(document.documentElement.dataset.motion).toBe('always');
   });
+
+  it('Ícones nos títulos: começa no ícone do app, mostra os três modos e grava a escolha', async () => {
+    const user = userEvent.setup();
+    render(<AppearanceFields />);
+
+    const group = screen.getByRole('radiogroup', { name: 'Ícones nos títulos' });
+    const [svg, original, none] = within(group).getAllByRole('radio');
+    expect(svg.getAttribute('aria-checked')).toBe('true');
+    expect(document.documentElement.dataset.noteIcons).toBeUndefined();
+    expect(original.textContent).toContain('❤️ Saúde');
+    expect(none.textContent).toContain('Saúde');
+    expect(none.textContent).not.toContain('❤️');
+
+    await user.click(none);
+    expect(none.getAttribute('aria-checked')).toBe('true');
+    expect(document.documentElement.dataset.noteIcons).toBe('none');
+    expect(readAppearance().noteIcons).toBe('none');
+  });
 });

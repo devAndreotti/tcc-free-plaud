@@ -20,7 +20,7 @@ describe('appearance', () => {
   });
 
   it('salva, aplica como data-* e remove o atributo ao voltar ao padrão', () => {
-    const custom = { accent: 'cyan', textSize: '125', readingFont: 'sans', density: 'compact', motion: 'always' } as const;
+    const custom = { accent: 'cyan', textSize: '125', readingFont: 'sans', density: 'compact', motion: 'always', noteIcons: 'none' } as const;
     saveAppearance(custom);
 
     expect(readAppearance()).toEqual(custom);

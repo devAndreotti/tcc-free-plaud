@@ -6,7 +6,7 @@ import BenchmarkAblation from './BenchmarkAblation';
 import BenchmarkAnswers from './BenchmarkAnswers';
 import BenchmarkCoverage from './BenchmarkCoverage';
 import BenchmarkFaithfulness from './BenchmarkFaithfulness';
-import BenchEmpty from './BenchEmpty';
+import BenchEmpty, { BenchLoading } from './BenchEmpty';
 
 type Metric = 'mrr' | 'recall_at_3' | 'recall_at_5' | 'recall_at_10' | 'ndcg_at_10';
 const METRICS: { key: Metric; label: string }[] = [
@@ -433,7 +433,7 @@ const BenchmarkPanel = () => {
             </section>
           </>
         ) : (
-          <BenchEmpty running={isRunning} />
+          isRunning ? <BenchLoading /> : <BenchEmpty running={false} />
         )}
       </div>
     </main>

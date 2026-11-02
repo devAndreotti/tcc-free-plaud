@@ -1,0 +1,5 @@
+/* Janela estreita (abaixo de 900 px): com a barra aberta, o campo de pasta da Fila quebra para a linha de baixo e ocupa a largura toda, sem cortar o placeholder */
+@media (max-width: 899px) {
+  .queue__source { flex-wrap: wrap; }
+  .queue__source .queue__field { flex: 1 1 100%; }
+}

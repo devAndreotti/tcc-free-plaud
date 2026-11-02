@@ -15,6 +15,24 @@
 .glyph-badge--err { color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }
 .glyph-badge--muted { color: var(--text-secondary); background: var(--bg-surface-hover); }
 
+/* Carregamento: o card entra com o esqueleto dentro e o dado troca no lugar (canvas "Carregamento — Escólio"). */
+/* O esqueleto só surge depois de 150 ms: resposta rápida não pisca. */
+.load-wait { animation: load-in 0.2s ease 0.15s both; }
+.load-on { animation: load-fade 0.28s ease both; }
+.bench .card:not(.rise) { animation: load-fade 0.28s ease both; }
+.load-sk { display: block; flex: none; max-width: 100%; }
+.load-lines { display: flex; flex-direction: column; min-width: 0; }
+.load-wide { grid-column: 1 / -1; }
+.load-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.load-row > .load-lines { flex: 1; }
+.force-graph--ghost { display: flex; align-items: center; justify-content: center; }
+.force-graph__ghost { width: 100%; max-width: 420px; animation: load-pulse 1.5s ease-in-out infinite; }
+.force-graph__ghost line { stroke: var(--border-color); }
+.force-graph__ghost circle { fill: color-mix(in srgb, var(--text-primary) 16%, transparent); }
+@keyframes load-in { from { opacity: 0; } }
+@keyframes load-fade { from { opacity: 0; } }
+@keyframes load-pulse { 50% { opacity: 0.6; } }
+
 /* Entrada em sequência: style={{ animationDelay }} escalona os cartões. */
 .rise { animation: ui-rise 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
 @keyframes ui-rise { from { opacity: 0; transform: translateY(10px); } }

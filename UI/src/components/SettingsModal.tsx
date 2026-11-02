@@ -22,6 +22,8 @@ import { AiSourcesPane } from './AiSourcesPane';
 import { AdvancedLocked, AdvancedPane } from './AdvancedPane';
 import DoctorPanel from './DoctorPanel';
 import MicTest from './MicTest';
+import { DoctorSkeleton } from './DoctorPanel';
+import { SettingsTabSkeleton, SkLines } from './ui/Loading';
 import { GroupCard, Segmented, SectionHead, Stepper } from './ui/Controls';
 import { Glyph, type GlyphName } from './ui/Glyph';
 import './settings-redesign.css';
@@ -75,8 +77,11 @@ const modelDescription = (details: Record<string, unknown>) => {
 
 export type SettingsTab = 'geral' | 'vaults' | 'ia' | 'voz' | 'avancado' | 'aparencia';
 
+// Elementos que recebem foco com Tab; o contêiner do modal (tabIndex -1) fica de fora.
+const FOCUSABLE_SELECTOR = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'geral', label: 'Geral' },
+  { id: 'geral', label: 'Diagnóstico' },
   { id: 'vaults', label: 'Vaults' },
   { id: 'ia', label: 'Fontes de IA' },
   { id: 'voz', label: 'Voz' },
@@ -146,9 +151,11 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const [isTestingProvider, setIsTestingProvider] = useState(false);
   const [isListingModels, setIsListingModels] = useState(false);
   const [modelDiscovery, setModelDiscovery] = useState<ModelDiscoveryResult | null>(null);
-  const [activeTab, setActiveTab] = useState<SettingsTab>('voz');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('geral');
   const [toast, setToast] = useState<Toast | null>(null);
   const [voiceModels, setVoiceModels] = useState<VoiceModelInfo[]>([]);
+  const [voiceLoaded, setVoiceLoaded] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [downloadJob, setDownloadJob] = useState<VoiceModelDownloadSnapshot | null>(null);
   const [downloadError, setDownloadError] = useState('');
   const [advancedUnlocked, setAdvancedUnlocked] = useState(readAdvancedUnlocked);
@@ -199,9 +206,38 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, requestClose]);
 
-  // Foca o modal quando abre (acessibilidade)
+  // Foca o modal quando abre (acessibilidade) e devolve o foco a quem abriu ao fechar.
   useEffect(() => {
-    if (isOpen) modalRef.current?.focus();
+    if (!isOpen) return undefined;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    modalRef.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [isOpen]);
+
+  // Tab e Shift+Tab circulam dentro do modal: no último vai ao primeiro, no primeiro vai ao último.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const handleTab = (e: KeyboardEvent) => {
+      const modal = modalRef.current;
+      if (e.key !== 'Tab' || !modal) return;
+      const items = Array.from(modal.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      const inside = active instanceof Node && modal.contains(active);
+      if (e.shiftKey && (!inside || active === first || active === modal)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (!inside || active === last)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleTab);
+    return () => document.removeEventListener('keydown', handleTab);
   }, [isOpen]);
 
   const [isRunningDoctor, setIsRunningDoctor] = useState(false);
@@ -223,7 +259,8 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
       })
       .catch((error) => {
         console.error('[SettingsModal] Erro ao carregar settings do backend:', error);
-      });
+      })
+      .finally(() => setSettingsLoaded(true));
   }, [isOpen]);
 
   // Roda o Doctor de novo sem descartar o que o usuário já editou.
@@ -267,9 +304,12 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
       .then(setVoiceModels)
       .catch((error) => {
         console.error('[SettingsModal] Erro ao listar modelos de voz:', error);
-      });
+      })
+      .finally(() => setVoiceLoaded(true));
   }, [isOpen]);
 
+  // Antes de os ajustes chegarem, as abas que dependem deles mostram o esqueleto; Aparência e Avançado bloqueado não esperam nada.
+  const skeletonTab = !backendSettings && !settingsLoaded && (currentTab === 'ia' || currentTab === 'voz' || (currentTab === 'avancado' && advancedUnlocked)) ? currentTab : null;
   const selectableVoiceModels = voiceModels.filter((model) => model.selectable);
   const selectedVoiceModel = selectableVoiceModels.find((model) => model.id === settingDrafts.audio_model) ?? null;
   const vadModel = voiceModels.find((model) => model.id === 'silero-vad') ?? null;
@@ -714,16 +754,15 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
               ) : (
                 <section className="settings-section" aria-labelledby="settings-doctor">
                   <SectionHead icon="pulse" id="settings-doctor" title="Diagnóstico" lede="Confere índice, IA e voz da vault ativa." />
-                  <div className="settings-item settings-item--stacked" aria-label="Carregando diagnóstico">
-                    <div className="skeleton-box skeleton-box--path" />
-                    <div className="skeleton-box skeleton-box--meta" />
-                  </div>
+                  <DoctorSkeleton />
                 </section>
               ))}
 
             {currentTab ==='vaults' && <VaultsTab onOpenQueue={() => onOpenQueue?.()} />}
 
-            {currentTab ==='ia' && (
+            {skeletonTab && <SettingsTabSkeleton tab={skeletonTab} />}
+
+            {currentTab ==='ia' && !skeletonTab && (
               <section className="settings-section" aria-labelledby="settings-ai">
                 <SectionHead icon="stars" id="settings-ai" title="Fontes de IA" lede="Quem escreve a resposta a partir dos trechos das suas notas. A busca e a transcrição ficam sempre no seu computador." />
 
@@ -887,7 +926,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
               </section>
             )}
 
-            {currentTab ==='voz' && (
+            {currentTab ==='voz' && !skeletonTab && (
               <section className="settings-section" aria-labelledby="settings-voz">
                 <SectionHead icon="mic" id="settings-voz" title="Voz" lede="Transcrição local da pergunta falada: nada sai do seu computador." />
 
@@ -902,7 +941,11 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                     </span>
                   </div>
 
-                  {selectableVoiceModels.length > 0 ? (
+                  {!voiceLoaded ? (
+                    <div className="load-wait ui-grid" aria-label="Carregando modelos de voz" role="status">
+                      {[0, 1, 2].map((key) => <div key={key} className="ui-card" style={{ padding: 14 }}><SkLines widths={['60%', '82%', '30%']} /></div>)}
+                    </div>
+                  ) : selectableVoiceModels.length > 0 ? (
                     <MomentumRail className="voice-models" role="radiogroup" aria-label={audioModelRow?.label ?? 'Modelo de transcrição (voz)'}>
                       {selectableVoiceModels.map((model) => {
                         const checked = settingDrafts.audio_model === model.id;
@@ -987,7 +1030,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
               </section>
             )}
 
-            {currentTab === 'avancado' &&
+            {currentTab === 'avancado' && !skeletonTab &&
               (advancedUnlocked ? (
                 <AdvancedPane
                   presets={backendSettings?.settings_presets ?? []}

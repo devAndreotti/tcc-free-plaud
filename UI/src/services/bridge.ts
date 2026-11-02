@@ -771,6 +771,9 @@ interface PythonApi {
   /** Grava as conversas; ok false traz o motivo quando o backend recusa o payload. */
   saveConversations?: (payload: SavedConversations) => Promise<{ ok: boolean; message?: string }>;
 
+  /** Salva um texto no caminho que o usuário escolher (diálogo nativo); devolve o caminho, ou null se cancelar. */
+  saveTextFile?: (name: string, text: string) => Promise<string | null>;
+
   /** Lista notas indexadas no corpus. */
   listNotes?: (since?: string) => Promise<NoteSummary[]>;
 
@@ -1052,6 +1055,7 @@ const MOCK_VAULT_NOTES: NoteDetail[] = [
   mockVaultNote('zustand--66ff', 'Zustand', 'Estudos\\Front\\Zustand.md'),
   mockVaultNote('diario-29--77aa', 'Segunda-feira, 29 de Junho', 'Diário\\2026-06-29.md'),
   mockVaultNote('diario-30--88bb', 'Terça-feira, 30 de Junho', 'Diário\\2026-06-30.md'),
+  mockVaultNote('saude--99cc', '❤️ Saúde', 'Estudos\\🧠 Mente\\❤️ Saúde.md'),
 ];
 
 // Ligações [[...]] entre as notas de exemplo do modo navegador (aba Links do grafo)
@@ -1779,6 +1783,16 @@ export const bridge = {
             retrieval_top_k: 4,
           },
         },
+        {
+          key: 'gpu_qualidade',
+          label: 'GPU qualidade',
+          description: 'GPU NVIDIA com PyTorch CUDA; modelo multilíngue do Sentence Transformers.',
+          values: {
+            embedding_model: 'sentence-transformer:paraphrase-multilingue',
+            embedding_device: 'cuda',
+            retrieval_top_k: 5,
+          },
+        },
       ],
       doctor: {
         status: 'warning',
@@ -1996,6 +2010,16 @@ export const bridge = {
           retrieval_top_k: 4,
         },
       },
+      {
+        key: 'gpu_qualidade',
+        label: 'GPU qualidade',
+        description: 'GPU NVIDIA com PyTorch CUDA; modelo multilíngue do Sentence Transformers.',
+        values: {
+          embedding_model: 'sentence-transformer:paraphrase-multilingue',
+          embedding_device: 'cuda',
+          retrieval_top_k: 5,
+        },
+      },
     ];
   },
 
@@ -2115,6 +2139,22 @@ export const bridge = {
     } catch {
       return { ok: false, message: 'Armazenamento do navegador indisponível.' };
     }
+  },
+
+  /** Exporta um texto como arquivo: no desktop, pelo diálogo de salvar; no navegador, como download. Devolve o caminho (ou o nome baixado), ou null se o usuário cancelar. */
+  saveTextFile: async (name: string, text: string): Promise<string | null> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.saveTextFile) {
+      return window.pywebview.api.saveTextFile(name, text);
+    }
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    return name;
   },
 
   listCorpusRoots: async (): Promise<CorpusRoot[]> => {

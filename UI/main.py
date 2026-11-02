@@ -18,6 +18,7 @@ Integração atual:
 """
 
 import os
+import re
 import subprocess
 import sqlite3
 import sys
@@ -559,6 +560,32 @@ class Api:
         except ValueError as exc:
             return {'ok': False, 'message': str(exc)}
         return {'ok': True}
+
+    def saveTextFile(self, name: str, text: str) -> str | None:
+        """
+        Exporta um texto (UTF-8) para o caminho que o usuário escolher no diálogo de salvar.
+
+        Args:
+            name: Nome sugerido; separadores de pasta são trocados por '-', o diálogo não aceita caminho.
+            text: Conteúdo do arquivo.
+
+        Returns:
+            Caminho gravado, ou None se o diálogo foi cancelado ou não há janela.
+        """
+        if webview is None or not webview.windows:
+            return None
+        safe_name = re.sub(r'[\\/]', '-', str(name or '')).strip() or 'conversa.md'
+        result = webview.windows[0].create_file_dialog(
+            webview.FileDialog.SAVE,
+            save_filename=safe_name,
+            file_types=('Markdown (*.md)', 'Todos os arquivos (*.*)'),
+        )
+        if not result:
+            return None
+        # Em SAVE_DIALOG o PyWebView devolve o caminho como texto (às vezes numa tupla); pega o primeiro.
+        chosen = result if isinstance(result, str) else result[0]
+        Path(chosen).write_text(text, encoding='utf-8', newline='\n')
+        return chosen
 
     def listNotes(self, since: str | None = None) -> list[dict]:
         """Notas indexadas; com `since`, só as gravadas desde aquele created_at (o grafo durante a indexação)."""

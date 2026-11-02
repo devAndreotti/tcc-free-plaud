@@ -103,7 +103,8 @@ def _summary_from_note(note, *, chunk_count: int) -> NoteSummary:
 
 
 def _chunk_summary(chunk: Chunk) -> NoteChunkSummary:
-    # Mesmo texto legível do chat; trecho que é só frontmatter aparece como está, para não ficar vazio.
+    # Mesmo texto legível do chat, inteiro: a tela de Trechos mostra o trecho todo, não só o começo.
+    # Trecho que é só frontmatter aparece como está, para não ficar vazio.
     snippet = (readable_chunk_text(chunk.chunk_text) or chunk.chunk_text).replace('\n', ' ').strip()
     return NoteChunkSummary(
         chunk_id=chunk.chunk_id,
@@ -111,7 +112,7 @@ def _chunk_summary(chunk: Chunk) -> NoteChunkSummary:
         char_start=chunk.char_start,
         char_end=chunk.char_end,
         token_count=chunk.token_count,
-        snippet=snippet[:240],
+        snippet=snippet,
     )
 
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { SettingRow, SettingPreset } from '../services/bridge';
+import { bridge, type SettingRow, type SettingPreset, type SettingPresetResult } from '../services/bridge';
 import { Glyph, GlyphBadge, type GlyphName } from './ui/Glyph';
 import { GroupCard, SectionHead } from './ui/Controls';
 import { ChunkArt, SearchArt, VectorArt } from './AdvancedArt';
@@ -106,11 +106,91 @@ const presetInUse = (preset: SettingPreset, catalog: SettingRow[]) =>
     return row ? String(row.value) === String(value) : false;
   });
 
+// Prévia de um preset: o que muda antes de aplicar. Nada é gravado aqui.
+type PresetPreview = { key: string; status: 'loading' | 'ready' | 'error'; result?: SettingPresetResult; error?: string };
+
+// O preset nunca troca o modelo de busca da vault: o backend também não o grava (apply_settings_preset exclui embedding_model).
+const EMBEDDING_KEY = 'embedding_model';
+const formatValue = (value: string | number | boolean | null | undefined) => (value === null || value === undefined ? '—' : String(value));
+
 export const AdvancedPane = ({ presets, rows, catalog, strategy, hiddenKeys, applyingPreset, pendingChanges, catalogLabel, renderRow, onApplyPreset, onHide }: AdvancedPaneProps) => {
+  const [preview, setPreview] = useState<PresetPreview | null>(null);
+  // Respostas da prévia que chegam depois de cancelar (ou de abrir outra) são ignoradas.
+  const previewKey = useRef('');
   const groups = rows.reduce<Record<string, SettingRow[]>>((acc, row) => {
     (acc[row.group] ??= []).push(row);
     return acc;
   }, {});
+
+  const openPreview = (key: string) => {
+    previewKey.current = key;
+    setPreview({ key, status: 'loading' });
+    bridge.previewSettingsPreset(key)
+      .then((result) => {
+        if (previewKey.current === key) setPreview({ key, status: 'ready', result });
+      })
+      .catch((error: unknown) => {
+        if (previewKey.current === key) {
+          setPreview({ key, status: 'error', error: error instanceof Error ? error.message : 'erro desconhecido' });
+        }
+      });
+  };
+
+  const closePreview = () => {
+    previewKey.current = '';
+    setPreview(null);
+  };
+
+  const confirmPreview = (key: string) => {
+    closePreview();
+    onApplyPreset(key);
+  };
+
+  const renderPreview = (preset: SettingPreset) => {
+    if (preview?.status === 'loading') {
+      return <p className="adv-preview__status" role="status">Calculando a prévia…</p>;
+    }
+    if (preview?.status === 'error') {
+      return (
+        <div className="adv-preview">
+          <p className="adv-preview__error" role="alert">Não foi possível montar a prévia: {preview.error}</p>
+          <div className="adv-preview__actions">
+            <button type="button" className="btn btn--sm ui-press" onClick={closePreview}>Cancelar</button>
+          </div>
+        </div>
+      );
+    }
+    const changes = preview?.result?.changes ?? {};
+    return (
+      <div className="adv-preview" aria-label={`Prévia do preset ${preset.label}`}>
+        {Object.keys(changes).length === 0 ? (
+          <p className="adv-preview__status">Nenhum valor muda com este preset.</p>
+        ) : (
+          <ul className="adv-preview__list" aria-label="O que muda">
+            {Object.entries(changes).map(([key, change]) => (
+              <li key={key}>
+                <span>{key === 'embedding_model' ? 'Modelo de busca semântica' : catalogLabel(key)}</span>
+                <span className="mono">{formatValue(change.before)}</span>
+                <span aria-hidden="true">→</span>
+                <span className="mono">{formatValue(change.after)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {EMBEDDING_KEY in changes && (
+          <p className="adv-preview__note" role="note">
+            O modelo de busca é fixo por vault: esta vault continua com o modelo atual. O novo vale para vaults criadas depois.
+          </p>
+        )}
+        <div className="adv-preview__actions">
+          <button type="button" className="btn btn--sm ui-press" onClick={closePreview}>Cancelar</button>
+          <button type="button" className="btn btn--sm btn--primary ui-press" onClick={() => confirmPreview(preset.key)} disabled={Boolean(applyingPreset)}>
+            Aplicar
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -146,30 +226,32 @@ export const AdvancedPane = ({ presets, rows, catalog, strategy, hiddenKeys, app
                       </div>
                     ))}
                 </dl>
-                <div className="adv-preset__foot">
-                  {busy ? (
-                    <span className="adv-preset__busy" role="status">
-                      <span className="adv-preset__spinner ui-spin" aria-hidden="true" />
-                      Aplicando…
-                    </span>
-                  ) : inUse ? (
-                    <span className="adv-preset__done pop">
-                      <Glyph name="check" size={14} strokeWidth={2.2} />
-                      Aplicado
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn btn--sm ui-press"
-                      onClick={() => onApplyPreset(preset.key)}
-                      disabled={Boolean(applyingPreset) || pendingChanges > 0}
-                      title={pendingChanges > 0 ? 'Salve ou descarte antes de aplicar' : undefined}
-                      aria-label={`Aplicar preset ${preset.label}`}
-                    >
-                      Aplicar
-                    </button>
-                  )}
-                </div>
+                {preview?.key === preset.key ? renderPreview(preset) : (
+                  <div className="adv-preset__foot">
+                    {busy ? (
+                      <span className="adv-preset__busy" role="status">
+                        <span className="adv-preset__spinner ui-spin" aria-hidden="true" />
+                        Aplicando…
+                      </span>
+                    ) : inUse ? (
+                      <span className="adv-preset__done pop">
+                        <Glyph name="check" size={14} strokeWidth={2.2} />
+                        Aplicado
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn--sm ui-press"
+                        onClick={() => openPreview(preset.key)}
+                        disabled={Boolean(applyingPreset) || pendingChanges > 0}
+                        title={pendingChanges > 0 ? 'Salve ou descarte antes de aplicar' : undefined}
+                        aria-label={`Aplicar preset ${preset.label}`}
+                      >
+                        Aplicar
+                      </button>
+                    )}
+                  </div>
+                )}
               </article>
             );
           })}

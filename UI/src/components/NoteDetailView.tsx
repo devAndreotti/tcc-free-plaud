@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { type NoteDetail } from '../services/bridge';
 import { ChevronRightIcon, CopyIcon, MoreIcon, RefreshIcon, TrashIcon } from './Icons';
+import { NoteChunks } from './NoteChunks';
+import { NoteTitle } from './NoteTitle';
+import { Segmented } from './ui/Controls';
+import { Sk, SkLines } from './ui/Loading';
 import { formatDate, typeLabel } from '../lib/notes';
 
 interface NoteDetailViewProps {
@@ -9,34 +13,83 @@ interface NoteDetailViewProps {
   crumbs: string[];
   isMutating: boolean;
   isLoadingDetail: boolean;
+  isReindexing?: boolean;
   onReindex: () => void;
   onDelete: () => void;
   /** Trecho citado numa resposta do chat: abre os chunks, rola até ele e o destaca. */
   highlightChunkId?: string | null;
 }
 
-/** `código` e **negrito** dentro de uma linha; o React escapa o resto. */
+/** `código`, **negrito** e [links](https://…) dentro de uma linha; o React escapa o resto. */
 function renderInline(text: string): ReactNode[] {
   // A chave é a posição do trecho na linha: o texto é estático, não se reordena.
   let offset = 0;
-  return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part) => {
+  // Limites no link: sem eles, uma linha longa de "[" custa quadrático e trava a interface (a nota pode vir de terceiros).
+  return text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]{1,300}\]\([^)\s]{1,2000}\))/g).map((part) => {
     const key = `i${offset}`;
     offset += part.length;
     if (part.startsWith('`') && part.endsWith('`') && part.length > 2) return <code key={key}>{part.slice(1, -1)}</code>;
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) return <strong key={key}>{part.slice(2, -2)}</strong>;
+    const link = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(part);
+    if (link) {
+      // Só http(s) vira link, e abre no navegador: o conteúdo da nota não navega dentro do app.
+      return /^https?:\/\//i.test(link[2]) ? <a key={key} href={link[2]} target="_blank" rel="noreferrer">{link[1]}</a> : link[1];
+    }
     return part;
   });
 }
 
 /**
- * Markdown de leitura: frontmatter, títulos, listas, citações, blocos de código e parágrafos.
- * ponytail: subconjunto do Markdown suficiente para notas do vault; tabelas e links viram texto.
+ * Markdown de leitura: frontmatter, títulos, listas, tabelas, citações, blocos de código e parágrafos.
+ * ponytail: subconjunto do Markdown suficiente para notas do vault; o resto vira texto.
  */
 interface MarkdownState {
   out: ReactNode[];
   para: string[];
   list: { ordered: boolean; items: { key: string; text: string }[] } | null;
   code: string[] | null;
+  table: string[];
+}
+
+const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+
+const tableCells = (row: string) =>
+  row
+    .trim()
+    .replace(/^\||\|$/g, '')
+    .split(/(?<!\\)\|/)
+    .map((cell) => cell.trim().replaceAll('\\|', '|'));
+
+/** Linhas com | seguidas: tabela se a segunda for a régua; senão, texto comum. */
+function flushTable(s: MarkdownState) {
+  const [head, rule, ...body] = s.table;
+  if (head === undefined) return;
+  if (rule === undefined || !TABLE_RULE.test(rule)) {
+    s.para.push(...s.table);
+    s.table = [];
+    flushPara(s);
+    return;
+  }
+  s.table = [];
+  // Chave por posição: a tabela é estática, não se reordena.
+  const cells = (row: string, Cell: 'th' | 'td') =>
+    tableCells(row).map((cell, i) => {
+      const key = `${Cell}${i}`;
+      return <Cell key={key}>{renderInline(cell)}</Cell>;
+    });
+  s.out.push(
+    <div key={`t${s.out.length}`} className="reader__table">
+      <table>
+        <thead><tr>{cells(head, 'th')}</tr></thead>
+        <tbody>
+          {body.map((row, i) => {
+            const key = `r${i}`;
+            return <tr key={key}>{cells(row, 'td')}</tr>;
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 /** Frontmatter do usuário vira uma lista de definição; devolve o resto das linhas. */
@@ -67,6 +120,7 @@ function flushList(s: MarkdownState) {
 }
 
 function flushBlocks(s: MarkdownState) {
+  flushTable(s);
   flushPara(s);
   flushList(s);
 }
@@ -88,8 +142,8 @@ function readHeading(s: MarkdownState, line: string, title: string): boolean {
   if (!heading) return false;
   flushBlocks(s);
   const text = heading[2].trim();
-  // O H1 igual ao título já está no cabeçalho do leitor.
-  if (heading[1].length === 1 && s.out.length <= 1 && text === title) return true;
+  // O título no começo da nota, em # ou ##, já está no cabeçalho do leitor.
+  if (heading[1].length <= 2 && s.out.length <= 1 && text === title) return true;
   const content = renderInline(text);
   s.out.push(heading[1].length <= 2 ? <h2 key={`h${s.out.length}`}>{content}</h2> : <h3 key={`h${s.out.length}`}>{content}</h3>);
   return true;
@@ -119,10 +173,17 @@ function readQuote(s: MarkdownState, line: string): boolean {
 
 function renderMarkdown(source: string, title: string): ReactNode[] {
   const { node, rest } = readFrontmatter(source.replaceAll('\r\n', '\n').split('\n'));
-  const s: MarkdownState = { out: node ? [node] : [], para: [], list: null, code: null };
+  const s: MarkdownState = { out: node ? [node] : [], para: [], list: null, code: null, table: [] };
   for (const raw of rest) {
     const line = raw.trimEnd();
     if (readCodeLine(s, line, raw)) continue;
+    if (line.trimStart().startsWith('|')) {
+      flushPara(s);
+      flushList(s);
+      s.table.push(line);
+      continue;
+    }
+    flushTable(s);
     if (line.startsWith('```')) {
       flushBlocks(s);
       s.code = [];
@@ -141,6 +202,15 @@ function renderMarkdown(source: string, title: string): ReactNode[] {
 }
 
 /**
+ * Comentário HTML (<!-- ai-memory:start -->) não aparece em nenhum leitor de Markdown.
+ * Só até o último "-->": sem fecho, cada "<!--" varreria o resto do texto e a interface travaria.
+ */
+function stripHtmlComments(text: string): string {
+  const end = text.lastIndexOf('-->') + 3;
+  return text.slice(0, end).replace(/<!--[\s\S]*?-->/g, '') + text.slice(end);
+}
+
+/**
  * O backend guarda a nota como: frontmatter interno, "## Summary" (o começo do texto),
  * "## Normalized Text" (a nota inteira) e "## Raw Text" (a nota inteira de novo).
  * A leitura mostra só o texto normalizado; sem essa seção, o markdown sem o frontmatter interno.
@@ -149,30 +219,37 @@ function readableMarkdown(source: string): string {
   const md = source.replaceAll('\r\n', '\n');
   const body = md.startsWith('---\n') ? md.slice(md.indexOf('\n---', 4) + 4) : md;
   const start = body.search(/^## Normalized Text\s*$/m);
-  if (start < 0) return body;
-  const text = body.slice(body.indexOf('\n', start) + 1);
-  const end = text.search(/^## Raw Text\s*$/m);
-  return end < 0 ? text : text.slice(0, end);
+  const text = start < 0 ? body : body.slice(body.indexOf('\n', start) + 1);
+  const end = start < 0 ? -1 : text.search(/^## Raw Text\s*$/m);
+  return stripHtmlComments(end < 0 ? text : text.slice(0, end));
 }
 
-export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, onReindex, onDelete, highlightChunkId = null }: NoteDetailViewProps) => {
+/** Nota abrindo: a barra e a leitura no lugar, com o tamanho da nota real. */
+export const NoteDetailSkeleton = () => (
+  <div className="load-wait" role="status" aria-label="Abrindo nota" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div className="nd__bar"><div className="nd__crumbs"><Sk w={200} /></div><Sk w={130} h={32} r={9} /><Sk w={96} h={32} r={9} /></div>
+    <div className="nd__scroll">
+      <div className="reader">
+        <Sk w="62%" h={30} r={8} />
+        <div className="reader__meta">{[70, 64, 74, 130].map((w) => <Sk key={w} w={w} h={22} r={11} />)}</div>
+        <SkLines widths={['92%', '84%', '96%', '60%', '40%', '90%', '74%']} h={13} gap={11} />
+      </div>
+    </div>
+  </div>
+);
+
+export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, isReindexing = false, onReindex, onDelete, highlightChunkId = null }: NoteDetailViewProps) => {
   const chunks = detail.chunks ?? [];
-  // Trecho citado: a lista abre com os chunks visíveis; se a nota não tiver mais esse trecho, abre a leitura normal.
-  const [showChunks, setShowChunks] = useState(() => chunks.some((c) => c.chunk_id === highlightChunkId));
+  // Trecho citado: a nota abre em Trechos; se ela não tiver mais esse trecho, abre a leitura normal.
+  const [view, setView] = useState<'read' | 'chunks'>(() => (chunks.some((c) => c.chunk_id === highlightChunkId) ? 'chunks' : 'read'));
   const [menu, setMenu] = useState<'closed' | 'menu' | 'confirm'>('closed');
   const [copied, setCopied] = useState(false);
   const actionsRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const citedRef = useRef<HTMLLIElement>(null);
 
   const tokens = chunks.reduce((sum, c) => sum + (c.token_count ?? 0), 0);
   const created = formatDate(detail.created_at);
   const busy = isMutating || isLoadingDetail;
-
-  // Rola até o trecho citado uma vez, ao abrir: a nota só monta depois de carregada.
-  useEffect(() => {
-    citedRef.current?.scrollIntoView({ block: 'center' });
-  }, []);
 
   useEffect(() => {
     if (menu === 'closed') return undefined;
@@ -208,28 +285,29 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
         <nav className="nd__crumbs" aria-label="Local no vault">
           {crumbs.slice(0, -1).map((part, depth) => ({ part, path: crumbs.slice(0, depth + 1).join('/') })).map(({ part, path }) => (
             <span key={path} className="nd__crumb">
-              {part}
+              <NoteTitle text={part} />
               <ChevronRightIcon size={12} />
             </span>
           ))}
-          <b>{crumbs.at(-1) ?? detail.title}</b>
+          <b><NoteTitle text={crumbs.at(-1) ?? detail.title} /></b>
           {copied && <span className="nd__copied">caminho copiado</span>}
         </nav>
 
         <div className="nd__actions" ref={actionsRef}>
-          <label className="switch">
-            <input
-              type="checkbox"
-              checked={showChunks}
-              onChange={(event) => setShowChunks(event.target.checked)}
-            />
-            <span className="switch__track" aria-hidden="true" />
-            <span>Mostrar trechos</span>
-          </label>
-          <span className="nd__vr" aria-hidden="true" />
+          <Segmented
+            label="Como ver a nota"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'read', label: 'Ler' },
+              { value: 'chunks', label: 'Trechos' },
+            ]}
+          />
           <button type="button" className="btn btn--sm" onClick={onReindex} disabled={busy}>
-            <RefreshIcon size={14} />
-            Reindexar
+            <span className={`nd__reindex-icon${isReindexing ? ' ui-spin' : ''}`}>
+              <RefreshIcon size={14} />
+            </span>
+            {isReindexing ? 'Reindexando…' : 'Reindexar'}
           </button>
           <button
             type="button"
@@ -264,7 +342,7 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
             <div className="popover nd__confirm" role="alertdialog" aria-labelledby="nd-confirm-title" aria-describedby="nd-confirm-desc">
               <h4 id="nd-confirm-title">Apagar do corpus?</h4>
               <p id="nd-confirm-desc">
-                Remove <b>{detail.title}</b> e {chunks.length === 1 ? 'seu trecho' : `seus ${chunks.length} trechos`} do SQLite e do
+                Remove <b><NoteTitle text={detail.title} /></b> e {chunks.length === 1 ? 'seu trecho' : `seus ${chunks.length} trechos`} do SQLite e do
                 Chroma. O arquivo no vault não é alterado.
               </p>
               <div className="nd__confirm-actions">
@@ -288,52 +366,20 @@ export const NoteDetailView = ({ detail, crumbs, isMutating, isLoadingDetail, on
       </div>
 
       <div className="nd__scroll">
-        <article className={`reader${showChunks ? ' reader--chunks' : ''}`}>
-          <h1 className="reader__title">{detail.title}</h1>
+        <article className="reader">
+          <h1 className="reader__title"><NoteTitle text={detail.title} /></h1>
           <div className="reader__meta">
-            <span>{typeLabel(detail.source_type)}</span>
-            <span className="reader__sep">·</span>
-            <span>{chunks.length} {chunks.length === 1 ? 'trecho' : 'trechos'}</span>
-            {tokens > 0 && (
-              <>
-                <span className="reader__sep">·</span>
-                <span className="mono">{tokens.toLocaleString('pt-BR')} tokens</span>
-              </>
-            )}
-            {created && (
-              <>
-                <span className="reader__sep">·</span>
-                <span>indexada em {created}</span>
-              </>
-            )}
+            <span className="reader__fact">{typeLabel(detail.source_type)}</span>
+            <span className="reader__fact">{chunks.length} {chunks.length === 1 ? 'trecho' : 'trechos'}</span>
+            {tokens > 0 && <span className="reader__fact">{tokens.toLocaleString('pt-BR')} tokens</span>}
+            {created && <span className="reader__fact">indexada em {created}</span>}
             {(detail.tags ?? []).filter((tag) => tag !== detail.source_type).map((tag) => (
-              <span key={tag} className="reader__tag mono">#{tag}</span>
+              <span key={tag} className="reader__fact reader__tag">#{tag}</span>
             ))}
           </div>
 
-          {showChunks ? (
-            <ol className="reader__chunks" aria-label="Trechos indexados">
-              {chunks.map((chunk, i) => {
-                const overlap = i > 0 ? chunks[i - 1].char_end - chunk.char_start : 0;
-                const cited = chunk.chunk_id === highlightChunkId;
-                return (
-                  <li
-                    key={chunk.chunk_id}
-                    ref={cited ? citedRef : undefined}
-                    className={`reader__chunk${cited ? ' reader__chunk--cited' : ''}`}
-                    title={chunk.chunk_id}
-                  >
-                    <span className="reader__chunk-label mono">
-                      {cited && <span className="pill pill--accent">trecho citado</span>}
-                      <b>#{chunk.chunk_index} · {chunk.token_count} tok</b>
-                      {chunk.char_start}–{chunk.char_end}
-                      {overlap > 0 && <><br />↥ {overlap} sobrepostos</>}
-                    </span>
-                    <p>{chunk.snippet}</p>
-                  </li>
-                );
-              })}
-            </ol>
+          {view === 'chunks' ? (
+            <NoteChunks chunks={chunks} highlightChunkId={highlightChunkId} />
           ) : (
             <div className="reader__body">{renderMarkdown(readableMarkdown(detail.structured_markdown ?? ''), detail.title)}</div>
           )}
