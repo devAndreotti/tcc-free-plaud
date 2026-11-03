@@ -1,0 +1,33 @@
+{
+  "dataset_name": "lote-cego-10-documento-longo-modelagem-dados",
+  "samples": [
+    {
+      "sample_id": "lc-10-a",
+      "question": "Qual estratégia de histórico de dimensão guarda só o valor anterior numa coluna extra?",
+      "expected_note_id": "10-documento-longo-modelagem-dados",
+      "expected_terms": ["SCD Tipo 3 (Adicionar coluna)"],
+      "expected_ref": "1.3 Slowly Changing Dimensions (SCD)"
+    },
+    {
+      "sample_id": "lc-10-b",
+      "question": "Quem criou o Data Vault?",
+      "expected_note_id": "10-documento-longo-modelagem-dados",
+      "expected_terms": ["Dan Linstedt"],
+      "expected_ref": "2.1 Filosofia e Estrutura"
+    },
+    {
+      "sample_id": "lc-10-c",
+      "question": "Quais são os estágios de refinamento do padrão em camadas que o guia cita para o Lakehouse?",
+      "expected_note_id": "10-documento-longo-modelagem-dados",
+      "expected_terms": ["Bronze → Silver → Gold"],
+      "expected_ref": "3.2 Impacto na Modelagem"
+    },
+    {
+      "sample_id": "lc-10-d",
+      "question": "Que pacote automatiza a geração do SQL de hubs, links e satélites a partir de YAML?",
+      "expected_note_id": "10-documento-longo-modelagem-dados",
+      "expected_terms": ["dbtvault"],
+      "expected_ref": "6.1 dbt (data build tool)"
+    }
+  ]
+}

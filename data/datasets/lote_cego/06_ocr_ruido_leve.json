@@ -1,0 +1,33 @@
+{
+  "dataset_name": "lote-cego-06-ocr-ruido-leve",
+  "samples": [
+    {
+      "sample_id": "lc-06-a",
+      "question": "Quanto custa por mês a licença do Datadog?",
+      "expected_note_id": "06-ocr-ruido-leve",
+      "expected_terms": ["R$ 18.700"],
+      "expected_ref": "4.2 Datadog"
+    },
+    {
+      "sample_id": "lc-06-b",
+      "question": "Quem confirmou a escolha da ferramenta de monitoramento?",
+      "expected_note_id": "06-ocr-ruido-leve",
+      "expected_terms": ["ratificada pelo Diretor"],
+      "expected_ref": "5. Recomendação"
+    },
+    {
+      "sample_id": "lc-06-c",
+      "question": "Que carga foi simulada durante os testes em staging?",
+      "expected_note_id": "06-ocr-ruido-leve",
+      "expected_terms": ["60% do tráfego"],
+      "expected_ref": "2. Ferramentas avaliadas"
+    },
+    {
+      "sample_id": "lc-06-d",
+      "question": "Qual ferramenta cobra de um jeito mais previsível quando a escala varia?",
+      "expected_note_id": "06-ocr-ruido-leve",
+      "expected_terms": ["mais prev isível"],
+      "expected_ref": "4.3 New Relic"
+    }
+  ]
+}

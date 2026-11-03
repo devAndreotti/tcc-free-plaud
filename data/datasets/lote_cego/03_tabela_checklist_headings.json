@@ -1,0 +1,33 @@
+{
+  "dataset_name": "lote-cego-03-tabela-checklist-headings",
+  "samples": [
+    {
+      "sample_id": "lc-03-a",
+      "question": "Quem ficou de testar a migração no ambiente de staging?",
+      "expected_note_id": "03-tabela-checklist-headings",
+      "expected_terms": ["Teste em staging | Rafael"],
+      "expected_ref": "Status"
+    },
+    {
+      "sample_id": "lc-03-b",
+      "question": "Quanto tempo leva, em média, para desfazer a migração por completo?",
+      "expected_note_id": "03-tabela-checklist-headings",
+      "expected_terms": ["8 a 12 minutos"],
+      "expected_ref": "Plano de Rollback"
+    },
+    {
+      "sample_id": "lc-03-c",
+      "question": "O que motivou a migração do banco de produção?",
+      "expected_note_id": "03-tabela-checklist-headings",
+      "expected_terms": ["180 milhões de registros"],
+      "expected_ref": "Contexto da Migração"
+    },
+    {
+      "sample_id": "lc-03-d",
+      "question": "Qual risco da lista tem a ver com tabelas volumosas?",
+      "expected_note_id": "03-tabela-checklist-headings",
+      "expected_terms": ["timeout em tabelas grandes"],
+      "expected_ref": "Riscos"
+    }
+  ]
+}
