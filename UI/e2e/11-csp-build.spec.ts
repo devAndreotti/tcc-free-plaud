@@ -41,10 +41,11 @@ test('build: CSP presente e sem violações ao navegar pelas telas principais', 
     await nav.getByRole('button', { name, exact: true }).click();
     await page.waitForTimeout(300);
   }
-  await page.locator('#btn-grafos').click();
-  await expect(page.locator('.force-graph__canvas')).toBeVisible();
   await page.getByRole('button', { name: 'Configurações' }).first().click();
   await expect(page.getByRole('navigation', { name: 'Categorias de configuração' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.locator('#btn-grafos').click();
+  await expect(page.locator('.force-graph__canvas')).toBeVisible();
   await page.waitForTimeout(500);
 
   const violations = await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
