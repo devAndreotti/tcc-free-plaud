@@ -18,6 +18,15 @@ def _gpu_failure(exc: Exception) -> bool:
     )
 
 
+def _cuda_compute_type(ctranslate2) -> str:
+    """int8_float16 quando a placa tem; Pascal (GTX 10xx) só tem int8 e o CTranslate2 recusa o resto."""
+    try:
+        supported = ctranslate2.get_supported_compute_types("cuda")
+    except RuntimeError:  # sem placa de verdade: o erro aparece ao carregar e cai no retry em CPU
+        return "int8_float16"
+    return next((kind for kind in ("int8_float16", "int8") if kind in supported), "float32")
+
+
 class WhisperEngine:
     def __init__(self, directory: Path, device: str):
         self.directory = directory
@@ -46,7 +55,7 @@ class WhisperEngine:
         self.model = WhisperModel(
             str(self.directory),
             device=self.device,
-            compute_type="int8_float16" if self.device == "cuda" else "int8",
+            compute_type=_cuda_compute_type(ctranslate2) if self.device == "cuda" else "int8",
             local_files_only=True,
             num_workers=1,
         )
