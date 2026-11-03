@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NoteChunkSummary } from '../services/bridge';
+import { plainMarkdown } from '../lib/plainMarkdown';
 
 interface NoteChunksProps {
   chunks: NoteChunkSummary[];
@@ -72,7 +73,8 @@ export const NoteChunks = ({ chunks, highlightChunkId }: NoteChunksProps) => {
                 {overlap > 0 && <span className="reader__chunk-overlap">↥ {overlap} sobrepostos</span>}
                 {cited && <span className="reader__chunk-cited">trecho citado</span>}
               </div>
-              <p>{chunk.snippet}</p>
+              {/* Só a exibição perde o Markdown cru; snippet, offsets e contagens seguem como vieram. */}
+              <p style={{ whiteSpace: 'pre-line' }}>{plainMarkdown(chunk.snippet)}</p>
             </li>
           );
         })}

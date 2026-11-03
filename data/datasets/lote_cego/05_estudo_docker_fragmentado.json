@@ -1,0 +1,32 @@
+{
+  "dataset_name": "lote-cego-05-estudo-docker-fragmentado",
+  "samples": [
+    {
+      "sample_id": "lc-05-b",
+      "question": "Como o multi-stage build ajuda a diminuir o tamanho final da imagem?",
+      "expected_note_id": "05-estudo-docker-fragmentado",
+      "expected_terms": [
+        "copie só o binário"
+      ],
+      "expected_ref": "multi-stage build"
+    },
+    {
+      "sample_id": "lc-05-c",
+      "question": "Qual modo de rede deixa o container totalmente isolado?",
+      "expected_note_id": "05-estudo-docker-fragmentado",
+      "expected_terms": [
+        "none: sem rede"
+      ],
+      "expected_ref": "redes"
+    },
+    {
+      "sample_id": "lc-05-d",
+      "question": "Por que dois containers da mesma imagem ocupam pouco espaço em disco?",
+      "expected_note_id": "05-estudo-docker-fragmentado",
+      "expected_terms": [
+        "copy-on-write"
+      ],
+      "expected_ref": "trecho copiado do livro (camadas das imagens)"
+    }
+  ]
+}

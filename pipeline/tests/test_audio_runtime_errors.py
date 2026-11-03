@@ -69,6 +69,26 @@ def test_model_prepare_reuses_engine_without_native_loading(tmp_path, monkeypatc
     assert instance._engine(options).model is None
 
 
+@pytest.mark.parametrize(
+    ("supported", "expected"),
+    [
+        ({"float32", "int8", "int8_float16"}, "int8_float16"),  # Turing ou mais nova (RTX 2050)
+        ({"float32", "int8", "int8_float32"}, "int8"),  # Pascal (GTX 1060)
+        ({"float32"}, "float32"),
+    ],
+)
+def test_whisper_on_cuda_uses_a_compute_type_the_card_supports(tmp_path, monkeypatch, supported, expected):
+    from escolio.providers import audio_engines
+
+    monkeypatch.setattr("ctranslate2.get_cuda_device_count", lambda: 1)
+    monkeypatch.setattr("ctranslate2.get_supported_compute_types", lambda device: supported)
+    monkeypatch.setattr(audio_engines, "prepare_native_libraries", lambda _: None)
+    calls = []
+    monkeypatch.setattr("faster_whisper.WhisperModel", lambda *args, **kwargs: calls.append(kwargs) or SimpleNamespace())
+    audio_engines.WhisperEngine(tmp_path, "auto")._load()
+    assert calls[0]["device"] == "cuda" and calls[0]["compute_type"] == expected
+
+
 def test_missing_cuda_dll_allows_single_cpu_retry(tmp_path, monkeypatch):
     from escolio.providers import audio_engines
 

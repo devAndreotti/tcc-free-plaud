@@ -41,6 +41,8 @@ uv run escolio benchmark faithfulness --results <compare.json> --judge-model qwe
 | IA, checagem de span em **toda** resposta | 24/39 | 0/34 | 58/73 (79%) |
 | IA, checagem de span só como segunda chance (versão final) | 33/39 | 6/34 | 60/73 (82%) |
 
+**Errata (2026-11-02):** a última linha não fecha. Com 33 positivas e 6 negativas respondidas, as decisões certas seriam 33 + 28 = 61, não 60. As outras três linhas fecham. O JSON dessa rodada não foi guardado, então não dá para saber qual dos três números está errado. Para citar a versão final, use as três rodadas do Experimento 22.
+
 Leitura:
 
 - A IA reduz as negativas respondidas de 13 para 6 em 34, ao custo de 3 positivas. O ganho vem do sentinela `NAO_ENCONTRADO` e da validação da resposta gerada.

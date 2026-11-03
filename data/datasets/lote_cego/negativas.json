@@ -1,0 +1,239 @@
+{
+  "dataset_name": "lote-cego-negativas",
+  "samples": [
+    {
+      "sample_id": "lcn-01",
+      "question": "Qual foi a última versão do bump2version publicada?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-02",
+      "question": "Quem revisou a nota sobre versionamento semântico antes de ela ser publicada?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-03",
+      "question": "Qual o custo mensal estimado do Thanos no relatório de monitoramento?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-04",
+      "question": "Em que data o ADR-2025-07 foi aprovado formalmente?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-05",
+      "question": "Quantos votos cada message broker recebeu na reunião do comitê de arquitetura?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-06",
+      "question": "Qual o nome do gestor do contrato designado pela contratante?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-07",
+      "question": "Qual o prazo de garantia dos serviços entregues pela contratada?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-08",
+      "question": "Em que data a migração do PostgreSQL foi concluída?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-09",
+      "question": "Qual o tamanho da tabela eventos depois do particionamento mensal?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-10",
+      "question": "Qual foi o MRR@10 do chunking semântico apenas nos e-mails do corpus?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-11",
+      "question": "Qual a versão do spaCy usada no experimento de chunking?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-12",
+      "question": "Qual comando do Docker apaga os volumes que ninguém mais usa, segundo meus estudos?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-13",
+      "question": "Qual o limite de tamanho de arquivo aceito pelo módulo de ingestão?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-14",
+      "question": "Quantas linhas tem a tabela fato_pedido do exemplo de e-commerce?",
+      "category": "negativa",
+      "subtipo": "quase-acerto"
+    },
+    {
+      "sample_id": "lcn-16",
+      "question": "Qual é a receita de pão de queijo?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-17",
+      "question": "Quem ganhou a Copa do Mundo de 2002?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-18",
+      "question": "Quantos habitantes tem a cidade de Curitiba?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-19",
+      "question": "Como funciona a fotossíntese nas plantas?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-20",
+      "question": "Qual a melhor época do ano para viajar a Lisboa?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-21",
+      "question": "Quem pintou o quadro A Noite Estrelada?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-22",
+      "question": "Qual é a distância média entre a Terra e a Lua?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-23",
+      "question": "Como declarar no imposto de renda o aluguel que recebo?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-24",
+      "question": "O que foi a Revolução Industrial?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-25",
+      "question": "Qual é um bom treino de peito para iniciantes?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-26",
+      "question": "Como trocar o pneu furado de um carro?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-27",
+      "question": "Qual a diferença entre jazz e blues?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-28",
+      "question": "A que horas o mercado do meu bairro abre aos domingos?",
+      "category": "negativa",
+      "subtipo": "fora-do-dominio"
+    },
+    {
+      "sample_id": "lcn-29",
+      "question": "Qual o MRR@10 do Prometheus nos manuais técnicos?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    },
+    {
+      "sample_id": "lcn-30",
+      "question": "Qual cláusula do contrato trata do rollback da migração do banco?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    },
+    {
+      "sample_id": "lcn-31",
+      "question": "Em que dia o Rafael testou o Kafka em staging?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    },
+    {
+      "sample_id": "lcn-32",
+      "question": "Qual o prazo do runbook de operação do Docker Compose?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    },
+    {
+      "sample_id": "lcn-33",
+      "question": "Quantos milissegundos leva o full scan da tabela fato_pedido?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    },
+    {
+      "sample_id": "lcn-34",
+      "question": "Qual o SLA de prioridade crítica que o Datadog oferece no relatório de monitoramento?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    },
+    {
+      "sample_id": "lcn-35",
+      "question": "Que versão do SemVer a Letícia Drummond atribuiu ao contrato 2025/0047?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    },
+    {
+      "sample_id": "lcn-36",
+      "question": "Qual hub do Data Vault guarda o REDIS_TIMEOUT?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    },
+    {
+      "sample_id": "lcn-37",
+      "question": "Qual a surrogate key da tabela eventos_legacy?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    },
+    {
+      "sample_id": "lcn-38",
+      "question": "Quem foi o secretário da reunião que escolheu o New Relic?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    },
+    {
+      "sample_id": "lcn-39",
+      "question": "Quanto custa por mês o Kafka com Thanos para retenção de longo prazo?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    },
+    {
+      "sample_id": "lcn-40",
+      "question": "Em que tag do Git foi publicado o ADR-2025-07?",
+      "category": "negativa",
+      "subtipo": "vocabulario-presente"
+    }
+  ]
+}

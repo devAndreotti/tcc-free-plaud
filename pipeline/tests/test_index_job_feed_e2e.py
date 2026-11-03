@@ -11,7 +11,7 @@ from time import monotonic, sleep
 
 from escolio.corpus.jobs import IndexJobManager
 from escolio.corpus.service import index_corpus_path
-from tests.test_corpus_service import FakeEmbedder, _settings
+from test_corpus_service import FakeEmbedder, _settings
 
 
 def _run_job(manager: IndexJobManager, folder: Path) -> list[dict]:

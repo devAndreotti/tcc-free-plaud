@@ -1,0 +1,198 @@
+# Experimento 22: Lote cego e gate da IA (Emerald)
+
+**Data da medição:** 2026-11-02. **Código:** commit `f8844d8` (branch `fechamento/lote-cego`), que contém a correção de normalização `77ea26d` e o lote cego congelado. Nenhum arquivo de código, pergunta, termo, limiar ou prompt foi alterado para esta medição.
+
+**Isto é medição, não calibração.** Resultado ruim ficou como resultado.
+
+## Perguntas
+
+1. A correção de normalização `77ea26d` piorou a recuperação ou a abstenção, com IA ou sem IA (gate da IA, que nunca tinha passado pelo compare com IA)?
+2. Quanto o desempenho cai do lote calibrado (`manual_validation`) para o lote cego (`lote_cego`)?
+
+## Avisos sobre validade
+
+- **O lote cego foi escrito por um agente de IA** que só leu os 10 documentos. Os autores do TCC ainda não revisaram as perguntas nem o gabarito. Não há rotulagem independente.
+- **A máquina difere dos Experimentos 20 e 21.** Estes usaram o notebook Windows (16 GB, RTX 2050); esta medição usou o Emerald: Intel i5-4690, 23 GB de RAM, GTX 1060 6 GB, Linux, Python 3.12. Outros processos (testes Playwright de outros agentes) podiam estar rodando na mesma máquina. Por isso **a latência não é reportada como resultado**.
+- O Ollama do Emerald foi baixado como tarball e rodou no espaço do usuário, na porta 11435.
+- Uma rodada por configuração sem IA, três com IA. O ruído entre rodadas com IA é conhecido (Experimento 21: cerca de ±3 perguntas).
+
+## Ambiente e modelo
+
+| Item | Windows (referência) | Emerald (esta medição) |
+|---|---|---|
+| Ollama | 0.40.3 | 0.40.3 (tarball oficial `ollama-linux-amd64.tar.zst`) |
+| `qwen2.5:3b` (digest do manifesto) | `357c53fb659c…` | `357c53fb659c…` (igual) |
+| `qchat:latest` (digest do manifesto) | `3f8f057e4bcd…` | `47504b2922e6…` (**diferente**) |
+| Camadas de `qchat` (modelo, system, template, licença, params) | `5ee4f07cdb9b`, `66b9ea09bd5b`, `eb4402837c78`, `b5c0e5cf74cf`, `62e6482c1e76` | as mesmas cinco |
+| Parâmetros | temperature 0.7, top_p 0.9, num_ctx 8192, num_gpu 99 | idem |
+| GPU | RTX 2050 4 GB | GTX 1060 6 GB (log: `offloaded 37/37 layers to GPU`) |
+
+O `qchat` do Emerald foi criado com `ollama create qchat -f Modelfile.qchat` (`FROM qwen2.5:3b` mais os quatro `PARAMETER` acima). **O digest do manifesto difere do Windows**, e o plano mandava parar nesse caso. Segui porque as cinco camadas de conteúdo são byte a byte as mesmas (mesmos digests de blob); a diferença está só no blob de configuração do manifesto, que no Windows traz `"architecture":"amd64","os":"linux"` e no Emerald não traz esses dois campos. Não verifiquei o `Modelfile` do Windows além da saída de `api/show`, de onde reconstruí os parâmetros. Registro como divergência do plano.
+
+O embedding efetivo de todas as rodadas foi `chroma-default` (campo `embedding_model` de cada JSON), em CPU, o mesmo do Experimento 20. Os valores de MRR abaixo têm portanto referência com o mesmo modelo.
+
+## Comandos
+
+Worktree de medição em `f8844d8` (limpa antes e depois), rodando de `pipeline/` com `PYTHONPATH=src` e o venv do clone descartável:
+
+```bash
+# A (manual_validation, sem IA, 3 estratégias) e C (lote_cego, sem IA)
+python -m escolio benchmark compare --suite ../data/datasets/<suite>/suite.json
+
+# B (manual_validation) e D (lote_cego): IA, só híbrida, 3 rodadas cada
+python hybrid_only.py benchmark compare --suite ../data/datasets/<suite>/suite.json \
+  --answer-provider ollama --answer-model qchat:latest \
+  --answer-base-url http://127.0.0.1:11435/v1 --registrar-respostas
+
+# E: faithfulness sobre a 1ª rodada de D
+python -m escolio benchmark faithfulness --results D1_lote_ia.json --judge-model qwen2.5:3b \
+  --judge-base-url http://127.0.0.1:11435/v1 --saida E_faith_lote.json --estrategia hybrid
+```
+
+`hybrid_only.py` só troca `escolio.benchmark.run_corpus.STRATEGIES` por `('hybrid',)` antes de chamar o `app` da CLI (mesmo recorte do Experimento 21, sem alterar código do repositório). Configuração registrada: `top_k=3`, `chunk_size=800`, `overlap=120`, RRF `k=60`, `lexical_weight=1.5`, `vector_weight=1.0`, pools 9 e 24. As rodadas rodaram em sequência, uma por vez. Scripts e JSONs ficam em `data/results/experimentos/22_lote_cego/` (pasta ignorada pelo git).
+
+## Suítes
+
+| | `manual_validation` (calibrado) | `lote_cego` |
+|---|---|---|
+| Notas | 10 | 10 (as mesmas) |
+| Positivas | 39 | 37 |
+| Negativas | 34 | 39 (14 quase-acerto, 13 fora-do-dominio, 12 vocabulario-presente) |
+
+## Resultado 1: sem IA (modo extrativo)
+
+Corpus completo, 3 estratégias. "Resp." = decisão de resposta do chat.
+
+| Suíte | Estratégia | Positivas resp. | Negativas resp. | Decisões certas | MRR | Recall@3 | Recall@5 |
+|---|---|---|---|---|---|---|---|
+| A manual | léxica | 39/39 | 14/34 | 59/73 | 0,9139 | 0,9744 | 0,9744 |
+| A manual | vetorial | 38/39 | 13/34 | 59/73 | 0,9359 | 1,0000 | 1,0000 |
+| A manual | **híbrida** | **38/39** | **13/34** | **59/73** | **0,9444** | **1,0000** | **1,0000** |
+| C lote cego | léxica | 19/37 | 21/39 | 37/76 | 0,7719 | 0,9189 | 0,9459 |
+| C lote cego | vetorial | 19/37 | 19/39 | 39/76 | 0,8165 | 0,8378 | 0,9459 |
+| C lote cego | **híbrida** | **19/37** | **19/39** | **39/76** | **0,8108** | **0,9459** | **0,9459** |
+
+Além do corpus completo, o `compare` grava um resumo por nota (recuperação dentro de cada nota isolada, que é a tabela do Experimento 20):
+
+| Suíte | Estratégia | MRR por nota | Recall@3 por nota |
+|---|---|---|---|
+| A manual | léxica | 0,9103 | 1,0000 |
+| A manual | vetorial | 0,7906 | 0,8974 |
+| A manual | híbrida | 0,9145 | 1,0000 |
+| C lote cego | léxica | 0,7793 | 0,8919 |
+| C lote cego | vetorial | 0,6667 | 0,7568 |
+| C lote cego | híbrida | 0,7613 | 0,8378 |
+
+## Resultado 2: gate da IA (híbrida, `qchat:latest`)
+
+### `manual_validation` (B, 3 rodadas)
+
+| Rodada | Positivas resp. | Negativas resp. | Decisões certas | Geradas de verdade (pos/neg) | MRR | Recall@3 |
+|---|---|---|---|---|---|---|
+| B1 | 36/39 | 7/34 | 63/73 | 28 / 4 | 0,9444 | 1,0 |
+| B2 | 37/39 | 6/34 | 65/73 | 28 / 3 | 0,9444 | 1,0 |
+| B3 | 36/39 | 3/34 | 67/73 | 27 / 2 | 0,9444 | 1,0 |
+| mín / máx / mediana | 36 / 37 / 36 | 3 / 7 / 6 | 63 / 67 / 65 | | | |
+
+Perguntas que mudaram de decisão entre as 3 rodadas: **8** (`semver-02`, `ingest-01`, `ata-02`, `paper-02`, `neg2-01`, `neg2-02`, `neg2-11`, `neg2-23`).
+
+### `lote_cego` (D, 3 rodadas)
+
+| Rodada | Positivas resp. | Negativas resp. | Decisões certas | Geradas de verdade (pos/neg) | MRR | Recall@3 |
+|---|---|---|---|---|---|---|
+| D1 | 26/37 | 11/39 | 54/76 | 18 / 5 | 0,8108 | 0,9459 |
+| D2 | 25/37 | 10/39 | 54/76 | 17 / 7 | 0,8108 | 0,9459 |
+| D3 | 25/37 | 11/39 | 53/76 | 16 / 8 | 0,8108 | 0,9459 |
+| mín / máx / mediana | 25 / 26 / 25 | 10 / 11 / 11 | 53 / 54 / 54 | | | |
+
+Perguntas que mudaram de decisão entre as 3 rodadas: **5** (`lc-03-a`, `lcn-02`, `lcn-08`, `lcn-13`, `lcn-38`).
+
+## Resultado 3: lote cego contra lote calibrado
+
+Taxas (mediana das 3 rodadas com IA; sem IA, a única rodada):
+
+| | Calibrado (manual) | Cego | Variação |
+|---|---|---|---|
+| Sem IA: positivas respondidas | 38/39 (97%) | 19/37 (51%) | -46 pontos |
+| Sem IA: negativas respondidas | 13/34 (38%) | 19/39 (49%) | +10 pontos |
+| Sem IA: decisões certas | 59/73 (81%) | 39/76 (51%) | -30 pontos |
+| Com IA: positivas respondidas | 36/39 (92%) | 25/37 (68%) | -25 pontos |
+| Com IA: negativas respondidas | 6/34 (18%) | 11/39 (28%) | +11 pontos |
+| Com IA: decisões certas | 65/73 (89%) | 54/76 (71%) | -18 pontos |
+| Recuperação híbrida: MRR / Recall@3 | 0,944 / 1,000 | 0,811 / 0,946 | -0,134 / -0,054 |
+
+Abstenção nas negativas do lote cego (negativas **não** respondidas), com intervalo de Wilson de 95%:
+
+| Configuração | Abstenção | IC 95% (Wilson) |
+|---|---|---|
+| Sem IA, híbrida | 20/39 = 51,3% | [36,2%; 66,1%] |
+| IA, D1 | 28/39 = 71,8% | [56,2%; 83,5%] |
+| IA, D2 | 29/39 = 74,4% | [58,9%; 85,4%] |
+| IA, D3 | 28/39 = 71,8% | [56,2%; 83,5%] |
+
+Para comparação, no lote calibrado com IA a abstenção foi 27/34 a 31/34 (79% a 91%; ICs de 63% a 92% e de 77% a 97%). Os intervalos do cego e do calibrado se sobrepõem em parte, com 34 e 39 negativas; a queda é visível no ponto central, mas o tamanho das amostras não a torna conclusiva só pela abstenção. A queda nas positivas respondidas é mais clara: IC 95% de D1 em 26/37 é [54%; 83%], contra [80%; 97%] de B1 em 36/39.
+
+### Negativas respondidas por subtipo (lote cego)
+
+| Subtipo (n) | Sem IA | D1 | D2 | D3 |
+|---|---|---|---|---|
+| quase-acerto (14) | 13 | 9 | 8 | 8 |
+| vocabulario-presente (12) | 5 | 2 | 2 | 3 |
+| fora-do-dominio (13) | 1 | 0 | 0 | 0 |
+
+O ponto fraco é o `quase-acerto` (pergunta sobre algo que a nota quase diz): 8 a 9 de 14 respondidas com IA. O modelo e a regra de vocabulário recusam bem o que é claramente de fora e razoavelmente o que só repete vocabulário, mas não o que está ao lado da resposta.
+
+## Conferência das saídas cruas
+
+Li as 76 respostas de D1 (37 positivas e 39 negativas, com os campos `answered`, `generated`, `discard_reason`), mais os contadores de B1. Conclusões:
+
+- **Nenhuma rodada colapsou para `[1]`.** As respostas geradas têm texto próprio.
+- **A métrica "respondida" conta fallback extrativo.** Em D1, das 26 positivas respondidas, 18 foram geradas de verdade e 8 vieram do fallback (descartes `echoed_question` 2, `unsupported_anchor` 2, `empty_generated_answer` 2, `unsupported_number` 2). Das 11 negativas respondidas, 5 foram geradas e 6 vieram do fallback (`unsupported_anchor` 3, `unsupported_number` 1, `empty_generated_answer` 1, `low_claim_overlap` 1). Ou seja, mais da metade das negativas "respondidas" são trechos copiados porque a resposta do modelo foi descartada, não afirmações do modelo. Em B1: 28 de 36 positivas e 4 de 7 negativas geradas.
+- Entre as respostas geradas há ecos da própria pergunta no início (`lc-01-b`, `lc-09-b`) e sentinelas corretos (`generated_no_answer_sentinel`: 10 descartes em D1).
+- **Negativas respondidas com valor errado, geradas pelo modelo** (o padrão do Experimento 21, valor associado à entidade errada):
+  - `lcn-10` (MRR@10 do chunking semântico em e-mails): respondeu "97,3". Esse número é o tempo de indexação em segundos do método semântico, não um MRR.
+  - `lcn-04` (data de aprovação do ADR-2025-07): respondeu "25 de março de 2025", que é a data da reunião; a aprovação formal é só pauta futura na ata.
+  - `lcn-03` (custo do Thanos): respondeu R$ 18.700, que é a licença do Datadog.
+  - `lcn-09`: texto genérico sobre partições, sem o tamanho pedido.
+- Positivas geradas corretas, por exemplo `lc-03-a` (Rafael), `lc-07-a` (0,81), `lc-10-b` (Dan Linstedt), `lc-10-c` (Bronze, Silver e Gold). Positivas recusadas sem falha de recuperação (rank 1 na recuperação, mas sem resposta): `lc-01-c`, `lc-01-d`, `lc-04-b`, `lc-04-c`, `lc-05-c`, `lc-07-b`, `lc-09-a`, entre outras.
+- Não revisei D2 e D3 pergunta a pergunta, só os contadores e a lista de perguntas que mudaram.
+
+## Resultado 4: faithfulness (E)
+
+Juiz `qwen2.5:3b` sobre a resposta da híbrida em D1: 37 respostas, 44 afirmações, 23 sustentadas (**52%** das afirmações), média por resposta 0,563, IC 95% [0,405; 0,725]. Inclui respostas do fallback extrativo e das negativas respondidas. **Não auditei as reprovações uma a uma**, ao contrário do Experimento 21. Há pelo menos uma reprovação que é erro do juiz: `lc-01-a` ("a Opção C é a recomendação para quem usa pyproject.toml...") foi marcada como não sustentada, mas confere com o gabarito. O número é portanto um piso; não é comparável com os 87% auditados do Experimento 21.
+
+## Leitura
+
+### Gate da IA: a correção de normalização não piorou nada medível
+
+- **Sem IA (A contra Experimento 20):** híbrida idêntica nas decisões: 38/39, 13/34, 59/73. MRR da híbrida no corpus 0,9444 e Recall@3 1,0, iguais à medição posterior à correção feita no Windows (0,9444 e 1,0). Por nota: híbrida 0,9145 (Experimento 20: 0,915), léxica 0,9103 (0,910). A vetorial por nota ficou em 0,7906, contra 0,816 do Experimento 20 (Recall@3 0,897 contra 0,923, uma pergunta). Não consegui separar efeito da normalização de efeito de máquina ou do ONNX em CPU nessa diferença, e ela não aparece na híbrida.
+- **Com IA (B contra Experimento 21):** 36–37/39, 3–7/34 e 63–67/73, contra 33/39, 6/34 e "60/73" da versão final do Experimento 21. A tabela do Experimento 21 não fecha aritmeticamente (33 + (34 − 6) = 61, mas diz 60/73); não tenho o JSON dele para decidir, e usei os números como escritos. Os números atuais estão no mesmo patamar ou um pouco melhores nas positivas (+3 a +4 contra a versão final, e ±3 é o ruído conhecido), e as negativas ficaram na mesma faixa. **Não há sinal de piora.** Também não dá para atribuir a melhora à correção: não há rodada da mesma máquina sem ela.
+- **Veredito do gate: passa**, no sentido de que não há regressão detectável acima do ruído, com ressalvas (máquina diferente, três rodadas, uma estratégia).
+
+### Lote cego: o desempenho cai
+
+- A queda é o achado principal. Sem IA, o chat responde só metade das positivas do cego (51%) contra 97% do calibrado, e responde 49% das negativas. Com IA, 68% das positivas contra 92%, e 28% das negativas contra 18%. As decisões certas caem de 89% para 71% com IA e de 81% para 51% sem IA.
+- A recuperação também cai (MRR 0,944 para 0,811; Recall@3 1,0 para 0,946). Duas positivas do cego nunca entram no top 3 da híbrida: `lc-04-d` ("Quando o comitê volta a se reunir?", sem resultado) e `lc-07-d` (posição 6). Parte das positivas recusadas, porém, tem a nota certa em primeiro lugar e é recusada pela regra de abstenção ou pelo modelo, não por falha de recuperação.
+- A regra de vocabulário foi calibrada no lote antigo, e o cego tem mais paráfrase: é coerente que a regra recuse positivas que usam outras palavras. Esta medição não separa quanto da queda vem da regra e quanto do modelo.
+- Sem IA, a abstenção nas negativas do cego (51%) é pior que a da IA (72% a 74%), e a IA melhora tanto positivas respondidas quanto negativas recusadas em relação ao extrativo no cego.
+- Com 37 positivas e 39 negativas e três rodadas, os intervalos são largos. A direção é consistente em todas as métricas, mas os números exatos não devem ser citados sem o intervalo.
+
+## Dúvidas sobre o lote
+
+Registradas sem corrigir nem refazer:
+
+- `lcn-03` ("Qual o custo mensal estimado do Thanos?"): a nota de monitoramento cita o Thanos como complemento do Prometheus + Grafana, cujo custo estimado é R$ 4.200. A negativa pode ser lida como parcialmente respondível; é ambígua.
+- `lcn-04` ("data em que o ADR-2025-07 foi aprovado formalmente"): a ata tem "Data: 25 de março de 2025" e fala em apresentar o ADR "para aprovação formal". O rótulo de negativa é defensável, mas a resposta que o modelo deu mostra que a pergunta induz erro.
+- `lc-04-d` ("Quando o comitê volta a se reunir?", esperado "22 de abril de 2025"): nenhuma estratégia a recupera no top 10, apesar de o termo esperado existir na seção "Pendências para próxima sessão". Não investiguei se é a fragmentação, a pergunta ou o vocabulário; não afirmo erro do lote.
+- `lcn-06` (nome do gestor do contrato): a cláusula 3.2 cita "designar um gestor do contrato"; a resposta correta é a ausência do nome, mas a cláusula é relacionada.
+
+Não encontrei erro de escrita evidente (termo esperado ausente do texto) nas perguntas que li.
+
+## Limitações
+
+- Três rodadas com IA, só estratégia híbrida, e uma rodada sem IA por suíte.
+- Máquina diferente, possivelmente com carga de outros processos; latência não reportada.
+- Digest do manifesto do `qchat` diferente do Windows (conteúdo idêntico, ver acima).
+- Faithfulness sem auditoria manual.
+- Lote cego escrito por IA, sem revisão dos autores, congelado antes da medição e não modificado.
+- A tabela do Experimento 21 não fecha aritmeticamente (33 + 28 = 61, escrito 60/73); a comparação com ela herda essa incerteza.
