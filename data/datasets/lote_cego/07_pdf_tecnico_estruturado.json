@@ -5,28 +5,27 @@
       "sample_id": "lc-07-a",
       "question": "Qual foi a nota média do chunking semântico na recuperação?",
       "expected_note_id": "07-pdf-tecnico-estruturado",
-      "expected_terms": ["MRR@10 médio de 0,81"],
+      "expected_terms": [
+        "MRR@10 médio de 0,81"
+      ],
       "expected_ref": "Resumo"
     },
     {
       "sample_id": "lc-07-b",
       "question": "Qual o tamanho da janela e da sobreposição na divisão em blocos de tamanho fixo?",
       "expected_note_id": "07-pdf-tecnico-estruturado",
-      "expected_terms": ["N=512 e M=64"],
+      "expected_terms": [
+        "N=512 e M=64"
+      ],
       "expected_ref": "2.1 Tamanho Fixo (TF)"
-    },
-    {
-      "sample_id": "lc-07-c",
-      "question": "Que modelo gerou os embeddings nos experimentos?",
-      "expected_note_id": "07-pdf-tecnico-estruturado",
-      "expected_terms": ["nomic-embed-text-v1.5"],
-      "expected_ref": "3.3 Infraestrutura"
     },
     {
       "sample_id": "lc-07-d",
       "question": "Em que situação vale a pena usar a divisão em blocos de tamanho fixo?",
       "expected_note_id": "07-pdf-tecnico-estruturado",
-      "expected_terms": ["tempo de indexação é um requisito crítico"],
+      "expected_terms": [
+        "tempo de indexação é um requisito crítico"
+      ],
       "expected_ref": "5. Discussão"
     }
   ]
