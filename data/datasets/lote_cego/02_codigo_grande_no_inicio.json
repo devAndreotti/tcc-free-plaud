@@ -1,0 +1,33 @@
+{
+  "dataset_name": "lote-cego-02-codigo-grande-no-inicio",
+  "samples": [
+    {
+      "sample_id": "lc-02-a",
+      "question": "Quantos bytes do arquivo entram no cálculo do hash, e por que só isso?",
+      "expected_note_id": "02-codigo-grande-no-inicio",
+      "expected_terms": ["primeiros 1.024 bytes"],
+      "expected_ref": "Decisão sobre o file_hash"
+    },
+    {
+      "sample_id": "lc-02-b",
+      "question": "Por que trocar o nome de um arquivo não quebra os links entre as notas?",
+      "expected_note_id": "02-codigo-grande-no-inicio",
+      "expected_terms": ["deriva do conteúdo"],
+      "expected_ref": "Por que o note_id não usa o nome do arquivo"
+    },
+    {
+      "sample_id": "lc-02-c",
+      "question": "O que precisaria mudar no cálculo do identificador se o sistema fosse usado por várias pessoas?",
+      "expected_note_id": "02-codigo-grande-no-inicio",
+      "expected_terms": ["namespace por usuário"],
+      "expected_ref": "Por que o note_id não usa o nome do arquivo"
+    },
+    {
+      "sample_id": "lc-02-d",
+      "question": "Qual caso de teste está previsto para arquivos com codificação do Windows?",
+      "expected_note_id": "02-codigo-grande-no-inicio",
+      "expected_terms": ["Windows-1252"],
+      "expected_ref": "Próximas Etapas"
+    }
+  ]
+}

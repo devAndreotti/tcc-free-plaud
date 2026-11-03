@@ -1,0 +1,33 @@
+{
+  "dataset_name": "lote-cego-04-ata-metadados-longos",
+  "samples": [
+    {
+      "sample_id": "lc-04-a",
+      "question": "Até quando o runbook de operação do cluster precisa ficar pronto?",
+      "expected_note_id": "04-ata-metadados-longos",
+      "expected_terms": ["15 de abril de 2025"],
+      "expected_ref": "Decisões tomadas"
+    },
+    {
+      "sample_id": "lc-04-b",
+      "question": "Por que o RabbitMQ não agradou à equipe de dados?",
+      "expected_note_id": "04-ata-metadados-longos",
+      "expected_terms": ["replay de mensagens"],
+      "expected_ref": "Discussão técnica"
+    },
+    {
+      "sample_id": "lc-04-c",
+      "question": "Depois de quantas falhas uma mensagem deve ser desviada para a fila de mensagens com erro?",
+      "expected_note_id": "04-ata-metadados-longos",
+      "expected_terms": ["três tentativas"],
+      "expected_ref": "Discussão técnica"
+    },
+    {
+      "sample_id": "lc-04-d",
+      "question": "Quando o comitê volta a se reunir?",
+      "expected_note_id": "04-ata-metadados-longos",
+      "expected_terms": ["22 de abril de 2025"],
+      "expected_ref": "Pendências para próxima sessão"
+    }
+  ]
+}

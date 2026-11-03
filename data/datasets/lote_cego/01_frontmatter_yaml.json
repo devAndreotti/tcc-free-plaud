@@ -1,0 +1,33 @@
+{
+  "dataset_name": "lote-cego-01-frontmatter-yaml",
+  "samples": [
+    {
+      "sample_id": "lc-01-a",
+      "question": "Qual das formas de guardar a versão do pacote a nota recomenda para quem usa o pyproject.toml como fonte única?",
+      "expected_note_id": "01-frontmatter-yaml",
+      "expected_terms": ["Opção C é a recomendada"],
+      "expected_ref": "2.1 Onde armazenar a versão"
+    },
+    {
+      "sample_id": "lc-01-b",
+      "question": "O que acontece com os metadados de build quando duas versões são comparadas?",
+      "expected_note_id": "01-frontmatter-yaml",
+      "expected_terms": ["ignorados na comparação de versões"],
+      "expected_ref": "1. O que é SemVer"
+    },
+    {
+      "sample_id": "lc-01-c",
+      "question": "Que ferramentas geram o changelog sozinhas a partir das mensagens de commit?",
+      "expected_note_id": "01-frontmatter-yaml",
+      "expected_terms": ["git-cliff"],
+      "expected_ref": "3.2 Conventional Commits e CHANGELOG automático"
+    },
+    {
+      "sample_id": "lc-01-d",
+      "question": "Por que chamar uma versão de 1.0.0-FINAL é um erro?",
+      "expected_note_id": "01-frontmatter-yaml",
+      "expected_terms": ["1.0.0-FINAL"],
+      "expected_ref": "4. Erros Comuns e Como Evitá-los"
+    }
+  ]
+}

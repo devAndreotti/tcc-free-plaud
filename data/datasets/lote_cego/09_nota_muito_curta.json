@@ -1,0 +1,26 @@
+{
+  "dataset_name": "lote-cego-09-nota-muito-curta",
+  "samples": [
+    {
+      "sample_id": "lc-09-a",
+      "question": "Em quantos segundos está o timeout do Redis no ambiente de staging?",
+      "expected_note_id": "09-nota-muito-curta",
+      "expected_terms": ["staging está em 30s"],
+      "expected_ref": "Lembrete: Revisar Configuração de Timeout"
+    },
+    {
+      "sample_id": "lc-09-b",
+      "question": "Em qual arquivo devo conferir a variável de timeout de conexão?",
+      "expected_note_id": "09-nota-muito-curta",
+      "expected_terms": [".env.production"],
+      "expected_ref": "Lembrete: Revisar Configuração de Timeout"
+    },
+    {
+      "sample_id": "lc-09-c",
+      "question": "Que valor pode estar valendo em produção e explicaria os erros de conexão da semana passada?",
+      "expected_note_id": "09-nota-muito-curta",
+      "expected_terms": ["valor padrão (5s)"],
+      "expected_ref": "Lembrete: Revisar Configuração de Timeout"
+    }
+  ]
+}
