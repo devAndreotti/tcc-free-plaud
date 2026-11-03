@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 // Versão do app vem do VERSION da raiz (mesma fonte do release desktop).
 const appVersion = readFileSync(new URL('../VERSION', import.meta.url), 'utf-8').trim()
 
-// CSP só no build (o app abre dist/index.html por file://). No dev o Vite injeta scripts inline e a política o quebraria.
+// CSP só no build (o PyWebView serve dist/ em http://127.0.0.1:<porta>). No dev o Vite injeta scripts inline e a política o quebraria.
 // 'unsafe-eval' é necessário: o PyWebView devolve cada resultado da API Python com window.evaluate_js, que chama eval().
 // Sem ele a ponte pode parar; a política ainda bloqueia script inline, handlers inline e script/imagem/conexão externos.
 // Fontes: IBM Plex e Source Serif são embutidas (src/assets/fonts), sem rede. Imagens data: vêm do ícone do grafo.

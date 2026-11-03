@@ -3,14 +3,15 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createPyWebViewMockScript } from './fixtures/pywebview-bridge-mock';
 
-// CSP do build: abre dist/index.html por file:// (como o PyWebView) e exige 0 violações ao navegar.
-// Não prova a janela real do PyWebView (WebView2/WebKit); só o Chromium do Playwright.
+// CSP do build: abre dist/index.html por file:// e exige 0 violações ao navegar.
+// O app real é servido pelo PyWebView em http://127.0.0.1:<porta>; essa janela foi conferida à mão em
+// 2026-11-03 (WebView2: ponte, fontes, 0 violações e 0 requisições externas). Este teste usa o Chromium do Playwright.
 const distHtml = fileURLToPath(new URL('../dist/index.html', import.meta.url));
 const hasDist = existsSync(distHtml);
 
 test.skip(!hasDist, 'dist/ não existe: rode "npm run build" na pasta UI antes de executar este teste.');
 
-// O app real também libera isso no WebView2 para carregar o bundle por file://.
+// Necessário só neste teste, para o Chromium carregar o bundle por file://.
 test.use({ launchOptions: { args: ['--allow-file-access-from-files'] } });
 
 test('build: CSP presente e sem violações ao navegar pelas telas principais', async ({ page }) => {
