@@ -122,7 +122,7 @@ Os termos não aparecem em nenhum documento de `samples/manual validetion/`. A r
 - Em "Detalhes técnicos", o motivo da abstenção.
 - Se a busca não foi léxica, aparece o botão "Buscar só por palavra-chave".
 
-**Fala honesta (obrigatória).** "A abstenção não é 100%. Na versão final com IA, medida em 2026-11-01 (Exp 21), o sistema respondeu 6 de 34 perguntas sem resposta <!-- atualizar-exp22 -->. Com só trechos, medido em 2026-10-31 (Exp 20), respondeu 13 de 34 <!-- atualizar-exp22 -->."
+**Fala honesta (obrigatória).** "A abstenção não é 100%. Num lote de perguntas escrito sem olhar o sistema, medido em 2026-11-02 (Exp 22), o app com IA ainda respondeu 10 ou 11 de 39 perguntas sem resposta; sem IA, 19 de 39. No lote usado na calibração, com IA, foram de 3 a 7 de 34."
 
 **Se o modelo responder mesmo assim.** Não é falha da apresentação. Mostrar a citação e dizer que esta pergunta é um dos casos em que a regra não pegou, que aparece na medição.
 
@@ -149,7 +149,8 @@ Seções a mostrar:
 - **MRR** é a média do inverso da posição da primeira nota certa. Quanto mais perto de 1, mais cedo a nota certa aparece.
 - **Recall@3** é a fração das perguntas em que a nota certa está entre os 3 primeiros resultados.
 - **Leitura.** A léxica e a híbrida empatam: os intervalos quase se sobrepõem. A fusão não supera a léxica de forma distinguível nesta suíte. A híbrida supera a vetorial pura em MRR.
-- **Negativas.** Com o extrativo, 13 de 34 foram respondidas em cada estratégia (Exp 20, 2026-10-31) <!-- atualizar-exp22 -->.
+- **Corpus completo.** A tabela é o resumo por nota. Buscando em todas as notas, a híbrida dá MRR 0,944 e Recall@3 1,000 no lote calibrado, e MRR 0,811 e Recall@3 0,946 no lote cego (Exp 22, 2026-11-02). Qual dos dois a tela mostra é **a confirmar no ensaio**.
+- **Negativas.** Sem IA, a híbrida respondeu 13 de 34 no lote calibrado (Exp 20 e 22) e 19 de 39 no lote cego (Exp 22).
 - **Latência.** A tela mostra p50, e o Exp 20 reporta média. Os dois são **a confirmar no ensaio**: não é a mesma métrica.
 
 **Fechamento (30 s).** "Os números vêm de uma suíte pequena, com gabarito feito pelo autor. Não afirmo que a híbrida é superior em geral."
@@ -200,7 +201,10 @@ As perguntas `neg2-*` foram escritas depois do ajuste da regra e medidas sem aju
 ## 10. Possíveis perguntas da banca
 
 **Por que a abstenção não é 100%?**
-A regra combina vocabulário e validação da resposta gerada. Com só trechos, o Exp 20 respondeu 13 de 34 perguntas sem resposta (2026-10-31) <!-- atualizar-exp22 -->. Com IA, a versão final respondeu 6 de 34 (Exp 21, 2026-11-01) <!-- atualizar-exp22 -->, ao custo de positivas: 38 de 39 no extrativo e 33 de 39 na versão final. Exigir span em toda resposta zerou as negativas, mas derrubou 11 positivas, então foi descartado (Exp 21). A regra foi calibrada com parte das negativas; as `neg2-*` foram medidas sem ajuste.
+A regra combina vocabulário e validação da resposta gerada, e recusar mais também derruba respostas certas: exigir span em toda resposta zerou as negativas, mas derrubou 11 positivas, e foi descartado (Exp 21). No lote cego, com IA, a abstenção ficou entre 72% e 74% (IC 95% de 56% a 85%). O ponto fraco é a pergunta sobre algo que a nota quase diz: 8 ou 9 de 14 foram respondidas (Exp 22).
+
+**O resultado se sustenta em perguntas novas?**
+Só em parte, e é por isso que medimos. A regra foi calibrada no lote antigo. Num lote novo, congelado antes da medição e escrito por um agente de IA que só leu os documentos, as decisões certas com IA caíram de 89% para 71%, e sem IA, de 81% para 51%. A recuperação também caiu, de MRR 0,944 para 0,811. O lote cego tem mais paráfrase, e a medição não separa o quanto vem da regra e o quanto vem do modelo. Os intervalos são largos, com 37 positivas e 39 negativas (Exp 22).
 
 **Por que local-first?**
 Os dados e os índices (SQLite e ChromaDB) ficam no computador do usuário. O Ollama roda na máquina. O app também aceita provedores na nuvem, mas é uma escolha explícita: o padrão de resposta é o extrativo, sem modelo. O modelo de embedding padrão é `chroma-default`; se ele roda sem rede depois do primeiro uso, é **a confirmar no ensaio**.
@@ -209,13 +213,13 @@ Os dados e os índices (SQLite e ChromaDB) ficam no computador do usuário. O Ol
 Reciprocal Rank Fusion. Junta a ordem da busca léxica e a da vetorial: cada resultado recebe 1/(k + posição) em cada ranking, e as pontuações são somadas. Os padrões são k = 60, peso léxico 1.5 e peso vetorial 1.0. A vantagem é não precisar normalizar as pontuações das duas buscas, que estão em escalas diferentes. Nesta suíte, a fusão empata com a léxica (Exp 20).
 
 **O que o benchmark não mede?**
-1. Não tem gabarito independente: as perguntas e o gabarito são do autor (Exp 20, limitações).
+1. Não tem gabarito independente: o lote calibrado é do autor (Exp 20, limitações), e o lote cego foi escrito por um agente de IA, sem revisão humana (Exp 22).
 2. A suíte é pequena: 10 notas, 39 perguntas positivas e 34 negativas. O intervalo do MRR é largo.
 3. O recall satura na léxica e na híbrida, então a métrica pouco separa as duas.
 4. Faithfulness não foi medida no Exp 20. No Exp 21, o juiz é um modelo de 3B e a auditoria foi feita por uma pessoa.
-5. Na IA, há uma rodada por configuração. O ruído entre rodadas é de cerca de ±3 perguntas em 39 (Exp 21).
+5. Na IA, há três rodadas por lote. Entre elas, 8 perguntas mudaram de decisão no lote calibrado e 5 no lote cego (Exp 22).
 6. Não mede uso real nem outras máquinas.
-7. O MRR de 0.942 do Exp 17 não foi reconciliado com o 0.915 do Exp 20 (Exp 20, relação com outros experimentos).
+7. Dois MRR aparecem nos documentos porque medem coisas diferentes: 0,915 é por nota isolada, e 0,944, no corpus completo (Exp 22).
 
 **A IA inventa informação?**
 Às vezes. No Exp 21, após auditoria manual, cerca de 34 das 39 afirmações geradas (≈ 87%) estavam sustentadas pelos trechos citados. Foram 5 alucinações reais, como o caso `docker-04`, em que o modelo respondeu "SCD Tipo 1" trazendo um trecho de outro documento (a resposta correta é `tmpfs`). Por isso `docker-04` não entra na demonstração.
@@ -224,8 +228,8 @@ Reciprocal Rank Fusion. Junta a ordem da busca léxica e a da vetorial: cada res
 
 ## 11. Observações para o autor (não falar na banca sem conferir)
 
-- No Exp 21, a linha "IA, checagem de span só como segunda chance (versão final)" da tabela de abstenção diz 33/39 positivas, 6/34 negativas e **60/73** decisões certas. Mas 33 + (34 − 6) = 61, não 60. Conferir no JSON da rodada antes de citar "60 de 73" <!-- atualizar-exp22 -->.
-- Os números de abstenção deste roteiro têm o comentário `<!-- atualizar-exp22 -->` e devem ser atualizados quando o Exp 22 sair.
+- No Exp 21, a linha "IA, checagem de span só como segunda chance (versão final)" da tabela de abstenção diz 33/39 positivas, 6/34 negativas e **60/73** decisões certas. Mas 33 + (34 − 6) = 61, não 60. O JSON dessa rodada não está na máquina, então não cite "60 de 73"; use os números do Exp 22.
+- O lote cego ainda não foi revisado pelos autores. Revise as perguntas antes de citar esses números no texto final, sem trocar nenhuma depois de ver o resultado. O Exp 22 lista as quatro de que há dúvida.
 
 ---
 
@@ -233,4 +237,5 @@ Reciprocal Rank Fusion. Junta a ordem da busca léxica e a da vetorial: cada res
 
 - `docs/experimentos/20_benchmark_recuperacao_reproduzido.md`, medido em 2026-10-31.
 - `docs/experimentos/21_abstencao_e_faithfulness_com_ia.md`, medido em 2026-11-01.
+- `docs/experimentos/22_lote_cego_e_gate_ia.md`, medido em 2026-11-02.
 - `data/datasets/manual_validation/README.md` e `suite.json`, para a origem das perguntas.
