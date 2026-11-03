@@ -34,7 +34,7 @@ A esteira de CI (`.github/workflows/quality-gate.yml`) roda a cada alteração:
 
 ## Limites conhecidos
 
-- O build da interface leva uma Content Security Policy (meta tag, só no build; veja `UI/vite.config.ts`). Ela bloqueia script inline, scripts e conexões externos, mas inclui `'unsafe-eval'` porque o PyWebView usa `eval` para devolver resultados da API Python à página. Ela foi testada no Chromium do Playwright, não na janela real do PyWebView.
+- O build da interface leva uma Content Security Policy (meta tag, só no build; veja `UI/vite.config.ts`). Ela bloqueia script inline, scripts e conexões externos (as fontes são embutidas; o build não pede nada à rede), mas inclui `'unsafe-eval'` porque o PyWebView usa `eval` para devolver resultados da API Python à página. Ela foi testada no Chromium do Playwright, não na janela real do PyWebView.
 - É um projeto acadêmico: não houve auditoria independente nem teste de penetração.
 - Os checks acima pegam vulnerabilidades conhecidas e padrões de código; não provam ausência de falhas.
 - Conteúdo de notas de terceiros deve ser tratado como não confiável; a interface escapa o texto, mas isso não substitui cautela ao importar arquivos de origem desconhecida.

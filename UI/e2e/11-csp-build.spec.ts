@@ -23,6 +23,12 @@ test('build: CSP presente e sem violações ao navegar pelas telas principais', 
     if (msg.type() === 'error' && /Content Security Policy|Refused to/i.test(msg.text())) consoleErrors.push(msg.text());
   });
   page.on('pageerror', (err) => consoleErrors.push(`pageerror: ${err.message}`));
+  // Local-first: nenhuma requisição http(s) para fora da máquina em toda a navegação.
+  const external: string[] = [];
+  page.on('request', (req) => {
+    const { protocol, hostname } = new URL(req.url());
+    if ((protocol === 'http:' || protocol === 'https:') && !['localhost', '127.0.0.1', '[::1]'].includes(hostname)) external.push(req.url());
+  });
 
   await page.addInitScript(createPyWebViewMockScript());
   await page.addInitScript(() => {
@@ -54,5 +60,16 @@ test('build: CSP presente e sem violações ao navegar pelas telas principais', 
 
   const violations = await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
   expect(violations).toEqual([]);
+  expect(external).toEqual([]);
+
+  // As fontes embutidas carregam de verdade por file:// (faces com status "loaded", sem cair no sistema).
+  const fonts = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const families = ['IBM Plex Sans', 'IBM Plex Mono', 'Source Serif 4'];
+    return Object.fromEntries(
+      families.map((family) => [family, [...document.fonts].filter((f) => f.family.replaceAll('"', '') === family && f.status === 'loaded').length]),
+    );
+  });
+  for (const [family, loaded] of Object.entries(fonts)) expect(loaded, `faces carregadas de ${family}`).toBeGreaterThan(0);
   expect(consoleErrors).toEqual([]);
 });
