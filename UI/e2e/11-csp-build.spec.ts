@@ -14,7 +14,8 @@ test.skip(!hasDist, 'dist/ não existe: rode "npm run build" na pasta UI antes d
 test.use({ launchOptions: { args: ['--allow-file-access-from-files'] } });
 
 test('build: CSP presente e sem violações ao navegar pelas telas principais', async ({ page }) => {
-  const html = readFileSync(distHtml, 'utf-8');
+  // O Vite escapa as aspas simples da política como &#39;.
+  const html = readFileSync(distHtml, 'utf-8').replaceAll('&#39;', "'");
   expect(html).toMatch(/<meta http-equiv="Content-Security-Policy" content="[^"]*script-src 'self'/);
 
   const consoleErrors: string[] = [];
