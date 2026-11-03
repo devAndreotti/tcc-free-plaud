@@ -67,6 +67,8 @@ A primeira série (Emerald com carga 5 a 7 por um Godot headless de outro proces
 
 `whisper-small` na GTX 1060 6 GB, sem instalar nada: **falhou**. O `WhisperEngine` pede `compute_type="int8_float16"` em CUDA, e o CTranslate2 respondeu `ValueError: Requested int8_float16 compute type, but the target device or backend do not support efficient int8_float16 computation.` (a GTX 1060 é Pascal). Sem medição de GPU. Achado lateral: esse erro é `ValueError`, e o fallback para CPU do `transcribe()` só captura `RuntimeError`, então, com `audio_device="auto"` e GPU Pascal, o app tende a falhar em vez de cair para CPU. Não foi testado pelo app, só pelo script; vale uma verificação.
 
+**Verificado e corrigido em `a433aeb` (2026-11-03).** No código anterior, `WhisperEngine(..., "auto").transcribe(...)` na GTX 1060 falhou com esse `ValueError`. O `WhisperEngine` passou a pedir o tipo que a placa suporta: `int8_float16` quando existe, como na RTX 2050 do notebook; `int8` na Pascal, que aceita `float32`, `int8` e `int8_float32`; e `float32` se nenhum dos dois existir. Depois da correção, o modelo carrega na GTX 1060, e o erro seguinte é de ambiente: o Emerald não tem `libcublas.so.12`. Com `audio_device="auto"`, esse erro cai no retry e a transcrição termina em CPU, com o aviso "CUDA inference failed; retried once on CPU.". A medição em GPU continua pendente, porque depende das bibliotecas CUDA 12.
+
 ## Aplicação da regra de decisão
 
 - `whisper-base`: RTF 0,170 ≤ 0,80, mas WER +6,35 pp (> 5 pp). **Não é candidato.**
@@ -88,7 +90,7 @@ A primeira série (Emerald com carga 5 a 7 por um Godot headless de outro proces
 1. Repetir o script no i5-12450H com a mesma lista de 40 arquivos, para ver se o RTF do `small` fica ≤ 0,80 ou perto de 3,60, e descobrir de onde vem a diferença.
 2. Medir também com VAD desligado e na primeira inferência (a frio), que são os cenários possíveis do relatório da APS.
 3. Obter o relatório da APS (ou seu protocolo) para reconciliar o 3,60.
-4. Confirmar o comportamento do app em GPU Pascal com `audio_device="auto"`.
+4. Medir o `whisper-small` em GPU na RTX 2050, com `--device cuda`.
 
 ## Reprodução no notebook
 
