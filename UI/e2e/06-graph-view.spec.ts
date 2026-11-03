@@ -7,14 +7,20 @@ test.describe('Knowledge Graph E2E Flow', () => {
     await page.goto('/');
   });
 
-  test('deve renderizar aplicacao e permitir navegacao por abas', async ({ page }) => {
-    await expect(page.locator('body')).toBeVisible();
-    const graphButton = page.locator('button:has-text("Grafo"), [data-tab="graph"]').first();
-    if (await graphButton.isVisible()) {
-      await graphButton.click();
-    }
-    await expect(page.locator('body')).toBeVisible();
+  test('o painel de grafos abre pelo botão do cabeçalho, mostra os modos e fecha', async ({ page }) => {
+    const panel = page.getByRole('complementary', { name: 'Painel de grafos' });
+    await page.getByRole('button', { name: 'Abrir painel de grafos' }).click();
+
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText('Grafo', { exact: true })).toBeVisible();
+    const modes = panel.getByRole('group', { name: 'O que o grafo mostra' });
+    await expect(modes.getByRole('button')).toHaveText(['Pastas', 'Links', 'Ambos']);
+
+    await panel.getByRole('button', { name: 'Fechar painel de grafos' }).click();
+    await expect(panel).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Abrir painel de grafos' })).toBeVisible();
   });
+
   test('teclado no grafo: setas selecionam, Esc limpa e Home enquadra (anúncio na região aria-live)', async ({ page }) => {
     // Dados do grafo só deste teste: o mock compartilhado não traz listCorpusRoots nem o formato de NoteSummary
     const corpusGraph = {
@@ -49,5 +55,4 @@ test.describe('Knowledge Graph E2E Flow', () => {
     await page.keyboard.press('Home');
     await expect(announcement).toHaveText('Grafo inteiro enquadrado');
   });
-
 });
