@@ -12,7 +12,7 @@ test.describe('Knowledge Graph E2E Flow', () => {
     await page.getByRole('button', { name: 'Abrir painel de grafos' }).click();
 
     await expect(panel).toBeVisible();
-    await expect(panel.getByText('Grafo', { exact: true })).toBeVisible();
+    await expect(panel.locator('.graph-panel__title')).toContainText('Grafo');
     const modes = panel.getByRole('group', { name: 'O que o grafo mostra' });
     await expect(modes.getByRole('button')).toHaveText(['Pastas', 'Links', 'Ambos']);
 
