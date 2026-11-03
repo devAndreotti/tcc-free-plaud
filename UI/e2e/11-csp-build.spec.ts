@@ -26,6 +26,10 @@ test('build: CSP presente e sem violações ao navegar pelas telas principais', 
 
   await page.addInitScript(createPyWebViewMockScript());
   await page.addInitScript(() => {
+    // O mock compartilhado não traz o catálogo de ajustes que a tela de Configurações lê.
+    const api = (window as unknown as { pywebview: { api: Record<string, (...args: unknown[]) => Promise<unknown>> } }).pywebview.api;
+    const original = api.getBackendSettings;
+    api.getBackendSettings = async () => ({ ...(await original()) as object, settings_catalog: [] });
     const w = window as unknown as { __csp: string[] };
     w.__csp = [];
     document.addEventListener('securitypolicyviolation', (e) => {
