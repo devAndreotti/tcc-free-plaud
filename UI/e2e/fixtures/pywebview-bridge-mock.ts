@@ -51,16 +51,23 @@ export function createPyWebViewMockScript(options: MockBridgeOptions = {}) {
               embedding_device: "cpu",
               retrieval_top_k: 5,
               answer_provider: "ollama",
-              answer_model: "llama3:latest"
+              answer_model: "llama3:latest",
+              notes_count: 0,
+              sqlite_chunks_count: 0,
+              vector_chunks_count: 0
             };
           },
           getDoctor: async function() {
             return {
               status: "ok",
               checks: [
-                { name: "sqlite", status: "ok", message: "SQLite ok" },
-                { name: "chroma", status: "ok", message: "ChromaDB ok" }
-              ]
+                { code: "sqlite", status: "ok", message: "SQLite ok", action: null, latency_ms: 1, details: {} },
+                { code: "chroma", status: "ok", message: "ChromaDB ok", action: null, latency_ms: 1, details: {} }
+              ],
+              latency_ms: 2,
+              ok_count: 2,
+              warning_count: 0,
+              error_count: 0
             };
           },
           listSettingsPresets: async function() {

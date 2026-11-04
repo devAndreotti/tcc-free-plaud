@@ -12,6 +12,7 @@ import { VaultGlyph } from './VaultGlyph';
 import { vaultMeta } from '../lib/vaultVisuals';
 import { useDismissOnOutside } from '../hooks/useDismissOnOutside';
 import { AnswerPicker } from './AnswerPicker';
+import { usePromptHistory } from '../hooks/usePromptHistory';
 
 const isAudioJobDone = (snapshot: AudioJobSnapshot) =>
   snapshot.status === 'completed' || snapshot.status === 'failed' || snapshot.status === 'cancelled';
@@ -67,6 +68,8 @@ interface ChatInputProps {
   vault?: Vault | null;
   vaults?: Vault[];
   onVaultChange?: (vaultId: string) => void;
+  /** Prompts já enviados, do mais recente para o mais antigo: as setas navegam por eles. */
+  promptHistory?: string[];
 }
 
 const folderName = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
@@ -214,6 +217,7 @@ const ChatInput = ({
   vault = null,
   vaults = [],
   onVaultChange,
+  promptHistory = [],
 }: ChatInputProps) => {
   const [micStatus, setMicStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
   const [micError, setMicError] = useState('');
@@ -297,6 +301,11 @@ const ChatInput = ({
     textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
   }, []);
 
+  const browseHistory = usePromptHistory(promptHistory, onChange);
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [value, adjustTextareaHeight]);
+
   // Atualiza texto e ajusta altura
   const handleTextChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value);
@@ -305,6 +314,7 @@ const ChatInput = ({
 
   // Envia mensagem ao pressionar Enter (sem Shift); durante a composição de um acento, o Enter só confirma a letra
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (browseHistory(e)) return;
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();

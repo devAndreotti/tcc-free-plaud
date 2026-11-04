@@ -1,5 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
-import { bridge, type BenchmarkCompareResult, type BenchmarkStrategySummary } from '../services/bridge';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { bridge, type BenchmarkRunRow, type BenchmarkStrategySummary } from '../services/bridge';
+import {
+  cancelBenchmarkRun,
+  getBenchmarkRun,
+  openBenchmarkRun,
+  setBenchmarkStatus,
+  setBenchmarkSuitePath,
+  startBenchmarkRun,
+  subscribeBenchmarkRun,
+} from '../lib/benchmarkRun';
 import { CopyIcon, FolderIcon, RefreshIcon } from './Icons';
 import { STRATEGY_ORDER, fmt2, fmt3, ms, nameOf, pct } from './benchmarkFormat';
 import BenchmarkAblation from './BenchmarkAblation';
@@ -7,6 +16,10 @@ import BenchmarkAnswers from './BenchmarkAnswers';
 import BenchmarkCoverage from './BenchmarkCoverage';
 import BenchmarkFaithfulness from './BenchmarkFaithfulness';
 import BenchEmpty, { BenchLoading } from './BenchEmpty';
+import BenchmarkHistory from './BenchmarkHistory';
+import BenchmarkProgress from './BenchmarkProgress';
+import BenchmarkQuestions from './BenchmarkQuestions';
+import BenchmarkSuitePreview from './BenchmarkSuitePreview';
 
 type Metric = 'mrr' | 'recall_at_3' | 'recall_at_5' | 'recall_at_10' | 'ndcg_at_10';
 const METRICS: { key: Metric; label: string }[] = [
@@ -141,15 +154,12 @@ const CopyPath = ({ format, path }: { format: string; path: string }) => {
 };
 
 const BenchmarkPanel = () => {
-  const [suitePath, setSuitePath] = useState('');
-  const [result, setResult] = useState<BenchmarkCompareResult | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
-  const [status, setStatus] = useState('');
+  const { suitePath, result, isRunning, job, status, ranModel } = useSyncExternalStore(subscribeBenchmarkRun, getBenchmarkRun);
+  const [runs, setRuns] = useState<BenchmarkRunRow[]>([]);
   const [scope, setScope] = useState<Scope>('corpus');
   // Medir também a resposta da IA: só faz sentido com uma IA nas Fontes de IA.
   const [answerSource, setAnswerSource] = useState<{ provider: string; model: string | null } | null>(null);
   const [withAnswer, setWithAnswer] = useState(false);
-  const [ranModel, setRanModel] = useState<string | null>(null);
   const hasAi = Boolean(answerSource && answerSource.provider !== 'extractive');
 
   useEffect(() => {
@@ -165,6 +175,22 @@ const BenchmarkPanel = () => {
       active = false;
     };
   }, []);
+
+  // Rodadas gravadas: recarrega ao abrir a tela e quando uma comparação termina.
+  const lastId = result?.comparison_id;
+  useEffect(() => {
+    let active = true;
+    Promise.resolve(bridge.listBenchmarkRuns?.())
+      .then((rows) => {
+        if (active) setRuns(rows ?? []);
+      })
+      .catch(() => {
+        // Sem o histórico, a tela segue só com a comparação atual.
+      });
+    return () => {
+      active = false;
+    };
+  }, [lastId]);
 
   const corpus = result?.corpus ?? null;
   const activeScope: Scope = corpus ? scope : 'notes';
@@ -189,36 +215,21 @@ const BenchmarkPanel = () => {
     try {
       const selected = await bridge.selectBenchmarkSuite();
       if (selected) {
-        setSuitePath(selected);
-        setStatus('');
+        setBenchmarkSuitePath(selected);
+        setBenchmarkStatus('');
       }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Falha ao selecionar suite.');
+      setBenchmarkStatus(error instanceof Error ? error.message : 'Falha ao selecionar suite.');
     }
   };
 
-  const handleRun = async () => {
+  const handleRun = () => {
     const resolvedSuite = suitePath.trim();
     if (!resolvedSuite) {
-      setStatus('Escolha a suite.json antes de rodar.');
+      setBenchmarkStatus('Escolha a suite.json antes de rodar.');
       return;
     }
-    setIsRunning(true);
-    setStatus('');
-    try {
-      const measureAnswers = withAnswer && hasAi;
-      const nextResult = measureAnswers
-        ? await bridge.runBenchmarkCompare(resolvedSuite, { answer: true })
-        : await bridge.runBenchmarkCompare(resolvedSuite);
-      setRanModel(measureAnswers ? answerSource?.model ?? null : null);
-      setResult(nextResult);
-      setStatus(`Comparação ${nextResult.comparison_id} concluída.`);
-    } catch (error) {
-      setResult(null);
-      setStatus(error instanceof Error ? error.message : 'Falha ao rodar benchmark.');
-    } finally {
-      setIsRunning(false);
-    }
+    void startBenchmarkRun(resolvedSuite, { answer: withAnswer && hasAi, model: answerSource?.model ?? null });
   };
 
   const snap = result?.settings_snapshot;
@@ -250,7 +261,7 @@ const BenchmarkPanel = () => {
               id="benchmark-suite-path"
               className="mono"
               value={suitePath}
-              onChange={(event) => setSuitePath(event.target.value)}
+              onChange={(event) => setBenchmarkSuitePath(event.target.value)}
               placeholder="data/datasets/suite.json"
             />
           </label>
@@ -273,7 +284,11 @@ const BenchmarkPanel = () => {
           )}
         </section>
 
+        <BenchmarkSuitePreview path={suitePath} runs={runs} withAnswer={withAnswer && hasAi} />
+
         {status && <p className="queue__status" role="status">{status}</p>}
+
+        {isRunning && job && <BenchmarkProgress job={job} onCancel={() => void cancelBenchmarkRun()} />}
 
         {result && summaries.length > 0 ? (
           <>
@@ -426,6 +441,8 @@ const BenchmarkPanel = () => {
 
             {corpus && <BenchmarkAnswers summaries={corpus.summaries} model={ranModel} />}
 
+            {corpus?.queries && <BenchmarkQuestions key={result.comparison_id} queries={corpus.queries} />}
+
             <section className="card" aria-label="Relatórios">
               <div className="card__head"><h2>Relatórios desta comparação</h2></div>
               <CopyPath format="JSON" path={result.json_report_path} />
@@ -435,6 +452,8 @@ const BenchmarkPanel = () => {
         ) : (
           isRunning ? <BenchLoading /> : <BenchEmpty running={false} />
         )}
+
+        {!isRunning && <BenchmarkHistory runs={runs} currentId={lastId} onOpen={(id) => void openBenchmarkRun(id)} />}
       </div>
     </main>
   );

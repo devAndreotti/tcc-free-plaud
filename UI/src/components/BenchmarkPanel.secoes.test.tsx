@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MOCK_BENCHMARK_RESULT_FULL, type BenchmarkCompareResult, type BenchmarkCoverageGroup } from '../services/bridge';
 import BenchmarkPanel from './BenchmarkPanel';
+import { resetBenchmarkRun } from '../lib/benchmarkRun';
 
 // Dados ILUSTRATIVOS: só para os testes (ver comentário em bridge.ts).
 const bridgeMock = vi.hoisted(() => ({
@@ -45,6 +46,7 @@ const region = (name: RegExp | string) => screen.queryByRole('region', { name })
 
 describe('BenchmarkPanel: seções opcionais (ablação, cobertura, faithfulness)', () => {
   beforeEach(() => {
+    resetBenchmarkRun();
     bridgeMock.selectBenchmarkSuite.mockReset();
     bridgeMock.runBenchmarkCompare.mockReset();
   });

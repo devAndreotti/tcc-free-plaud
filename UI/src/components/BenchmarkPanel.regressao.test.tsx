@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BenchmarkPanel from './BenchmarkPanel';
+import { resetBenchmarkRun } from '../lib/benchmarkRun';
 
 // Regressão: um resultado SEM os campos novos (reranked, baseline_ci, coverage, faithfulness)
 // tem que produzir exatamente o mesmo painel de antes.
@@ -78,6 +79,7 @@ const legacyResult = {
 
 describe('BenchmarkPanel sem os campos novos (regressão)', () => {
   beforeEach(() => {
+    resetBenchmarkRun();
     bridgeMock.selectBenchmarkSuite.mockReset();
     bridgeMock.runBenchmarkCompare.mockReset();
     bridgeMock.runBenchmarkCompare.mockResolvedValue(legacyResult);

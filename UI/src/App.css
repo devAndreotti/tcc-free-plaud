@@ -5964,3 +5964,23 @@
 .app-toast__close {
   flex-shrink: 0;
 }
+
+/* Copiar o prompt: aparece ao passar o mouse ou ao chegar pelo teclado. */
+.msg--user { align-items: center; gap: 8px; }
+.msg__prompt-copy { margin-left: 0; opacity: 0; transition: opacity 0.15s, color 0.2s, background-color 0.2s; }
+.msg--user:hover .msg__prompt-copy,
+.msg__prompt-copy:focus-visible,
+.msg__prompt-copy.is-copied { opacity: 1; }
+
+/* A janela desliga a seleção de texto no app inteiro (text_select em main.py), como em app nativo;
+   o que se lê volta a ser selecionável. */
+.msg__bubble,
+.msg__answer,
+.msg__source-quote,
+.reader__title,
+.reader__body,
+.reader__chunk {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}

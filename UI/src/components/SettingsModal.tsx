@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangleIcon,
@@ -23,6 +23,7 @@ import { AdvancedLocked, AdvancedPane } from './AdvancedPane';
 import DoctorPanel from './DoctorPanel';
 import MicTest from './MicTest';
 import { DoctorSkeleton } from './DoctorPanel';
+import { getDoctorSnapshot, lastDoctorStats, refreshDoctor, rememberDoctorStats, subscribeDoctor } from '../lib/doctorReport';
 import { SettingsTabSkeleton, SkLines } from './ui/Loading';
 import { GroupCard, Segmented, SectionHead, Stepper } from './ui/Controls';
 import { Glyph, type GlyphName } from './ui/Glyph';
@@ -241,6 +242,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   }, [isOpen]);
 
   const [isRunningDoctor, setIsRunningDoctor] = useState(false);
+  const { report: doctorReport, running: doctorRunning } = useSyncExternalStore(subscribeDoctor, getDoctorSnapshot);
 
   useEffect(() => {
     if (toast?.tone !== 'ok') return undefined;
@@ -250,8 +252,13 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
 
   useEffect(() => {
     if (!isOpen) return;
-    bridge.getBackendSettings()
+    // O Diagnóstico leva segundos: as abas não esperam por ele, e a dele mostra o último resultado enquanto atualiza.
+    refreshDoctor().catch((error) => {
+      console.error('[SettingsModal] Erro ao rodar o diagnóstico:', error);
+    });
+    bridge.getBackendSettings({ doctor: false })
       .then((settings) => {
+        rememberDoctorStats(settings);
         setBackendSettings(settings);
         setSettingDrafts(draftsFrom(settings));
         setIsConfirmingKeyRemoval(false);
@@ -267,8 +274,9 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const handleRerunDoctor = async () => {
     setIsRunningDoctor(true);
     try {
-      const settings = await bridge.getBackendSettings();
-      setBackendSettings((prev) => (prev ? { ...prev, doctor: settings.doctor, notes_count: settings.notes_count, sqlite_chunks_count: settings.sqlite_chunks_count } : settings));
+      const [settings] = await Promise.all([bridge.getBackendSettings({ doctor: false }), refreshDoctor()]);
+      rememberDoctorStats(settings);
+      setBackendSettings((prev) => (prev ? { ...prev, doctor: settings.doctor ?? prev.doctor, notes_count: settings.notes_count, sqlite_chunks_count: settings.sqlite_chunks_count } : settings));
     } catch (error) {
       setToast({ tone: 'error', text: error instanceof Error ? error.message : 'Falha ao rodar o diagnóstico.' });
     } finally {
@@ -623,7 +631,10 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
 
   if (!isOpen) return null;
 
-  const doctor = backendSettings?.doctor;
+  const doctor = doctorReport ?? backendSettings?.doctor;
+  const doctorStats = backendSettings
+    ? { notes: backendSettings.notes_count, sqlite: backendSettings.sqlite_chunks_count, vectors: backendSettings.vector_chunks_count }
+    : lastDoctorStats();
   const audioRows = backendSettings?.settings_catalog.filter((row) => row.group === 'Áudio' && !row.secret) ?? [];
   const audioModelRow = audioRows.find((row) => row.key === 'audio_model') ?? null;
   const audioLanguageRow = audioRows.find((row) => row.key === 'audio_language') ?? null;
@@ -719,7 +730,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   return <TabIcon size={16} />;
                 })()}
                 <span>{tab.label}</span>
-                {tab.id === 'geral' && (backendSettings?.doctor?.error_count ?? 0) > 0 && (
+                {tab.id === 'geral' && (doctor?.error_count ?? 0) > 0 && (
                   <span className="settings-nav__dot" aria-label="Diagnóstico com erro" />
                 )}
                 {tab.id === 'avancado' && !advancedUnlocked && (
@@ -733,7 +744,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
 
           <div className="settings-panel">
             {currentTab === 'geral' &&
-              (backendSettings && doctor ? (
+              (doctorStats && doctor ? (
                 <DoctorPanel
                   title={
                     active ? (
@@ -747,8 +758,8 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                     )
                   }
                   doctor={doctor}
-                  stats={{ notes: backendSettings.notes_count, sqlite: backendSettings.sqlite_chunks_count, vectors: backendSettings.vector_chunks_count }}
-                  running={isRunningDoctor}
+                  stats={doctorStats}
+                  running={isRunningDoctor || doctorRunning}
                   onRerun={handleRerunDoctor}
                 />
               ) : (

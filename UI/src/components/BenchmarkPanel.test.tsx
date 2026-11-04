@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BenchmarkPanel from './BenchmarkPanel';
+import { resetBenchmarkRun } from '../lib/benchmarkRun';
 
 const bridgeMock = vi.hoisted(() => ({
   selectBenchmarkSuite: vi.fn(),
@@ -70,6 +71,8 @@ describe('BenchmarkPanel', () => {
   });
 
   beforeEach(() => {
+
+    resetBenchmarkRun();
     bridgeMock.selectBenchmarkSuite.mockReset();
     bridgeMock.runBenchmarkCompare.mockReset();
     bridgeMock.selectBenchmarkSuite.mockResolvedValue('data/datasets/suite-ui.json');

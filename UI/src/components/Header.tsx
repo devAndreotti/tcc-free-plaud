@@ -3,6 +3,8 @@ import { GraphIcon, PlusIcon, XIcon } from './Icons';
 import SettingsModal, { type SettingsTab } from './SettingsModal';
 import { VaultGlyph } from './VaultGlyph';
 import ConversationSearch from './ConversationSearch';
+import ExportMenu from './ExportMenu';
+import type { ExportChoice } from '../lib/conversationExport';
 import type { MessageData } from './MessageBubble';
 import type { Vault } from '../services/bridge';
 
@@ -32,19 +34,10 @@ interface HeaderProps {
   onToggleGraphPanel: () => void;
   /** Mensagens de cada aba, para a busca nas conversas. */
   tabMessages: Record<string, MessageData[]>;
-  /** Exporta a aba ativa; o botão só aparece quando `canExport` for verdadeiro. */
-  onExportTab: () => void;
+  /** Exporta a aba ativa no formato escolhido; o botão só aparece quando `canExport` for verdadeiro. */
+  onExportTab: (format: ExportChoice, includeSources: boolean) => void;
   canExport: boolean;
 }
-
-// Ícone de download para exportar a conversa
-const ExportIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <path d="m7 10 5 5 5-5" />
-    <path d="M12 15V3" />
-  </svg>
-);
 
 // Ícone de mensagem de chat para a aba
 const ChatTabIcon = () => (
@@ -170,18 +163,7 @@ const Header = ({
         <ConversationSearch tabs={tabs} tabMessages={tabMessages} onSelectTab={onSelectTab} />
 
         {/* Exportar a aba ativa (só com mensagens) */}
-        {canExport && (
-          <button
-            type="button"
-            className="header-action-btn"
-            aria-label="Exportar conversa"
-            title="Exportar conversa"
-            onClick={onExportTab}
-          >
-            <ExportIcon />
-            <span>Exportar</span>
-          </button>
-        )}
+        {canExport && <ExportMenu onExport={onExportTab} />}
 
         {/* Botão fixo de Grafos — visível apenas com o painel fechado */}
         {!isGraphPanelOpen && (

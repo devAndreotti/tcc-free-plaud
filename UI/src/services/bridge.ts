@@ -425,6 +425,64 @@ export interface BenchmarkCorpusResult {
   negative_count: number;
   retrieval_depth: number;
   summaries: Record<string, BenchmarkStrategySummary>;
+  /** Cada pergunta, por estratégia: a decisão do chat e, quando gravada, a resposta. */
+  queries?: Record<string, BenchmarkQueryRow[]>;
+}
+
+export interface BenchmarkQueryRow {
+  sample_id: string;
+  question: string;
+  expected_note_id?: string | null;
+  expected_ref?: string | null;
+  retrieved: { rank?: number; note_id?: string; chunk_id?: string }[];
+  relevant_rank?: number | null;
+  category?: string | null;
+  answered?: boolean | null;
+  generated?: boolean | null;
+  discard_reason?: string | null;
+  answer?: string | null;
+  contexts?: string[] | null;
+}
+
+/** Comparação em segundo plano (benchmark/jobs.py). */
+export interface BenchmarkJobState {
+  status: 'running' | 'done' | 'error' | 'cancelled';
+  suite_name: string;
+  answer: boolean;
+  phase: string | null;
+  strategy: string | null;
+  question: string | null;
+  done: number;
+  total: number;
+  elapsed_ms: number;
+  error: string | null;
+  result: BenchmarkCompareResult | null;
+  recent: { question: string; strategy: string; negative: boolean; answered: boolean }[];
+}
+
+/** Rodada gravada em data/results (benchmark/history.py); as métricas são da híbrida. */
+export interface BenchmarkRunRow {
+  comparison_id: string;
+  suite_name: string | null;
+  started_at: string | null;
+  duration_ms: number | null;
+  answer_provider: string;
+  answer_model: string | null;
+  positive_count: number | null;
+  negative_count: number | null;
+  mrr: number | null;
+  recall_at_3: number | null;
+  answered_positive_rate: number | null;
+  abstention_recall: number | null;
+  accuracy: number | null;
+}
+
+export interface BenchmarkSuitePreview {
+  suite_name: string;
+  note_count: number;
+  positive_count: number;
+  negative_count: number;
+  questions: { question: string; note: string | null; expected_ref: string | null; negative: boolean }[];
 }
 
 /** Intervalo bootstrap de 95% do MRR de uma estratégia. */
@@ -469,6 +527,8 @@ export interface BenchmarkFaithfulness {
 }
 
 export interface BenchmarkCompareResult {
+  answer_provider?: string;
+  answer_model?: string | null;
   ok: boolean;
   comparison_id: string;
   suite_name: string;
@@ -810,6 +870,14 @@ interface PythonApi {
 
   /** Executa benchmark compare e exporta JSON/CSV com snapshot de settings. */
   runBenchmarkCompare?: (suitePath: string, answer?: boolean) => Promise<BenchmarkCompareResult>;
+
+  /** Comparação em segundo plano: uma por vez, acompanhada por getBenchmarkJob. */
+  startBenchmarkCompare?: (suitePath: string, answer?: boolean) => Promise<BenchmarkJobState>;
+  getBenchmarkJob?: () => Promise<BenchmarkJobState | null>;
+  cancelBenchmarkJob?: () => Promise<BenchmarkJobState | null>;
+  previewBenchmarkSuite?: (suitePath: string) => Promise<BenchmarkSuitePreview>;
+  listBenchmarkRuns?: () => Promise<BenchmarkRunRow[]>;
+  loadBenchmarkRun?: (comparisonId: string) => Promise<BenchmarkCompareResult>;
 }
 
 declare global {
@@ -2394,6 +2462,36 @@ export const bridge = {
     console.debug(`[Bridge Mock] runBenchmarkCompare: ${suitePath}`);
     await new Promise((resolve) => setTimeout(resolve, 600));
     return options?.answer ? mockBenchmarkWithAnswers() : MOCK_BENCHMARK_RESULT;
+  },
+
+  /** null quando não há backend em segundo plano: quem chama cai em runBenchmarkCompare. */
+  startBenchmarkCompare: async (suitePath: string, options?: { answer?: boolean }): Promise<BenchmarkJobState | null> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.startBenchmarkCompare) {
+      return window.pywebview.api.startBenchmarkCompare(suitePath, Boolean(options?.answer));
+    }
+    return null;
+  },
+  getBenchmarkJob: async (): Promise<BenchmarkJobState | null> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getBenchmarkJob) return window.pywebview.api.getBenchmarkJob();
+    return null;
+  },
+  cancelBenchmarkJob: async (): Promise<BenchmarkJobState | null> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.cancelBenchmarkJob) return window.pywebview.api.cancelBenchmarkJob();
+    return null;
+  },
+  previewBenchmarkSuite: async (suitePath: string): Promise<BenchmarkSuitePreview | null> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.previewBenchmarkSuite) {
+      return window.pywebview.api.previewBenchmarkSuite(suitePath);
+    }
+    return null;
+  },
+  listBenchmarkRuns: async (): Promise<BenchmarkRunRow[]> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.listBenchmarkRuns) return window.pywebview.api.listBenchmarkRuns();
+    return [];
+  },
+  loadBenchmarkRun: async (comparisonId: string): Promise<BenchmarkCompareResult> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.loadBenchmarkRun) return window.pywebview.api.loadBenchmarkRun(comparisonId);
+    return MOCK_BENCHMARK_RESULT;
   },
 
   /** Indica se o app está rodando dentro do PyWebView (desktop) */

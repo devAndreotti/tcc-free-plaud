@@ -69,6 +69,7 @@ describe('App: fechar com desfazer, exportar e buscar', () => {
     await screen.findByText('O Mosquitto.');
 
     await user.click(screen.getByRole('button', { name: 'Exportar conversa' }));
+    await user.click(screen.getByRole('button', { name: /Markdown/ }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0][0]).toBe('Estudos de redes.md');
     expect(save.mock.calls[0][1]).toContain('## Pergunta\n\nQual broker foi adotado?');

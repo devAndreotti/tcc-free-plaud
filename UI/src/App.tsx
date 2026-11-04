@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import './App.css';
 
 import Header, { type Tab } from './components/Header';
@@ -20,7 +20,8 @@ import { useVaults } from './hooks/useVaults';
 import { QueueProvider } from './contexts/QueueContext';
 import { useQueueContext } from './hooks/useQueueContext';
 import { fromSavedConversations, toSavedConversations, type ConversationSnapshot } from './lib/conversations';
-import { buildConversationMarkdown, conversationFileName } from './lib/conversationExport';
+import { buildConversationExport, conversationFileName, printConversation, type ExportChoice } from './lib/conversationExport';
+import { buildPromptHistory } from './hooks/usePromptHistory';
 import AppToast from './components/AppToast';
 
 // Gera ID único para mensagens e abas
@@ -393,11 +394,20 @@ function AppContent() {
   }, [vaultKey, setChat]);
 
   // Exporta a aba ativa como Markdown: diálogo de salvar no desktop, download no navegador.
-  const handleExportTab = useCallback(async () => {
+  const promptHistory = useMemo(
+    () => buildPromptHistory(tabs.map((tab) => tab.id), activeTab?.id, tabMessages),
+    [tabs, activeTab?.id, tabMessages],
+  );
+
+  const handleExportTab = useCallback(async (format: ExportChoice, includeSources: boolean) => {
     if (!activeTab) return;
-    const markdown = buildConversationMarkdown({ title: activeTab.label, messages: activeMessages, exportedAt: new Date() });
+    const input = { title: activeTab.label, messages: activeMessages, exportedAt: new Date(), includeSources };
     try {
-      const saved = await bridge.saveTextFile(conversationFileName(activeTab.label), markdown);
+      if (format === 'pdf') {
+        printConversation(input);
+        return;
+      }
+      const saved = await bridge.saveTextFile(conversationFileName(activeTab.label, format), buildConversationExport(format, input));
       if (saved) setNotice({ id: generateId(), message: 'Conversa exportada', tone: 'ok' });
     } catch (error) {
       console.error('[App] Não foi possível exportar a conversa:', error);
@@ -658,6 +668,7 @@ function AppContent() {
                 vault={activeVault}
                 vaults={vaults}
                 onVaultChange={(vaultId) => void selectVault(vaultId)}
+                promptHistory={promptHistory}
               />
             )}
           </div>
