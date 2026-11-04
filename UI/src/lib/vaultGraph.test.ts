@@ -102,6 +102,19 @@ describe('vaultGraph (regressão do grafo bagunçado)', () => {
 });
 
 describe('vaultGraph.tick (regressão da física)', () => {
+  it('nó preso (arrastado) não se move, e a nota ligada a ele vem até ele', () => {
+    const { nodes, edges } = buildGraph([note('P/a.md'), note('P/b.md')], 400, 400);
+    const pasta = nodes.find((n) => n.kind === 'folder' && n.label === 'P')!;
+    const nota = nodes.find((n) => n.id === 'P/a.md')!;
+    pasta.fixed = true;
+    pasta.x = 900;
+    pasta.y = 900;
+    const antes = Math.hypot(nota.x - 900, nota.y - 900);
+    for (let i = 0; i < 200; i++) tick(nodes, edges, 200, 200);
+    expect([pasta.x, pasta.y]).toEqual([900, 900]);
+    expect(Math.hypot(nota.x - 900, nota.y - 900)).toBeLessThan(antes / 2);
+  });
+
   it('converge: notas ficam perto da sua pasta, nada vira NaN e a velocidade tem teto', () => {
     const vault = Array.from({ length: 40 }, (_, i) => note(`P${i % 4}/n${i}.md`));
     const { nodes, edges } = buildGraph(vault, 400, 400);

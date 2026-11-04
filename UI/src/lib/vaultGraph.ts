@@ -37,6 +37,7 @@ export interface SimNode {
   vy: number;
   degree: number;
   pending?: boolean; // desenhado tracejado até o lote ser gravado
+  fixed?: boolean; // preso no mouse enquanto é arrastado: as forças não o movem, os vizinhos vêm até ele
 }
 
 /** Aresta: árvore (pasta ↔ filho, sem kind) ou ligação [[...]] entre duas notas (kind 'link'). */
@@ -250,6 +251,7 @@ export function tick(nodes: SimNode[], edges: SimEdge[], cx: number, cy: number)
     n.vy = (n.vy + (cy - n.y) * CENTER_PULL) * DAMPING;
     const speed = Math.hypot(n.vx, n.vy);
     if (speed > MAX_SPEED) { n.vx *= MAX_SPEED / speed; n.vy *= MAX_SPEED / speed; }
+    if (n.fixed) { n.vx = 0; n.vy = 0; continue; }
     n.x += n.vx; n.y += n.vy;
   }
 }
