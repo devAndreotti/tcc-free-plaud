@@ -22,6 +22,7 @@ import { useQueueContext } from './hooks/useQueueContext';
 import { fromSavedConversations, toSavedConversations, type ConversationSnapshot } from './lib/conversations';
 import { buildConversationExport, conversationFileName, printConversation, type ExportChoice } from './lib/conversationExport';
 import { buildPromptHistory } from './hooks/usePromptHistory';
+import NoChatsScreen from './components/NoChatsScreen';
 import AppToast from './components/AppToast';
 
 // Gera ID único para mensagens e abas
@@ -34,6 +35,7 @@ const ASK_POLL_MS = 150;
 const WARM_INTERVAL_MS = 4 * 60 * 1000;
 // Prazo de uma pergunta em streaming: passa do limite de 300 s do provedor, então só estoura se o backend travar.
 const STREAM_DEADLINE_MS = 6 * 60 * 1000;
+const RECENT_CLOSED_LIMIT = 3;
 // Tempo para desfazer o fechamento de uma aba, e de avisos como "Conversa exportada".
 const UNDO_MS = 8000;
 const NOTICE_MS = 4000;
@@ -314,6 +316,8 @@ function AppContent() {
   const activeProgress = activeTabId ? askProgress[activeTabId] : undefined;
   // Rascunho de cada aba (o que foi digitado e ainda não foi enviado). Também fica fora do ChatState.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  // Conversas fechadas nesta sessão: a tela sem chats oferece reabrir.
+  const [recentClosed, setRecentClosed] = useState<{ tab: Tab; messages: MessageData[] }[]>([]);
   // Aba fechada há pouco (desfazer por 8 s) e aviso de exportação.
   const [closedTab, setClosedTab] = useState<ClosedTab | null>(null);
   const [notice, setNotice] = useState<{ id: string; message: string; tone: 'ok' | 'erro' } | null>(null);
@@ -348,6 +352,8 @@ function AppContent() {
       const messages = chat.tabMessages[id] ?? [];
       const index = chat.tabs.findIndex((t) => t.id === id);
       if (messages.length > 0 && index >= 0) {
+        const closing = { tab: chat.tabs[index], messages };
+        setRecentClosed((recent) => [closing, ...recent.filter((item) => item.tab.id !== id)].slice(0, RECENT_CLOSED_LIMIT));
         setClosedTab({ tab: chat.tabs[index], index, messages, draft: drafts[id], wasActive: id === chat.activeTabId });
       }
       setDrafts((prev) => withoutKey(prev, id));
@@ -377,13 +383,14 @@ function AppContent() {
       return { ...c, tabs, tabMessages: { ...c.tabMessages, [tab.id]: messages }, activeTabId };
     });
     if (draft !== undefined) setDrafts((prev) => ({ ...prev, [tab.id]: draft }));
+    setRecentClosed((recent) => recent.filter((item) => item.tab.id !== tab.id));
     setClosedTab(null);
     setWorkspaceView('chat');
   }, [closedTab, setChat]);
 
-  // Abre nova aba de chat na vault ativa e a torna ativa
-  const handleNewTab = useCallback(() => {
-    const newTab = newChatTab(vaultKey);
+  // Abre nova aba de chat numa vault (a aba leva a vault junto) e a torna ativa
+  const handleNewChatIn = useCallback((vaultId: string) => {
+    const newTab = newChatTab(vaultId);
     setChat((c) => ({
       ...c,
       tabs: [...c.tabs, newTab],
@@ -391,7 +398,42 @@ function AppContent() {
       activeTabId: newTab.id,
     }));
     setWorkspaceView('chat');
-  }, [vaultKey, setChat]);
+  }, [setChat]);
+
+  const handleNewTab = useCallback(() => handleNewChatIn(vaultKey), [handleNewChatIn, vaultKey]);
+
+  // Ctrl+T abre uma conversa de qualquer tela
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 't') {
+        event.preventDefault();
+        handleNewTab();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleNewTab]);
+
+  // Nota de outra vault, vinda do grafo de todas as vaults: troca de vault antes de abrir.
+  const handleOpenVaultNote = useCallback(async (vaultId: string, noteId: string) => {
+    if (vaultId !== activeVault?.id) await selectVault(vaultId);
+    handleOpenNote(noteId);
+  }, [activeVault?.id, selectVault, handleOpenNote]);
+
+  // Volta a uma conversa fechada nesta sessão, com as mensagens dela
+  const handleReopenClosed = useCallback((chatId: string) => {
+    const closed = recentClosed.find((item) => item.tab.id === chatId);
+    if (!closed) return;
+    setChat((c) => ({
+      ...c,
+      tabs: [...c.tabs, closed.tab],
+      tabMessages: { ...c.tabMessages, [closed.tab.id]: closed.messages },
+      activeTabId: closed.tab.id,
+    }));
+    setRecentClosed((recent) => recent.filter((item) => item.tab.id !== chatId));
+    setClosedTab((current) => (current?.tab.id === chatId ? null : current));
+    setWorkspaceView('chat');
+  }, [recentClosed, setChat]);
 
   // Exporta a aba ativa como Markdown: diálogo de salvar no desktop, download no navegador.
   const promptHistory = useMemo(
@@ -643,11 +685,17 @@ function AppContent() {
 
             {/* Estado vazio: nenhuma aba aberta */}
             {workspaceView === 'chat' && !activeTab && (
-              <main className="main main--empty" id="main-content">
-                <div className="empty-state">
-                  <p className="empty-state__text">Nenhuma aba aberta.</p>
-                </div>
-              </main>
+              <NoChatsScreen
+                vaults={vaults}
+                recent={recentClosed.map(({ tab }) => ({
+                  id: tab.id,
+                  label: tab.label,
+                  vaultName: vaults.find((vault) => vault.id === tab.vaultId)?.name ?? null,
+                }))}
+                onNewChat={handleNewChatIn}
+                onReopen={handleReopenClosed}
+                onOpenQueue={() => setWorkspaceView('queue')}
+              />
             )}
 
             {/* Input de mensagem (visível apenas com aba de chat ativa) */}
@@ -674,7 +722,7 @@ function AppContent() {
           </div>
 
           {/* Painel lateral de grafos — expande à direita do conteúdo */}
-          <GraphPanel isOpen={isGraphPanelOpen} onToggle={handleToggleGraphPanel} onOpenNote={handleOpenNote} />
+          <GraphPanel isOpen={isGraphPanelOpen} onToggle={handleToggleGraphPanel} onOpenVaultNote={(vaultId, noteId) => void handleOpenVaultNote(vaultId, noteId)} onAskVault={handleNewChatIn} onOpenNote={handleOpenNote} />
         </div>
 
         {/* Avisos de rodapé: aba fechada (com Desfazer) e resultado da exportação, empilhados */}

@@ -35,25 +35,34 @@ interface BenchEmptyProps {
   running: boolean;
 }
 
-/** Benchmark sem resultado ainda (ou rodando): arte no acento, título e o que a comparação faz. */
-const skTable = (cols: number) => (
-  <div className="load-wait" style={{ display: 'grid', gridTemplateColumns: `1.4fr repeat(${cols - 1}, 1fr)`, gap: '16px 14px', padding: '6px 2px 10px' }}>
-    {Array.from({ length: cols * 4 }, (_, i) => <Sk key={i} w={i % cols ? '60%' : '80%'} />)}
-  </div>
+const skCard = (title: string, rows: number, delay: number) => (
+  <section className="card rise" style={{ animationDelay: `${delay}ms` }}>
+    <div className="card__head"><h2>{title}</h2></div>
+    <div className="load-wait" style={{ display: 'grid', gap: 12, padding: '4px 2px 10px' }}>
+      {Array.from({ length: rows }, (_, i) => <Sk key={i} w={`${92 - (i % 3) * 14}%`} h={i % 2 ? 10 : 14} />)}
+    </div>
+  </section>
 );
 
-/** Enquanto a comparação roda: cada card já mostra o que vem. */
+/** Enquanto a comparação roda: a mesma grade do resultado (frase, 4 números, pares de cards), já com os títulos. */
 export const BenchLoading = () => (
   <div role="status" aria-label="Rodando a comparação" style={{ display: 'contents' }}>
-    {(['Resultado por estratégia', 'Recall@k', 'Responder ou se abster', 'Relatórios desta comparação'] as const).map((title, i) => (
-      <section key={title} className="card rise" style={{ animationDelay: `${i * 60}ms` }}>
-        <div className="card__head"><h2>{title}</h2></div>
-        {i === 3 ? <div className="load-wait load-row" style={{ padding: '4px 2px 10px' }}><Sk w={140} h={30} r={8} /><Sk w={140} h={30} r={8} /></div> : skTable(i === 1 ? 4 : 6)}
-      </section>
-    ))}
+    <div className="bench-lead load-wait">
+      <div style={{ flex: 1, minWidth: 300, maxWidth: 780, display: 'grid', gap: 10 }}><Sk w="92%" h={20} /><Sk w="64%" h={20} /></div>
+      <div className="load-row"><Sk w={64} h={30} r={999} /><Sk w={64} h={30} r={999} /></div>
+    </div>
+    <div className="bench-stats load-wait">
+      {Array.from({ length: 4 }, (_, i) => (
+        <div key={i} className="bench-stat"><Sk w="55%" h={11} /><Sk w="45%" h={26} r={8} /><Sk w="70%" h={11} /></div>
+      ))}
+    </div>
+    <div className="bench-pair">{skCard('As três buscas', 6, 60)}{skCard('Responder ou recusar', 5, 120)}</div>
+    {skCard('Por que errou', 3, 180)}
+    <div className="bench-pair bench-pair--map">{skCard('Mapa das perguntas', 9, 240)}{skCard('Pergunta selecionada', 6, 300)}</div>
   </div>
 );
 
+/** Benchmark sem resultado ainda (ou rodando): arte no acento, título e o que a comparação faz. */
 const BenchEmpty = ({ running }: BenchEmptyProps) => (
   <div className="card bench-empty" role={running ? 'status' : undefined}>
     <BenchArt running={running} />

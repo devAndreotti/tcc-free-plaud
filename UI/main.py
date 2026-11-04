@@ -51,6 +51,7 @@ from escolio.app.vaults import (
     update_vault,
 )
 from escolio.app.conversations import load_conversations, save_conversations
+from escolio.app.vaults_overview import vaults_overview
 from escolio.app.doctor import run_doctor
 from escolio.app.local_env import (
     answer_api_key_is_configured,
@@ -177,6 +178,10 @@ class Api:
         base = base_settings()
         registry = load_registry(base)
         return {'active': registry.active, 'vaults': [self._vault_row(v, base) for v in registry.vaults]}
+
+    def getVaultsOverview(self) -> dict:
+        """Todas as vaults com pastas e notas, para o grafo. Só leitura: não troca a vault ativa."""
+        return vaults_overview(base_settings())
 
     def createVault(self, name: str, icon: str, color: str, folders: list[str]) -> dict:
         try:

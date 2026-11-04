@@ -471,6 +471,7 @@ export interface BenchmarkRunRow {
   positive_count: number | null;
   negative_count: number | null;
   mrr: number | null;
+  mrr_ci?: [number, number] | null;
   recall_at_3: number | null;
   answered_positive_rate: number | null;
   abstention_recall: number | null;
@@ -529,6 +530,8 @@ export interface BenchmarkFaithfulness {
 export interface BenchmarkCompareResult {
   answer_provider?: string;
   answer_model?: string | null;
+  /** Tipo de cada pergunta sem resposta, quando a suite marca. */
+  negative_subtypes?: Record<string, string>;
   ok: boolean;
   comparison_id: string;
   suite_name: string;
@@ -578,6 +581,24 @@ export interface Vault {
   note_count?: number;
   /** Pastas indexadas no banco da vault, com as notas de cada uma (listVaults). */
   roots?: CorpusRoot[];
+}
+
+export interface VaultOverviewNote {
+  id: string;
+  title: string;
+  folder: string;
+}
+
+/** Vault com pastas e notas, para o grafo de todas as vaults. */
+export interface VaultOverview {
+  id: string;
+  name: string;
+  icon: VaultIconId;
+  color: VaultColor;
+  note_count: number;
+  chunk_count: number;
+  folders: { name: string; count: number }[];
+  notes: VaultOverviewNote[];
 }
 
 export interface VaultList {
@@ -864,6 +885,8 @@ interface PythonApi {
 
   /** Reindexa uma nota a partir do source_path salvo no banco. */
   reindexNote?: (noteId: string) => Promise<NoteReindexResult>;
+
+  getVaultsOverview?: () => Promise<{ active: string; vaults: VaultOverview[] }>;
 
   /** Abre o seletor nativo para suite.json de benchmark. */
   selectBenchmarkSuite?: () => Promise<string>;
@@ -2462,6 +2485,22 @@ export const bridge = {
     console.debug(`[Bridge Mock] runBenchmarkCompare: ${suitePath}`);
     await new Promise((resolve) => setTimeout(resolve, 600));
     return options?.answer ? mockBenchmarkWithAnswers() : MOCK_BENCHMARK_RESULT;
+  },
+
+  getVaultsOverview: async (): Promise<{ active: string; vaults: VaultOverview[] }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getVaultsOverview) return window.pywebview.api.getVaultsOverview();
+    const notes = [
+      { id: 'docker--44dd', title: 'Docker vs Máquinas Virtuais', folder: 'Estudos' },
+      { id: 'vlan--11aa', title: 'VLAN', folder: 'Estudos' },
+      { id: 'roadmap--5c1d', title: 'Roadmap', folder: 'Projetos' },
+    ];
+    return {
+      active: 'mock',
+      vaults: [{
+        id: 'mock', name: 'Vault de exemplo', icon: 'notes', color: 'violet', note_count: notes.length, chunk_count: 12,
+        folders: [{ name: 'Estudos', count: 2 }, { name: 'Projetos', count: 1 }], notes,
+      }],
+    };
   },
 
   /** null quando não há backend em segundo plano: quem chama cai em runBenchmarkCompare. */

@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import ForceGraph from './ForceGraph';
+import VaultsOverview from './VaultsOverview';
 import { GraphIcon, XIcon } from './Icons';
 import { useCorpusGraph } from '../hooks/useCorpusGraph';
 import type { GraphMode } from '../lib/vaultGraph';
@@ -9,6 +10,9 @@ interface GraphPanelProps {
   isOpen: boolean;
   onToggle: () => void;
   onOpenNote?: (noteId: string) => void;
+  /** Nota ou conversa de outra vault: quem abre troca de vault antes. */
+  onOpenVaultNote?: (vaultId: string, noteId: string) => void;
+  onAskVault?: (vaultId: string) => void;
 }
 
 // Largura mínima e máxima permitidas ao redimensionar
@@ -18,6 +22,7 @@ const DEFAULT_WIDTH = 320;
 
 // Modos do seletor (ordem dos botões) e a chave do localStorage que lembra a escolha
 const MODE_STORAGE_KEY = 'escolio:graph:mode';
+const SCOPE_STORAGE_KEY = 'escolio:graph:scope';
 const GRAPH_MODES: { id: GraphMode; label: string }[] = [
   { id: 'pastas', label: 'Pastas' },
   { id: 'links', label: 'Links' },
@@ -36,7 +41,24 @@ function readStoredMode(): GraphMode {
 }
 
 // Painel lateral direito para visualização de grafos
-const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
+const GraphPanel = ({ isOpen, onToggle, onOpenNote, onOpenVaultNote, onAskVault }: GraphPanelProps) => {
+  // Esta vault ou todas: a escolha fica lembrada; a tela cheia, não.
+  const [scope, setScope] = useState<'vault' | 'all'>(() => {
+    try {
+      return window.localStorage.getItem(SCOPE_STORAGE_KEY) === 'all' ? 'all' : 'vault';
+    } catch {
+      return 'vault';
+    }
+  });
+  const [fullscreen, setFullscreen] = useState(false);
+  const chooseScope = (next: 'vault' | 'all') => {
+    setScope(next);
+    try {
+      window.localStorage.setItem(SCOPE_STORAGE_KEY, next);
+    } catch {
+      // sem armazenamento a escolha vale só nesta sessão
+    }
+  };
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [isResizingActive, setIsResizingActive] = useState(false);
   const isResizing = useRef(false);
@@ -122,9 +144,9 @@ const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
         <span className="graph-panel__title">
           <GraphIcon size={14} />
           Grafo
-          {nodes.length > 0 && <span className="graph-panel__count mono">{nodes.length}</span>}
+          {scope === 'vault' && nodes.length > 0 && <span className="graph-panel__count mono">{nodes.length}</span>}
         </span>
-        <div className="graph-panel__modes" role="group" aria-label="O que o grafo mostra">
+        {scope === 'vault' && <div className="graph-panel__modes" role="group" aria-label="O que o grafo mostra">
           {GRAPH_MODES.map((option) => (
             <button
               key={option.id}
@@ -136,7 +158,7 @@ const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
               {option.label}
             </button>
           ))}
-        </div>
+        </div>}
         <button
           type="button"
           className="btn-icon"
@@ -148,6 +170,11 @@ const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
         >
           <XIcon size={14} />
         </button>
+      </div>
+
+      <div className="graph-panel__scope" role="group" aria-label="Quais vaults o grafo mostra">
+        <button type="button" aria-pressed={scope === 'vault'} onClick={() => chooseScope('vault')}>Esta vault</button>
+        <button type="button" aria-pressed={scope === 'all'} onClick={() => chooseScope('all')}>Todas as vaults</button>
       </div>
 
       {/* Indexação em andamento: o que está entrando no grafo agora (visual; o andamento é anunciado na Fila) */}
@@ -165,7 +192,26 @@ const GraphPanel = ({ isOpen, onToggle, onOpenNote }: GraphPanelProps) => {
       {/* Corpo do painel — grafo de força interativo */}
       <div className="graph-panel__body">
         {/* Fechado, o painel não desenha o anel: o job pode durar minutos */}
+        {scope === 'all' ? (
+          isOpen && (
+            <VaultsOverview
+              full={fullscreen}
+              live={Boolean(live)}
+              onExpand={() => setFullscreen(true)}
+              onClose={() => setFullscreen(false)}
+              onOpenNote={(vaultId, noteId) => {
+                setFullscreen(false);
+                onOpenVaultNote?.(vaultId, noteId);
+              }}
+              onAsk={(vaultId) => {
+                setFullscreen(false);
+                onAskVault?.(vaultId);
+              }}
+            />
+          )
+        ) : (
         <ForceGraph vaultNodes={nodes} links={links} mode={mode} onOpenNote={onOpenNote} activeId={isOpen ? activeId : null} loading={!loaded} />
+        )}
       </div>
     </aside>
   );
