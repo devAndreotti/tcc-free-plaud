@@ -241,3 +241,9 @@ Pergunta a pergunta, comparando os JSONs de `data/results/experimentos/22_lote_c
 - Fallback extrativo: das 22 positivas respondidas, 15 foram geradas e 7 vieram do fallback. Das 7 negativas respondidas, 3 foram geradas e 4 vieram do fallback.
 - **Para o texto do TCC:** com IA, 71% de decisões certas em duas medições independentes, em máquinas e dias diferentes (quatro rodadas no total, de 53 a 54 de 76). Sem IA, 51%, idêntico nas duas. A taxa de positivas respondidas com IA variou de 59% a 70% entre as rodadas e não deve ser citada sem essa faixa.
 - Latência e faithfulness não foram medidas nesta rodada.
+
+### A suíte manual pelo app
+
+A rodada `cmp-64e82a972b97` (2026-11-04, 00:59Z) passou a suíte manual pelo mesmo caminho do app: `top_k=4`, `qchat:latest`, notebook Windows. Deu **58/73 (79,5%)** de decisões certas, com 33/39 positivas respondidas e 25/34 negativas recusadas. No calibrado do Experimento 22, com `top_k=3`, foram 63 a 67 de 73 (mediana de 89%), com 36 a 37 de 39 positivas e 27 a 31 de 34 negativas.
+
+É uma rodada só, e ela muda `top_k`, máquina e sorteio ao mesmo tempo, então não separa a causa. Mas é o número que o histórico do app mostra e que "Copiar tabela para o TCC" copia. Ao citar 89%, diga que é a mediana do Experimento 22 com `top_k=3`.
