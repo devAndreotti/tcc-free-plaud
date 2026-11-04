@@ -149,6 +149,8 @@ test.describe('Grafo da vault: arrastar um nó', () => {
       ],
       roots: [{ root: '/mock/vault', notes_count: 3 }],
     };
+    // Com movimento reduzido o grafo já aparece assentado: o nó achado na varredura continua no lugar quando o mouse desce.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.addInitScript(createPyWebViewMockScript());
     await page.addInitScript((g) => {
       const api = (window as unknown as { pywebview: { api: Record<string, () => Promise<unknown>> } }).pywebview.api;
@@ -160,7 +162,7 @@ test.describe('Grafo da vault: arrastar um nó', () => {
     await page.locator('#btn-grafos').click();
     const canvas = page.locator('.force-graph__canvas');
     await expect(canvas).toBeVisible();
-    await page.waitForTimeout(800); // a simulação assenta (são 300 passos)
+    await page.waitForTimeout(300);
 
     // Acha um nó varrendo o canvas dentro da página (uma chamada por ponto estoura o tempo em máquina lenta):
     // em cima de um nó o cursor vira a mãozinha.
