@@ -18,6 +18,12 @@ export const formatDate = (iso: string | null | undefined, withYear = true) => {
 
 const splitPath = (path: string) => path.split(/[\\/]/).filter(Boolean);
 
+/** Só o fim do caminho: o que importa para achar a nota, sem a pasta do usuário. */
+export const shortPath = (path: string): string => {
+  const parts = splitPath(path);
+  return parts.length > 3 ? `…/${parts.slice(-3).join('/')}` : parts.join('/');
+};
+
 /** Pastas em comum a todos os caminhos: a raiz do vault, sem precisar perguntar ao backend. */
 export const commonRoot = (paths: string[]): string[] => {
   const dirs = paths.filter(Boolean).map((p) => splitPath(p).slice(0, -1));

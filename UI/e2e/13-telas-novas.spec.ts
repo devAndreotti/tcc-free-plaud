@@ -149,6 +149,8 @@ test.describe('Grafo da vault: arrastar um nó', () => {
       ],
       roots: [{ root: '/mock/vault', notes_count: 3 }],
     };
+    // Com movimento reduzido o grafo já aparece assentado: o nó achado na varredura continua no lugar quando o mouse desce.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.addInitScript(createPyWebViewMockScript());
     await page.addInitScript((g) => {
       const api = (window as unknown as { pywebview: { api: Record<string, () => Promise<unknown>> } }).pywebview.api;
@@ -160,20 +162,34 @@ test.describe('Grafo da vault: arrastar um nó', () => {
     await page.locator('#btn-grafos').click();
     const canvas = page.locator('.force-graph__canvas');
     await expect(canvas).toBeVisible();
-    await page.waitForTimeout(800); // a simulação assenta (são 300 passos)
+    await page.waitForTimeout(300);
 
-    // Acha um nó varrendo o canvas: em cima de um nó o cursor vira a mãozinha.
+    // Acha um nó varrendo o canvas dentro da página (uma chamada por ponto estoura o tempo em máquina lenta):
+    // em cima de um nó o cursor vira a mãozinha.
     const box = (await canvas.boundingBox())!;
     const cursor = () => canvas.evaluate((el) => (el as HTMLCanvasElement).style.cursor);
-    let hit: { x: number; y: number } | null = null;
-    for (let y = box.y + 10; y < box.y + box.height - 10 && !hit; y += 7) {
-      for (let x = box.x + 10; x < box.x + box.width - 10 && !hit; x += 7) {
-        await page.mouse.move(x, y);
-        if ((await cursor()) === 'pointer') hit = { x, y };
+    const scan = () => canvas.evaluate((el) => {
+      const c = el as HTMLCanvasElement;
+      const r = c.getBoundingClientRect();
+      for (let y = r.top + 10; y < r.bottom - 10; y += 5) {
+        for (let x = r.left + 10; x < r.right - 10; x += 5) {
+          c.dispatchEvent(new MouseEvent('mousemove', { clientX: x, clientY: y, bubbles: true }));
+          if (c.style.cursor === 'pointer') return { x, y };
+        }
       }
-    }
-    expect(hit).not.toBeNull();
-    const from = hit!;
+      return null;
+    });
+    // Repete até o mouse de verdade confirmar o nó: os lotes da simulação ainda podem estar assentando.
+    let from = { x: 0, y: 0 };
+    await expect(async () => {
+      const hit = await scan();
+      expect(hit).not.toBeNull();
+      from = hit!;
+      await page.mouse.move(from.x, from.y);
+      await page.waitForTimeout(200);
+      await page.mouse.move(from.x, from.y + 0.5);
+      expect(await cursor()).toBe('pointer');
+    }).toPass({ timeout: 15000 });
     const to = { x: Math.min(box.x + box.width - 20, from.x + 70), y: Math.min(box.y + box.height - 20, from.y + 60) };
 
     await page.mouse.down();
@@ -184,4 +200,51 @@ test.describe('Grafo da vault: arrastar um nó', () => {
     expect(await cursor()).not.toBe('grabbing');
     await expect(canvas).toBeVisible();
   });
+});
+
+// Clique de verdade: o Playwright só clica se o item for o que está por cima naquele ponto.
+// Com o cabeçalho cortando o que passa dos 40 px, o menu ficava invisível e o clique caía no chat.
+test.describe('Exportar conversa', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(createPyWebViewMockScript());
+    await page.goto('/');
+    await ask(page, 'Como funciona o pipeline?');
+  });
+
+  test('o menu aparece por cima do chat e o PDF abre a impressão só com a conversa', async ({ page }) => {
+    await page.evaluate(() => {
+      const state = { title: '', text: '' };
+      (window as unknown as { __print: typeof state }).__print = state;
+      window.print = () => {
+        state.title = document.title;
+        state.text = document.querySelector('.print-root')?.textContent ?? '';
+      };
+    });
+    await page.getByRole('button', { name: 'Exportar conversa' }).click();
+    const menu = page.getByRole('group', { name: 'Formato da exportação' });
+    await expect(menu).toBeVisible();
+    await menu.getByRole('button', { name: /^PDF/ }).click();
+    const printed = await page.evaluate(() => (window as unknown as { __print: { title: string; text: string } }).__print);
+    expect(printed.title).toBe('Como funciona o pipeline-');
+    expect(printed.text).toContain('Como funciona o pipeline?');
+  });
+
+  test('com muitas abas o cabeçalho não estoura a janela e o menu segue clicável', async ({ page }) => {
+    for (let i = 0; i < 14; i += 1) await page.locator('#btn-new-tab').click();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.getByRole('tablist', { name: 'Abas abertas' }).getByRole('tab').first().click();
+    await page.getByRole('button', { name: 'Exportar conversa' }).click();
+    await expect(page.getByRole('group', { name: 'Formato da exportação' }).getByRole('button', { name: /^JSON/ })).toBeVisible();
+  });
+});
+
+test('Benchmark: o campo da suíte tem largura de verdade com o interruptor da IA na tela', async ({ page }) => {
+  await page.addInitScript(createPyWebViewMockScript());
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Benchmark', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: /Medir também a resposta da IA/ })).toHaveCount(1);
+  const field = page.locator('#benchmark-suite-path');
+  await expect(field).toBeVisible();
+  expect((await field.boundingBox())!.width).toBeGreaterThan(200);
 });
