@@ -166,7 +166,8 @@
 .bench-dec__bar { display: flex; gap: 2px; height: 28px; border-radius: 8px; overflow: hidden; font-size: 11.5px; font-weight: 600; }
 .bench-dec__bar span { display: flex; align-items: center; min-width: 0; padding-left: 8px; box-sizing: border-box; overflow: hidden; white-space: nowrap; }
 .bench-dec__ok { background: color-mix(in srgb, var(--ok) 85%, var(--bg-surface)); color: #0d1f16; }
-.bench-dec__err { background: color-mix(in srgb, var(--err) 18%, transparent); color: var(--err); }
+/* O vermelho puro fica abaixo de 4,5:1 no tema claro; puxar para a cor do texto resolve nos dois temas. */
+.bench-dec__err { background: color-mix(in srgb, var(--err) 18%, transparent); color: color-mix(in srgb, var(--err) 72%, var(--text-primary)); }
 
 .bench-why { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .bench-why__tile { min-width: 0; display: flex; flex-direction: column; gap: 7px; padding: 12px 14px; border: 1px solid var(--border-color-subtle); border-radius: 12px; background: var(--bg-primary); color: var(--text-primary); text-align: left; font: inherit; cursor: pointer; transition: border-color 0.2s, background-color 0.2s; }
