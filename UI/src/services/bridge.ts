@@ -527,6 +527,8 @@ export interface BenchmarkFaithfulness {
 }
 
 export interface BenchmarkCompareResult {
+  answer_provider?: string;
+  answer_model?: string | null;
   ok: boolean;
   comparison_id: string;
   suite_name: string;
