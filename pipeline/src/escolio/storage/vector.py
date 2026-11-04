@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 
 import chromadb
@@ -12,6 +13,9 @@ from escolio.retrieval.models import Chunk, SearchHit
 # todos os clientes dela fecham; excluir uma vault fecha os dela (no Windows, arquivo aberto impede apagar a pasta).
 # ponytail: guarda um cliente leve por ativação da vault; limpar ao trocar se trocas viram milhares.
 _OPEN_CLIENTS: dict[str, list[chromadb.ClientAPI]] = {}
+# O primeiro cliente de uma pasta leva ~0,8 s subindo o Chroma; outro criado nesse meio-tempo, por outra thread,
+# falha com "Could not connect to tenant default_tenant". O app abre a loja em várias threads ao iniciar.
+_CLIENT_LOCK = threading.Lock()
 
 
 def _distance_to_score(distance: float) -> float:
@@ -68,10 +72,11 @@ class LocalVectorStore:
         self.base_dir = base_dir
         self.base_dir.mkdir(parents=True, exist_ok=True)
         # Telemetria anônima do Chroma vem ligada por padrão; o app é local e não manda nada para fora.
-        self._client = chromadb.PersistentClient(
-            path=str(self.base_dir), settings=ChromaSettings(anonymized_telemetry=False)
-        )
-        _OPEN_CLIENTS.setdefault(str(self.base_dir.resolve()), []).append(self._client)
+        with _CLIENT_LOCK:
+            self._client = chromadb.PersistentClient(
+                path=str(self.base_dir), settings=ChromaSettings(anonymized_telemetry=False)
+            )
+            _OPEN_CLIENTS.setdefault(str(self.base_dir.resolve()), []).append(self._client)
         self.collection_name = _resolve_collection_name(self._client, collection_name)
 
     def _collection(self) -> Collection:
