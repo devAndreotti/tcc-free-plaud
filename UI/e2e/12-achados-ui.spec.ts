@@ -184,7 +184,7 @@ test.describe('Esqueleto com menos animação', () => {
     await page.goto('/');
     const medida = await medir(page);
     expect(medida).toMatchObject({ nome: 'sk-pulse', duracao: '1.6s', vezes: 'infinite' });
-    expect(medida.outro).toBe('0.001ms');
+    expect(Number.parseFloat(medida.outro)).toBeLessThan(0.001); // zerada pela regra global
   });
 
   test('"Nunca" reduz: tudo anima mesmo com o sistema pedindo menos', async ({ page }) => {
@@ -193,7 +193,7 @@ test.describe('Esqueleto com menos animação', () => {
     await page.goto('/');
     const medida = await medir(page);
     expect(medida.nome).toBe('shimmer');
-    expect(medida.outro).not.toBe('0.001ms');
+    expect(medida.outro).toBe('0.5s');
   });
 
   test('"Sempre" reduz: o esqueleto pulsa mesmo sem pedido do sistema', async ({ page }) => {
