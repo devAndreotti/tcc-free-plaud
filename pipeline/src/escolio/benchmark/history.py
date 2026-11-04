@@ -49,6 +49,28 @@ def preview_benchmark_suite(suite_path: str | Path, *, settings: Settings | None
     }
 
 
+def negative_subtypes(suite_path: str | Path, *, settings: Settings | None = None) -> dict[str, str]:
+    """Tipo de cada pergunta sem resposta, quando a suite marca (`subtipo` no dataset). Só o lote cego marca."""
+    resolved = settings or get_settings()
+    suite = load_benchmark_suite(_suite_file(suite_path, resolved))
+    if not suite.negative_dataset_path:
+        return {}
+    payload = json.loads((resolved.workspace_dir / suite.negative_dataset_path).read_text(encoding='utf-8'))
+    samples = payload.get('samples', []) if isinstance(payload, dict) else payload
+    return {sample['sample_id']: sample['subtipo'] for sample in samples if sample.get('subtipo')}
+
+
+def _subtypes_by_suite_name(name: object, settings: Settings) -> dict[str, str]:
+    # Rodada gravada antes de o JSON guardar os tipos: acha a suite pelo nome.
+    for suite_file in sorted(settings.datasets_dir.glob('*/suite.json')):
+        try:
+            if json.loads(suite_file.read_text(encoding='utf-8')).get('suite_name') == name:
+                return negative_subtypes(suite_file, settings=settings)
+        except (OSError, ValueError, KeyError):
+            continue
+    return {}
+
+
 def _run_row(path: Path, data: dict) -> dict:
     corpus = data.get('corpus') or {}
     summary = (corpus.get('summaries') or data.get('summaries') or {}).get('hybrid') or {}
@@ -103,6 +125,8 @@ def load_benchmark_run(comparison_id: str, *, settings: Settings | None = None) 
         raise ValueError(f'Rodada não encontrada: {comparison_id}')
     payload = json.loads(json_path.read_text(encoding='utf-8'))
     csv_path = json_path.with_suffix('.csv')
+    if 'negative_subtypes' not in payload:
+        payload['negative_subtypes'] = _subtypes_by_suite_name(payload.get('suite_name'), resolved)
     payload.update({
         'ok': True,
         'json_report_path': str(json_path),

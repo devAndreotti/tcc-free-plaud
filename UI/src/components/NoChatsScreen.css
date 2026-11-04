@@ -1,0 +1,110 @@
+/* Nenhum chat aberto (canvas "Telas novas — Escólio"). */
+.nochats {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px 28px;
+  overflow-y: auto;
+}
+.nochats__art { flex: none; max-width: 100%; }
+.nochats__halo { fill: var(--accent-soft); }
+.nochats__orbit { stroke: color-mix(in srgb, var(--accent-blue-light) 50%, transparent); transform-origin: 150px 86px; animation: nochats-spin 26s linear infinite; }
+.nochats__tab { fill: var(--bg-surface); stroke: color-mix(in srgb, var(--accent-blue-light) 50%, transparent); }
+.nochats__line { fill: var(--accent-soft); }
+.nochats__line-strong { fill: color-mix(in srgb, var(--accent-blue-light) 55%, transparent); }
+.nochats__stroke { stroke: var(--accent-blue-light); }
+.nochats__bubble { fill: var(--bg-primary); stroke: var(--accent-blue-light); animation: nochats-dash 2.4s linear infinite; }
+.nochats__float { animation: nochats-float 5s ease-in-out infinite; }
+.nochats__float--2 { animation-duration: 6s; animation-delay: -2s; }
+.nochats__float--3 { animation-duration: 7s; animation-delay: -4s; }
+@keyframes nochats-spin { to { transform: rotate(360deg); } }
+@keyframes nochats-dash { to { stroke-dashoffset: -20; } }
+@keyframes nochats-float { 50% { transform: translateY(-7px); } }
+
+.nochats__title { margin: 2px 0 0; font: 600 28px/1.2 var(--font-read); letter-spacing: -0.01em; text-align: center; text-wrap: balance; color: var(--text-primary); }
+.nochats__lede { margin: 0; max-width: 500px; font-size: 14px; line-height: 1.5; text-align: center; color: var(--text-secondary); }
+.nochats__search {
+  width: 100%;
+  max-width: 640px;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+.nochats__vaults {
+  width: 100%;
+  max-width: 640px;
+  max-height: 232px;
+  margin: 2px 0 0;
+  padding: 2px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.nochats__vaults--one { max-width: 360px; grid-template-columns: minmax(0, 1fr); }
+.nochats__vault {
+  width: 100%;
+  height: 100%;
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.nochats__vault:hover { border-color: var(--accent-blue-light); transform: translateY(-1px); }
+.nochats__glyph { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: var(--bg-surface-hover); }
+.nochats__vault-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.nochats__vault-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; }
+.nochats__vault-text span { font-size: 11.5px; color: var(--text-secondary); }
+.nochats__cta { flex: none; font-size: 12px; font-weight: 500; color: var(--accent-blue-light); }
+.nochats__none { margin: 0; font-size: 13px; color: var(--text-secondary); }
+
+.nochats__recent { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 6px; }
+.nochats__recent h2 { margin: 0; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.nochats__recent ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.nochats__chat {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.nochats__chat:hover { border-color: var(--accent-blue-light); }
+.nochats__chat span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; }
+.nochats__chat small { font-size: 11px; color: var(--text-secondary); }
+
+.nochats__hint { margin: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.nochats__hint kbd { padding: 1px 6px; border: 1px solid var(--border-color); border-bottom-width: 2px; border-radius: 5px; background: var(--bg-surface); color: var(--text-primary); font: 500 11px var(--font-mono); }
+.nochats__link { padding: 0; border: 0; background: transparent; color: var(--accent-blue-light); font: inherit; font-weight: 500; cursor: pointer; }
+.nochats__link:hover { text-decoration: underline; }
+
+@media (max-width: 720px) {
+  .nochats__vaults, .nochats__recent ul { grid-template-columns: minmax(0, 1fr); }
+}

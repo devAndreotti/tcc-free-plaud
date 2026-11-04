@@ -5,6 +5,7 @@ from escolio.app.config import Settings, get_settings
 from escolio.app.paths import ensure_runtime_dirs
 from escolio.benchmark.compare_flags import executar_compare_com_flags
 from escolio.benchmark.datasets import load_benchmark_suite
+from escolio.benchmark.history import negative_subtypes
 from escolio.benchmark.json_merge import mesclar_chaves_json
 from escolio.benchmark.reports import (
     export_benchmark_comparison_csv,
@@ -118,6 +119,9 @@ def run_benchmark_compare(
             keep_answers=keep_answers,
             on_progress=on_progress,
         )
+        subtypes = negative_subtypes(suite_file, settings=resolved_settings)
+        if subtypes:
+            extras['negative_subtypes'] = subtypes
         output_base = resolved_settings.results_dir / result.comparison_id
         json_path = export_benchmark_comparison_json(result, output_base.with_suffix('.json'))
         csv_path = export_benchmark_comparison_csv(result, output_base.with_suffix('.csv'))
