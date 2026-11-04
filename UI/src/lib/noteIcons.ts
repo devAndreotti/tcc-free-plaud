@@ -7,9 +7,6 @@
 
 import { useSyncExternalStore } from 'react';
 import { DEFAULT_APPEARANCE, type Appearance } from '../appearance';
-// ?raw: texto, para o TypeScript não inferir um tipo de 1.594 chaves. Import estático de propósito:
-// o app desktop abre por file://, e assim os ícones não dependem de carregar outro arquivo depois.
-import rawIcons from '../assets/emoji-svg.json?raw';
 
 export type NoteIconsMode = Appearance['noteIcons'];
 
@@ -64,17 +61,35 @@ export function titleParts(text: string, mode: NoteIconsMode): TitlePart[] {
 }
 
 let icons: Record<string, string> | null = null;
+let loading: Promise<void> | null = null;
+let iconsVersion = 0;
 const listeners = new Set<() => void>();
 let observer: MutationObserver | null = null;
 
 export const notifyNoteIcons = () => listeners.forEach((listener) => listener());
 
 /**
+ * Os 1.595 SVGs (2,6 MB) vêm num arquivo à parte, carregado na primeira vez que alguém pede um ícone:
+ * no bundle principal eram 83% do JS da abertura. ?raw: texto, para o TypeScript não inferir 1.595 chaves.
+ */
+export function loadNoteIcons(): Promise<void> {
+  loading ??= import('../assets/emoji-svg.json?raw').then(({ default: raw }) => {
+    icons = JSON.parse(raw) as Record<string, string>;
+    iconsVersion += 1;
+    notifyNoteIcons();
+  });
+  return loading;
+}
+
+/**
  * SVG do emoji (conteúdo do <svg>, viewBox 0 0 32 32) ou null se não houver.
  * O conjunto não tem tons de pele nem bandeiras de país: tom vira o desenho base, bandeira vira a bandeira branca.
  */
 export function iconBody(key: string): string | null {
-  icons ??= JSON.parse(rawIcons) as Record<string, string>; // só no primeiro emoji
+  if (!icons) {
+    void loadNoteIcons(); // até chegar, o emoji fica de fora; quem assina redesenha quando o mapa chega
+    return null;
+  }
   const codes = key.split('-');
   const base = codes.filter((code) => !/^1f3f[b-f]$/.test(code)).join('-');
   const isFlag = /^1f1[e-f]/.test(codes[0]);
@@ -94,4 +109,9 @@ export function subscribeNoteIcons(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export const useNoteIconsMode = (): NoteIconsMode => useSyncExternalStore(subscribeNoteIcons, readNoteIconsMode);
+const readIconsVersion = () => iconsVersion;
+
+export const useNoteIconsMode = (): NoteIconsMode => {
+  useSyncExternalStore(subscribeNoteIcons, readIconsVersion); // renderiza de novo quando os ícones chegam
+  return useSyncExternalStore(subscribeNoteIcons, readNoteIconsMode);
+};

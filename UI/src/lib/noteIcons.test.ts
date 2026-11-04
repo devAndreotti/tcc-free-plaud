@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { iconBody, splitEmoji, stripEmoji, titleParts } from './noteIcons';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { iconBody, loadNoteIcons, splitEmoji, stripEmoji, titleParts } from './noteIcons';
+
+beforeAll(() => loadNoteIcons());
 
 const keys = (text: string) => splitEmoji(text).flatMap((part) => (typeof part === 'string' ? [] : [part.key]));
 

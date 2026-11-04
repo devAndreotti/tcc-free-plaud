@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { loadNoteIcons } from '../lib/noteIcons';
 import { nodeRadius, type SimEdge, type SimNode } from '../lib/vaultGraph';
 import { DIM_ALPHA, selectionSet } from '../lib/graphSelection';
 import { drawEdges, drawLabels, drawNodes, tooltipDetail, type Highlight, type Palette } from './graphDraw';
@@ -298,6 +299,7 @@ describe('drawLabels: com seleção, só o selecionado e os vizinhos têm nome',
 });
 
 describe('drawLabels: emoji no rótulo segue a opção de Aparência', () => {
+  beforeAll(() => loadNoteIcons());
   afterEach(() => {
     delete document.documentElement.dataset.noteIcons;
     vi.unstubAllGlobals();
