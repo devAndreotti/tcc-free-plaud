@@ -9,9 +9,10 @@ from __future__ import annotations
 from pathlib import Path
 from time import monotonic, sleep
 
+from test_corpus_service import FakeEmbedder, _settings
+
 from escolio.corpus.jobs import IndexJobManager
 from escolio.corpus.service import index_corpus_path
-from test_corpus_service import FakeEmbedder, _settings
 
 
 def _run_job(manager: IndexJobManager, folder: Path) -> list[dict]:

@@ -5,7 +5,11 @@ import time
 import pytest
 
 from escolio.app.config import Settings
-from escolio.benchmark.history import list_benchmark_runs, load_benchmark_run, preview_benchmark_suite
+from escolio.benchmark.history import (
+    list_benchmark_runs,
+    load_benchmark_run,
+    preview_benchmark_suite,
+)
 from escolio.benchmark.jobs import BenchmarkJobs, expected_steps
 
 
