@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import css from '../appearance.css?raw';
 import { DEFAULT_APPEARANCE, readAppearance } from '../appearance';
 import ExportMenu from '../components/ExportMenu';
 import MessageBubble, { type MessageData } from '../components/MessageBubble';
@@ -13,6 +14,11 @@ import {
   type ConversationExportInput,
 } from './conversationExport';
 import { lastDoctorReport, refreshDoctor, resetDoctorReport } from './doctorReport';
+
+afterEach(cleanup);
+
+// O Vitest esvazia o CSS importado: o arquivo é lido do disco.
+const css = readFileSync(resolve(process.cwd(), 'src/appearance.css'), 'utf-8');
 
 describe('cores de destaque', () => {
   const ACCENTS = ['indigo', 'blue', 'cyan', 'teal', 'green', 'lime', 'amber', 'orange', 'red', 'rose', 'fuchsia'];

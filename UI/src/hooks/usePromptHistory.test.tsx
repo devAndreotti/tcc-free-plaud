@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { MessageData } from '../components/MessageBubble';
 import { buildPromptHistory, usePromptHistory } from './usePromptHistory';
 
 const user = (content: string) => ({ id: content, role: 'user', content }) as unknown as MessageData;
 const ai = (content: string) => ({ id: content, role: 'assistant', content }) as unknown as MessageData;
+
+afterEach(cleanup);
 
 describe('buildPromptHistory', () => {
   it('vem da aba ativa primeiro, do mais recente para o mais antigo, sem repetir', () => {

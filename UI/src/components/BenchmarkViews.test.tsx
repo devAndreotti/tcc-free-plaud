@@ -1,10 +1,12 @@
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BenchmarkJobState, BenchmarkQueryRow, BenchmarkRunRow } from '../services/bridge';
 import BenchmarkHistory from './BenchmarkHistory';
 import BenchmarkProgress from './BenchmarkProgress';
 import BenchmarkQuestions from './BenchmarkQuestions';
+
+afterEach(cleanup);
 
 const row = (patch: Partial<BenchmarkQueryRow>): BenchmarkQueryRow => ({
   sample_id: patch.question ?? 'q',
