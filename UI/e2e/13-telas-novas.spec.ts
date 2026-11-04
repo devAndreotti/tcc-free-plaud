@@ -112,4 +112,76 @@ test.describe('Grafo de todas as vaults', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
   });
+
+  test('tela cheia: scroll aproxima no mouse, arrastar move e duplo clique volta ao desenho inteiro', async ({ page }) => {
+    await page.getByRole('button', { name: 'Abrir em tela cheia' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Grafo de todas as vaults' });
+    const body = dialog.locator('.overview__body');
+    const stage = dialog.locator('.overview__stage');
+    const box = (await body.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, -400);
+    await expect(body).toHaveClass(/is-zoomed/);
+    const zoomed = await stage.evaluate((el) => el.style.transform);
+    expect(zoomed).toMatch(/scale\(/);
+    expect(await nodeOffset(page)).toBeLessThan(3); // desenho e botões aproximam juntos
+
+    // Arrastar no vazio move o desenho; soltar não abre nada embaixo do mouse.
+    await page.mouse.move(box.x + 30, box.y + 30);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 130, box.y + 80, { steps: 5 });
+    await page.mouse.up();
+    expect(await stage.evaluate((el) => el.style.transform)).not.toBe(zoomed);
+    await expect(dialog).toBeVisible();
+
+    await body.dblclick({ position: { x: 30, y: 30 } });
+    await expect(body).not.toHaveClass(/is-zoomed/);
+  });
+});
+
+test.describe('Grafo da vault: arrastar um nó', () => {
+  test('o nó segue o mouse com o cursor de agarrar, e a câmera fica parada', async ({ page }) => {
+    const graph = {
+      notes: [
+        { note_id: 'n1', title: 'Cisco', source_type: 'md', source_path: '/mock/vault/Estudos/cisco.md', created_at: '2026-09-01', tags: [], chunk_count: 1 },
+        { note_id: 'n2', title: 'RRF', source_type: 'md', source_path: '/mock/vault/Estudos/rrf.md', created_at: '2026-09-01', tags: [], chunk_count: 1 },
+        { note_id: 'n3', title: 'Plano', source_type: 'md', source_path: '/mock/vault/Projetos/plano.md', created_at: '2026-09-01', tags: [], chunk_count: 1 },
+      ],
+      roots: [{ root: '/mock/vault', notes_count: 3 }],
+    };
+    await page.addInitScript(createPyWebViewMockScript());
+    await page.addInitScript((g) => {
+      const api = (window as unknown as { pywebview: { api: Record<string, () => Promise<unknown>> } }).pywebview.api;
+      api.listNotes = async () => g.notes;
+      api.listCorpusRoots = async () => g.roots;
+      api.listNoteLinks = async () => [];
+    }, graph);
+    await page.goto('/');
+    await page.locator('#btn-grafos').click();
+    const canvas = page.locator('.force-graph__canvas');
+    await expect(canvas).toBeVisible();
+    await page.waitForTimeout(800); // a simulação assenta (são 300 passos)
+
+    // Acha um nó varrendo o canvas: em cima de um nó o cursor vira a mãozinha.
+    const box = (await canvas.boundingBox())!;
+    const cursor = () => canvas.evaluate((el) => (el as HTMLCanvasElement).style.cursor);
+    let hit: { x: number; y: number } | null = null;
+    for (let y = box.y + 10; y < box.y + box.height - 10 && !hit; y += 7) {
+      for (let x = box.x + 10; x < box.x + box.width - 10 && !hit; x += 7) {
+        await page.mouse.move(x, y);
+        if ((await cursor()) === 'pointer') hit = { x, y };
+      }
+    }
+    expect(hit).not.toBeNull();
+    const from = hit!;
+    const to = { x: Math.min(box.x + box.width - 20, from.x + 70), y: Math.min(box.y + box.height - 20, from.y + 60) };
+
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 8 });
+    expect(await cursor()).toBe('grabbing');
+    await page.mouse.up();
+    // Soltou: sai do modo de arrastar e o grafo continua na tela (soltar não é clique, não abre a nota).
+    expect(await cursor()).not.toBe('grabbing');
+    await expect(canvas).toBeVisible();
+  });
 });

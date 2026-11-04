@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { bridge, type VaultOverview, type VaultOverviewNote } from '../services/bridge';
 import { CORPUS_CHANGED, CORPUS_PROGRESS_EVENT } from '../lib/corpusEvents';
-import { buildOverviewLayout, searchOverview, vaultColorHex, VIEW_H, VIEW_W } from '../lib/vaultsOverviewLayout';
+import { buildOverviewLayout, NO_ZOOM, searchOverview, vaultColorHex, VIEW_H, VIEW_W, zoomAt, type OverviewView } from '../lib/vaultsOverviewLayout';
 import { VaultGlyph } from './VaultGlyph';
 import './VaultsOverview.css';
 
@@ -26,6 +26,11 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
   const [loaded, setLoaded] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  // Tela cheia: scroll aproxima no ponto do mouse, arrastar move, duplo clique volta ao desenho inteiro
+  const [view, setView] = useState<OverviewView>(NO_ZOOM);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const panRef = useRef<{ x: number; y: number; vx: number; vy: number; moved: boolean } | null>(null);
+  const movedRef = useRef(false);
 
   // Cada lote da indexação avisa; enquanto uma leitura está em andamento, a próxima é ignorada.
   const busy = useRef(false);
@@ -67,6 +72,45 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
     return () => window.removeEventListener('keydown', onKey);
   }, [full, onClose]);
 
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!full || !body) return undefined;
+    // Listener nativo: o onWheel do React é passivo e não deixa impedir a rolagem da página.
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = body.getBoundingClientRect();
+      setView((current) => zoomAt(current, event.clientX - rect.left, event.clientY - rect.top, event.deltaY < 0 ? 1.15 : 1 / 1.15));
+    };
+    body.addEventListener('wheel', onWheel, { passive: false });
+    return () => body.removeEventListener('wheel', onWheel);
+  }, [full]);
+
+  const shownView = full ? view : NO_ZOOM;
+  const startPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!full || view.k === 1 || event.button !== 0) return;
+    panRef.current = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y, moved: false };
+  };
+  const movePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const pan = panRef.current;
+    if (!pan) return;
+    const dx = event.clientX - pan.x;
+    const dy = event.clientY - pan.y;
+    if (!pan.moved && Math.hypot(dx, dy) < 4) return;
+    pan.moved = true;
+    setView((current) => ({ ...current, x: pan.vx + dx, y: pan.vy + dy }));
+  };
+  const endPan = () => {
+    movedRef.current = Boolean(panRef.current?.moved);
+    panRef.current = null;
+  };
+  // O clique que fecha um arrasto não abre a nota nem a vault que ficou embaixo do mouse.
+  const swallowPanClick = (event: React.MouseEvent) => {
+    if (!movedRef.current) return;
+    movedRef.current = false;
+    event.stopPropagation();
+    event.preventDefault();
+  };
+
   const term = full ? query.trim().toLowerCase() : '';
   const searching = term.length > 1;
   const hits = useMemo(() => (searching ? searchOverview(vaults, term) : []), [searching, vaults, term]);
@@ -106,7 +150,17 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
           <button type="button" className="btn" onClick={onClose}>Sair da tela cheia</button>
         </header>
       )}
-      <div className="overview__body">
+      <div
+        ref={bodyRef}
+        className={`overview__body${shownView.k > 1 ? ' is-zoomed' : ''}`}
+        onPointerDown={startPan}
+        onPointerMove={movePan}
+        onPointerUp={endPan}
+        onPointerLeave={endPan}
+        onClickCapture={swallowPanClick}
+        onDoubleClick={() => setView(NO_ZOOM)}
+      >
+        <div className="overview__stage" style={shownView.k > 1 ? { transform: `translate(${shownView.x}px, ${shownView.y}px) scale(${shownView.k})` } : undefined}>
         <svg className="overview__graph" viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} role="group" aria-label="Vaults">
           {layout.spokes.map((spoke) => (
             <line key={spoke.id} className="overview__spoke" x1={spoke.x1} y1={spoke.y1} x2={spoke.x2} y2={spoke.y2} style={{ color: spoke.color }} opacity={spoke.dim ? 0.3 : 1} />
@@ -141,7 +195,7 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
         </svg>
         {/* Botões de verdade por cima do desenho: dá para chegar neles pelo teclado. */}
         <div className="overview__nodes">
-          <button type="button" className="overview__hub" style={{ left: `${(layout.hub.x / VIEW_W) * 100}%`, top: `${(layout.hub.y / VIEW_H) * 100}%` }} aria-label="Escólio: recolher tudo" onClick={() => { setOpenId(null); setQuery(''); }}>ES</button>
+          <button type="button" className="overview__hub" style={{ left: `${(layout.hub.x / VIEW_W) * 100}%`, top: `${(layout.hub.y / VIEW_H) * 100}%` }} aria-label="Escólio: recolher tudo" onClick={() => { setOpenId(null); setQuery(''); setView(NO_ZOOM); }}>ES</button>
           {layout.vaults.map((node) => {
             const color = vaultColorHex(node.vault.color);
             return (
@@ -160,6 +214,7 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
               </div>
             );
           })}
+        </div>
         </div>
       </div>
       <aside className="overview__side" aria-label="Detalhes">
@@ -196,7 +251,7 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
           <>
             {full && <h2>Todas as vaults</h2>}
             <p className="mono">{fmt(totalNotes)} notas · {fmt(totalChunks)} trechos</p>
-            <p>{full ? 'O Escólio fica no centro e cada vault em volta. Clique numa vault para abrir as pastas dela.' : 'Aqui as vaults aparecem fechadas. Para abrir as pastas e buscar, use a tela cheia.'}</p>
+            <p>{full ? 'O Escólio fica no centro e cada vault em volta. Clique numa vault para abrir as pastas dela. Role para aproximar, arraste para mover e dê duplo clique para ver tudo.' : 'Aqui as vaults aparecem fechadas. Para abrir as pastas e buscar, use a tela cheia.'}</p>
             {!full && <button type="button" className="btn btn--primary" onClick={onExpand}>Abrir em tela cheia</button>}
           </>
         )}
