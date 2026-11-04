@@ -168,7 +168,7 @@ test.describe('Grafo da vault: arrastar um nó', () => {
     // em cima de um nó o cursor vira a mãozinha.
     const box = (await canvas.boundingBox())!;
     const cursor = () => canvas.evaluate((el) => (el as HTMLCanvasElement).style.cursor);
-    const hit = await canvas.evaluate((el) => {
+    const scan = () => canvas.evaluate((el) => {
       const c = el as HTMLCanvasElement;
       const r = c.getBoundingClientRect();
       for (let y = r.top + 10; y < r.bottom - 10; y += 5) {
@@ -179,9 +179,17 @@ test.describe('Grafo da vault: arrastar um nó', () => {
       }
       return null;
     });
-    expect(hit).not.toBeNull();
-    const from = hit!;
-    await page.mouse.move(from.x, from.y);
+    // Repete até o mouse de verdade confirmar o nó: os lotes da simulação ainda podem estar assentando.
+    let from = { x: 0, y: 0 };
+    await expect(async () => {
+      const hit = await scan();
+      expect(hit).not.toBeNull();
+      from = hit!;
+      await page.mouse.move(from.x, from.y);
+      await page.waitForTimeout(200);
+      await page.mouse.move(from.x, from.y + 0.5);
+      expect(await cursor()).toBe('pointer');
+    }).toPass({ timeout: 15000 });
     const to = { x: Math.min(box.x + box.width - 20, from.x + 70), y: Math.min(box.y + box.height - 20, from.y + 60) };
 
     await page.mouse.down();
