@@ -229,7 +229,10 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
         for (let i = 0; i < n; i++) tick(nodes, edges, cx, cy);
         left -= n;
         if (left > 0) animRef.current = requestAnimationFrame(batch);
-        else draw();
+        else {
+          animRef.current = 0; // 0 = nenhum loop rodando (o arrasto usa isso para não empilhar passos)
+          draw();
+        }
       };
       batch();
       return;
@@ -242,6 +245,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
         animRef.current = requestAnimationFrame(() => loop(i - 1));
       } else {
         // Simulação terminada: a abertura de 600 ms já acabou (são centenas de quadros)
+        animRef.current = 0;
         entryStartRef.current = null;
         draw();
       }
@@ -394,9 +398,11 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
     n.fixed = true;
     n.x = p.x;
     n.y = p.y;
-    // Seguir o mouse é ação de quem arrasta, não animação; com movimento reduzido os vizinhos esperam soltar
+    // Seguir o mouse é ação de quem arrasta, não animação; com movimento reduzido os vizinhos esperam soltar.
+    // Com o loop rodando, o próximo quadro já desenha o nó: um passo da física por quadro, não um por evento
+    // do mouse (com 600+ notas cada passo custa ~10 ms, e o mouse manda até 125 eventos por segundo).
     if (prefersReducedMotion()) draw();
-    else startLoop(DRAG_TICKS);
+    else if (!animRef.current) startLoop(DRAG_TICKS);
   }, [toWorld, draw, startLoop]);
 
   // ── Hover + pan ─────────────────────────────────────────────────────────
