@@ -26,13 +26,9 @@ test.describe('Tela sem chats', () => {
     await closeAllTabs(page);
 
     await expect(page.getByRole('heading', { name: 'Você fechou todos os chats' })).toBeVisible();
-    const vaults = page.getByRole('list', { name: 'Vaults' });
-    await expect(vaults.getByRole('button')).toHaveCount(2);
-
-    await page.getByLabel('Buscar vault').fill('culin');
-    await expect(vaults.getByRole('button')).toHaveCount(1);
-    await expect(vaults).toContainText('Culinária');
-    await page.getByLabel('Buscar vault').fill('');
+    // Com poucas vaults não há busca: os cards já cabem na tela.
+    await expect(page.getByRole('list', { name: 'Vaults' }).getByRole('button')).toHaveCount(2);
+    await expect(page.getByLabel('Buscar vault')).toHaveCount(0);
 
     // Reabrir a conversa recente traz as mensagens de volta.
     await page.getByRole('region', { name: 'Conversas recentes' }).getByRole('button').first().click();
@@ -42,6 +38,27 @@ test.describe('Tela sem chats', () => {
     await page.keyboard.press('Control+t');
     await expect(page.getByRole('tablist', { name: 'Abas abertas' }).getByRole('tab')).toHaveCount(1);
     await expect(page.getByRole('heading', { name: 'Você fechou todos os chats' })).toBeHidden();
+  });
+
+  test('a partir de 7 vaults aparece a busca, que filtra pelo nome', async ({ page }) => {
+    await page.addInitScript(() => {
+      const api = (window as unknown as { pywebview: { api: Record<string, unknown> } }).pywebview.api;
+      const names = ['Obsidian', 'Culinária', 'Trabalho', 'Faculdade', 'Viagens', 'Leituras', 'Finanças', 'Música'];
+      api.listVaults = async () => ({
+        active: 'v0',
+        vaults: names.map((name, i) => ({ id: `v${i}`, name, icon: 'notes', color: 'violet', folders: [], embedding_model: 'chroma-default', created_at: '2026-10-18T12:00:00-03:00', sqlite_path: null, vector_store_dir: null, note_count: i + 1, roots: [] })),
+      });
+    });
+    await page.goto('/');
+    await closeAllTabs(page);
+
+    const vaults = page.getByRole('list', { name: 'Vaults' });
+    await expect(vaults.getByRole('button')).toHaveCount(8);
+    await page.getByLabel('Buscar vault').fill('culin');
+    await expect(vaults.getByRole('button')).toHaveCount(1);
+    await expect(vaults).toContainText('Culinária');
+    await page.getByLabel('Buscar vault').fill('zzz');
+    await expect(page.getByText('Nenhuma vault com esse nome.')).toBeVisible();
   });
 
   test('clicar numa vault abre uma conversa nela', async ({ page }) => {
