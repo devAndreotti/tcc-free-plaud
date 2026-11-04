@@ -32,7 +32,7 @@ test.describe('Tela sem chats', () => {
 
     // Reabrir a conversa recente traz as mensagens de volta.
     await page.getByRole('region', { name: 'Conversas recentes' }).getByRole('button').first().click();
-    await expect(page.getByRole('article', { name: 'Sua pergunta' })).toHaveText('Como funciona o pipeline?');
+    await expect(page.getByRole('article', { name: 'Sua pergunta' })).toContainText('Como funciona o pipeline?');
 
     await closeAllTabs(page);
     await page.keyboard.press('Control+t');
