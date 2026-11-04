@@ -1,11 +1,13 @@
 /**
  * conversationExport.ts
  * Exporta uma conversa para Markdown: título, perguntas e respostas, e as fontes de cada resposta
- * (caminho e faixa de caracteres, o mesmo texto que o botão de copiar põe em MessageBubble).
+ * (fim do caminho e faixa de caracteres, o mesmo texto que o botão de copiar põe em MessageBubble: quem recebe o
+ * arquivo não precisa ver a pasta do usuário, e o note_id identifica a nota).
  * Função pura: não toca em arquivo nem em tela.
  */
 import type { AskCitation } from '../services/bridge';
 import type { MessageData } from '../components/MessageBubble';
+import { shortPath } from './notes';
 
 export interface ConversationExportInput {
   title: string;
@@ -35,7 +37,14 @@ const textOf = (message: MessageData): string =>
   (message.role === 'user' ? message.content : message.ask?.answer ?? message.content).trim();
 
 const formatSource = (citation: AskCitation): string =>
-  `${citation.source_path ?? citation.note_id} (${citation.char_start}–${citation.char_end})`;
+  `${citation.source_path ? shortPath(citation.source_path) : citation.note_id} (${citation.char_start}–${citation.char_end})`;
+
+/** Título do arquivo: a aba corta a primeira pergunta em 32 caracteres; aba renomeada fica com o nome que recebeu. */
+export const conversationTitle = (label: string, messages: MessageData[]): string => {
+  if (!label.endsWith('…')) return label;
+  const question = messages.find((message) => message.role === 'user')?.content.trim() ?? '';
+  return question.startsWith(label.slice(0, -1)) ? question : label;
+};
 
 /** Monta o Markdown da conversa. */
 export const buildConversationMarkdown = ({ title, messages, exportedAt, includeSources = true }: ConversationExportInput): string => {
@@ -94,7 +103,7 @@ const buildJson = ({ title, messages, exportedAt, includeSources = true }: Conve
           ? {
               sources: sourcesOf(message).map((source) => ({
                 note_id: source.note_id,
-                path: source.source_path ?? null,
+                path: source.source_path ? shortPath(source.source_path) : null,
                 char_start: source.char_start,
                 char_end: source.char_end,
               })),
@@ -153,9 +162,13 @@ export const printConversation = (input: ConversationExportInput): void => {
   root.innerHTML = buildHtmlBody(input); // tudo escapado em buildHtmlBody
   document.body.appendChild(root);
   document.documentElement.classList.add('is-printing');
+  // A impressão sugere o nome do arquivo pelo título da página.
+  const pageTitle = document.title;
+  document.title = conversationFileName(input.title).replace(/\.md$/, '');
   const finish = () => {
     window.removeEventListener('afterprint', finish);
     document.documentElement.classList.remove('is-printing');
+    document.title = pageTitle;
     root.remove();
   };
   window.addEventListener('afterprint', finish);

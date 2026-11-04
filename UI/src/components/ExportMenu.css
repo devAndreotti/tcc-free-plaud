@@ -58,4 +58,6 @@
   .print-root h2 { font-size: 13pt; margin: 14pt 0 4pt; }
   .print-root p { margin: 0 0 6pt; white-space: pre-wrap; overflow-wrap: anywhere; }
   .print-root .fontes { font-size: 10pt; color: #444; }
+  /* O reset global tira o recuo da lista, e com ele os números que a resposta cita. */
+  .print-root ol { padding-left: 18pt; }
 }

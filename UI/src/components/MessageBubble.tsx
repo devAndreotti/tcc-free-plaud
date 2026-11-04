@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { AskCitation, AskResult, AskStage, AskStrategy } from '../services/bridge';
 import { discardText } from '../lib/discardReasons';
+import { shortPath } from '../lib/notes';
 import { focusNoteInGraph } from '../lib/vaultGraph';
 import { ExternalIcon, SearchIcon } from './Icons';
 import CopyAction from './CopyAction';
@@ -140,11 +141,6 @@ const noteTitle = (citation: AskCitation) => {
 };
 
 /** Só as últimas pastas do caminho; o caminho completo fica no title. */
-const shortPath = (path: string) => {
-  const parts = path.split(/[\\/]/).filter(Boolean);
-  return parts.length > 3 ? `…/${parts.slice(-3).join('/')}` : parts.join('/');
-};
-
 /** Numera as fontes na ordem em que aparecem e liga cada afirmação aos números. */
 function useSources(ask: AskResult) {
   return useMemo(() => {
@@ -323,7 +319,7 @@ const StructuredAnswer = ({ ask, onOpenSource, during }: { ask: AskResult; onOpe
       : withRefs
         ? splitRefs(ask.answer ?? '', refOf).map((part) => (typeof part === 'string' ? part : ` [${part.ref + 1}]`)).join('')
         : ask.answer ?? '',
-    sources.length ? `\n\nFontes:\n${sources.map((s, i) => `[${i + 1}] ${s.source_path ?? s.note_id} (${s.char_start}–${s.char_end})`).join('\n')}` : '',
+    sources.length ? `\n\nFontes:\n${sources.map((s, i) => `[${i + 1}] ${s.source_path ? shortPath(s.source_path) : s.note_id} (${s.char_start}–${s.char_end})`).join('\n')}` : '',
   ].join('');
 
   return (

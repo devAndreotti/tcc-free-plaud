@@ -33,7 +33,6 @@
   border-bottom: 1px solid var(--border-color-subtle);
   flex-shrink: 0;
   z-index: 10;
-  overflow: hidden;
 }
 
 /* Contêiner das abas — scroll horizontal se necessário */
@@ -2262,6 +2261,11 @@
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
+}
+
+/* O interruptor do Benchmark ocupa a linha toda: sem quebra, ele espremia o campo da suíte a 22 px. */
+.queue__source:has(.bench__with-answer) {
+  flex-wrap: wrap;
 }
 
 .queue__field {

@@ -20,7 +20,7 @@ import { useVaults } from './hooks/useVaults';
 import { QueueProvider } from './contexts/QueueContext';
 import { useQueueContext } from './hooks/useQueueContext';
 import { fromSavedConversations, toSavedConversations, type ConversationSnapshot } from './lib/conversations';
-import { buildConversationExport, conversationFileName, printConversation, type ExportChoice } from './lib/conversationExport';
+import { buildConversationExport, conversationFileName, conversationTitle, printConversation, type ExportChoice } from './lib/conversationExport';
 import { buildPromptHistory } from './hooks/usePromptHistory';
 import NoChatsScreen from './components/NoChatsScreen';
 import AppToast from './components/AppToast';
@@ -443,13 +443,14 @@ function AppContent() {
 
   const handleExportTab = useCallback(async (format: ExportChoice, includeSources: boolean) => {
     if (!activeTab) return;
-    const input = { title: activeTab.label, messages: activeMessages, exportedAt: new Date(), includeSources };
+    const title = conversationTitle(activeTab.label, activeMessages);
+    const input = { title, messages: activeMessages, exportedAt: new Date(), includeSources };
     try {
       if (format === 'pdf') {
         printConversation(input);
         return;
       }
-      const saved = await bridge.saveTextFile(conversationFileName(activeTab.label, format), buildConversationExport(format, input));
+      const saved = await bridge.saveTextFile(conversationFileName(title, format), buildConversationExport(format, input));
       if (saved) setNotice({ id: generateId(), message: 'Conversa exportada', tone: 'ok' });
     } catch (error) {
       console.error('[App] Não foi possível exportar a conversa:', error);

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { buildConversationMarkdown, conversationFileName } from './conversationExport';
+import { describe, expect, it, vi } from 'vitest';
+import { buildConversationExport, buildConversationMarkdown, conversationFileName, conversationTitle, printConversation } from './conversationExport';
 import type { MessageData } from '../components/MessageBubble';
 import type { AskResult } from '../services/bridge';
 
@@ -43,6 +43,47 @@ describe('buildConversationMarkdown', () => {
     expect(md).toContain('# Conversa');
     expect(md).toContain('## Resposta\n\nOcorreu um erro.');
     expect(md).not.toContain('Fontes');
+  });
+});
+
+describe('caminho das fontes no arquivo', () => {
+  const longa = { ...ask, claims: [], citations: [citation('c9', String.raw`C:\Users\alguem\Notas\Estudos\Redes\vlan.md`, 0, 10)] };
+  const msgs = [{ id: 'a', role: 'assistant', content: '', timestamp: new Date(), ask: longa }] as unknown as MessageData[];
+  const input = { title: 'T', messages: msgs, exportedAt: new Date('2026-11-04T12:00:00Z') };
+
+  it.each(['md', 'txt', 'html', 'json'] as const)('%s não mostra a pasta do usuário', (format) => {
+    const out = buildConversationExport(format, input);
+    expect(out).toContain('Estudos/Redes/vlan.md');
+    expect(out).not.toContain('alguem');
+  });
+});
+
+describe('conversationTitle', () => {
+  const msgs = (content: string) => [{ id: 'u', role: 'user', content, timestamp: new Date() }] as unknown as MessageData[];
+  const pergunta = 'Quais são os estágios de refinamento do Lakehouse?';
+
+  it('troca o rótulo cortado da aba pela pergunta inteira', () => {
+    expect(conversationTitle(`${pergunta.slice(0, 32)}…`, msgs(pergunta))).toBe(pergunta);
+  });
+
+  it('aba renomeada fica com o nome que recebeu', () => {
+    expect(conversationTitle('Lakehouse', msgs(pergunta))).toBe('Lakehouse');
+    expect(conversationTitle('Outro assunto…', msgs(pergunta))).toBe('Outro assunto…');
+  });
+});
+
+describe('printConversation', () => {
+  it('o título da página vira o nome sugerido e volta depois da impressão', () => {
+    const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+    document.title = 'Escólio';
+    printConversation({ title: 'Redes: VLAN', messages: [], exportedAt: new Date() });
+    expect(print).toHaveBeenCalled();
+    expect(document.title).toBe('Redes- VLAN');
+    expect(document.querySelector('.print-root')).not.toBeNull();
+    window.dispatchEvent(new Event('afterprint'));
+    expect(document.title).toBe('Escólio');
+    expect(document.querySelector('.print-root')).toBeNull();
+    print.mockRestore();
   });
 });
 
