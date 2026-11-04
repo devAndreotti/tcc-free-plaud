@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangleIcon,
@@ -23,7 +23,7 @@ import { AdvancedLocked, AdvancedPane } from './AdvancedPane';
 import DoctorPanel from './DoctorPanel';
 import MicTest from './MicTest';
 import { DoctorSkeleton } from './DoctorPanel';
-import { lastDoctorReport, lastDoctorStats, refreshDoctor, rememberDoctorStats } from '../lib/doctorReport';
+import { getDoctorSnapshot, lastDoctorStats, refreshDoctor, rememberDoctorStats, subscribeDoctor } from '../lib/doctorReport';
 import { SettingsTabSkeleton, SkLines } from './ui/Loading';
 import { GroupCard, Segmented, SectionHead, Stepper } from './ui/Controls';
 import { Glyph, type GlyphName } from './ui/Glyph';
@@ -242,7 +242,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   }, [isOpen]);
 
   const [isRunningDoctor, setIsRunningDoctor] = useState(false);
-  const [doctorReport, setDoctorReport] = useState(lastDoctorReport);
+  const { report: doctorReport, running: doctorRunning } = useSyncExternalStore(subscribeDoctor, getDoctorSnapshot);
 
   useEffect(() => {
     if (toast?.tone !== 'ok') return undefined;
@@ -253,16 +253,9 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   useEffect(() => {
     if (!isOpen) return;
     // O Diagnóstico leva segundos: as abas não esperam por ele, e a dele mostra o último resultado enquanto atualiza.
-    setIsRunningDoctor(true);
-    setDoctorReport(lastDoctorReport());
-    refreshDoctor()
-      .then((report) => {
-        if (report) setDoctorReport(report);
-      })
-      .catch((error) => {
-        console.error('[SettingsModal] Erro ao rodar o diagnóstico:', error);
-      })
-      .finally(() => setIsRunningDoctor(false));
+    refreshDoctor().catch((error) => {
+      console.error('[SettingsModal] Erro ao rodar o diagnóstico:', error);
+    });
     bridge.getBackendSettings({ doctor: false })
       .then((settings) => {
         rememberDoctorStats(settings);
@@ -281,8 +274,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
   const handleRerunDoctor = async () => {
     setIsRunningDoctor(true);
     try {
-      const [settings, report] = await Promise.all([bridge.getBackendSettings({ doctor: false }), refreshDoctor()]);
-      if (report) setDoctorReport(report);
+      const [settings] = await Promise.all([bridge.getBackendSettings({ doctor: false }), refreshDoctor()]);
       rememberDoctorStats(settings);
       setBackendSettings((prev) => (prev ? { ...prev, doctor: settings.doctor ?? prev.doctor, notes_count: settings.notes_count, sqlite_chunks_count: settings.sqlite_chunks_count } : settings));
     } catch (error) {
@@ -767,7 +759,7 @@ const SettingsModal = ({ isOpen, onClose, initialTab, onOpenQueue }: SettingsMod
                   }
                   doctor={doctor}
                   stats={doctorStats}
-                  running={isRunningDoctor}
+                  running={isRunningDoctor || doctorRunning}
                   onRerun={handleRerunDoctor}
                 />
               ) : (

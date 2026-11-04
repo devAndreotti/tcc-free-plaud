@@ -11,11 +11,30 @@ export interface DoctorStats {
   vectors: number;
 }
 
-let lastReport: DoctorReport | null = null;
+export interface DoctorSnapshot {
+  report: DoctorReport | null;
+  running: boolean;
+}
+
+const EMPTY: DoctorSnapshot = { report: null, running: false };
+let snapshot = EMPTY;
 let lastStats: DoctorStats | null = null;
 let pending: Promise<DoctorReport | null> | null = null;
+const listeners = new Set<() => void>();
 
-export const lastDoctorReport = (): DoctorReport | null => lastReport;
+const publish = (patch: Partial<DoctorSnapshot>) => {
+  snapshot = { ...snapshot, ...patch };
+  listeners.forEach((listener) => listener());
+};
+
+export const subscribeDoctor = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+export const getDoctorSnapshot = (): DoctorSnapshot => snapshot;
+export const lastDoctorReport = (): DoctorReport | null => snapshot.report;
 export const lastDoctorStats = (): DoctorStats | null => lastStats;
 
 export const rememberDoctorStats = (settings: BackendSettings): void => {
@@ -28,19 +47,23 @@ export const rememberDoctorStats = (settings: BackendSettings): void => {
 
 /** Roda o Diagnóstico; chamadas durante uma execução recebem essa mesma execução. */
 export const refreshDoctor = (): Promise<DoctorReport | null> => {
-  pending ??= Promise.resolve(bridge.getDoctor?.())
-    .then((report) => {
-      if (report) lastReport = report;
-      return report ?? null;
-    })
-    .finally(() => {
-      pending = null;
-    });
+  if (!pending) {
+    publish({ running: true });
+    pending = Promise.resolve(bridge.getDoctor?.())
+      .then((report) => {
+        if (report) publish({ report });
+        return report ?? null;
+      })
+      .finally(() => {
+        pending = null;
+        publish({ running: false });
+      });
+  }
   return pending;
 };
 
 export const resetDoctorReport = (): void => {
-  lastReport = null;
+  snapshot = EMPTY;
   lastStats = null;
   pending = null;
 };
