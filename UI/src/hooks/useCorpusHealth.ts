@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CORPUS_CHANGED, CORPUS_PROGRESS_EVENT } from '../lib/corpusEvents';
 import { bridge } from '../services/bridge';
+import { lastDoctorReport, refreshDoctor, rememberDoctorStats } from '../lib/doctorReport';
 
 export interface CorpusHealth {
   notes: number;
@@ -53,20 +54,36 @@ export function useCorpusHealth(refreshKey: unknown): CorpusHealth | null {
 
   useEffect(() => {
     let cancelled = false;
+    // As contagens chegam primeiro; o estado do Diagnóstico leva segundos e vem à parte.
     bridge
-      .getBackendSettings()
+      .getBackendSettings({ doctor: false })
       .then((settings) => {
         if (cancelled) return;
-        setHealth({
+        rememberDoctorStats(settings);
+        const report = settings.doctor ?? lastDoctorReport();
+        setHealth((prev) => ({
           notes: settings.notes_count ?? 0,
           chunks: settings.sqlite_chunks_count ?? 0,
-          status: settings.doctor?.status ?? 'unknown',
-          errorCount: settings.doctor?.error_count ?? 0,
-          warningCount: settings.doctor?.warning_count ?? 0,
-        });
+          status: report?.status ?? prev?.status ?? 'unknown',
+          errorCount: report?.error_count ?? prev?.errorCount ?? 0,
+          warningCount: report?.warning_count ?? prev?.warningCount ?? 0,
+        }));
       })
       .catch(() => {
         if (!cancelled) setHealth(null);
+      });
+    refreshDoctor()
+      .then((report) => {
+        if (cancelled || !report) return;
+        setHealth((prev) => prev && {
+          ...prev,
+          status: report.status,
+          errorCount: report.error_count,
+          warningCount: report.warning_count,
+        });
+      })
+      .catch(() => {
+        // Sem Diagnóstico, a barra lateral fica só com as contagens.
       });
     return () => {
       cancelled = true;

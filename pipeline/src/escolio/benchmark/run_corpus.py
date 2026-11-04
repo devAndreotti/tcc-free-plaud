@@ -1,5 +1,6 @@
 """Passada no corpus: todas as notas da suite buscadas como o chat busca, com negativas e resposta."""
 
+from collections.abc import Callable
 from time import perf_counter
 
 from escolio.benchmark.answer_metrics import generation_discard_reason
@@ -34,6 +35,7 @@ def run_corpus_benchmark(
     answer_provider: AnswerProvider | None = None,
     keep_answers: bool = False,
     reranker: Reranker | None = None,
+    on_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> BenchmarkCorpusResult:
     """Mede o cenário do chat: todas as notas num corpus só, sem filtro por nota.
 
@@ -106,6 +108,14 @@ def run_corpus_benchmark(
                 row.answer = response.answer
                 row.contexts = [hit.chunk.chunk_text for hit in hits if hit.chunk.chunk_id in cited_chunk_ids]
             rows.append(row)
+            if on_progress is not None:
+                on_progress({
+                    'phase': 'corpus',
+                    'strategy': strategy,
+                    'question': sample.question,
+                    'negative': is_negative,
+                    'answered': answered,
+                })
             predicted_abstain.append(not answered)
             gold_abstain.append(is_negative)
 

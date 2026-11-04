@@ -9,11 +9,17 @@ import './AppearanceFields.css';
 // Amostra em tom médio, legível nos dois temas; os tokens de verdade ficam em appearance.css.
 const ACCENTS: Record<Appearance['accent'], { label: string; swatch: string }> = {
   violet: { label: 'Violeta', swatch: '#7c62ea' },
+  indigo: { label: 'Índigo', swatch: '#6366f1' },
   blue: { label: 'Azul', swatch: '#3b82f6' },
-  green: { label: 'Verde', swatch: '#22c55e' },
-  amber: { label: 'Âmbar', swatch: '#f59e0b' },
-  rose: { label: 'Rosa', swatch: '#f43f5e' },
   cyan: { label: 'Ciano', swatch: '#06b6d4' },
+  teal: { label: 'Verde-azulado', swatch: '#14b8a6' },
+  green: { label: 'Verde', swatch: '#22c55e' },
+  lime: { label: 'Lima', swatch: '#84cc16' },
+  amber: { label: 'Âmbar', swatch: '#f59e0b' },
+  orange: { label: 'Laranja', swatch: '#f97316' },
+  red: { label: 'Vermelho', swatch: '#ef4444' },
+  rose: { label: 'Rosa', swatch: '#f43f5e' },
+  fuchsia: { label: 'Magenta', swatch: '#d946ef' },
 };
 
 const NOTE_ICON_OPTIONS: { value: NoteIconsMode; label: string }[] = [

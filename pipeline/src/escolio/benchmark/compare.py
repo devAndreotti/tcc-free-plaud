@@ -1,5 +1,6 @@
 """Comparação de uma suite inteira: lexical, vector e hybrid por caso, mais a passada no corpus."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
@@ -62,6 +63,7 @@ def compare_benchmark_suite(
     answer_provider: AnswerProvider | None = None,
     keep_answers: bool = False,
     reranker: Reranker | None = None,
+    on_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> BenchmarkComparisonResult:
     """Compara lexical, vector e hybrid em múltiplos documentos de forma reproduzível."""
     started_at = datetime.now(UTC)
@@ -73,6 +75,10 @@ def compare_benchmark_suite(
     vector_runs: list[BenchmarkRunResult] = []
     hybrid_runs: list[BenchmarkRunResult] = []
     corpus_cases: list[tuple[Note, BenchmarkDataset]] = []
+
+    def _note_step(strategy: str, note: Note) -> None:
+        if on_progress is not None:
+            on_progress({'phase': 'notas', 'strategy': strategy, 'note': note.title})
 
     for case in suite.cases:
         document_path = workspace_dir / case.document_path
@@ -92,6 +98,7 @@ def compare_benchmark_suite(
             run_name=f'{suite.suite_name}-{case.case_id}-lexical',
             settings_snapshot=settings_snapshot,
         )
+        _note_step('lexical', note)
         vector_result = run_benchmark(
             note,
             dataset,
@@ -105,6 +112,7 @@ def compare_benchmark_suite(
             embedder=embedder,
             settings_snapshot=settings_snapshot,
         )
+        _note_step('vector', note)
         hybrid_result = run_benchmark(
             note,
             dataset,
@@ -124,6 +132,7 @@ def compare_benchmark_suite(
             settings_snapshot=settings_snapshot,
             reuse_vectors=True,  # a rodada vetorial acabou de gravar estes mesmos chunks
         )
+        _note_step('hybrid', note)
 
         lexical_runs.append(lexical_result)
         vector_runs.append(vector_result)
@@ -158,6 +167,7 @@ def compare_benchmark_suite(
             answer_provider=answer_provider,
             keep_answers=keep_answers,
             reranker=reranker,
+            on_progress=on_progress,
         )
 
     finished_at = datetime.now(UTC)

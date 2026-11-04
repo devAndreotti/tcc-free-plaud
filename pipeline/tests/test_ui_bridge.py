@@ -897,3 +897,41 @@ def test_desktop_api_warm_answer_model_nunca_levanta_excecao(monkeypatch) -> Non
     monkeypatch.setattr(module, "get_settings", settings_quebrado)
 
     assert api.warmAnswerModel() == {"ok": False, "started": False}
+
+
+def test_a_porta_do_app_e_fixa_para_as_preferencias_sobreviverem(monkeypatch):
+    main = _load_ui_main(monkeypatch)
+    import socket
+
+    # Pega uma porta livre e confere que ela é devolvida enquanto está livre.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        free_port = probe.getsockname()[1]
+    assert main.choose_http_port(free_port) == free_port
+
+    # Ocupada (outra instância aberta), cai em outra porta em vez de falhar.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen()
+        busy_port = busy.getsockname()[1]
+        assert main.choose_http_port(busy_port) != busy_port
+
+
+def test_salvar_arquivo_oferece_o_tipo_da_extensao(monkeypatch, tmp_path):
+    main = _load_ui_main(monkeypatch)
+    chamadas: list[tuple] = []
+    destino = tmp_path / "conversa.json"
+
+    def dialogo(_tipo, save_filename, file_types):
+        chamadas.append((save_filename, file_types))
+        return str(destino)
+
+    janela = SimpleNamespace(create_file_dialog=dialogo)
+    monkeypatch.setattr(
+        main,
+        "webview",
+        SimpleNamespace(windows=[janela], FileDialog=SimpleNamespace(SAVE="save")),
+    )
+    assert main.Api().saveTextFile("conversa.json", "{}") == str(destino)
+    assert chamadas[0][1][0] == "JSON (*.json)"
+    assert destino.read_text(encoding="utf-8") == "{}"

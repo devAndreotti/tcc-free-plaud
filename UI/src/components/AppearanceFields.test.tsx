@@ -17,7 +17,7 @@ describe('AppearanceFields', () => {
 
     const group = screen.getByRole('group', { name: 'Cor de destaque' });
     expect(screen.getByRole('button', { name: 'Violeta' }).getAttribute('aria-pressed')).toBe('true');
-    expect(group.querySelectorAll('button')).toHaveLength(6);
+    expect(group.querySelectorAll('button')).toHaveLength(12);
 
     await user.click(screen.getByRole('button', { name: 'Âmbar' }));
 

@@ -3,7 +3,7 @@
 // O padrão não grava atributo, então sem escolha o app fica exatamente como era.
 
 const OPTIONS = {
-  accent: ['violet', 'blue', 'green', 'amber', 'rose', 'cyan'],
+  accent: ['violet', 'indigo', 'blue', 'cyan', 'teal', 'green', 'lime', 'amber', 'orange', 'red', 'rose', 'fuchsia'],
   textSize: ['90', '100', '110', '125'],
   readingFont: ['serif', 'sans'],
   density: ['comfortable', 'compact'],

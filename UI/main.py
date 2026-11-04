@@ -19,6 +19,7 @@ Integração atual:
 
 import os
 import re
+import socket
 import subprocess
 import sqlite3
 import sys
@@ -60,6 +61,8 @@ from escolio.app.local_env import (
 )
 from escolio.app.settings_catalog import save_catalog_setting, save_catalog_settings, settings_catalog_payload
 from escolio.app.settings_presets import apply_settings_preset, list_settings_presets, preview_settings_preset
+from escolio.benchmark.history import list_benchmark_runs, load_benchmark_run, preview_benchmark_suite
+from escolio.benchmark.jobs import BenchmarkJobs, expected_steps
 from escolio.benchmark.service import run_benchmark_compare
 from escolio.corpus.ask import corpus_vocabulary_stems
 from escolio.corpus.dropped import DroppedFileIndexer
@@ -101,6 +104,29 @@ CONFIG_PATH = Path(os.environ.get('APPDATA', Path.home())) / 'Brainiac' / 'confi
 ASK_STRATEGIES = {'lexical', 'vector', 'hybrid'}
 
 
+# Porta fixa: o localStorage é por origem, então com porta aleatória as preferências somem a cada abertura.
+APP_HTTP_PORT = 47615
+SAVE_FILE_TYPES = {
+    '.md': 'Markdown (*.md)',
+    '.txt': 'Texto (*.txt)',
+    '.json': 'JSON (*.json)',
+    '.html': 'Página HTML (*.html)',
+}
+
+
+def choose_http_port(preferred: int = APP_HTTP_PORT) -> int:
+    """A porta do app ou, ocupada (outra instância aberta), uma livre: essa sessão só não lê as preferências."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(('127.0.0.1', preferred))
+            return preferred
+        except OSError:
+            pass
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(('127.0.0.1', 0))
+        return probe.getsockname()[1]
+
+
 class Api:
     """
     API exposta ao JavaScript via PyWebView.
@@ -115,6 +141,7 @@ class Api:
         self._ask_jobs: dict[str, dict] = {}  # respostas em streaming, por ask_id
         self._answer_lock = threading.Lock()  # protege _ask_jobs e _warming
         self._warming = False
+        self._benchmark_jobs = BenchmarkJobs()
         self._activate_vault(stop_watcher=False)
 
     def _activate_vault(self, stop_watcher: bool = True) -> None:
@@ -575,10 +602,11 @@ class Api:
         if webview is None or not webview.windows:
             return None
         safe_name = re.sub(r'[\\/]', '-', str(name or '')).strip() or 'conversa.md'
+        file_type = SAVE_FILE_TYPES.get(Path(safe_name).suffix.lower(), SAVE_FILE_TYPES['.md'])
         result = webview.windows[0].create_file_dialog(
             webview.FileDialog.SAVE,
             save_filename=safe_name,
-            file_types=('Markdown (*.md)', 'Todos os arquivos (*.*)'),
+            file_types=(file_type, 'Todos os arquivos (*.*)'),
         )
         if not result:
             return None
@@ -619,6 +647,41 @@ class Api:
     def runBenchmarkCompare(self, suite_path: str, answer: bool = False) -> dict:
         """`answer`: mede também a resposta da IA das Fontes de IA (answer_metrics com os motivos de descarte)."""
         return run_benchmark_compare(Path(suite_path), runtime=self.runtime, answer=bool(answer))
+
+    def previewBenchmarkSuite(self, suite_path: str) -> dict:
+        """Notas e perguntas de uma suite, sem rodar nada."""
+        return preview_benchmark_suite(suite_path)
+
+    def startBenchmarkCompare(self, suite_path: str, answer: bool = False) -> dict:
+        """Roda a comparação em segundo plano; a tela acompanha por getBenchmarkJob."""
+        preview = preview_benchmark_suite(suite_path)
+        settings = get_settings()
+        with_answer = bool(answer)
+        passes = 2 if settings.rerank_model.strip() else 1
+        return self._benchmark_jobs.start(
+            suite_name=preview['suite_name'],
+            total=expected_steps(preview, passes=passes),
+            answer=with_answer,
+            run=lambda on_progress: run_benchmark_compare(
+                Path(suite_path),
+                runtime=self.runtime,
+                answer=with_answer,
+                keep_answers=True,  # a tela mostra a resposta de cada pergunta
+                on_progress=on_progress,
+            ),
+        )
+
+    def getBenchmarkJob(self) -> dict | None:
+        return self._benchmark_jobs.snapshot()
+
+    def cancelBenchmarkJob(self) -> dict | None:
+        return self._benchmark_jobs.cancel()
+
+    def listBenchmarkRuns(self) -> list[dict]:
+        return list_benchmark_runs()
+
+    def loadBenchmarkRun(self, comparison_id: str) -> dict:
+        return load_benchmark_run(comparison_id)
 
     def _native_dialog(self, dialog_type, **kwargs) -> str:
         """
@@ -854,4 +917,13 @@ if __name__ == '__main__':
 
     # Inicia o loop de eventos do PyWebView
     # debug=True exibe DevTools (útil durante desenvolvimento)
-    webview.start(debug=False)
+    # Fora do modo privado e com pasta e porta fixas, o que o app guarda no navegador (tema, cor, animações)
+    # continua lá na próxima abertura.
+    webview_storage = get_settings().results_dir / 'webview'
+    webview_storage.mkdir(parents=True, exist_ok=True)
+    webview.start(
+        debug=False,
+        private_mode=False,
+        storage_path=str(webview_storage),
+        http_port=choose_http_port(),
+    )

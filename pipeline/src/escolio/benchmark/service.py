@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from pathlib import Path
 
 from escolio.app.config import Settings, get_settings
@@ -75,6 +76,8 @@ def run_benchmark_compare(
     runtime: CorpusRuntime | None = None,
     settings: Settings | None = None,
     answer: bool = False,
+    keep_answers: bool = False,
+    on_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> dict:
     """Compara as estratégias na suite. Com `answer`, o chat responde com a IA das configurações (como a CLI com
     --answer-provider) e o resumo traz `answer_metrics`: aceitas e motivos de descarte. Sem IA configurada, `answer`
@@ -112,6 +115,8 @@ def run_benchmark_compare(
             embedder=embedder,
             settings_snapshot=snapshot,
             answer_provider=_answer_provider(resolved_settings) if answer else None,
+            keep_answers=keep_answers,
+            on_progress=on_progress,
         )
         output_base = resolved_settings.results_dir / result.comparison_id
         json_path = export_benchmark_comparison_json(result, output_base.with_suffix('.json'))

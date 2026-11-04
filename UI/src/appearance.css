@@ -10,12 +10,24 @@
 :root[data-theme="dark"][data-accent="amber"] { --accent-blue: #b45309; --accent-blue-hover: #92400e; --accent-blue-light: #fbbf24; }
 :root[data-theme="dark"][data-accent="rose"]  { --accent-blue: #e11d48; --accent-blue-hover: #be123c; --accent-blue-light: #fb7185; }
 :root[data-theme="dark"][data-accent="cyan"]  { --accent-blue: #0e7490; --accent-blue-hover: #155e75; --accent-blue-light: #22d3ee; }
+:root[data-theme="dark"][data-accent="indigo"] { --accent-blue: #4f46e5; --accent-blue-hover: #4338ca; --accent-blue-light: #818cf8; }
+:root[data-theme="dark"][data-accent="teal"] { --accent-blue: #0f766e; --accent-blue-hover: #115e59; --accent-blue-light: #2dd4bf; }
+:root[data-theme="dark"][data-accent="lime"] { --accent-blue: #4d7c0f; --accent-blue-hover: #3f6212; --accent-blue-light: #a3e635; }
+:root[data-theme="dark"][data-accent="orange"] { --accent-blue: #c2410c; --accent-blue-hover: #9a3412; --accent-blue-light: #fb923c; }
+:root[data-theme="dark"][data-accent="red"] { --accent-blue: #dc2626; --accent-blue-hover: #b91c1c; --accent-blue-light: #f87171; }
+:root[data-theme="dark"][data-accent="fuchsia"] { --accent-blue: #c026d3; --accent-blue-hover: #a21caf; --accent-blue-light: #e879f9; }
 
 :root[data-theme="light"][data-accent="blue"]  { --accent-blue: #1d4ed8; --accent-blue-hover: #1e40af; }
 :root[data-theme="light"][data-accent="green"] { --accent-blue: #137034; --accent-blue-hover: #0f5a2a; }
 :root[data-theme="light"][data-accent="amber"] { --accent-blue: #a14a08; --accent-blue-hover: #873e06; }
 :root[data-theme="light"][data-accent="rose"]  { --accent-blue: #be123c; --accent-blue-hover: #9f1239; }
 :root[data-theme="light"][data-accent="cyan"]  { --accent-blue: #0b6a84; --accent-blue-hover: #09566b; }
+:root[data-theme="light"][data-accent="indigo"] { --accent-blue: #4338ca; --accent-blue-hover: #3730a3; }
+:root[data-theme="light"][data-accent="teal"] { --accent-blue: #0f766e; --accent-blue-hover: #115e59; }
+:root[data-theme="light"][data-accent="lime"] { --accent-blue: #4d7c0f; --accent-blue-hover: #3f6212; }
+:root[data-theme="light"][data-accent="orange"] { --accent-blue: #c2410c; --accent-blue-hover: #9a3412; }
+:root[data-theme="light"][data-accent="red"] { --accent-blue: #b91c1c; --accent-blue-hover: #991b1b; }
+:root[data-theme="light"][data-accent="fuchsia"] { --accent-blue: #a21caf; --accent-blue-hover: #86198f; }
 
 /* Derivados. No escuro, --accent-soft e --mark já saem de --accent-blue-light (index.css);
    as séries repetem a receita do violeta: escura, média e clara na mesma matiz. */

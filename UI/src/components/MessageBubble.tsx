@@ -3,6 +3,7 @@ import type { AskCitation, AskResult, AskStage, AskStrategy } from '../services/
 import { discardText } from '../lib/discardReasons';
 import { focusNoteInGraph } from '../lib/vaultGraph';
 import { ExternalIcon, SearchIcon } from './Icons';
+import CopyAction from './CopyAction';
 import { NoteTitle } from './NoteTitle';
 import { Glyph, GlyphBadge, type GlyphName } from './ui/Glyph';
 
@@ -169,7 +170,6 @@ function useSources(ask: AskResult) {
 }
 
 const AnswerMeta = ({ ask, copyText }: { ask: AskResult; copyText?: string }) => {
-  const [copied, setCopied] = useState(false);
   const parts = (
     [
       ['search', ask.strategy ? STRATEGY_LABEL[ask.strategy] ?? ask.strategy : null],
@@ -177,17 +177,6 @@ const AnswerMeta = ({ ask, copyText }: { ask: AskResult; copyText?: string }) =>
       ['clock', ask.latency_ms ? `${ask.latency_ms} ms` : null],
     ] as Array<[GlyphName, string | null]>
   ).filter((part): part is [GlyphName, string] => Boolean(part[1]));
-
-  const copy = async () => {
-    if (!copyText) return;
-    try {
-      await navigator.clipboard.writeText(copyText);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      setCopied(false);
-    }
-  };
 
   if (parts.length === 0 && !copyText) return null;
   return (
@@ -198,16 +187,7 @@ const AnswerMeta = ({ ask, copyText }: { ask: AskResult; copyText?: string }) =>
           {text}
         </span>
       ))}
-      {copyText && (
-        <button type="button" className={`msg__action${copied ? ' is-copied' : ''}`} onClick={copy} aria-label="Copiar resposta com as fontes">
-          {copied ? (
-            <span className="msg__action-ok pop"><Glyph name="check" size={14} strokeWidth={2.2} /></span>
-          ) : (
-            <Glyph name="copy" size={14} />
-          )}
-          <span>{copied ? 'Copiado' : 'Copiar'}</span>
-        </button>
-      )}
+      {copyText && <CopyAction text={copyText} ariaLabel="Copiar resposta com as fontes" />}
     </div>
   );
 };
@@ -487,6 +467,7 @@ const MessageBubble = ({ message, onRetry, onOpenSource, runningJobId = null }: 
   if (message.role === 'user') {
     return (
       <article className="msg msg--user fade-in" aria-label="Sua pergunta">
+        <CopyAction text={message.content} ariaLabel="Copiar pergunta" className="msg__prompt-copy" />
         <div className="msg__bubble">{message.content}</div>
       </article>
     );

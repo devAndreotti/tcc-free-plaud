@@ -275,3 +275,17 @@ html, body {
   animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
 }
+
+/* O esqueleto avisa que algo está carregando: sem ele a tela parece travada. Com menos animação, o brilho que
+   desliza vira um pulso lento só na opacidade, sem movimento. */
+@keyframes sk-pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="never"]) .skeleton-box,
+  :root:not([data-motion="never"]) .force-graph__ghost {
+    animation: sk-pulse 1.6s ease-in-out infinite !important;
+  }
+}
+:root[data-motion="always"] .skeleton-box,
+:root[data-motion="always"] .force-graph__ghost {
+  animation: sk-pulse 1.6s ease-in-out infinite !important;
+}

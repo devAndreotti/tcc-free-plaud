@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BenchmarkPanel from './BenchmarkPanel';
 import type { BenchmarkAnswerMetrics, BenchmarkCompareResult, BenchmarkStrategySummary } from '../services/bridge';
+import { resetBenchmarkRun } from '../lib/benchmarkRun';
 
 const bridgeMock = vi.hoisted(() => ({
   selectBenchmarkSuite: vi.fn(),
@@ -57,6 +58,7 @@ const compare = (summaries: Record<string, BenchmarkStrategySummary>): Benchmark
 const withAi = () => bridgeMock.getBackendSettings.mockResolvedValue({ answer_provider: 'ollama', answer_model: 'qchat:latest' });
 
 describe('Benchmark: medir também a resposta da IA', () => {
+  beforeEach(() => resetBenchmarkRun());
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => cleanup());
 
