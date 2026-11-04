@@ -583,6 +583,24 @@ export interface Vault {
   roots?: CorpusRoot[];
 }
 
+export interface VaultOverviewNote {
+  id: string;
+  title: string;
+  folder: string;
+}
+
+/** Vault com pastas e notas, para o grafo de todas as vaults. */
+export interface VaultOverview {
+  id: string;
+  name: string;
+  icon: VaultIconId;
+  color: VaultColor;
+  note_count: number;
+  chunk_count: number;
+  folders: { name: string; count: number }[];
+  notes: VaultOverviewNote[];
+}
+
 export interface VaultList {
   active: string;
   vaults: Vault[];
@@ -867,6 +885,8 @@ interface PythonApi {
 
   /** Reindexa uma nota a partir do source_path salvo no banco. */
   reindexNote?: (noteId: string) => Promise<NoteReindexResult>;
+
+  getVaultsOverview?: () => Promise<{ active: string; vaults: VaultOverview[] }>;
 
   /** Abre o seletor nativo para suite.json de benchmark. */
   selectBenchmarkSuite?: () => Promise<string>;
@@ -2465,6 +2485,22 @@ export const bridge = {
     console.debug(`[Bridge Mock] runBenchmarkCompare: ${suitePath}`);
     await new Promise((resolve) => setTimeout(resolve, 600));
     return options?.answer ? mockBenchmarkWithAnswers() : MOCK_BENCHMARK_RESULT;
+  },
+
+  getVaultsOverview: async (): Promise<{ active: string; vaults: VaultOverview[] }> => {
+    if ((await whenDesktopReady()) && window.pywebview?.api.getVaultsOverview) return window.pywebview.api.getVaultsOverview();
+    const notes = [
+      { id: 'docker--44dd', title: 'Docker vs Máquinas Virtuais', folder: 'Estudos' },
+      { id: 'vlan--11aa', title: 'VLAN', folder: 'Estudos' },
+      { id: 'roadmap--5c1d', title: 'Roadmap', folder: 'Projetos' },
+    ];
+    return {
+      active: 'mock',
+      vaults: [{
+        id: 'mock', name: 'Vault de exemplo', icon: 'notes', color: 'violet', note_count: notes.length, chunk_count: 12,
+        folders: [{ name: 'Estudos', count: 2 }, { name: 'Projetos', count: 1 }], notes,
+      }],
+    };
   },
 
   /** null quando não há backend em segundo plano: quem chama cai em runBenchmarkCompare. */

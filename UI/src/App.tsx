@@ -414,6 +414,12 @@ function AppContent() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [handleNewTab]);
 
+  // Nota de outra vault, vinda do grafo de todas as vaults: troca de vault antes de abrir.
+  const handleOpenVaultNote = useCallback(async (vaultId: string, noteId: string) => {
+    if (vaultId !== activeVault?.id) await selectVault(vaultId);
+    handleOpenNote(noteId);
+  }, [activeVault?.id, selectVault, handleOpenNote]);
+
   // Volta a uma conversa fechada nesta sessão, com as mensagens dela
   const handleReopenClosed = useCallback((chatId: string) => {
     const closed = recentClosed.find((item) => item.tab.id === chatId);
@@ -716,7 +722,7 @@ function AppContent() {
           </div>
 
           {/* Painel lateral de grafos — expande à direita do conteúdo */}
-          <GraphPanel isOpen={isGraphPanelOpen} onToggle={handleToggleGraphPanel} onOpenNote={handleOpenNote} />
+          <GraphPanel isOpen={isGraphPanelOpen} onToggle={handleToggleGraphPanel} onOpenVaultNote={(vaultId, noteId) => void handleOpenVaultNote(vaultId, noteId)} onAskVault={handleNewChatIn} onOpenNote={handleOpenNote} />
         </div>
 
         {/* Avisos de rodapé: aba fechada (com Desfazer) e resultado da exportação, empilhados */}

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bridge, type VaultOverview, type VaultOverviewNote } from '../services/bridge';
 import { CORPUS_CHANGED, CORPUS_PROGRESS_EVENT } from '../lib/corpusEvents';
-import { buildOverviewLayout, searchOverview, VIEW_H, VIEW_W } from '../lib/vaultsOverviewLayout';
-import { vaultMeta } from '../lib/vaultVisuals';
+import { buildOverviewLayout, searchOverview, vaultColorHex, VIEW_H, VIEW_W } from '../lib/vaultsOverviewLayout';
 import { VaultGlyph } from './VaultGlyph';
 import './VaultsOverview.css';
 
@@ -126,7 +125,7 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
         <div className="overview__nodes">
           <button type="button" className="overview__hub" style={{ left: `${(layout.hub.x / VIEW_W) * 100}%`, top: `${(layout.hub.y / VIEW_H) * 100}%` }} aria-label="Escólio: recolher tudo" onClick={() => { setOpenId(null); setQuery(''); }}>ES</button>
           {layout.vaults.map((node) => {
-            const color = vaultMeta(node.vault.color).hex;
+            const color = vaultColorHex(node.vault.color);
             return (
               <div key={node.vault.id} className={`overview__vault${node.dim ? ' is-dim' : ''}`} style={{ left: `${(node.x / VIEW_W) * 100}%`, top: `${(node.y / VIEW_H) * 100}%` }}>
                 <button

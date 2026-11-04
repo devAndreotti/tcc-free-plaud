@@ -3,8 +3,10 @@
  * Posições do grafo de todas as vaults (sem React, testável). Sem simulação de forças: a posição sai de contas
  * determinísticas, então milhares de notas não custam nada a cada quadro, e a mesma nota fica sempre no mesmo lugar.
  */
-import type { VaultOverview, VaultOverviewNote } from '../services/bridge';
-import { vaultMeta } from './vaultVisuals';
+import type { VaultColor, VaultOverview, VaultOverviewNote } from '../services/bridge';
+
+const COLOR_HEX: Record<VaultColor, string> = { violet: '#a590f6', blue: '#7aa7ff', green: '#5ccf96', amber: '#f2c45a', rose: '#fb7185', teal: '#2dd4bf', slate: '#94a3b8' };
+export const vaultColorHex = (color: VaultColor): string => COLOR_HEX[color] ?? COLOR_HEX.violet;
 
 export const VIEW_W = 780;
 export const VIEW_H = 620;
@@ -46,7 +48,7 @@ export const buildOverviewLayout = (vaults: VaultOverview[], openId: string | nu
     };
   });
 
-  const spokes = nodes.map((node) => ({ id: node.vault.id, x1: HUB.x, y1: HUB.y, x2: node.x, y2: node.y, color: vaultMeta(node.vault.color).hex, dim: node.dim }));
+  const spokes = nodes.map((node) => ({ id: node.vault.id, x1: HUB.x, y1: HUB.y, x2: node.x, y2: node.y, color: vaultColorHex(node.vault.color), dim: node.dim }));
   const edges: { id: string; x1: number; y1: number; x2: number; y2: number; color: string; dim: boolean }[] = [];
   const dots: { key: string; x: number; y: number; r: number; color: string; dim: boolean; note: VaultOverviewNote; vaultId: string }[] = [];
   const folders: { key: string; name: string; count: number; x: number; y: number; r: number; color: string; right: boolean; dim: boolean }[] = [];
@@ -62,7 +64,7 @@ export const buildOverviewLayout = (vaults: VaultOverview[], openId: string | nu
       const reach = (folder.name ? 118 : 74) + (index % 2) * 26;
       const fx = clampX(node.x + Math.cos(angle) * reach);
       const fy = clampY(node.y + Math.sin(angle) * reach);
-      const color = folder.name ? PALETTE[index % PALETTE.length] : vaultMeta(node.vault.color).hex;
+      const color = folder.name ? PALETTE[index % PALETTE.length] : vaultColorHex(node.vault.color);
       const notes = node.vault.notes.filter((note) => note.folder === folder.name);
       const anyHit = hitIds ? notes.some((note) => hitIds.has(`${node.vault.id}:${note.id}`)) : true;
       if (folder.name) {
