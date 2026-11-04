@@ -196,3 +196,48 @@ Não encontrei erro de escrita evidente (termo esperado ausente do texto) nas pe
 - Faithfulness sem auditoria manual.
 - Lote cego escrito por IA, sem revisão dos autores, congelado antes da medição e não modificado.
 - A tabela do Experimento 21 não fecha aritmeticamente (33 + 28 = 61, escrito 60/73); a comparação com ela herda essa incerteza.
+
+## Reprodução em 2026-11-04
+
+**Rodada:** `cmp-187e76fca758` (`data/results/cmp-187e76fca758.json`), iniciada às 17:43Z. Usou o mesmo serviço do botão "Medir também a resposta da IA" do painel Benchmark (`run_benchmark_compare(..., answer=True, keep_answers=True)`), com Ollama e `qchat:latest`. Levou 1.109 s para as três estratégias com IA, dos quais 411 s foram da híbrida. A referência sem IA do mesmo dia é `cmp-32377de15bdf`. O lote cego não foi alterado: `git diff f8844d8 main -- data/datasets/lote_cego` está vazio. **Também aqui é medição, não calibração.**
+
+As condições não são as mesmas de D1 a D3:
+
+- **Máquina:** o notebook Windows (RTX 2050 4 GB), não o Emerald. O log do Ollama do Windows mostra as chamadas a `qchat:latest` a partir de 14:43 (horário local). É o `qchat` de manifesto `3f8f057e4bcd…`, com as mesmas cinco camadas (ver "Ambiente e modelo").
+- **`top_k=4` e pools 12/32**, que vêm da configuração do app (`retrieval_top_k=4`). A CLI do Experimento 22 usou `top_k=3` e pools 9/24. A IA recebe portanto até 4 trechos, e não 3. A posição da nota certa é a mesma nas 37 positivas, porque a profundidade da recuperação é 10 nos dois casos. Sem IA, a mudança não alterou nenhuma decisão: `cmp-32377de15bdf` (`top_k=4`) e C (`top_k=3`) decidiram igual nas 76 perguntas.
+- **Código:** entre `f8844d8` e a `main` atual, `pipeline/src` só ganhou progresso, histórico e subtipos no benchmark, além de um lock na abertura do Chroma. O prompt, a regra de abstenção e os limiares são os mesmos.
+- O app roda as três estratégias com IA, e o Experimento 22 rodou só a híbrida. Comparo só a híbrida.
+
+### Exp 22 × reprodução (híbrida, lote cego)
+
+| Métrica | D1 | D2 | D3 | Exp 22 (mediana) | Reprodução |
+|---|---|---|---|---|---|
+| **Decisões certas, com IA** | 54/76 | 54/76 | 53/76 | **54/76 (71%)** | **54/76 (71,1%)** |
+| Positivas respondidas | 26/37 | 25/37 | 25/37 | 25/37 (68%) | 22/37 (59,5%) |
+| Negativas recusadas | 28/39 | 29/39 | 28/39 | 28/39 (72%) | 32/39 (82,1%) |
+| Negativas respondidas: quase-acerto (14) | 9 | 8 | 8 | 8 | 6 |
+| Negativas respondidas: vocabulario-presente (12) | 2 | 2 | 3 | 2 | 1 |
+| Negativas respondidas: fora-do-dominio (13) | 0 | 0 | 0 | 0 | 0 |
+| Geradas de verdade (pos/neg) | 18 / 5 | 17 / 7 | 16 / 8 | | 15 / 3 |
+| Sentinela `generated_no_answer_sentinel` | 10 | 11 | 10 | | 16 |
+| MRR / Recall@3 | 0,8108 / 0,9459 | idem | idem | 0,811 / 0,946 | 0,8108 / 0,9459 (35/37) |
+| **Decisões certas, sem IA** (C × `cmp-32377de15bdf`) | | | | **39/76 (51%)** | **39/76 (51,3%)**, mesmas 76 decisões |
+
+As linhas por subtipo contam **negativas respondidas**, que são erros, como a tabela "Negativas respondidas por subtipo". Em acertos, a reprodução recusou 8/14 das quase-acerto, 11/12 das vocabulario-presente e 13/13 das fora-do-dominio. IC 95% de Wilson da reprodução: decisões certas [60,0%; 80,0%], positivas respondidas [43,5%; 73,7%], abstenção nas negativas [67,3%; 91,0%].
+
+Pergunta a pergunta, comparando os JSONs de `data/results/experimentos/22_lote_cego/`:
+
+- A reprodução tomou a mesma decisão que D1 em 68 das 76 perguntas, que D2 em 66 e que D3 em 65. Entre si, D1, D2 e D3 concordam em 71 a 75 de 76.
+- Das 71 perguntas com a mesma decisão nas três rodadas do Experimento 22, a reprodução manteve 64. As outras 7 passaram todas de respondida para recusada: as positivas `lc-05-b`, `lc-06-a`, `lc-06-b` e `lc-08-c` e as negativas `lcn-06`, `lcn-09` e `lcn-33`. Nenhuma pergunta recusada nas três rodadas foi respondida agora.
+- Das 5 perguntas que já variavam no Experimento 22, a reprodução respondeu `lc-03-a` e `lcn-02` e recusou `lcn-08`, `lcn-13` e `lcn-38`.
+
+### Leitura
+
+- **O total bate.** São 54/76 (71,1%), igual a D1 e D2 e dentro da faixa de 53 a 54 do Experimento 22. Sem IA, a reprodução é exata: 39/76, com as mesmas decisões nas 76 perguntas. A recuperação também é idêntica: MRR 0,8108, Recall@3 35/37 e as mesmas duas positivas fora do top 3 (`lc-04-d` e `lc-07-d`).
+- **A composição não bate.** A reprodução foi mais conservadora. Respondeu 3 a 4 positivas a menos (22 contra 25 a 26) e 3 a 4 negativas a menos (7 contra 10 a 11), e os dois efeitos se anularam no total. Cada lado fica dentro do ruído conhecido de cerca de ±3 perguntas (Experimento 21). A direção, porém, é uma só: as 7 mudanças em relação ao consenso de D1 a D3 foram todas para recusa, e o modelo devolveu o sentinela de "sem resposta" 16 vezes, contra 10 a 11. Por isso a concordância com D1 a D3 (65 a 68 de 76) é menor que a concordância entre elas (71 a 75).
+- Esta rodada não separa a causa. Pode ser o quarto trecho no contexto (`top_k=4`), a máquina e a GPU ou simplesmente o sorteio da temperatura 0,7.
+- **Os subtipos mantêm a ordem.** `quase-acerto` continua o ponto fraco (6 de 14 respondidas, contra 8 a 9), e `fora-do-dominio` continua com 0 de 13.
+- Os erros de valor se repetem. `lcn-03` respondeu de novo R$ 18.700, que é a licença do Datadog. `lcn-10` respondeu "0,81", outro valor errado (em D1 tinha sido 97,3). `lcn-07` conta como respondida, embora o texto gerado diga que a garantia não está mencionada no contrato: a métrica conta como resposta uma recusa escrita em texto livre.
+- Fallback extrativo: das 22 positivas respondidas, 15 foram geradas e 7 vieram do fallback. Das 7 negativas respondidas, 3 foram geradas e 4 vieram do fallback.
+- **Para o texto do TCC:** com IA, 71% de decisões certas em duas medições independentes, em máquinas e dias diferentes (quatro rodadas no total, de 53 a 54 de 76). Sem IA, 51%, idêntico nas duas. A taxa de positivas respondidas com IA variou de 59% a 70% entre as rodadas e não deve ser citada sem essa faixa.
+- Latência e faithfulness não foram medidas nesta rodada.
