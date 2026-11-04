@@ -58,9 +58,13 @@ export function createPyWebViewMockScript(options: MockBridgeOptions = {}) {
             return {
               status: "ok",
               checks: [
-                { name: "sqlite", status: "ok", message: "SQLite ok" },
-                { name: "chroma", status: "ok", message: "ChromaDB ok" }
-              ]
+                { code: "sqlite", status: "ok", message: "SQLite ok", action: null, latency_ms: 1, details: {} },
+                { code: "chroma", status: "ok", message: "ChromaDB ok", action: null, latency_ms: 1, details: {} }
+              ],
+              latency_ms: 2,
+              ok_count: 2,
+              warning_count: 0,
+              error_count: 0
             };
           },
           listSettingsPresets: async function() {
