@@ -14,6 +14,22 @@ const HUB = { x: VIEW_W / 2, y: VIEW_H / 2 };
 const PALETTE = ['#a590f6', '#5cc8e0', '#f2c45a', '#5ccf96', '#f48aa0', '#7aa7ff', '#fb923c', '#e879f9', '#a3e635'];
 const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 
+/** Zoom da tela cheia: deslocamento em px e escala da caixa do desenho. */
+export interface OverviewView {
+  x: number;
+  y: number;
+  k: number;
+}
+export const NO_ZOOM: OverviewView = { x: 0, y: 0, k: 1 };
+export const MAX_ZOOM = 5;
+
+/** Aproxima ou afasta em torno de (mx, my), em px da caixa: o ponto sob o mouse fica parado. Em 1x volta ao desenho inteiro. */
+export const zoomAt = (view: OverviewView, mx: number, my: number, factor: number): OverviewView => {
+  const k = Math.min(MAX_ZOOM, Math.max(1, view.k * factor));
+  if (k === 1) return NO_ZOOM;
+  return { k, x: mx - (mx - view.x) * (k / view.k), y: my - (my - view.y) * (k / view.k) };
+};
+
 export interface OverviewHit {
   vaultId: string;
   vaultName: string;

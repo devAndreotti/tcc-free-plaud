@@ -47,6 +47,8 @@ const MAX_ITER = 300;
 const REDUCED_BATCH_TICKS = 12;
 // Quadros de uma transição de câmera (enquadrar uma pasta): ~240 ms a 60 Hz
 const GLIDE_FRAMES = 14;
+// Ticks depois de mexer num nó arrastado: ~2 s a 60 Hz para os vizinhos acompanharem e assentarem
+const DRAG_TICKS = 120;
 
 // Lista fixa: um array novo a cada render reconstruiria o grafo a cada render
 const NO_LINKS: VaultLink[] = [];
@@ -58,7 +60,8 @@ const cssZoom = (rect: DOMRect, layoutWidth: number) => (rect.width > 0 && layou
 const GRAPH_HELP =
   'Teclado: setas movem a seleção para o nó vizinho na direção da seta; Enter abre a nota selecionada ou enquadra a pasta; ' +
   'Home enquadra o grafo inteiro; Esc limpa a seleção; Tab sai do grafo. ' +
-  'Mouse: clique seleciona (nota abre, pasta enquadra), arraste move, scroll dá zoom, duplo clique enquadra.';
+  'Mouse: clique seleciona (nota abre, pasta enquadra); arrastar um nó o move e os vizinhos acompanham; ' +
+  'arrastar no vazio move a câmera; scroll dá zoom; duplo clique enquadra.';
 
 interface ForceGraphProps {
   /** Primeira leitura em andamento: mostra o fantasma, não o aviso de vazio. */
@@ -89,7 +92,8 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
   const camRef     = useRef<Camera>({ x: 0, y: 0, scale: 1 });
   const autoFitRef = useRef(true); // desliga quando o usuário arrasta, dá zoom ou enquadra uma pasta
   const graphRef   = useRef<{ nodes: SimNode[]; edges: SimEdge[] }>({ nodes: [], edges: [] });
-  const dragRef    = useRef({ active: false, startX: 0, startY: 0, camX: 0, camY: 0 });
+  // Arrasto: no vazio move a câmera; sobre um nó (nodeId) move o nó, depois de passar da folga do clique (moving)
+  const dragRef    = useRef({ active: false, startX: 0, startY: 0, camX: 0, camY: 0, nodeId: null as string | null, moving: false });
   const hovered    = useRef<string | null>(null);
   const focused    = useRef<string | null>(null); // nota da fonte sob o mouse no chat
   const selectedRef = useRef<string | null>(null); // nó selecionado por clique
@@ -225,7 +229,10 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
         for (let i = 0; i < n; i++) tick(nodes, edges, cx, cy);
         left -= n;
         if (left > 0) animRef.current = requestAnimationFrame(batch);
-        else draw();
+        else {
+          animRef.current = 0; // 0 = nenhum loop rodando (o arrasto usa isso para não empilhar passos)
+          draw();
+        }
       };
       batch();
       return;
@@ -238,6 +245,7 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
         animRef.current = requestAnimationFrame(() => loop(i - 1));
       } else {
         // Simulação terminada: a abertura de 600 ms já acabou (são centenas de quadros)
+        animRef.current = 0;
         entryStartRef.current = null;
         draw();
       }
@@ -358,10 +366,53 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
     glideTo(frameCamera(nodes, folderSubtreeIds(n.id, edges), logW.current, logH.current));
   }, [glideTo]);
 
+  // Solta o nó arrastado: ele volta a sentir as forças e o grafo assenta (com movimento reduzido, de uma vez)
+  const releaseNode = useCallback(() => {
+    const drag = dragRef.current;
+    const n = drag.moving ? graphRef.current.nodes.find((node) => node.id === drag.nodeId) : undefined;
+    drag.moving = false;
+    drag.nodeId = null;
+    if (canvasRef.current) canvasRef.current.style.cursor = '';
+    if (!n) return;
+    n.fixed = false;
+    startLoop(DRAG_TICKS);
+  }, [startLoop]);
+
+  // Nó arrastado segue o mouse; os vizinhos vêm pelas molas, como no Obsidian
+  const dragNode = useCallback((canvas: HTMLCanvasElement, e: React.MouseEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag.moving && isClick({ x: drag.startX, y: drag.startY }, { x: e.clientX, y: e.clientY })) return;
+    const n = graphRef.current.nodes.find((node) => node.id === drag.nodeId);
+    if (!n) return;
+    if (!drag.moving) {
+      drag.moving = true;
+      autoFitRef.current = false; // a câmera fica parada: o nó vai para onde o mouse está
+      entryStartRef.current = null; // no meio da abertura, o nó passa a ser desenhado onde está de verdade
+      hovered.current = null;
+      setTooltip(null);
+    }
+    canvas.style.cursor = 'grabbing';
+    const rect = canvas.getBoundingClientRect();
+    const k = cssZoom(rect, logW.current);
+    const p = toWorld((e.clientX - rect.left) / k, (e.clientY - rect.top) / k);
+    n.fixed = true;
+    n.x = p.x;
+    n.y = p.y;
+    // Seguir o mouse é ação de quem arrasta, não animação; com movimento reduzido os vizinhos esperam soltar.
+    // Com o loop rodando, o próximo quadro já desenha o nó: um passo da física por quadro, não um por evento
+    // do mouse (com 600+ notas cada passo custa ~10 ms, e o mouse manda até 125 eventos por segundo).
+    if (prefersReducedMotion()) draw();
+    else if (!animRef.current) startLoop(DRAG_TICKS);
+  }, [toWorld, draw, startLoop]);
+
   // ── Hover + pan ─────────────────────────────────────────────────────────
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (dragRef.current.active && dragRef.current.nodeId) {
+      dragNode(canvas, e);
+      return;
+    }
     const found = nodeUnder(e.clientX, e.clientY);
     const cam = camRef.current;
     canvas.style.cursor = found ? 'pointer' : '';
@@ -390,17 +441,26 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
       camRef.current.y = dragRef.current.camY + (e.clientY - dragRef.current.startY) / k;
       draw();
     }
-  }, [nodeUnder, draw]);
+  }, [nodeUnder, draw, dragNode]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, camX: camRef.current.x, camY: camRef.current.y };
-  }, []);
+    const hit = nodeUnder(e.clientX, e.clientY);
+    dragRef.current = {
+      active: true, startX: e.clientX, startY: e.clientY, camX: camRef.current.x, camY: camRef.current.y,
+      nodeId: hit?.id ?? null, moving: false,
+    };
+  }, [nodeUnder]);
 
   // Soltar sem ter arrastado é clique: seleciona o nó (nota abre; pasta enquadra) ou limpa no vazio
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
     if (!drag.active) return; // soltou o botão vindo de fora do canvas
     drag.active = false;
+    if (drag.moving) {
+      releaseNode();
+      return;
+    }
+    drag.nodeId = null;
     if (!isClick({ x: drag.startX, y: drag.startY }, { x: e.clientX, y: e.clientY })) return;
 
     const hit = nodeUnder(e.clientX, e.clientY);
@@ -413,12 +473,13 @@ const ForceGraph = ({ vaultNodes, links = NO_LINKS, mode = 'ambos', onOpenNote, 
     if (hit.pending) return;
     if (hit.kind === 'note') onOpenNote?.(hit.id);
     else frameFolder(hit);
-  }, [nodeUnder, selectNode, frameFolder, onOpenNote]);
+  }, [nodeUnder, selectNode, frameFolder, onOpenNote, releaseNode]);
 
   const handleMouseLeave = useCallback(() => {
     dragRef.current.active = false;
+    releaseNode();
     if (hovered.current !== null) { hovered.current = null; setTooltip(null); draw(); }
-  }, [draw]);
+  }, [draw, releaseNode]);
 
   // Volta a enquadrar o grafo inteiro (duplo clique e Home); cancela um deslize de câmera em curso
   const fitAll = useCallback(() => {

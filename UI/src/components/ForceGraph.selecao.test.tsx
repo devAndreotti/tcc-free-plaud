@@ -129,6 +129,39 @@ describe('ForceGraph: seleção por clique', () => {
     expect(onOpenNote).not.toHaveBeenCalled();
   });
 
+  it('arrastar um nó leva o nó junto: soltar não abre, e ele passa a estar onde foi solto', () => {
+    const onOpenNote = vi.fn();
+    const { container } = render(<ForceGraph vaultNodes={vault} onOpenNote={onOpenNote} />);
+    const canvas = container.querySelector('canvas')!;
+    const p = screenPos(vault, 'A/x.md');
+    const destino = { x: p.x + 90, y: p.y + 40 };
+    fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
+    fireEvent.mouseMove(canvas, { clientX: p.x + 45, clientY: p.y + 20 });
+    expect(canvas.style.cursor).toBe('grabbing');
+    fireEvent.mouseMove(canvas, { clientX: destino.x, clientY: destino.y });
+    fireEvent.mouseUp(canvas, { clientX: destino.x, clientY: destino.y });
+    expect(onOpenNote).not.toHaveBeenCalled();
+    expect(canvas.style.cursor).toBe('');
+
+    clickAt(canvas, destino);
+    expect(onOpenNote).toHaveBeenCalledWith('A/x.md');
+    // A câmera não andou: a outra nota segue onde estava (arrastar a câmera a teria levado junto)
+    clickAt(canvas, screenPos(vault, 'B/y.md'));
+    expect(onOpenNote).toHaveBeenLastCalledWith('B/y.md');
+  });
+
+  it('arrastar no vazio continua movendo a câmera inteira', () => {
+    const onOpenNote = vi.fn();
+    const { container } = render(<ForceGraph vaultNodes={vault} onOpenNote={onOpenNote} />);
+    const canvas = container.querySelector('canvas')!;
+    const p = screenPos(vault, 'A/x.md');
+    fireEvent.mouseDown(canvas, { clientX: 2, clientY: 2 });
+    fireEvent.mouseMove(canvas, { clientX: 62, clientY: 2 });
+    fireEvent.mouseUp(canvas, { clientX: 62, clientY: 2 });
+    clickAt(canvas, { x: p.x + 60, y: p.y });
+    expect(onOpenNote).toHaveBeenCalledWith('A/x.md');
+  });
+
   it('ao selecionar, o desenho do frame é refeito com o anel no nó (ver graphDraw.test.ts para o alpha)', () => {
     const { container } = render(<ForceGraph vaultNodes={vault} />);
     const canvas = container.querySelector('canvas')!;

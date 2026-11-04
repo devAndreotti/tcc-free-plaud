@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { VaultOverview } from '../services/bridge';
-import { buildOverviewLayout, searchOverview, VIEW_H, VIEW_W } from './vaultsOverviewLayout';
+import { buildOverviewLayout, MAX_ZOOM, NO_ZOOM, searchOverview, VIEW_H, VIEW_W, zoomAt } from './vaultsOverviewLayout';
 
 const vault = (id: string, name: string, folders: Record<string, string[]>, color = 'teal') => {
   const notes = Object.entries(folders).flatMap(([folder, titles]) => titles.map((title) => ({ id: `${id}-${title}`, title, folder })));
@@ -56,5 +56,21 @@ describe('searchOverview', () => {
     const l = buildOverviewLayout([DEMO, GRANDE], null, hits);
     expect(l.dots.filter((d) => !d.dim).map((d) => d.note.title)).toEqual(['Aberturas']);
     expect(l.vaults.find((n) => n.vault.id === 'd')?.dim).toBe(true);
+  });
+});
+
+describe('zoomAt', () => {
+  it('o ponto sob o mouse fica parado ao aproximar e ao afastar', () => {
+    const world = (v: { x: number; y: number; k: number }) => [(300 - v.x) / v.k, (200 - v.y) / v.k];
+    const perto = zoomAt(NO_ZOOM, 300, 200, 2);
+    expect(perto.k).toBe(2);
+    expect(world(perto)).toEqual(world(NO_ZOOM));
+    const meio = zoomAt(perto, 300, 200, 0.75);
+    expect(world(meio).map((n) => Math.round(n * 1e6) / 1e6)).toEqual(world(NO_ZOOM));
+  });
+
+  it('não passa do teto nem fica abaixo do desenho inteiro', () => {
+    expect(zoomAt({ x: -900, y: -900, k: 4.9 }, 0, 0, 3).k).toBe(MAX_ZOOM);
+    expect(zoomAt({ x: -40, y: -40, k: 1.1 }, 0, 0, 0.5)).toEqual(NO_ZOOM);
   });
 });
