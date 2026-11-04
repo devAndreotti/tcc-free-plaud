@@ -51,7 +51,10 @@ export function createPyWebViewMockScript(options: MockBridgeOptions = {}) {
               embedding_device: "cpu",
               retrieval_top_k: 5,
               answer_provider: "ollama",
-              answer_model: "llama3:latest"
+              answer_model: "llama3:latest",
+              notes_count: 0,
+              sqlite_chunks_count: 0,
+              vector_chunks_count: 0
             };
           },
           getDoctor: async function() {
