@@ -162,18 +162,24 @@ test.describe('Grafo da vault: arrastar um nó', () => {
     await expect(canvas).toBeVisible();
     await page.waitForTimeout(800); // a simulação assenta (são 300 passos)
 
-    // Acha um nó varrendo o canvas: em cima de um nó o cursor vira a mãozinha.
+    // Acha um nó varrendo o canvas dentro da página (uma chamada por ponto estoura o tempo em máquina lenta):
+    // em cima de um nó o cursor vira a mãozinha.
     const box = (await canvas.boundingBox())!;
     const cursor = () => canvas.evaluate((el) => (el as HTMLCanvasElement).style.cursor);
-    let hit: { x: number; y: number } | null = null;
-    for (let y = box.y + 10; y < box.y + box.height - 10 && !hit; y += 7) {
-      for (let x = box.x + 10; x < box.x + box.width - 10 && !hit; x += 7) {
-        await page.mouse.move(x, y);
-        if ((await cursor()) === 'pointer') hit = { x, y };
+    const hit = await canvas.evaluate((el) => {
+      const c = el as HTMLCanvasElement;
+      const r = c.getBoundingClientRect();
+      for (let y = r.top + 10; y < r.bottom - 10; y += 5) {
+        for (let x = r.left + 10; x < r.right - 10; x += 5) {
+          c.dispatchEvent(new MouseEvent('mousemove', { clientX: x, clientY: y, bubbles: true }));
+          if (c.style.cursor === 'pointer') return { x, y };
+        }
       }
-    }
+      return null;
+    });
     expect(hit).not.toBeNull();
     const from = hit!;
+    await page.mouse.move(from.x, from.y);
     const to = { x: Math.min(box.x + box.width - 20, from.x + 70), y: Math.min(box.y + box.height - 20, from.y + 60) };
 
     await page.mouse.down();
