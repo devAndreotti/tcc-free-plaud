@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { bridge, type VaultOverview, type VaultOverviewNote } from '../services/bridge';
 import { CORPUS_CHANGED, CORPUS_PROGRESS_EVENT } from '../lib/corpusEvents';
 import { buildOverviewLayout, searchOverview, vaultColorHex, VIEW_H, VIEW_W } from '../lib/vaultsOverviewLayout';
@@ -26,7 +27,11 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
   const [openId, setOpenId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
+  // Cada lote da indexação avisa; enquanto uma leitura está em andamento, a próxima é ignorada.
+  const busy = useRef(false);
   const refresh = useCallback(() => {
+    if (busy.current) return;
+    busy.current = true;
     Promise.resolve(bridge.getVaultsOverview?.())
       .then((overview) => {
         if (!overview) return;
@@ -36,7 +41,10 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
       .catch(() => {
         // Sem a visão geral, o seletor continua e o grafo da vault ativa segue funcionando.
       })
-      .finally(() => setLoaded(true));
+      .finally(() => {
+        busy.current = false;
+        setLoaded(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -48,6 +56,16 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
       window.removeEventListener(CORPUS_PROGRESS_EVENT, refresh);
     };
   }, [refresh]);
+
+  // Tela cheia: Esc sai, como nos outros diálogos do app.
+  useEffect(() => {
+    if (!full) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [full, onClose]);
 
   const term = full ? query.trim().toLowerCase() : '';
   const searching = term.length > 1;
@@ -72,7 +90,7 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
 
   if (loaded && vaults.length === 0) return <p className="overview__empty">Nenhuma vault cadastrada ainda.</p>;
 
-  return (
+  const content = (
     <div className={`overview${full ? ' overview--full' : ''}`} role={full ? 'dialog' : undefined} aria-modal={full || undefined} aria-label={full ? 'Grafo de todas as vaults' : undefined}>
       {full && (
         <header className="overview__head">
@@ -185,6 +203,8 @@ const VaultsOverview = ({ full, live, onExpand, onClose, onOpenNote, onAsk }: Va
       </aside>
     </div>
   );
+  // O painel do grafo corta o que passa da borda: a tela cheia vai direto para o body.
+  return full ? createPortal(content, document.body) : content;
 };
 
 export default VaultsOverview;
