@@ -471,6 +471,7 @@ export interface BenchmarkRunRow {
   positive_count: number | null;
   negative_count: number | null;
   mrr: number | null;
+  mrr_ci?: [number, number] | null;
   recall_at_3: number | null;
   answered_positive_rate: number | null;
   abstention_recall: number | null;
@@ -529,6 +530,8 @@ export interface BenchmarkFaithfulness {
 export interface BenchmarkCompareResult {
   answer_provider?: string;
   answer_model?: string | null;
+  /** Tipo de cada pergunta sem resposta, quando a suite marca. */
+  negative_subtypes?: Record<string, string>;
   ok: boolean;
   comparison_id: string;
   suite_name: string;

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { tccTable } from '../lib/benchmarkView';
 import type { BenchmarkRunRow } from '../services/bridge';
 import { fmt3, pct } from './benchmarkFormat';
 import './BenchmarkRun.css';
@@ -73,6 +74,22 @@ interface BenchmarkHistoryProps {
 /** Rodadas já gravadas: reabrir sem rodar de novo e comparar duas lado a lado (calibrado e cego, por exemplo). */
 const BenchmarkHistory = ({ runs, currentId, onOpen }: BenchmarkHistoryProps) => {
   const [selected, setSelected] = useState<string[]>([]);
+  const [table, setTable] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+  }, []);
+  const copyTable = async () => {
+    setTable(true);
+    try {
+      await navigator.clipboard.writeText(tccTable(runs));
+      setCopied(true);
+      timer.current = window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Sem acesso à área de transferência, a tabela fica na tela para copiar à mão.
+    }
+  };
   const toggle = (id: string) =>
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current.slice(-1), id]));
   const pair = useMemo(
@@ -85,7 +102,10 @@ const BenchmarkHistory = ({ runs, currentId, onOpen }: BenchmarkHistoryProps) =>
     <section className="card" aria-label="Rodadas anteriores">
       <div className="card__head">
         <h2>Rodadas anteriores</h2>
-        <span className="card__count">marque duas para comparar</span>
+        <span className="bench-history__tools">
+          <span className="card__count">marque duas para comparar</span>
+          <button type="button" className="btn bench-history__open" onClick={() => void copyTable()}>{copied ? 'Copiada' : 'Copiar tabela para o TCC'}</button>
+        </span>
       </div>
       {pair.length === 2 && <SideBySide first={pair[0]} second={pair[1]} />}
       <div className="bench__table-wrap bench-history">
@@ -137,6 +157,7 @@ const BenchmarkHistory = ({ runs, currentId, onOpen }: BenchmarkHistoryProps) =>
           </tbody>
         </table>
       </div>
+      {table && <pre className="bench-history__table mono">{tccTable(runs)}</pre>}
     </section>
   );
 };

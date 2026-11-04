@@ -119,7 +119,7 @@ test.describe('Benchmark', () => {
 
     await page.getByRole('button', { name: /^Abrir calibrada/ }).click();
     await expect(page.getByText('Rodada cmp-antiga aberta.')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Resultado por estratégia' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'As três buscas' })).toBeVisible();
 
     // Nova comparação: o resultado anterior sai na hora e a barra aparece.
     await page.getByRole('button', { name: 'Rodar comparação' }).click();
@@ -131,11 +131,27 @@ test.describe('Benchmark', () => {
     await expect(page.getByText('Comparação cmp-nova concluída.')).toBeVisible();
     await expect(page.getByRole('progressbar')).toHaveCount(0);
 
-    const perguntas = page.getByRole('region', { name: 'Perguntas e respostas' });
-    await expect(perguntas.getByText('Qual é a sigla?')).toBeVisible();
-    await perguntas.getByRole('button', { name: /Decisão errada/ }).click();
-    await expect(perguntas.getByText('Quando é a festa?')).toBeVisible();
-    await expect(perguntas.getByText('Qual é a sigla?')).toHaveCount(0);
+    const mapa = page.getByRole('region', { name: 'Mapa das perguntas' });
+    await expect(mapa.getByRole('button', { name: 'Qual é a sigla?' })).toBeVisible();
+    await mapa.getByRole('button', { name: 'Erradas' }).click();
+    await expect(mapa.getByRole('button', { name: 'Quando é a festa?' })).not.toHaveClass(/is-dim/);
+    await expect(mapa.getByRole('button', { name: 'Qual é a sigla?' })).toHaveClass(/is-dim/);
+    await mapa.getByRole('button', { name: 'Qual é a sigla?' }).click();
+    await expect(page.getByRole('region', { name: 'Pergunta selecionada' }).getByText('A sigla é ACME.')).toBeVisible();
+
+    // Modo apresentação abre por cima e o Esc fecha.
+    await page.getByRole('button', { name: 'Apresentar' }).click();
+    await expect(page.getByRole('dialog', { name: 'Modo apresentação' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Modo apresentação' })).toHaveCount(0);
+
+    // Os cards de cada linha têm as mesmas bordas e a mesma altura.
+    const caixa = (nome: string) => page.getByRole('region', { name: nome }).boundingBox();
+    const [mapaBox, detalhe, buscas, decisao] = await Promise.all(['Mapa das perguntas', 'Pergunta selecionada', 'As três buscas', 'Responder ou recusar'].map(caixa));
+    expect(mapaBox!.height).toBe(detalhe!.height);
+    expect(buscas!.height).toBe(decisao!.height);
+    expect(mapaBox!.x).toBe(buscas!.x);
+    expect(detalhe!.x).toBe(decisao!.x);
   });
 
   test('trocar de tela não perde a comparação', async ({ page }) => {
@@ -156,7 +172,7 @@ test.describe('Benchmark', () => {
     await page.getByRole('button', { name: 'Cancelar' }).click();
     await expect(page.getByText('Comparação cancelada.')).toBeVisible();
     await expect(page.getByRole('progressbar')).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'Resultado por estratégia' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'As três buscas' })).toHaveCount(0);
   });
 });
 

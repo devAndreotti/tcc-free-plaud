@@ -18,7 +18,8 @@ import BenchmarkFaithfulness from './BenchmarkFaithfulness';
 import BenchEmpty, { BenchLoading } from './BenchEmpty';
 import BenchmarkHistory from './BenchmarkHistory';
 import BenchmarkProgress from './BenchmarkProgress';
-import BenchmarkQuestions from './BenchmarkQuestions';
+import BenchmarkInsights from './BenchmarkInsights';
+import BenchmarkSummary, { BenchmarkPresent } from './BenchmarkSummary';
 import BenchmarkSuitePreview from './BenchmarkSuitePreview';
 
 type Metric = 'mrr' | 'recall_at_3' | 'recall_at_5' | 'recall_at_10' | 'ndcg_at_10';
@@ -156,6 +157,7 @@ const CopyPath = ({ format, path }: { format: string; path: string }) => {
 const BenchmarkPanel = () => {
   const { suitePath, result, isRunning, job, status, ranModel } = useSyncExternalStore(subscribeBenchmarkRun, getBenchmarkRun);
   const [runs, setRuns] = useState<BenchmarkRunRow[]>([]);
+  const [presenting, setPresenting] = useState(false);
   const [scope, setScope] = useState<Scope>('corpus');
   // Medir também a resposta da IA: só faz sentido com uma IA nas Fontes de IA.
   const [answerSource, setAnswerSource] = useState<{ provider: string; model: string | null } | null>(null);
@@ -246,6 +248,7 @@ const BenchmarkPanel = () => {
           <p>O mesmo conjunto de perguntas contra as três estratégias de busca.</p>
         </div>
         <div className="page-head__actions">
+          {result && <button type="button" className="btn" onClick={() => setPresenting(true)}>Apresentar</button>}
           <button type="button" className="btn btn--primary" onClick={handleRun} disabled={isRunning || !suitePath.trim()}>
             <RefreshIcon size={14} />
             {isRunning ? 'Rodando…' : 'Rodar comparação'}
@@ -305,8 +308,18 @@ const BenchmarkPanel = () => {
               </div>
             )}
 
-            {sentence && <p className="bench__thesis">{sentence}</p>}
+            {corpus?.queries?.hybrid?.length ? (
+              <>
+                <BenchmarkSummary result={result} runs={runs} onOpenRun={(id) => void openBenchmarkRun(id)} />
+                <BenchmarkInsights key={result.comparison_id} result={result} />
+              </>
+            ) : (
+              sentence && <p className="bench__thesis">{sentence}</p>
+            )}
 
+            <details className="bench-all card" open={!corpus?.queries?.hybrid?.length}>
+              <summary>Todos os números</summary>
+              <div className="bench-all__body">
             <div className="bench__grid">
               <section className="card">
                 <div className="card__head">
@@ -440,8 +453,8 @@ const BenchmarkPanel = () => {
             )}
 
             {corpus && <BenchmarkAnswers summaries={corpus.summaries} model={ranModel} />}
-
-            {corpus?.queries && <BenchmarkQuestions key={result.comparison_id} queries={corpus.queries} />}
+              </div>
+            </details>
 
             <section className="card" aria-label="Relatórios">
               <div className="card__head"><h2>Relatórios desta comparação</h2></div>
@@ -455,6 +468,7 @@ const BenchmarkPanel = () => {
 
         {!isRunning && <BenchmarkHistory runs={runs} currentId={lastId} onOpen={(id) => void openBenchmarkRun(id)} />}
       </div>
+      {presenting && result && <BenchmarkPresent result={result} runs={runs} onClose={() => setPresenting(false)} />}
     </main>
   );
 };

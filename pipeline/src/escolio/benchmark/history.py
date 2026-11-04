@@ -86,6 +86,7 @@ def _run_row(path: Path, data: dict) -> dict:
         'positive_count': corpus.get('positive_count'),
         'negative_count': corpus.get('negative_count'),
         'mrr': summary.get('mrr'),
+        'mrr_ci': summary.get('mrr_ci'),
         'recall_at_3': summary.get('recall_at_3'),
         'answered_positive_rate': abstention.get('answered_positive_rate'),
         'abstention_recall': abstention.get('recall'),
