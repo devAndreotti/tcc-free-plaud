@@ -55,7 +55,8 @@ describe('plainMarkdown', () => {
       plainMarkdown(caso);
       const ms = performance.now() - inicio;
       console.info(`plainMarkdown ${JSON.stringify(caso.slice(0, 8))}… (${caso.length} chars): ${ms.toFixed(1)} ms`);
-      expect(ms).toBeLessThan(1000);
+      // Folga para a instrumentação de cobertura (~3 s); um custo quadrático em 100 mil caracteres passaria longe disso.
+      expect(ms).toBeLessThan(5000);
     }
   });
 });
