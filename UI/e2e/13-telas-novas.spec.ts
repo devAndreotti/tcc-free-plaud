@@ -214,7 +214,7 @@ test.describe('Exportar conversa', () => {
   });
 
   test('com muitas abas o cabeçalho não estoura a janela e o menu segue clicável', async ({ page }) => {
-    for (let i = 0; i < 14; i += 1) await page.getByRole('button', { name: 'Nova conversa' }).click();
+    for (let i = 0; i < 14; i += 1) await page.locator('#btn-new-tab').click();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     await page.getByRole('tablist', { name: 'Abas abertas' }).getByRole('tab').first().click();
