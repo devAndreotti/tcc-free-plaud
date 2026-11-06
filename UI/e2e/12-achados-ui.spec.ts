@@ -265,3 +265,22 @@ test.describe('Chat', () => {
     await expect(page.getByRole('checkbox', { name: 'Incluir as fontes de cada resposta' })).toBeChecked();
   });
 });
+
+test.describe('Configurações', () => {
+  test('a lista aberta de um seletor fica por cima do cartão seguinte', async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Configurações' }).first().click();
+    await page.getByRole('navigation', { name: 'Categorias de configuração' }).getByRole('button', { name: 'Voz', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Microfone' }).click();
+    const menu = page.getByRole('listbox', { name: 'Microfone' });
+    await expect(menu).toBeVisible();
+    await page.waitForTimeout(600); // a entrada dos cartões (ui-rise) termina
+    // O centro da lista cai sobre o cartão de baixo; quem recebe o ponto tem de ser a própria lista.
+    const onTop = await menu.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+    });
+    expect(onTop).toBe(true);
+  });
+});

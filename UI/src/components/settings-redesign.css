@@ -7,7 +7,9 @@
   border: 1px solid var(--border-color-subtle);
   border-radius: 14px;
   background: var(--bg-panel);
-  animation: ui-rise 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  /* backwards, não both: o transform preso depois da entrada fazia de cada cartão um contexto de empilhamento,
+     e a lista aberta de um Select ficava atrás do cartão seguinte. */
+  animation: ui-rise 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) backwards;
   transition: border-color 0.25s, transform 0.25s;
 }
 .settings-section > .settings-item:hover,
