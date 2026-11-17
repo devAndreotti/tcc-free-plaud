@@ -18,11 +18,15 @@ permissions:
 env:
   UV_NO_SYNC: "1"
 
+# Runner por autor: só pushes/PRs do dono (incluindo agentes de IA com o token dele) usam o
+# self-hosted `tcc`, que roda numa máquina pessoal. Colaboradores, bots e o resto vão para o
+# runner hospedado do GitHub. `github.actor` é quem disparou o evento; re-run de commit alheio
+# mantém o actor original, então não "promove" código de terceiros para o self-hosted.
 jobs:
   security:
     name: Security audit
     if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
-    runs-on: [self-hosted, linux, tcc]
+    runs-on: ${{ github.actor == 'devAndreotti' && fromJSON('["self-hosted","linux","tcc"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -55,7 +59,7 @@ jobs:
   lint:
     name: Lint
     if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
-    runs-on: [self-hosted, linux, tcc]
+    runs-on: ${{ github.actor == 'devAndreotti' && fromJSON('["self-hosted","linux","tcc"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -97,7 +101,7 @@ jobs:
   test:
     name: Tests & ratchet
     if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
-    runs-on: [self-hosted, linux, tcc]
+    runs-on: ${{ github.actor == 'devAndreotti' && fromJSON('["self-hosted","linux","tcc"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -154,7 +158,7 @@ jobs:
   build:
     name: Build & smoke
     if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
-    runs-on: [self-hosted, linux, tcc]
+    runs-on: ${{ github.actor == 'devAndreotti' && fromJSON('["self-hosted","linux","tcc"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -190,7 +194,7 @@ jobs:
   sonar:
     name: SonarCloud
     if: (github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name) && !cancelled()
-    runs-on: [self-hosted, linux, tcc]
+    runs-on: ${{ github.actor == 'devAndreotti' && fromJSON('["self-hosted","linux","tcc"]') || 'ubuntu-latest' }}
     needs: test
     # A análise falha do lado do SonarCloud ("CE Task finished abnormally"), fora do nosso controle:
     # o resultado continua no relatório, mas não reprova o run.
@@ -220,7 +224,7 @@ jobs:
   docker:
     name: Docker image gate
     if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
-    runs-on: [self-hosted, linux, tcc]
+    runs-on: ${{ github.actor == 'devAndreotti' && fromJSON('["self-hosted","linux","tcc"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -239,7 +243,7 @@ jobs:
 
   report:
     name: PR report
-    runs-on: [self-hosted, linux, tcc]
+    runs-on: ${{ github.actor == 'devAndreotti' && fromJSON('["self-hosted","linux","tcc"]') || 'ubuntu-latest' }}
     needs: [security, lint, test, build, sonar, docker]
     if: always() && github.event_name == 'pull_request' && github.repository == github.event.pull_request.head.repo.full_name
     permissions:
